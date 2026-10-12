@@ -55,6 +55,9 @@ Every recorded sound in `sfx/` is released under **CC0 1.0** (public domain dedi
 - Sabre Swing by Ben Jaszczak & Brian Nelson (Still North Media) (CC0) https://opengameart.org/content/medieval-sound-effects-weapon-textures
 - Seax Draw Fast by Ben Jaszczak & Brian Nelson (Still North Media) (CC0) https://opengameart.org/content/medieval-sound-effects-weapon-textures
 - Seax Spear Blade on Haft by Ben Jaszczak & Brian Nelson (Still North Media) (CC0) https://opengameart.org/content/medieval-sound-effects-weapon-impacts
+## Music
+The score is written in the game's code and played on recordings of real instruments (organ, harp, strumstick, recorder, frame drums, tambourine) from the [Versilian Community Sample Library](https://github.com/sgossner/VCSL) by Versilian Studios, released under **CC0 1.0**. The short per-note MP3s in `music/` were prepared by the [Conquest](https://github.com/hoffspot/conquest) project.
+
 ## Fighter model and animations
 Mixamo X Bot character and idle/walk/run animations (Adobe Mixamo).
 

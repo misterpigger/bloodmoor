@@ -149,10 +149,10 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
       <dt><kbd>Mouse</kbd></dt><dd>Move your sword hand. Push to the edge to turn.</dd>
       <dt><kbd>LMB</kbd></dt><dd>Hold while you swing for full power. Big, fast mouse sweeps hit hardest.</dd>
       <dt><kbd>RMB</kbd></dt><dd>Hold to look around freely</dd>
-      <dt><kbd>Wheel</kbd></dt><dd>Reach in and out. Roll forward fast to thrust.</dd>
+      <dt><kbd>Wheel</kbd></dt><dd>Flick forward to thrust: the point drives out and comes back. Spears reach furthest.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch, or slide while sprinting · <kbd>Space</kbd> jump and vault</dd>
       <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q while you swing and let go to throw</dd>
-      <dt><kbd>V</kbd></dt><dd>Switch between third and first person</dd>
+      <dt><kbd>V</kbd> <kbd>M</kbd></dt><dd>Switch between third and first person · music on/off</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
     </dl>
@@ -786,7 +786,7 @@ const spurts=[];
 // ================================================================ audio (synthesized)
 let AC=null,master=null,noiseBuf=null,swooshGain=null,swooshFilt=null,fireGain=null,crowdGain=null;
 function initAudio(){
-  if(AC){AC.resume();loadSfx();return;}
+  if(AC){AC.resume();loadSfx();loadMusic();return;}
   try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
   master=AC.createGain();master.gain.value=.8;master.connect(AC.destination);
   noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
@@ -797,7 +797,7 @@ function initAudio(){
    const lfo=AC.createOscillator();lfo.type='square';lfo.frequency.value=13;const lg=AC.createGain();lg.gain.value=.4;const crack=AC.createGain();crack.gain.value=.6;lfo.connect(lg);lg.connect(crack.gain);lfo.start();
    fs.connect(ff);ff.connect(fr);fr.connect(crack);crack.connect(fireGain);fireGain.connect(master);fs.start();fireSynth=crack;}
   {const cs=AC.createBufferSource();cs.buffer=noiseBuf;cs.loop=true;cs.playbackRate.value=.5;const cf=AC.createBiquadFilter();cf.type='bandpass';cf.frequency.value=520;cf.Q.value=.5;crowdGain=AC.createGain();crowdGain.gain.value=0;cs.connect(cf);cf.connect(crowdGain);crowdGain.connect(master);cs.start();}
-  loadSfx();
+  loadSfx();loadMusic();
   const sw=AC.createBufferSource();sw.buffer=noiseBuf;sw.loop=true;swooshFilt=AC.createBiquadFilter();swooshFilt.type='bandpass';swooshFilt.Q.value=1.4;swooshFilt.frequency.value=600;swooshGain=AC.createGain();swooshGain.gain.value=0;sw.connect(swooshFilt);swooshFilt.connect(swooshGain);swooshGain.connect(master);sw.start();
 }
 // ---- recorded sounds (CC0, see CREDITS.md): played when loaded, the synth below is the fallback
@@ -814,6 +814,62 @@ function sfx(k,p,vol=1,rate=1,delay=0,net=true){
   const g=AC.createGain();g.gain.value=v;src.connect(g);
   if(p&&AC.createStereoPanner){const pn=AC.createStereoPanner();_sr.set(1,0,0).applyQuaternion(camera.quaternion);_sd.subVectors(p,camera.position);const d=_sd.length();pn.pan.value=d>.3?clamp(_sd.dot(_sr)/d,-1,1)*.75:0;g.connect(pn);pn.connect(master);}else g.connect(master);
   src.start(AC.currentTime+delay);return true;}
+// ---- music: a score written here, played on recordings of real instruments (Versilian Community Sample Library, CC0)
+// The battle theme gets louder and busier as the ring closes, the field thins out, or an enemy gets close.
+const MUS_INST={organ:[38,42,46,50,54,58,62,66,70],harp:[46,50,54,58,62,66,70,74,78],strumstick:[52,57,62,67,71,76],recorder:[65,70,74,78,82]};
+const MUS={buf:{},on:true,vol:.34,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{}};
+try{if(localStorage.getItem('bloodmoor-music')==='off')MUS.on=false;}catch(e){}
+const CH={D:[50,53,57],Bb:[46,50,53],C:[48,52,55],G:[43,46,50],A:[45,49,52],F:[41,45,48],Gm:[43,46,50],E:[40,44,47]};
+const THEMES={
+  menu:{bpm:64,prog:['D','C','Bb','C','D','F','G','A'],
+    mel:[74,null,null,null,72,null,70,null, 69,null,null,null,null,null,null,null, 70,null,72,null,74,null,null,null, 72,null,null,null,null,null,null,null,
+         74,null,77,null,76,null,74,null, 72,null,null,null,69,null,null,null, 70,null,null,null,74,null,72,null, 73,null,null,null,null,null,null,null]},
+  battle:{bpm:118,prog:['D','D','Bb','C','D','D','G','A'],
+    mel:[74,null,77,76,74,null,72,74, 76,null,77,79,81,null,79,77, 77,null,74,null,70,72,74,null, 76,null,72,null,67,null,null,null,
+         74,null,77,76,74,null,72,74, 76,77,79,null,81,79,77,76, 74,null,79,null,77,76,74,null, 73,null,76,null,81,null,null,null]}};
+function loadMusic(){if(MUS.loading||!AC)return;MUS.loading=true;MUS.gain=AC.createGain();MUS.gain.gain.value=MUS.on?MUS.vol:0;MUS.gain.connect(AC.destination);
+  for(const L of ['drums','strings','lead','pad']){const g=AC.createGain();g.gain.value=0;g.connect(MUS.gain);MUS.lay[L]=g;}
+  const get=(name)=>fetch('music/'+name+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{MUS.buf[name]=buf;}).catch(()=>{});
+  for(const inst in MUS_INST)for(const k of MUS_INST[inst])get(inst+'-'+k);for(const n of ['drum-low','drum-high','tambourine-hit'])get(n);}
+function mNote(inst,note,t,vol,dur,layer){const keys=MUS_INST[inst];let k=keys[0];for(const q of keys)if(Math.abs(q-note)<Math.abs(k-note))k=q;const b=MUS.buf[inst+'-'+k];if(!b)return;
+  const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain();
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+(inst==='organ'?.25:.012));if(dur)g.gain.setTargetAtTime(0,t+dur,inst==='organ'?.35:.12);
+  s.connect(g);g.connect(MUS.lay[layer]);s.start(t);s.stop(t+(dur||2)+2);}
+function mHit(name,t,vol){const b=MUS.buf[name];if(!b)return;const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.96+Math.random()*.08;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay.drums);s.start(t);}
+function musicIntensity(){
+  if(state==='attract'||state==='loading')return 0;if(state==='dead')return 0;if(state==='won')return 1;
+  let i=1;const alive=fighters.filter(f=>f.alive).length;
+  if(zone.off)i=2;else{if(zone.state==='shrink'||zone.phase>=2)i=2;if(alive<=4)i=3;}
+  if(player&&player.alive)for(const f of fighters){if(f===player||!f.alive)continue;if(f.pos.distanceToSquared(player.pos)<30){i=Math.max(i,zone.off?3:2);break;}}
+  return i;}
+function musicTick(){
+  if(!AC||!MUS.gain)return;const want=state==='attract'||state==='dead'||state==='won'?'menu':'battle';
+  const now=AC.currentTime;
+  if(want!==MUS.theme){MUS.theme=want;MUS.step=0;MUS.bar=0;MUS.next=Math.max(MUS.next,now+.1);}
+  const T=THEMES[MUS.theme],sd=60/T.bpm/4;
+  if(MUS.next<now-.1)MUS.next=now+.05;   // after a stall, pick up from now instead of firing a burst of old notes
+  while(MUS.next<now+.25){const t=MUS.next,st=MUS.step%16;
+    if(st===0){MUS.int=musicIntensity();const I=MUS.int,L=MUS.lay,set=(g,v)=>g.gain.setTargetAtTime(v,t,.8);
+      if(MUS.theme==='menu'){set(L.pad,1);set(L.strings,0);set(L.drums,.5);set(L.lead,.9);}
+      else{set(L.pad,1);set(L.strings,I>=1?1:0);set(L.drums,I>=1?1:.0);set(L.lead,I>=3?1:I>=2?.55:0);}}
+    playStep(T,st,t,sd);MUS.step++;if(st===15)MUS.bar++;MUS.next+=sd;}
+}
+function playStep(T,st,t,sd){
+  const chord=CH[T.prog[MUS.bar%T.prog.length]],I=MUS.int,menu=MUS.theme==='menu';
+  if(st===0){mNote('organ',chord[0]-12,t,.32,sd*16*1.02,'pad');mNote('organ',chord[2]-12,t,.18,sd*16*1.02,'pad');if(!menu||MUS.bar%2===0)mNote('organ',chord[1],t,.12,sd*16,'pad');}
+  if(menu){ // harp arpeggios under a slow recorder line
+    if(st%2===0){const arp=[chord[0],chord[1],chord[2],chord[0]+12,chord[1]+12,chord[2]+12,chord[0]+12,chord[2]];mNote('harp',arp[st/2],t,.22,sd*6,'strings');MUS.lay.strings.gain.setTargetAtTime(1,t,.5);}
+    if(st%4===0){const m=T.mel[(MUS.bar*4+st/4)%T.mel.length];if(m)mNote('recorder',m,t,.2,sd*7,'lead');}
+    if(st===0&&MUS.bar%2===0)mHit('drum-low',t,.35);
+    return;}
+  // battle: war drums, a driving strumstick, the melody when it gets tense
+  const lo=[0,6,8,(I>=2?11:-1),(I>=3?3:-1),(I>=3?14:-1)],hi=[4,12,(I>=2&&MUS.bar%2?14:-1),(I>=2&&MUS.bar%2?15:-1)];
+  if(lo.includes(st))mHit('drum-low',t,st===0?.9:.7);if(hi.includes(st))mHit('drum-high',t,.55);
+  if(I>=2&&st%4===2)mHit('tambourine-hit',t,.22);
+  if(st%2===0){const pat=[0,2,1,2,0,2,1,0];const n=chord[pat[st/2]]+12;mNote('strumstick',n,t,st%4===0?.3:.2,sd*2.2,'strings');}
+  if(st%2===0){const m=T.mel[(MUS.bar*8+st/2)%T.mel.length];if(m)mNote('recorder',m,t,.24,sd*3.2,'lead');}
+}
+function setMusic(on){MUS.on=on;if(MUS.gain)MUS.gain.gain.setTargetAtTime(on?MUS.vol:0,AC.currentTime,.3);try{localStorage.setItem('bloodmoor-music',on?'on':'off');}catch(e){}}
 function distVol(p){if(!p)return 1;return 1/(1+Math.pow(camera.position.distanceTo(p)*.18,1.3));}
 function noiseBurst(t0,dur,type,freq,q,vol){const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8+Math.random()*.4;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const g=AC.createGain();g.gain.setValueAtTime(vol,t0);g.gain.exponentialRampToValueAtTime(.001,t0+dur);s.connect(f);f.connect(g);g.connect(master);s.start(t0,Math.random());s.stop(t0+dur+.05);}
 function sClang(p,power=1){netEv(['c',r3v(p),power]);if(sfx(power>.55?'clash':'block',p,.75*clamp(power+.3,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1.2)*.5;if(v<.01)return;const t=AC.currentTime,base=650+Math.random()*500;
@@ -924,8 +980,8 @@ const WEAPONS={
   arming:{id:'arming',name:'Arming sword',kind:'blade',len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:1,make:()=>makeBlade(.78,.024,.15)},
   longsword:{id:'longsword',name:'Longsword',kind:'blade',len:1.0,grip2:-.12,weight:1.1,cut:1.1,thrust:1.1,sever:1.1,pen:.25,hitFrom:.22,tier:2,make:()=>makeBlade(.95,.025,.24)},
   greatsword:{id:'greatsword',name:'Greatsword',kind:'blade',len:1.28,grip2:-.24,weight:1.75,cut:1.35,thrust:1.0,sever:1.5,pen:.3,hitFrom:.2,tier:3,make:makeGreatsword},
-  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.35,thrust:.2,sever:1.5,pen:.45,hitFrom:.78,tier:2,make:makeAxe},
-  mace:{id:'mace',name:'Flanged mace',kind:'blunt',len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.74,tier:2,make:makeMace},
+  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.35,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
+  mace:{id:'mace',name:'Flanged mace',kind:'blunt',len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:2,make:makeMace},
   fists:{id:'fists',name:'Fists',kind:'fist',len:.2,grip2:0,weight:.45,cut:1.0,thrust:1.0,sever:0,pen:.55,hitFrom:0,tier:0,make:()=>{const g=new THREE.Group();scene.add(g);return g;}},
   spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:1.5,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
 };
@@ -1156,15 +1212,15 @@ class Sword{
       if(st.t<=0||!st.B.alive||!c.on||target.distanceTo(this.H)>.45){this.stuck=null;this.Hv.set(0,0,0);spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.4).setY(.7),12,1.2,1);sHit(this.T,.4,false);}
       else{_g.copy(c.a).lerp(c.b,st.u).add(st.off);this.axis.subVectors(_g,this.H).normalize();this.H.copy(_g).addScaledVector(this.axis,-this.len);this.Hv.multiplyScalar(.5);this.T.copy(_g);this.Tp.copy(_g);this.tipVel.set(0,0,0);st.B.vel.multiplyScalar(.6);return;}
     }
-    const w=Math.max(1,this.def.weight),wf=Math.pow(w,.3);
+    const w=this.def.weight,wf=Math.pow(Math.max(.85,w),.5);
     const k=(commit?950:520)*(this.def.kind==='fist'?2:1),c=2*Math.sqrt(k)*.8;
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
     const maxA=(commit?420:220)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
-    _v.subVectors(this.T,this.Tp).multiplyScalar(1-(commit?9:12)*h);
+    const gk=(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
+    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(commit?.3:.75)*tw*h);
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
-    const gk=(commit?520:300)/wf;
     this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*.3*h*h;
     if(this.T.y<.03)this.T.y=.03;
     collide(this.T,.02,true);
@@ -1295,14 +1351,17 @@ class Fighter{
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y).addScaledVector(f,this.ctrl.z);
-    const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
+    // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
+    const slide=(this.sword&&this.sword.def.kind==='spear'?.55:.3)*clamp((this.ctrl.z-.46)/.16,0,1);
+    out.addScaledVector(f,slide);
+    const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
     return out;
   }
   guideDir(hand,out){
     const f=_t2,u=_t3;this.frame(f,u);
-    if(this.thrust)return out.copy(f).addScaledVector(u,.05).normalize();
-    if(this.sword&&this.sword.def.kind==='spear')return out.copy(hand).sub(this.chest).multiplyScalar(.7).addScaledVector(f,1).addScaledVector(u,.1).normalize();
+    // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
+    if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
     out.copy(hand).sub(this.chest).addScaledVector(f,.26).addScaledVector(u,.32);
     return out.normalize();
   }
@@ -1353,7 +1412,7 @@ class Fighter{
     if(this.sword&&this.mainArm){
       const tgt=this.handTarget(_t1.clone());const guide=this.guideDir(tgt,V());
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev:this.limbs.armR.sev)?.8:1);
-      if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,this.commit&&this.stagger<=0&&!exhausted,str,this);}else this.sword.step(h,tgt,guide,this.commit&&this.stagger<=0&&!exhausted,str);
+      const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else this.sword.step(h,tgt,guide,cm,str);
       if(ts>8&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55);}if(ts<4)this._sw=false;
     }
   }
@@ -1590,9 +1649,9 @@ class Fighter{
       const sgn=this.mainArm==='R'?1:-1;
       const shM=this.mainArm==='R'?this.shR:this.shL,shO=this.mainArm==='R'?this.shL:this.shR;
       _t1.copy(shM).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,.55*sgn).addScaledVector(_f,-.2);
-      _t3.copy(s.H).addScaledVector(s.axis,-.045);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1);
+      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1);
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
-      if(!offLimb.sev){if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2);
+      if(!offLimb.sev){if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
         if(_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.05){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1);}}
       s.sync();
     } else if(!this.sword&&this.alive){
@@ -1912,8 +1971,8 @@ function resolveHit(A,B,cap,t,P,pv){
   else if(along>.7)mode='poke';
   else if(t<W.hitFrom)mode='haft';
   else if(W.kind==='blunt')mode='blunt';
-  else if(W.kind==='spear')mode=align>.6&&t>.88?'cut':'flat';
-  else mode=align<.55?'flat':'cut';
+  else if(W.kind==='spear')mode=align>.5&&t>.85?'cut':'flat';
+  else mode=align<.35?'flat':'cut';
   const arcF=isThrust?clamp(.55+s.arc*.6,.55,1):clamp(.3+s.arc*.75,.3,1.15);
   const stamF=A.stamina<12?.55:.8+.2*A.stamina/100;
   const prot=B.prot(cap.zone);const pen=clamp(W.pen*(isThrust?1.2:1),0,1);
@@ -2228,6 +2287,7 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyF')player.kickReq=true;
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
     if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
+    if(e.code==='KeyM'){setMusic(!MUS.on);note(MUS.on?'Music on':'Music off','sm');}
     if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}}
   }
 });
@@ -2251,13 +2311,15 @@ addEventListener('mousemove',e=>{
   if(c.x>.5){player.yaw-=(c.x-.5)*1.7;c.x=.5;}if(c.x<-.5){player.yaw-=(c.x+.5)*1.7;c.x=-.5;}
   if(c.y>.56){player.pitch=clamp(player.pitch+(c.y-.56)*1.3,-1.2,.95);c.y=.56;}if(c.y<-.46){player.pitch=clamp(player.pitch+(c.y+.46)*1.3,-1.2,.95);c.y=-.46;}
 });
-addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-e.deltaY*.0007,.28,.64);},{passive:true});
+addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-clamp(e.deltaY,-120,120)*.0016,.28,.68);lastWheel=performance.now();},{passive:true});
+let lastWheel=0;
 document.addEventListener('pointerlockchange',()=>{input.locked=document.pointerLockElement===cvs;if(!input.locked&&state==='playing'&&lockWanted&&!paused){showPause(true);}});
 let lockWanted=false;
 function requestLock(){lockWanted=true;try{const p=cvs.requestPointerLock();if(p&&p.catch)p.catch(()=>{lockWanted=false;});}catch(e){lockWanted=false;}}
 let paused=false;
 function showPause(v){paused=v;document.getElementById('pause').classList.toggle('hide',!v);input.lmb=input.rmb=false;if(player)player.throwHold=false;
   if(v){lockWanted=false;if(document.pointerLockElement)document.exitPointerLock();if(swooshGain)swooshGain.gain.value=0;}}
+addEventListener('pointerdown',()=>{if(state!=='loading')initAudio();});
 document.getElementById('resumeBtn').addEventListener('click',()=>{showPause(false);requestLock();last=performance.now();});
 document.getElementById('restartBtn').addEventListener('click',()=>{showPause(false);startGame();});
 function toMainMenu(){
@@ -2438,6 +2500,7 @@ function frame(now){
   if(state==='loading')return;
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
+  if(player&&player.sword&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
   for(const s of freeSwords)s.sync();
   for(let i=spurts.length-1;i>=0;i--){const sp=spurts[i];if(simTime>sp.until||!sp.obj.parent){spurts.splice(i,1);continue;}sp.obj.getWorldPosition(_t1);if(_t1.distanceToSquared(camera.position)<.5)continue;const k=(sp.until-simTime);spawnBlood(_t1,_t2.set(sp.dir.x*1.2,1.4+Math.random(),sp.dir.z*1.2),Math.random()<k*.5?2:1,1.2,.9);}
   updateBlood(dt);updatePool(sparks,dt,-9.8,.5);
@@ -2486,7 +2549,7 @@ function frame(now){
   grade.uniforms.uTime.value=now*.001;grassTime.value=now*.001;
   if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.14,.3);swooshFilt.frequency.value=280+ts*95/Math.sqrt(player.sword.def.weight);}else if(swooshGain)swooshGain.gain.value*=.9;
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
-  updateHUD(dt);renderPreview(dt);
+  updateHUD(dt);renderPreview(dt);musicTick();
   composer.render();
 }
 let attractRestart=0;
@@ -2844,5 +2907,5 @@ loadFighters(async g=>{
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
-window.__game={get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={MUS,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 </script>
