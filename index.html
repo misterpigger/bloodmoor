@@ -58,6 +58,8 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 #joinCode:focus-visible,#joinBtn:focus-visible{outline:2px solid var(--ember);outline-offset:-2px}
 #joinBtn{font:400 20px var(--f-display);padding:0 16px;background:rgba(255,155,61,.16);color:var(--parch);border:none;border-left:1px solid rgba(236,220,184,.25);cursor:pointer}
 #lobby{margin:0;max-width:52ch;font-size:15px;color:var(--parch)}
+#lobby .lnk{font:600 13px var(--f-ui);background:none;border:1px solid rgba(236,220,184,.35);color:var(--parch);padding:2px 8px;margin:4px 6px 0 0;cursor:pointer}
+#lobby .lnk:focus-visible{outline:2px solid var(--ember)}
 #lobby .code{font-size:22px;letter-spacing:.16em;color:var(--ember);-webkit-user-select:text;user-select:text}
 .btn:disabled{opacity:.5;cursor:default;transform:none}
 /* fighter card */
@@ -259,6 +261,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
+let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
 function netEv(e){if(NET.mode!=='host')return;if(NET.ev.length<300||!'bkchtnwCS'.includes(e[0]))NET.ev.push(e);}
@@ -835,6 +838,7 @@ function mNote(inst,note,t,vol,dur,layer){const keys=MUS_INST[inst];let k=keys[0
   const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain();
   g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+(inst==='organ'?.25:.012));if(dur)g.gain.setTargetAtTime(0,t+dur,inst==='organ'?.35:.12);
   s.connect(g);g.connect(MUS.lay[layer]);s.start(t);s.stop(t+(dur||2)+2);}
+function mHitNow(name,vol){if(!AC||!MUS.buf[name])return;const s=AC.createBufferSource();s.buffer=MUS.buf[name];const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(AC.destination);s.start();}
 function mHit(name,t,vol){const b=MUS.buf[name];if(!b)return;const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.96+Math.random()*.08;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay.drums);s.start(t);}
 function musicIntensity(){
   if(state==='attract'||state==='loading')return 0;if(state==='dead')return 0;if(state==='won')return 1;
@@ -1384,6 +1388,7 @@ class Fighter{
     this.stagger=Math.max(0,this.stagger-h);this.clashCd-=h;this.kickCd-=h;this.staminaDelay-=h;
     let wish=_t1.set(0,0,0),run=false;
     if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);else run=this.think(h,wish);
+    if(simTime<CD_END){wish.set(0,0,0);run=false;this.commit=false;this.kickReq=this.jumpReq=this.slideReq=this.throwReq=false;}
     const legs=!(this.limbs.legL.sev||this.limbs.legR.sev);
     const exhausted=this.stamina<12;
     const onGround=this.pos.y<=.001;
@@ -1964,6 +1969,7 @@ function bladeContact(s,B){
   if(moved)s.constrain(H);
 }
 function resolveHit(A,B,cap,t,P,pv){
+  if(simTime<CD_END)return;
   const s=A.sword,W=s.def,phys=!!pv;if(phys)_va.copy(pv);else s.velAt(t,_va);_rel.subVectors(_va,B.vel);const speed=_rel.length();
   if(speed<2.2){if(!phys){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);}return;}   // a resting touch is not a blow, and doesn't use up the next one
   A.hitCd.set(B.id,simTime+.3);
@@ -2089,6 +2095,7 @@ let swordId=0;
 function swordShove(s,dir,dv){if(s.rb){s.rb.applyImpulseAtPoint(_pv.copy(dir).multiplyScalar(dv*s.M),s.T,true);}else s.Hv.addScaledVector(dir,dv);}
 function mkArm(){return {phase:'guard',t:0,charge:0,pos:V(),vel:V(),tgt:V(),power:0,hit:false,init:false};}
 function fistCheck(A,arm){
+  if(simTime<CD_END)return;
   for(const B of fighters){
     if(B===A||!B.alive||B.pos.distanceToSquared(A.pos)>4)continue;
     for(const c of B.caps){
@@ -2122,6 +2129,7 @@ function thrownCheck(s){
   }
 }
 function thrownHit(s,B,hit,ht,P,pv){
+  if(simTime<CD_END)return;
   {
     const W=s.def;_rel.subVectors(pv,B.vel);const speed=_rel.length();const dir=_rel.clone().normalize();
     s.flying=false;
@@ -2167,7 +2175,7 @@ const PHASES=[{wait:45,shrink:25,frac:.55,dps:7},{wait:30,shrink:22,frac:.5,dps:
 function zoneReset(){zone.c.set(0,0,0);zone.r=MAPS[curMap].zoneR;zone.phase=0;zone.state='wait';zone.t=0;zone.dps=5;planNext();}
 function planNext(){const P=PHASES[Math.min(zone.phase,PHASES.length-1)];const r2=Math.max(3.5,zone.r*P.frac);const a=Math.random()*6.283,off=Math.random()*(zone.r-r2)*.7;
   let cx=zone.c.x+Math.cos(a)*off,cz=zone.c.z+Math.sin(a)*off;cx=clamp(cx,-MAP+r2*.5,MAP-r2*.5);cz=clamp(cz,-MAP+r2*.5,MAP-r2*.5);zone.next={c:V(cx,0,cz),r:r2};zone.from={c:zone.c.clone(),r:zone.r};}
-function zoneStep(h){if(zone.off)return;const P=PHASES[Math.min(zone.phase,PHASES.length-1)];zone.t+=h;
+function zoneStep(h){if(zone.off||simTime<CD_END)return;const P=PHASES[Math.min(zone.phase,PHASES.length-1)];zone.t+=h;
   if(zone.state==='wait'){if(zone.t>=P.wait){zone.state='shrink';zone.t=0;zone.from={c:zone.c.clone(),r:zone.r};}}
   else{const k=clamp(zone.t/P.shrink,0,1),e=k*k*(3-2*k);zone.c.lerpVectors(zone.from.c,zone.next.c,e);zone.r=lerp(zone.from.r,zone.next.r,e);zone.dps=P.dps;
     if(k>=1){zone.phase++;zone.state='wait';zone.t=0;planNext();}}}
@@ -2233,7 +2241,7 @@ function spawnMatch(withPlayer){
       ok=isFree(x,z,.6)&&spots.every(([sx,sz])=>Math.hypot(sx-x,sz-z)>(withPlayer?(k<200?M.spacing:M.spacing*.5):2.5));
     }
     spots.push([x,z]);
-    const isP=withPlayer&&i===0;const rc=withPlayer&&NET.mode==='host'&&i>=1?NET.conns[i-1]:null;
+    const isP=withPlayer&&i===0;const rc=withPlayer&&NET.mode==='host'&&i>=1?NET.conns.filter(q=>q.hello)[i-1]:null;
     const f=new Fighter(isP?(PROFILE.name.trim()||'You'):rc?rc.name:names[i],isP,x,z,isP?PROFILE.pal.slice():rc&&rc.pal?rc.pal.slice():pals[i%pals.length],isP||rc?{weapon:'arming',armor:[]}:botLoad());
     if(rc){f.remote=rc;rc.f=f;}
     if(!withPlayer)f.yaw=Math.atan2(-x,-z);
@@ -2263,6 +2271,13 @@ function feedRow(killer,victim,cause){
   while(feed.children.length>6)feed.lastChild.remove();
 }
 function addScore(n){score+=n;}
+function startCountdown(){CD_END=simTime+3;cdShown=-1;}
+let cdShown=-1;
+function countdownTick(left){ // shown on every screen; the host's clock decides
+  const n=left>0?Math.ceil(left):0;if(n===cdShown)return;cdShown=n;
+  if(n>0){showBanner(String(n),(zone.off&&MODEHUD[1])||'Get ready');if(AC&&MUS.buf['drum-low']){mHitNow('drum-low',1);}}
+  else if(left>-1){showBanner('Fight!','');sfx('clash',null,.8,1,0,false);cheer(.6);}
+}
 function tell(f,text,cls){if(!f)return;if(f.isPlayer)note(text,cls);else if(f.remote)netEv(['o',f.id,text,cls||'']);}
 let hmT=null;function hitMarker(kill){const c=document.getElementById('cross');c.classList.remove('hit','kill');void c.offsetWidth;c.classList.add(kill?'kill':'hit');clearTimeout(hmT);hmT=setTimeout(()=>c.classList.remove('hit','kill'),kill?420:160);}
 function note(text,cls=''){const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
@@ -2330,7 +2345,10 @@ addEventListener('pointerdown',()=>{if(state!=='loading')initAudio();});
 document.getElementById('resumeBtn').addEventListener('click',()=>{showPause(false);requestLock();last=performance.now();});
 document.getElementById('restartBtn').addEventListener('click',()=>{showPause(false);startGame();});
 function toMainMenu(){
-  if(NET.mode)netReset();
+  if(NET.mode==='host')for(const x of NET.conns)try{x.c.send({t:'lobby'});}catch(e){}
+  toMenuKeepRoom();if(NET.mode==='host')hostLobby();else if(NET.mode==='client')clientLobby();
+}
+function toMenuKeepRoom(){
   showPause(false);lockWanted=false;if(document.pointerLockElement)document.exitPointerLock();
   el('end').classList.add('hide');el('hud').classList.add('hide');el('menu').classList.remove('hide');
   state='attract';spawnMatch(false);attractRestart=performance.now();camera.fov=74;camera.updateProjectionMatrix();
@@ -2367,7 +2385,7 @@ function startGame(){
   END=null;MODEHUD=['',''];
   if(MODE!=='br'){paused=false;initAudio();state='playing';if(curMap!=='arena')loadMap('arena');modeStart();
     document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);requestLock();return;}
-  RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';
+  RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';startCountdown();
   if(NET.mode==='host'){NET.ev.length=0;hostSendStart();}
   document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);
   requestLock();note('Last blade standing','sm');
@@ -2461,6 +2479,7 @@ function updateHUD(dt){
   if((state==='dead'||state==='won')&&performance.now()-deathT>2600&&el('end').classList.contains('hide')){
     el('end').classList.remove('hide');if(document.pointerLockElement)document.exitPointerLock();lockWanted=false;hud.prompt.classList.add('hide');
     const t=el('endtitle');t.textContent=state==='won'?'Victory':'Slain';t.className=state==='won'?'win':'lose';
+    el('againBtn').textContent=NET.mode==='client'?'Waiting for the host…':'Fight again';el('againBtn').disabled=NET.mode==='client';
     if(END){t.textContent=END.title;el('endline').textContent=END.line;el('endcause').textContent=END.cause||'';}
     else{el('endline').textContent=`Placed #${placement} of ${MAPS[curMap].fighters} · ${player?player.kills:0} ${player&&player.kills===1?'kill':'kills'} · ${score} points`;
     if(state==='won')el('endcause').textContent='Last blade standing in Bloodmoor.';}
@@ -2490,6 +2509,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
+  if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 function logic(dt){
   if(NET.mode==='client'){clientFrame(dt);return;}
@@ -2554,7 +2574,7 @@ function frame(now){
     for(const f of fighters)if(f.alive&&f.outside&&Math.random()<.6){const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=f.chest.x+(Math.random()-.5)*.5;embers.pos[i*3+1]=f.chest.y+(Math.random()-.7)*1.2;embers.pos[i*3+2]=f.chest.z+(Math.random()-.5)*.5;embers.vel[i*3]=(Math.random()-.5)*.6;embers.vel[i*3+1]=1+Math.random()*1.5;embers.vel[i*3+2]=(Math.random()-.5)*.6;embers.life[i]=.6+Math.random();}
   }
   grade.uniforms.uTime.value=now*.001;grassTime.value=now*.001;
-  if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.14,.3);swooshFilt.frequency.value=280+ts*95/Math.sqrt(player.sword.def.weight);}else if(swooshGain)swooshGain.gain.value*=.9;
+  if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.14,.3);swooshFilt.frequency.value=Math.min(6000,280+ts*95/Math.sqrt(player.sword.def.weight));}else if(swooshGain)swooshGain.gain.value*=.9;
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
   updateHUD(dt);renderPreview(dt);musicTick();
   composer.render();
@@ -2610,7 +2630,7 @@ let MODE='br',RUN=null,END=null,MODEHUD=['',''];
 try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
-function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),human:true}];if(NET.mode==='host')for(const x of NET.conns)h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],human:true});return h;}
+function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],human:true});return h;}
 function botEntrant(name,skill){return {ctl:null,name,pal:PALETTES[(Math.random()*PALETTES.length)|0],human:false,skill};}
 const vb=(n,a,b)=>n+' '+(n==='You'?b:a);
 function showBanner(title,sub){const b=el('banner');b.querySelector('b').textContent=title;b.querySelector('span').textContent=sub||'';b.classList.remove('hide');b.style.animation='none';void b.offsetWidth;b.style.animation='';clearTimeout(showBanner.t);showBanner.t=setTimeout(()=>b.classList.add('hide'),3200);}
@@ -2626,7 +2646,7 @@ function spawnEntrant(en,x,z,kit,skill){
   if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
   f.yaw=Math.atan2(-x,-z);f.entrant=en;f.ai.retarget=0;fighters.push(f);if(isMe){player=f;f.pitch=-.05;}return f;
 }
-function roundSetup(){clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;}
+function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;}
 function endRun(winners,title,line,cause){
   const meWon=winners.some(e=>e.ctl==='me');
   END={title:meWon?'Victory':title,line,cause:meWon?cause:(cause||'')};state=meWon?'won':'dead';deathT=performance.now();
@@ -2727,21 +2747,28 @@ function netReset(){
 async function netHost(){
   if(NET.mode==='host')return;netReset();netLobby('Opening a room…');
   let P;try{P=await loadPeer();}catch(e){netLobby('Multiplayer could not load here.');return;}
-  NET.mode='host';NET.code=mkCode();hostKeepAlive(true);
+  NET.mode='host';NET.code=(()=>{try{const c=localStorage.getItem('bloodmoor-room');if(c&&/^[A-Z0-9]{5}$/.test(c)&&!NET.codeTaken)return c;}catch(e){}return mkCode();})();try{localStorage.setItem('bloodmoor-room',NET.code);}catch(e){}hostKeepAlive(true);
   const peer=NET.peer=new P('bloodmoor-'+NET.code.toLowerCase(),peerOpts());
   peer.on('open',hostLobby);
-  peer.on('error',e=>{if(NET.peer!==peer)return;if(e.type==='unavailable-id'){netReset();netHost();}else if(e.type!=='peer-unavailable')netLobby('Connection problem ('+esc(e.type)+'). Try again.');});
-  peer.on('connection',c=>{
-    c.on('open',()=>{if(NET.conns.length>=7){c.send({t:'full'});setTimeout(()=>c.close(),400);return;}NET.conns.push({c,name:'Friend',pal:null,f:null});hostLobby();});
+  peer.on('error',e=>{if(NET.peer!==peer)return;if(e.type==='unavailable-id'){netReset();NET.codeTaken=true;netHost();}else if(e.type!=='peer-unavailable')netLobby('Connection problem ('+esc(e.type)+'). Try again.');});
+  peer.on('connection',c=>{if(window.__netdbg)console.warn('NETDBG host connection',c.connectionId,c.peer);
+    c.on('open',()=>{if(NET.conns.some(x=>x.c===c))return;   // the library can announce the same connection twice
+      const old=NET.conns.find(x=>x.c.peer===c.peer);
+      if(old){const oc=old.c;old.c=c;try{oc.close();}catch(e){}hostLobby();return;}
+      if(NET.conns.length>=7){c.send({t:'full'});setTimeout(()=>c.close(),400);return;}NET.conns.push({c,name:'Friend',pal:null,f:null,hello:false});hostLobby();});
     c.on('data',d=>hostData(c,d));
-    c.on('close',()=>{const k=NET.conns.findIndex(x=>x.c===c);if(k<0)return;const x=NET.conns[k];NET.conns.splice(k,1);if(x.f){x.f.remote=null;if(x.f.alive&&state==='playing')note(x.f.name+' left','sm');}hostLobby();});
+    c.on('close',()=>{if(window.__netdbg)console.warn('NETDBG host close',c.connectionId);const k=NET.conns.findIndex(x=>x.c===c);if(k<0)return;   // (a replaced connection is no longer in the list)
+const x=NET.conns[k];NET.conns.splice(k,1);if(x.f){x.f.remote=null;if(x.f.alive&&state==='playing')note(x.f.name+' left','sm');}hostLobby();});
   });
 }
-function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.map(x=>esc(x.name));
-  netLobby(`Room code <b class="code">${NET.code}</b> · ${n.length?n.length+' joined: '+n.join(', '):'waiting for friends'}<br>Send them the code, then press Draw your sword to start everyone.`);}
+function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.filter(x=>x.hello).map(x=>esc(x.name));
+  const link=location.origin+location.pathname+'?join='+NET.code;
+  netLobby(`Room code <b class="code">${NET.code}</b> · ${n.length?n.length+' joined: '+n.join(', '):'waiting for friends'}<br>Your code stays the same every time you host. <button class="lnk" id="copyInv">Copy invite link</button> <button class="lnk" id="leaveRoom">Close room</button>`);
+  el('copyInv').onclick=()=>{try{navigator.clipboard.writeText(link);el('copyInv').textContent='Copied';}catch(e){prompt('Invite link',link);}};
+  el('leaveRoom').onclick=()=>{for(const x of NET.conns)try{x.c.send({t:'closed'});}catch(e){}netReset();};}
 function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
-  if(d.t==='hello'){x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
+  if(d.t==='hello'){x.hello=true;x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
@@ -2759,7 +2786,7 @@ function remoteInput(f,wish,h){
 const ARMOR_SLOTS=['head','body','arms','legs'];
 function netSnap(){
   const z=zone;
-  const S={t:'s',z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
+  const S={t:'s',cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
@@ -2779,8 +2806,12 @@ function netTick(dt){
     if(state==='attract'||!NET.conns.length){NET.ev.length=0;return;}
     NET.sendT+=dt;if(NET.sendT<.05)return;NET.sendT=0;
     const S=netSnap();for(const x of NET.conns)if(x.c.open&&x.f)try{x.c.send(S);}catch(e){}
-  } else if(NET.mode==='client'&&NET.host&&NET.host.open&&player&&state!=='attract'){
-    NET.inT+=dt;if(NET.inT<1/30)return;NET.inT=0;const k=input.keys,p=player;
+  }
+}
+// friends' controls go out on their own steady clock, so a slow frame never stalls them
+setInterval(()=>{if(NET.mode==='client')clientSendInput();},33);
+function clientSendInput(){
+  if(NET.host&&NET.host.open&&player&&state!=='attract'){const k=input.keys,p=player;
     const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb?32:0)|(input.rmb?64:0),
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
@@ -2795,13 +2826,15 @@ async function netJoin(code){
   netReset();netLobby('Joining '+code+'…');
   let P;try{P=await loadPeer();}catch(e){netLobby('Multiplayer could not load here.');return;}
   NET.mode='client';const peer=NET.peer=new P(undefined,peerOpts());
-  peer.on('open',()=>{const c=peer.connect('bloodmoor-'+code.toLowerCase(),{reliable:true});NET.host=c;
-    c.on('open',()=>{c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal});netLobby(`Joined room <b class="code">${code}</b>. Waiting for the host to start…`);el('startBtn').disabled=true;el('startBtn').textContent='Waiting for host';});
+  peer.on('open',()=>{if(NET.host||NET.peer!==peer)return;const c=peer.connect('bloodmoor-'+code.toLowerCase(),{reliable:true});NET.host=c;
+    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
     c.on('data',clientData);
-    c.on('close',()=>{if(NET.peer!==peer)return;const inGame=state!=='attract';if(inGame)toMainMenu();else netReset();netLobby('The host closed the room.');});
+    c.on('close',()=>{if(window.__netdbg)console.warn('NETDBG client close',c.connectionId);if(NET.peer!==peer)return;const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('Lost the connection to the host.');});
   });
-  peer.on('error',e=>{if(NET.peer!==peer)return;const m=e.type==='peer-unavailable'?'No room with that code. Check it with the host.':'Connection problem ('+esc(e.type)+').';netReset();netLobby(m);});
+  peer.on('error',e=>{if(window.__netdbg)console.warn('NETDBG client peer error',e.type);if(NET.peer!==peer)return;const m=e.type==='peer-unavailable'?'No room with that code. Check it with the host.':'Connection problem ('+esc(e.type)+').';netReset();netLobby(m);});
 }
+function clientLobby(){netLobby(`In room <b class="code">${NET.code}</b>. Waiting for the host to start the next match… <button class="lnk" id="leaveRoom">Leave room</button>`);el('startBtn').disabled=true;el('startBtn').textContent='Waiting for host';
+  el('leaveRoom').onclick=()=>{netReset();};}
 function clientData(d){
   if(!d||typeof d!=='object')return;
   if(d.t==='s'){if(!NET.puppets.size)return;const now=performance.now();NET.gap=NET.cur?clamp(now-NET.curAt,16,200):50;NET.prev=NET.cur;NET.cur=d;NET.curAt=now;NET.fresh=true;if(d.e&&d.e.length)clientEvents(d.e);}
@@ -2809,6 +2842,8 @@ function clientData(d){
   else if(d.t==='add')clientAdd(d);
   else if(d.t==='end'){END={title:d.title,line:d.line,cause:d.cause};state=d.won?'won':'dead';deathT=performance.now();}
   else if(d.t==='full'){netReset();netLobby('That room is full.');}
+  else if(d.t==='lobby'){if(state!=='attract')toMenuKeepRoom();clientLobby();}
+  else if(d.t==='closed'){const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('The host closed the room.');}
 }
 function clientStart(d){
   if(PW){for(const f of fighters)f.dispose();fighters.length=0;for(const s of freeSwords)s.dispose();freeSwords.length=0;for(const it of [...loot])removeLoot(it);PW.free();PW=null;PHC.clear();physStatics.length=0;physKey=-1;}
@@ -2835,6 +2870,7 @@ const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){
   const S=NET.cur;if(!S)return;const P=NET.prev||S;
   const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1);
+  if(S.cd!=null)countdownTick(S.cd);
   zone.c.set(S.z[0],0,S.z[1]);zone.r=lerp(P.z[2],S.z[2],a);zone.phase=S.z[3];zone.state=S.z[4]?'shrink':'wait';zone.t=S.z[5];zone.next=S.z[6]?{c:V(S.z[6][0],0,S.z[6][1]),r:S.z[6][2]}:null;zone.dps=S.z[7];zone.off=!!S.z[8];if(S.mh)MODEHUD=S.mh;
   const pm=new Map();for(const o of P.f)pm.set(o.i,o);
   for(const o of S.f){const f=NET.puppets.get(o.i);if(!f)continue;const q=pm.get(o.i)||o;
@@ -2909,6 +2945,8 @@ function loadFighters(onLoad,onErr){
 loadFighters(async g=>{
   GLTF=g;await physReady;
   el('physTag').textContent='';showEngine();initFighterCard();showMode();
+  {const q=new URLSearchParams(location.search).get('join');let last='';try{last=localStorage.getItem('bloodmoor-lastjoin')||'';}catch(e){}
+   el('joinCode').value=(q||last||'').toUpperCase().slice(0,5);if(q&&/^[A-Za-z0-9]{5}$/.test(q))netJoin(q);}
   spawnMatch(false);state='attract';attractRestart=performance.now();
   el('loading').classList.add('hide');el('menu').classList.remove('hide');
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
