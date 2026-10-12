@@ -1352,7 +1352,7 @@ class Fighter{
   frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cp).addScaledVector(_f,-sp);}
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
-    out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y).addScaledVector(f,this.ctrl.z);
+    out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y-(this.sword&&this.sword.def.kind==='spear'?.4:.22)).addScaledVector(f,this.ctrl.z);
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     const slide=(this.sword&&this.sword.def.kind==='spear'?.55:.3)*clamp((this.ctrl.z-.46)/.16,0,1);
     out.addScaledVector(f,slide);
@@ -1364,7 +1364,7 @@ class Fighter{
     const f=_t2,u=_t3;this.frame(f,u);
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
     if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
-    out.copy(hand).sub(this.chest).addScaledVector(f,.26).addScaledVector(u,.32);
+    out.copy(hand).sub(this.chest).addScaledVector(f,.26).addScaledVector(u,.5);
     return out.normalize();
   }
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.35);}
@@ -1616,7 +1616,8 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03;
-    this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:0,1-Math.exp(-10*dt));
+    const stance=this.alive&&!this.ragdoll&&this.mainArm&&sp<3.6&&this.slideT<=0?.3:0;
+    this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:stance,1-Math.exp(-10*dt));
     const kk=this.kickT>=0?Math.sin(clamp(this.kickT/.45,0,1)*Math.PI):0;
     // unarmed: the shoulders turn and the body leans into a long punch
     let pl=0,pt=0;if(!this.sword&&this.alive){const rc=this.armLen[0]+this.armLen[1];for(const sd of ['R','L']){const a=this.fists[sd];if(!a.init)continue;const d=a.pos.distanceTo(sd==='R'?this.shR:this.shL)-rc*.92;if(d>0){pl=Math.max(pl,d);pt+=(sd==='R'?1:-1)*d;}}}
@@ -1959,9 +1960,8 @@ function bladeContact(s,B){
 }
 function resolveHit(A,B,cap,t,P,pv){
   const s=A.sword,W=s.def,phys=!!pv;if(phys)_va.copy(pv);else s.velAt(t,_va);_rel.subVectors(_va,B.vel);const speed=_rel.length();
-  if(phys&&speed<2.2)return;   // a resting touch is not a blow
+  if(speed<2.2){if(!phys){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);}return;}   // a resting touch is not a blow, and doesn't use up the next one
   A.hitCd.set(B.id,simTime+.3);
-  if(speed<2.2){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);return;}
   const dir=_rel.clone().normalize();
   const along=Math.abs(dir.dot(s.axis));
   const isThrust=along>.7&&t>.8&&W.thrust>.5;
