@@ -1120,7 +1120,7 @@ const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe
 const _a=V(),_v=V(),_g=V(),_e=V(),_z=V(),_sm=new THREE.Matrix4();
 class Sword{
   constructor(def){this.def=def;this.len=def.len;this.mesh=def.make();this.H=V();this.Hv=V();this.Hp=V();this.T=V();this.Tp=V();this.axis=V(0,1,0);this.edge=V(1,0,0);this.tipVel=V();this.free=false;this.age=0;this.arc=0;this.lastDir=V(1,0,0);this.power=0;this.swings=0;this.flying=false;this.thrower=null;this.Hprev=V();this.stuck=null;this.owner=null;this.rb=null;this.wallCd=0;this.id=swordId++;if(PW)this.physMake();}
-  reset(h,dir){this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);if(this.edge.lengthSq()<1e-4)this.edge.set(0,0,1).addScaledVector(this.axis,-this.axis.z);this.edge.normalize();this.arc=0;if(this.rb)this.physPose();}
+  reset(h,dir){if(this.planted){this.planted=false;if(this.rb)this.rb.setBodyType(R.RigidBodyType.Dynamic,true);}this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);if(this.edge.lengthSq()<1e-4)this.edge.set(0,0,1).addScaledVector(this.axis,-this.axis.z);this.edge.normalize();this.arc=0;if(this.rb)this.physPose();}
   // ---- rigid body: the weapon is a real object with weight and balance; hands and wrists push it, the solver handles every contact
   physMake(){
     const parts=wepParts(this.def);if(!parts)return;
@@ -1197,8 +1197,9 @@ class Sword{
   }
   unstick(){if(!this.stuck)return;if(this.stuck.j&&PW){try{PW.removeImpulseJoint(this.stuck.j,true);}catch(e){}}this.stuck=null;}
   physFree(h){
-    this.age+=h;this.wallCd-=h;
+    this.age+=h;this.wallCd-=h;if(this.planted)return;
     if(this.flying){
+      if(this.def.kind==='spear'&&!this.planted&&this.T.y<.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
       if(this.def.kind==='spear'&&this.v.lengthSq()>4){_pv.copy(this.v).normalize();_pw.crossVectors(this.axis,_pv);this.w.addScaledVector(_pw,40*h).multiplyScalar(1-6*h);this.rb.setAngvel(this.w,true);}
       if(this.age>3||this.age>.15&&this.v.length()<2.5)this.flying=false;
     }
@@ -1244,13 +1245,17 @@ class Sword{
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
   }
   stepFree(h){
-    this.age+=h;if(this.age>6&&this.tipVel.lengthSq()<.01)return;
+    this.age+=h;if(this.planted)return;if(this.age>6&&this.tipVel.lengthSq()<.01)return;
+    if(this.flying&&this.def.kind==='spear'&&this.T.y<.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
     const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;if(p.y<.04){p.y=.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}collide(p,.03,true);}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
     if(this.flying&&this.def.kind==='spear'){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
     if(this.flying&&(this.age>3||(this.H.y<.08&&this.T.y<.08)||this.age>.15&&this.Hv.length()<2.5&&this.tipVel.length()<2.5))this.flying=false;
   }
+  // a thrown spear that lands point-first sticks in the ground instead of levering back over its point
+  plant(){this.planted=true;this.flying=false;this.T.y=Math.max(this.T.y,.02);this.T.addScaledVector(this.axis,.12);this.H.copy(this.T).addScaledVector(this.axis,-this.len);this.Hp.copy(this.H);this.Tp.copy(this.T);this.Hv.set(0,0,0);this.tipVel.set(0,0,0);
+    if(this.rb){this.physPose();this.rb.setBodyType(R.RigidBodyType.Fixed,true);}sThud(this.T,.6);spawnSparks(this.T,4,null);}
   stepLimp(h,hand){
     this.Hp.copy(this.H);this.H.copy(hand);
     const vx=(this.T.x-this.Tp.x)*.99,vy=(this.T.y-this.Tp.y)*.99,vz=(this.T.z-this.Tp.z)*.99;this.Tp.copy(this.T);this.T.x+=vx;this.T.y+=vy-9.8*h*h;this.T.z+=vz;
@@ -1487,12 +1492,12 @@ class Fighter{
     // the weapon flies off with the blade's momentum: the handle takes the average of hand and tip speed, the tip keeps its spin
     // solid base power plus whatever the swing adds; flies mostly toward the crosshair, keeps the swing's spin
     _g.copy(s.Hv).lerp(s.tipVel,.5);const cs=_g.length();
-    const speed=clamp((10+Math.max(cs,s.tipVel.length()*.6)*.55)/Math.pow(s.def.weight,.35),8,19);
+    const speed=clamp((10+Math.max(cs,s.tipVel.length()*.6)*.55)/Math.pow(s.def.weight,.35),8,19)*(s.def.kind==='spear'?1.35:1);
     if(this.isPlayer){const tp=aimPoint(V());const d=Math.max(1,tp.distanceTo(s.H)),ft=Math.min(.75,d/speed);tp.y+=4.9*ft*ft;_e.subVectors(tp,s.H).normalize();}
     else{const cp=Math.cos(this.pitch);_e.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
     if(cs>.5)_v.copy(_g).multiplyScalar(1/cs).lerp(_e,.88).normalize();else _v.copy(_e);
     const spin=s.def.kind==='spear'?0:.45;_a.subVectors(s.tipVel,_g).multiplyScalar(spin);if(_a.length()<4&&spin>0)_a.copy(Y_AXIS).multiplyScalar(6);_a.addScaledVector(s.axis,-_a.dot(s.axis));
-    if(s.def.kind==='spear')s.reset(s.H,_v);
+    if(s.def.kind==='spear'){_g.copy(this.mainArm==='L'?this.shL:this.shR);_g.y+=.08;s.reset(_g,_v);}   // javelin: thrown overhand from the shoulder
     if(s.rb){_g.crossVectors(s.axis,_a).multiplyScalar(1/s.len);s.v.copy(_v).multiplyScalar(speed);s.w.copy(_g);s.rb.setLinvel(s.v,true);s.rb.setAngvel(s.w,true);s.setGroup(GR_HELD);}
     else{s.Hp.copy(s.H).addScaledVector(_v,-speed*H).addScaledVector(_a,H*.5);s.Tp.copy(s.T).addScaledVector(_v,-speed*H).addScaledVector(_a,-H*.5);}
     s.flying=true;s.thrower=this;s.age=0;
