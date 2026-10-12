@@ -45,6 +45,20 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 .map.on{border-color:var(--ember);background:rgba(255,155,61,.12)}
 .map:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 @media (max-width:700px){.panel{background:rgba(7,8,12,.86)}.controls{font-size:13px}}
+/* fighter card */
+.fcard{position:absolute;right:clamp(16px,5vw,80px);top:50%;transform:translateY(-50%);width:270px;display:flex;flex-direction:column;gap:9px;padding:16px;background:rgba(7,8,12,.72);border:1px solid rgba(236,220,184,.18);border-radius:3px}
+#fprev{width:100%;aspect-ratio:240/280;display:block;background:radial-gradient(circle at 50% 40%,rgba(255,155,61,.14),transparent 70%)}
+.frow{display:grid;grid-template-columns:52px 1fr;align-items:center;gap:8px;font-size:13px;color:var(--parch-dim)}
+#fname{font:500 15px var(--f-ui);color:var(--parch);background:rgba(236,220,184,.06);border:1px solid rgba(236,220,184,.25);border-radius:2px;padding:5px 8px;min-width:0;-webkit-user-select:text;user-select:text}
+#fname:focus-visible{outline:2px solid var(--ember);outline-offset:1px}
+.sw{display:flex;flex-wrap:wrap;gap:5px}
+.sw button{width:20px;height:20px;border-radius:50%;border:2px solid rgba(0,0,0,.4);cursor:pointer;padding:0}
+.sw button[aria-checked=true]{outline:2px solid var(--ember);outline-offset:1px}
+.sw button:focus-visible{outline:2px solid var(--parch);outline-offset:1px}
+.seg{display:flex;gap:4px}
+.seg button{flex:1;font:500 13px var(--f-ui);padding:4px 0;background:rgba(236,220,184,.05);border:1px solid rgba(236,220,184,.25);color:var(--parch-dim);cursor:pointer}
+.seg button[aria-checked=true]{border-color:var(--ember);color:var(--parch);background:rgba(255,155,61,.12)}
+@media (max-width:1100px){.fcard{display:none}}
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
@@ -125,7 +139,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
       <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q while you swing and let go to throw</dd>
       <dt><kbd>V</kbd></dt><dd>Switch between third and first person</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
-      <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to wind up a punch with each hand, let go to throw it</dd>
+      <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small">Wild swinging burns stamina, turns your blade flat and glances off armor. Wind up, keep the edge true, and parry to leave them open.</p>
@@ -140,6 +154,15 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <button class="btn" id="startBtn">Draw your sword</button>
     <p class="small">Needs a keyboard and mouse. The ring of fire closes in, so stay inside it. Loot glows: pale is common, blue is better, gold is the best.</p>
   </div>
+  <aside class="fcard" aria-label="Your fighter">
+    <div class="eyebrow">Your fighter</div>
+    <canvas id="fprev" width="480" height="560" aria-label="Preview of your fighter"></canvas>
+    <label class="frow">Name <input id="fname" maxlength="16" spellcheck="false" autocomplete="off" placeholder="Nameless"></label>
+    <div class="frow">Coat <div class="sw" data-k="0" role="radiogroup" aria-label="Coat colour"></div></div>
+    <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
+    <div class="frow">Hose <div class="sw" data-k="2" role="radiogroup" aria-label="Hose colour"></div></div>
+    <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
+  </aside>
 </div>
 
 <div id="hud" class="hide">
@@ -1305,7 +1328,8 @@ class Fighter{
       const arm=this.fists[side];if(this.limbs[side==='R'?'armR':'armL'].sev)continue;
       const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
       const held=this.isPlayer?(side==='R'?input.lmb:input.rmb):this.fistHold[side];
-      if(!arm.init){arm.pos.copy(this.chest).addScaledVector(f,.25).addScaledVector(_r,.13*sg);arm.vel.set(0,0,0);arm.init=true;}
+      if(!arm.init){arm.pos.copy(this.chest).addScaledVector(f,.25).addScaledVector(_r,.13*sg);arm.vel.set(0,0,0);arm.init=true;arm.c={x:.12*sg,y:.25,z:.27};arm.cd=0;}
+      if(this.isPlayer){this.stepFistFree(h,side,arm,held,sg,sh,f,u,reach);continue;}
       if(arm.phase==='guard'&&held&&this.stamina>5&&this.stagger<=0){arm.phase='charge';arm.charge=0;}
       if(arm.phase==='charge'){
         arm.charge=Math.min(1,arm.charge+h/.6);this.useStamina(3*h);
@@ -1324,6 +1348,28 @@ class Fighter{
       _v.subVectors(arm.pos,sh);const rmax=reach+(arm.phase==='punch'?.12:0);if(_v.length()>rmax){_v.setLength(rmax);arm.pos.copy(sh).add(_v);}
       if(arm.phase==='punch'&&!arm.hit)fistCheck(this,arm);
     }
+  }
+  // Half Sword style: hold a mouse button and that fist follows the mouse; the punch is however hard you swing it
+  stepFistFree(h,side,arm,held,sg,sh,f,u,reach){
+    const c=arm.c;
+    if(held&&!arm.wasHeld){c.x=.05*sg;c.y=.25;c.z=.25;}arm.wasHeld=held;
+    if(!held){const k=1-Math.exp(-7*h);c.x+=(.12*sg-c.x)*k;c.y+=(.25-c.y)*k;c.z+=(.27-c.z)*k;}
+    if(held){ // the fist swings in an arc round the shoulder: mouse sideways sweeps it, up/down lifts it, the wheel extends it
+      const az=c.x*1.7,el=(c.y-.2)*1.5,ext=reach*clamp(.8+c.z,.55,1.3);
+      _v.copy(f).multiplyScalar(Math.cos(az)).addScaledVector(_r,Math.sin(az));_v.multiplyScalar(Math.cos(el)).addScaledVector(u,Math.sin(el));
+      _g.copy(sh).addScaledVector(_v,ext).addScaledVector(_r,-.06*sg);
+    } else {
+      _g.copy(this.chest).addScaledVector(_r,c.x).addScaledVector(u,c.y).addScaledVector(f,c.z);
+      _v.subVectors(_g,sh);if(_v.length()>reach){_v.setLength(reach);_g.copy(sh).add(_v);}
+    }
+    const str=(this.stamina<12?.6:1)*(this.stagger>0?.5:1);
+    const k=held?560:300,cc=2*Math.sqrt(k)*(held?.72:.95),maxA=(held?170:90)*str;
+    _a.subVectors(_g,arm.pos).multiplyScalar(k).addScaledVector(arm.vel,-cc);if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);
+    _v.subVectors(arm.pos,sh);if(_v.length()>reach*1.32){_v.setLength(reach*1.32);arm.pos.copy(sh).add(_v);_v.normalize();const vn=arm.vel.dot(_v);if(vn>0)arm.vel.addScaledVector(_v,-vn);}
+    arm.cd-=h;const sp=arm.vel.length();
+    if(sp>5.5&&!arm.wh){arm.wh=true;sSwing(arm.pos,sp+2);this.useStamina(2+sp*.4);}if(sp<3)arm.wh=false;
+    if(sp>3&&arm.cd<=0){arm.power=clamp((sp-2)/5,.2,1);arm.hit=false;arm.phase='punch';fistCheck(this,arm);if(arm.hit){arm.cd=.28;arm.phase='guard';}else arm.phase='guard';}
   }
   throwWeapon(){
     // the weapon leaves the hand with whatever momentum the swing gave it
@@ -1463,9 +1509,12 @@ class Fighter{
     const airborne=this.pos.y>.03;
     this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:0,1-Math.exp(-10*dt));
     const kk=this.kickT>=0?Math.sin(clamp(this.kickT/.45,0,1)*Math.PI):0;
-    _qr.setFromAxisAngle(X_AXIS,-this.pitch*.25+this.crouchAmt*.32-kk*.15);B.Spine1.quaternion.premultiply(_qr);
+    // unarmed: the shoulders turn and the body leans into a long punch
+    let pl=0,pt=0;if(!this.sword&&this.alive){const rc=this.armLen[0]+this.armLen[1];for(const sd of ['R','L']){const a=this.fists[sd];if(!a.init)continue;const d=a.pos.distanceTo(sd==='R'?this.shR:this.shL)-rc*.92;if(d>0){pl=Math.max(pl,d);pt+=(sd==='R'?1:-1)*d;}}}
+    this.punchLean=lerp(this.punchLean||0,clamp(pl*1.6,0,.45),1-Math.exp(-14*dt));
+    _qr.setFromAxisAngle(X_AXIS,-this.pitch*.25+this.crouchAmt*.32-kk*.15+this.punchLean);B.Spine1.quaternion.premultiply(_qr);
     // the torso turns with the sword hand, so swings come from the whole body
-    const tw=0;this.twist=lerp(this.twist,tw,1-Math.exp(-10*dt));
+    const tw=this.sword?0:clamp(-pt*2.6,-.6,.6);this.twist=lerp(this.twist,tw,1-Math.exp(-10*dt));
     _qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);
     // hit flinch: the upper body gets knocked along the blow and springs back
     if(this.headSnap>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap);B.Head.quaternion.premultiply(_qr);this.headSnap*=Math.exp(-7*dt);}
@@ -1928,7 +1977,7 @@ function fistCheck(A,arm){
     if(B===A||!B.alive||B.pos.distanceToSquared(A.pos)>4)continue;
     for(const c of B.caps){
       if(!c.on)continue;const rr=c.r+.07;if(distPointSeg2(arm.pos,c.a,c.b)>=rr*rr)continue;
-      arm.hit=true;_rel.subVectors(arm.vel,B.vel);const speed=_rel.length();if(speed<2){arm.phase='recover';arm.t=0;return;}
+      arm.hit=true;_rel.subVectors(arm.vel,B.vel);const speed=_rel.length();if(speed<2){if(!A.isPlayer){arm.phase='recover';arm.t=0;}return;}
       const dir=_rel.clone().normalize(),prot=B.prot(c.zone),P=arm.pos.clone();
       let dmg=(speed-1.5)*3.8*arm.power*ZONE_MULT[c.zone]*(1-prot*.45);
       const face=c.zone==='head'||c.zone==='neck';
@@ -1941,7 +1990,7 @@ function fistCheck(A,arm){
       if(B.alive&&!B.ragdoll&&(face&&arm.power>.75&&(B.stamina<35||Math.random()<.3)||B.stamina<5&&arm.power>.6)){B.knockdown(rand(1.8,3),_v.copy(dir).multiplyScalar(2+arm.power*2),P);if(A.isPlayer)note('Knocked out','gold');cheer(.5);}
       if(A.isPlayer){hitMarker(false);if(arm.power>.7){hitstop(.05);shake(.22);}}
       if(B.isPlayer)shake(.3+arm.power*.4);
-      arm.vel.multiplyScalar(.15);arm.phase='recover';arm.t=0;
+      arm.vel.multiplyScalar(.15);arm.phase='recover';arm.t=0;if(A.isPlayer)arm.phase='guard';
       return;
     }
   }
@@ -2066,7 +2115,7 @@ function spawnMatch(withPlayer){
     }
     spots.push([x,z]);
     const isP=withPlayer&&i===0;
-    const f=new Fighter(isP?'You':names[i],isP,x,z,isP?['#6e1712','#c9a227','#241c18',1]:pals[i%pals.length],isP?{weapon:'arming',armor:[]}:botLoad());
+    const f=new Fighter(isP?(PROFILE.name.trim()||'You'):names[i],isP,x,z,isP?PROFILE.pal.slice():pals[i%pals.length],isP?{weapon:'arming',armor:[]}:botLoad());
     if(!withPlayer)f.yaw=Math.atan2(-x,-z);
     fighters.push(f);
   }
@@ -2129,13 +2178,19 @@ addEventListener('mousemove',e=>{
   input.mx=e.clientX/innerWidth;input.my=e.clientY/innerHeight;
   if(state!=='playing'||!player||!player.alive||player.ragdoll||!input.locked)return;
   const dx=e.movementX||0,dy=e.movementY||0;const c=player.ctrl;
-  if(!player.sword){player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
+  if(!player.sword){
+    if(input.lmb||input.rmb){for(const sd of ['R','L']){if(!(sd==='R'?input.lmb:input.rmb))continue;const a=player.fists[sd];if(!a.c)continue;const sg=sd==='R'?1:-1;
+        a.c.x+=dx*.0021;a.c.y-=dy*.0021;
+        if(a.c.x>.5){player.yaw-=(a.c.x-.5)*1.7;a.c.x=.5;}if(a.c.x<-.5){player.yaw-=(a.c.x+.5)*1.7;a.c.x=-.5;}
+        if(a.c.y>.55){player.pitch=clamp(player.pitch+(a.c.y-.55)*1.3,-1.2,.95);a.c.y=.55;}if(a.c.y<-.35){player.pitch=clamp(player.pitch+(a.c.y+.35)*1.3,-1.2,.95);a.c.y=-.35;}}
+      return;}
+    player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
   if(input.rmb){player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
   c.x+=dx*.0021;c.y-=dy*.0021;
   if(c.x>.5){player.yaw-=(c.x-.5)*1.7;c.x=.5;}if(c.x<-.5){player.yaw-=(c.x+.5)*1.7;c.x=-.5;}
   if(c.y>.56){player.pitch=clamp(player.pitch+(c.y-.56)*1.3,-1.2,.95);c.y=.56;}if(c.y<-.46){player.pitch=clamp(player.pitch+(c.y+.46)*1.3,-1.2,.95);c.y=-.46;}
 });
-addEventListener('wheel',e=>{if(state!=='playing'||!player)return;player.ctrl.z=clamp(player.ctrl.z-e.deltaY*.0007,.28,.64);},{passive:true});
+addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-e.deltaY*.0007,.28,.64);},{passive:true});
 document.addEventListener('pointerlockchange',()=>{input.locked=document.pointerLockElement===cvs;if(!input.locked&&state==='playing'&&lockWanted&&!paused){showPause(true);}});
 let lockWanted=false;
 function requestLock(){lockWanted=true;try{const p=cvs.requestPointerLock();if(p&&p.catch)p.catch(()=>{lockWanted=false;});}catch(e){lockWanted=false;}}
@@ -2280,7 +2335,7 @@ function sim(h){
   simTime+=h;
   physTick=!!PW&&(physPhase^=1)===1;
   for(const f of fighters)f.step(h);
-  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.5&&d2>1e-6){const d=Math.sqrt(d2),k=(.707-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;}}}
+  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),k=(.6-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;}}}
   if(PW){if(physTick){const h=PH_H;
     for(const f of fighters)if(f.pb)f.physParts(h);
     for(const s of freeSwords)if(s.rb)s.physFree(h);
@@ -2356,7 +2411,7 @@ function frame(now){
   grade.uniforms.uTime.value=now*.001;grassTime.value=now*.001;
   if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.32,.3);swooshFilt.frequency.value=280+ts*95/Math.sqrt(player.sword.def.weight);}else if(swooshGain)swooshGain.gain.value*=.9;
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
-  updateHUD(dt);
+  updateHUD(dt);renderPreview(dt);
   composer.render();
 }
 let attractRestart=0;
@@ -2371,6 +2426,38 @@ function updateBurnFx(f,now,dt){
   } else if(f.fireFx)f.fireFx.forEach(s=>s.visible=false);
 }
 const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
+
+// ================================================================ your fighter
+const SW=[['#6e1712','#1d3768','#2f5130','#5a3a6a','#8a6a3a','#2a2a2a','#b8ad98','#3a5a7a','#6a2a1a','#c8a060','#40506a','#556b2f'],
+  ['#c9a227','#d8d0bc','#a02020','#1a1a1a','#e0c060','#3a2a1a','#7a1f1f','#e8e0d0','#5a2a1a','#2b4d7a'],
+  ['#241c18','#24262b','#2b2a22','#3a2e22','#1e1e1e','#3a3028','#2a2e34','#4a3a2a']];
+let PROFILE={name:'',pal:['#6e1712','#c9a227','#241c18',1]};
+try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&Array.isArray(p.pal)&&p.pal.length===4)PROFILE={name:String(p.name||'').slice(0,16),pal:p.pal};}catch(e){}
+function saveProfile(){try{localStorage.setItem('bloodmoor-fighter',JSON.stringify(PROFILE));}catch(e){}}
+const prev={r:null,scene:null,cam:null,model:null,mats:[],mixer:null};
+function buildPreview(){
+  const cv=el('fprev');if(!cv||prev.r)return;
+  try{prev.r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});}catch(e){return;}
+  prev.r.setPixelRatio(1);prev.r.toneMapping=THREE.ACESFilmicToneMapping;prev.r.toneMappingExposure=1.3;prev.r.outputColorSpace=THREE.SRGBColorSpace;
+  prev.scene=new THREE.Scene();prev.cam=new THREE.PerspectiveCamera(30,240/280,.1,20);prev.cam.position.set(0,1.15,3.9);prev.cam.lookAt(0,.95,0);
+  prev.scene.add(new THREE.HemisphereLight(0xffe2c0,0x302018,1.4));const d=new THREE.DirectionalLight(0xffd0a0,2.6);d.position.set(2,3,3);prev.scene.add(d);const b=new THREE.DirectionalLight(0x6080ff,1.2);b.position.set(-3,2,-2);prev.scene.add(b);
+  prev.model=SkeletonUtils.clone(GLTF.scene);prev.scene.add(prev.model);
+  prev.model.traverse(o=>{if(o.isMesh){const isJoint=/Joint/.test(o.name)||o.material.name.includes('Joints');o.material=outfitMaterial(PROFILE.pal,isJoint?.55:1);prev.mats.push(o.material);o.frustumCulled=false;}});
+  prev.mixer=new THREE.AnimationMixer(prev.model);prev.mixer.clipAction(GLTF.animations.find(a=>a.name==='idle')).play();
+}
+function applyPreview(){for(const m of prev.mats){const U=m.userData.U;U.uCoat.value.set(PROFILE.pal[0]);U.uCoat2.value.set(PROFILE.pal[1]);U.uHose.value.set(PROFILE.pal[2]);U.uParty.value=PROFILE.pal[3];}}
+function renderPreview(dt){if(!prev.r||el('menu').classList.contains('hide')||innerWidth<=1100)return;prev.mixer.update(dt);prev.model.rotation.y+=dt*.45;prev.r.render(prev.scene,prev.cam);}
+function initFighterCard(){
+  el('fname').value=PROFILE.name;el('fname').addEventListener('input',e=>{PROFILE.name=e.target.value.replace(/[<>&"]/g,'').slice(0,16);saveProfile();});
+  el('fname').addEventListener('keydown',e=>e.stopPropagation());
+  document.querySelectorAll('.sw').forEach(box=>{const k=+box.dataset.k;
+    const sync=()=>box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',b.dataset.c===PROFILE.pal[k]?'true':'false'));
+    for(const c of SW[k]){const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.setAttribute('role','radio');b.setAttribute('aria-label',c);
+      b.addEventListener('click',()=>{PROFILE.pal[k]=c;saveProfile();sync();applyPreview();});box.appendChild(b);}sync();});
+  const ps=()=>el('fpat').querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',+b.dataset.v===PROFILE.pal[3]?'true':'false'));
+  el('fpat').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.pal[3]=+b.dataset.v;saveProfile();ps();applyPreview();}));ps();
+  buildPreview();
+}
 
 // ================================================================ boot
 loadMap('village');
@@ -2389,7 +2476,7 @@ function loadFighters(onLoad,onErr){
 }
 loadFighters(async g=>{
   GLTF=g;await physReady;
-  el('physTag').textContent='';showEngine();
+  el('physTag').textContent='';showEngine();initFighterCard();
   spawnMatch(false);state='attract';attractRestart=performance.now();
   el('loading').classList.add('hide');el('menu').classList.remove('hide');
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
