@@ -1212,16 +1212,18 @@ class Sword{
       if(st.t<=0||!st.B.alive||!c.on||target.distanceTo(this.H)>.45){this.stuck=null;this.Hv.set(0,0,0);spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.4).setY(.7),12,1.2,1);sHit(this.T,.4,false);}
       else{_g.copy(c.a).lerp(c.b,st.u).add(st.off);this.axis.subVectors(_g,this.H).normalize();this.H.copy(_g).addScaledVector(this.axis,-this.len);this.Hv.multiplyScalar(.5);this.T.copy(_g);this.Tp.copy(_g);this.tipVel.set(0,0,0);st.B.vel.multiplyScalar(.6);return;}
     }
-    const w=this.def.weight,wf=Math.pow(Math.max(.85,w),.5);
-    const k=(commit?950:520)*(this.def.kind==='fist'?2:1),c=2*Math.sqrt(k)*.8;
+    const w=this.def.weight,heavy=this.def.kind==='axe'||this.def.kind==='blunt';
+    // heavy weapons: the arm works harder to get them moving, momentum carries them through, and the wrist holds the head firm
+    const wf=heavy?Math.pow(w,.9):Math.pow(Math.max(.85,w),.5);
+    const k=(commit?950:520)*(this.def.kind==='fist'?2:1)*(heavy?.8:1),c=2*Math.sqrt(k)*(heavy?.62:.8);
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
     const maxA=(commit?420:220)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
-    const gk=(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
-    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(commit?.3:.75)*tw*h);
+    const gk=heavy?(commit?700:420):(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
+    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(heavy?.85:commit?.3:.75)*tw*h);
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
-    this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*.3*h*h;
+    this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*(heavy?.3+.5*(w-1):.3)*h*h;
     if(this.T.y<.03)this.T.y=.03;
     collide(this.T,.02,true);
     this.constrain(h);
@@ -1976,7 +1978,7 @@ function resolveHit(A,B,cap,t,P,pv){
   const arcF=isThrust?clamp(.55+s.arc*.6,.55,1):clamp(.3+s.arc*.75,.3,1.15);
   const stamF=A.stamina<12?.55:.8+.2*A.stamina/100;
   const prot=B.prot(cap.zone);const pen=clamp(W.pen*(isThrust?1.2:1),0,1);
-  const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:5.8*W.cut,flat:1.8,haft:1.4,poke:1.2};
+  const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:7*W.cut,flat:1.8,haft:1.4,poke:1.2};
   const base=(speed-2.0)*MODE_K[mode]*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
   const armorF=1-prot*(1-pen);
   let dmg=Math.min(base*armorF,80);
