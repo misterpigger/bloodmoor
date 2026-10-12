@@ -147,7 +147,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <p class="tag">A physics sword battle royale with a closing ring of fire. Your mouse is your sword arm: the faster you swing, the deeper it cuts. Put your blade in the way to parry, and take limbs when you can.</p>
     <dl class="controls">
       <dt><kbd>Mouse</kbd></dt><dd>Move your sword hand. Push to the edge to turn.</dd>
-      <dt><kbd>LMB</kbd></dt><dd>Hold to commit: loose wrist, heavy swings</dd>
+      <dt><kbd>LMB</kbd></dt><dd>Hold while you swing for full power. Big, fast mouse sweeps hit hardest.</dd>
       <dt><kbd>RMB</kbd></dt><dd>Hold to look around freely</dd>
       <dt><kbd>Wheel</kbd></dt><dd>Reach in and out. Roll forward fast to thrust.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch, or slide while sprinting · <kbd>Space</kbd> jump and vault</dd>
@@ -1057,7 +1057,7 @@ const PART_W=[16,16,13,13,34,34,34,34,22,22,22,22];         // how hard each lim
 const PART_A=[70,70,38,38,320,320,320,320,120,120,120,120];     // how much a limb can resist a shove (m/s^2)
 const PART_VIS=[[2,'Spine'],[3,'Spine2'],[1,'Neck'],[0,'Head'],[8,'LeftUpLeg'],[9,'LeftLeg'],[10,'RightUpLeg'],[11,'RightLeg']];
 const ARM_PARTS={R:[6,7],L:[4,5]},ARM_IDX=[4,5,6,7];
-const PT={kc:420,kg:210,ac:150,ag:70,ktc:110,ktg:260,zc:.32,zg:.8,tc:55,tg:26,gc:.92,hold:.8,thr:2.2};
+const PT={kc:950,kg:520,ac:420,ag:220,ktc:420,ktg:300,zc:.45,zg:.8,tc:110,tg:40,gc:.92,hold:.8,thr:2.2};
 const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe=V(),_zero3=V();
 
 // ================================================================ weapon physics
@@ -1157,14 +1157,14 @@ class Sword{
       else{_g.copy(c.a).lerp(c.b,st.u).add(st.off);this.axis.subVectors(_g,this.H).normalize();this.H.copy(_g).addScaledVector(this.axis,-this.len);this.Hv.multiplyScalar(.5);this.T.copy(_g);this.Tp.copy(_g);this.tipVel.set(0,0,0);st.B.vel.multiplyScalar(.6);return;}
     }
     const w=Math.max(1,this.def.weight),wf=Math.pow(w,.3);
-    const k=(commit?320:190)*(this.def.kind==='fist'?2.6:1),c=2*Math.sqrt(k)*.85;
+    const k=(commit?950:520)*(this.def.kind==='fist'?2:1),c=2*Math.sqrt(k)*.8;
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
-    const maxA=(commit?110:65)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    const maxA=(commit?420:220)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
-    _v.subVectors(this.T,this.Tp).multiplyScalar(1-(commit?1.0:3.2)*h);
+    _v.subVectors(this.T,this.Tp).multiplyScalar(1-(commit?9:12)*h);
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
-    const gk=(commit?55:260)/wf;
+    const gk=(commit?520:300)/wf;
     this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*.3*h*h;
     if(this.T.y<.03)this.T.y=.03;
     collide(this.T,.02,true);
@@ -1411,7 +1411,7 @@ class Fighter{
       _v.subVectors(_g,sh);if(_v.length()>reach){_v.setLength(reach);_g.copy(sh).add(_v);}
     }
     const str=(this.stamina<12?.6:1)*(this.stagger>0?.5:1);
-    const k=held?560:300,cc=2*Math.sqrt(k)*(held?.72:.95),maxA=(held?170:90)*str;
+    const k=held?1300:420,cc=2*Math.sqrt(k)*(held?.7:.95),maxA=(held?520:160)*str;
     _a.subVectors(_g,arm.pos).multiplyScalar(k).addScaledVector(arm.vel,-cc);if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);
     _v.subVectors(arm.pos,sh);if(_v.length()>reach*1.32){_v.setLength(reach*1.32);arm.pos.copy(sh).add(_v);_v.normalize();const vn=arm.vel.dot(_v);if(vn>0)arm.vel.addScaledVector(_v,-vn);}
@@ -1946,13 +1946,13 @@ function resolveHit(A,B,cap,t,P,pv){
     if(!B.alive&&B.ragdoll)B.ragdoll.kick(imp);
   }
   if(B.alive&&!B.ragdoll){
-    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.2:.12),2));
-    let st=mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
+    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));
+    let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
     if(cap.zone==='legL'||cap.zone==='legR'){B.crouchAmt=Math.min(1,B.crouchAmt+.55);B.stagger=Math.max(B.stagger,.4);}
     if(!phys){
-    if(cap.zone==='head'||cap.zone==='neck')B.headSnap=Math.min(.9,(B.headSnap||0)+speed*.05*(mode==='blunt'?1.5:1));
-    B.addFlinch(dir,clamp(speed*.03*(mode==='blunt'?1.6:1)*(cap.zone==='head'?1.4:1),.05,.55));
+    if(cap.zone==='head'||cap.zone==='neck')B.headSnap=Math.min(1.1,(B.headSnap||0)+speed*.07*(mode==='blunt'?1.5:1));
+    B.addFlinch(dir,clamp(speed*.045*(mode==='blunt'?1.6:1)*(cap.zone==='head'?1.4:1)+dmg*.004,.08,.85));
     if(B.sword){B.sword.Hv.addScaledVector(dir,speed*.18);}}
     const heavy=W.weight*speed*(mode==='blunt'?1.5:1);
     if(!B.ragdoll&&(heavy>16&&(cap.zone==='head'||B.stamina<15)&&Math.random()<.6||(cap.zone==='legL'||cap.zone==='legR')&&heavy>13&&Math.random()<.35||W.kind==='fist'&&cap.zone==='head'&&speed>5&&(B.stamina<30||Math.random()<.12))){B.knockdown(rand(1.3,2.3),imp,P);tell(A,'Knocked down','gold');}
@@ -2034,13 +2034,13 @@ function fistCheck(A,arm){
       if(face&&!B.sword&&!B.ragdoll){B.fwd(_f);if(_f.dot(dir)<-.4&&B.fists.R.phase!=='punch'&&B.fists.L.phase!=='punch'){dmg*=.4;sThud(P,.4);}}
       dmg=Math.min(dmg,38);const body=(c.zone==='torso'||face)?dmg:dmg*.5;
       sThud(P,.5+arm.power);if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
-      B.addFlinch(dir,.12+arm.power*.4);B.stagger=Math.max(B.stagger,.18+arm.power*.42);B.useStamina(5+arm.power*12);
-      _v.copy(dir).setY(0);B.vel.addScaledVector(_v,.8+arm.power*2.4);if(B.sword)swordShove(B.sword,dir,speed*.25);
+      B.addFlinch(dir,.2+arm.power*.7);if(face)B.headSnap=Math.min(1.2,(B.headSnap||0)+.35+arm.power*.6);B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
+      _v.copy(dir).setY(0);B.vel.addScaledVector(_v,1.4+arm.power*3.6);if(B.sword)swordShove(B.sword,dir,speed*.25);
       B.damage(body,A,'beaten');
       if(B.alive&&!B.ragdoll&&(face&&arm.power>.75&&(B.stamina<35||Math.random()<.3)||B.stamina<5&&arm.power>.6)){B.knockdown(rand(1.8,3),_v.copy(dir).multiplyScalar(2+arm.power*2),P);tell(A,'Knocked out','gold');cheer(.5);}
-      if(A.isPlayer){hitMarker(false);if(arm.power>.7){hitstop(.05);shake(.22);}}
+      if(A.isPlayer){hitMarker(false);hitstop(.03+arm.power*.05);shake(.12+arm.power*.25);}
       if(B.isPlayer)shake(.3+arm.power*.4);
-      arm.vel.multiplyScalar(.15);arm.phase='recover';arm.t=0;if(A.isPlayer)arm.phase='guard';
+      arm.vel.multiplyScalar(A.isPlayer||A.remote?.4:.15);arm.phase='recover';arm.t=0;if(A.isPlayer||A.remote)arm.phase='guard';
       return;
     }
   }
