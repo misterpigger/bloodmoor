@@ -160,8 +160,8 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <h1>Bloodmoor</h1>
     <p class="tag">A physics sword battle royale with a closing ring of fire. Your mouse is your sword arm: the faster you swing, the deeper it cuts. Put your blade in the way to parry, and take limbs when you can.</p>
     <dl class="controls">
-      <dt><kbd>Mouse</kbd></dt><dd>Move your sword hand. Push to the edge to turn.</dd>
-      <dt><kbd>LMB</kbd></dt><dd>Hold while you swing for full power. Big, fast mouse sweeps hit hardest.</dd>
+      <dt><kbd>Mouse</kbd></dt><dd>Sweep your weapon round you: wide, overhead, low. The sweep is the swing. Push past the side to turn.</dd>
+      <dt><kbd>LMB</kbd></dt><dd>Optional: hold for a locked power grip. Fast sweeps already strike at full force.</dd>
       <dt><kbd>RMB</kbd></dt><dd>Hold to look around freely</dd>
       <dt><kbd>Wheel</kbd></dt><dd>Flick forward to thrust: the point drives out and comes back. Spears reach furthest.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch, or slide while sprinting · <kbd>Space</kbd> jump and vault</dd>
@@ -282,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=34;
+const BUILD=35;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1079,6 +1079,8 @@ const ARMOR={
 //  sag      how much gravity pulls the head down               edgeTurn  how fast the edge turns into the motion
 //  guardY   guard height below the chest, m                    slide     how far a thrust drives the weapon through the hands, m
 //  swingOut, swingUp  where a committed swing points the blade: forward and upward lean (the guard uses .26 and .5)
+// human arc control: ctrl.x in [-1,1] and ctrl.y in [ARC.yLo,ARC.yHi] map to angles (radians) round the chest
+const ARC={az:1.25,el:1.25,yLo:-.75,yHi:1.15,sens:.0026};
 const HANDLING={
   arming:    {effort:.80, grip:[560,1050], gripDamp:.8, accel:[240,470],wrist:[388.24,752.94],tipDamp:[.75,.3], sag:.3,  edgeTurn:.2, guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
   longsword: {effort:1.0488,grip:[520,950], gripDamp:.8, accel:[220,420],wrist:[300,581.82],   tipDamp:[.75,.3], sag:.3,  edgeTurn:.2, guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
@@ -1518,6 +1520,16 @@ class Fighter{
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
     const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
+    if(this.sword&&(this.isPlayer||this.remote)){
+      // human control, as in Half Sword: the mouse moves the hand round an arc about the upper chest at near arm's length,
+      // so sweeping the mouse IS the swing: wide, overhead, low or round to the side, never a flick inside a small box
+      const sg=this.mainArm==='L'?-1:1,reach=this.armLen[0]+this.armLen[1];
+      const az=this.ctrl.x*ARC.az,el=this.ctrl.y*ARC.el-.25,fr=clamp(.8+(this.ctrl.z-.46)*1.1,.55,1)*reach,ce=Math.cos(el);
+      out.copy(this.chest).addScaledVector(u,.14).addScaledVector(_r,.07*sg);
+      out.addScaledVector(f,ce*Math.cos(az)*fr).addScaledVector(_r,ce*Math.sin(az)*fr).addScaledVector(u,Math.sin(el)*fr);
+      out.addScaledVector(f,Hd.slide*clamp((this.ctrl.z-.46)/.16,0,1));
+      const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const rc=reach-.03+Hd.slide;if(_v.length()>rc){_v.setLength(rc);out.copy(sh).add(_v);}
+      return out;}
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY).addScaledVector(f,this.ctrl.z);
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     const slide=Hd.slide*clamp((this.ctrl.z-.46)/.16,0,1);
@@ -1529,10 +1541,15 @@ class Fighter{
   guideDir(hand,out){
     const f=_t2,u=_t3;this.frame(f,u);
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
-    if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
+    if(this.thrust||(this.sword&&this.sword.def.kind==='spear'&&!((this.isPlayer||this.remote)&&(this.ctrlSp||0)>.6))){/* a human sweeping a spear swings it like a polearm */const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
     const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
     const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
+    if((this.isPlayer||this.remote)&&Hd){   // no mode switch: a still hand stands the blade up, a moving hand levels it into the cut
+      const w=Math.max(cm?.75:0,clamp(((this.ctrlSp||0)-.5)/1.5,0,1));
+      _v.copy(hand).sub(this.chest).addScaledVector(f,.26-hi*(heavyW?.95:.45)).addScaledVector(u,.5).normalize();
+      out.copy(hand).sub(this.chest).addScaledVector(f,Hd.swingOut).addScaledVector(u,Hd.swingUp).normalize().multiplyScalar(w).addScaledVector(_v,1-w);
+      return out.normalize();}
     out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:.5);
     return out.normalize();
   }
@@ -1848,12 +1865,12 @@ class Fighter{
       // the weapon hand drags the shoulders round, and a downward blow brings the body over it
       let twT=0;const s=this.sword&&!this.sword.free?this.sword:null;
       if(s&&this.mainArm){if(M.hp){const hx=(s.H.x-M.hp.x)/dtc,hy=(s.H.y-M.hp.y)/dtc,hz=(s.H.z-M.hp.z)/dtc,hr=hx*cy-hz*sy;
-          twT=clamp(this.ctrl.x*.55+(this.commit?hr*.03:0),-.6,.6);if(this.commit&&hy<-2)tz+=clamp(-hy*.022,0,.3);}
+          const hu=this.isPlayer||this.remote;twT=clamp(this.ctrl.x*(hu?.75:.55)+(this.commit?hr*.03:0),hu?-.85:-.6,hu?.85:.6);if(this.commit&&hy<-2)tz+=clamp(-hy*.022,0,.3);}
         (M.hp||(M.hp=V())).copy(s.H);}
       M.tw=lerp(M.tw,twT,1-Math.exp(-9*dt));
       const k=70,c=2*Math.sqrt(k)*.38;M.vx+=((tx-M.sx)*k-M.vx*c)*dtc;M.vz+=((tz-M.sz)*k-M.vz*c)*dtc;M.sx=clamp(M.sx+M.vx*dtc,-.35,.4);M.sz=clamp(M.sz+M.vz*dtc,-.3,.45);
       const mag=Math.hypot(M.sx,M.sz);if(mag>.003){_t2.set(M.sz/mag,0,-M.sx/mag);_qr.setFromAxisAngle(_t2,mag*.6);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,mag*.4);B.Spine1.quaternion.premultiply(_qr);}
-      if(Math.abs(M.tw)>.002){_qr.setFromAxisAngle(Y_AXIS,-M.tw*.45);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(Y_AXIS,-M.tw*.35);B.Spine2.quaternion.premultiply(_qr);}}
+      if(Math.abs(M.tw)>.002){_qr.setFromAxisAngle(Y_AXIS,-M.tw*.2);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(Y_AXIS,-M.tw*.45);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(Y_AXIS,-M.tw*.35);B.Spine2.quaternion.premultiply(_qr);}}
     // the body leans the way its weight has been pushed
     {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
@@ -2465,7 +2482,7 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
+const CAM_TP={dist:2.7,side:.3,up:.62,tilt:-.34};   // high and nearly centred, looking down on the fight, so the whole weapon arc is in view
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){hitStopT=Math.max(hitStopT,t);}
 function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
@@ -2604,16 +2621,19 @@ let hmT=null;function hitMarker(kill){const c=document.getElementById('cross');c
 function note(text,cls=''){const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
 let hurtV=0;function hudHurt(d){hurtV=Math.min(1,hurtV+d/40);}
 
+// how fast the hand target is sweeping (control units a second, smoothed): drives blade attitude and auto-commit
+function humanCtrl(f,h){const c=f.ctrl,p=f.ctrlP||(f.ctrlP={x:c.x,y:c.y});const v=Math.hypot(c.x-p.x,c.y-p.y)/Math.max(h,1e-4);p.x=c.x;p.y=c.y;f.ctrlSp=lerp(f.ctrlSp||0,v,1-Math.exp(-14*h));}
 function playerInput(f,wish,h){
   const k=input.keys;f.fwd(_f);f.right(_r);
   if(k.KeyW)wish.add(_f);if(k.KeyS)wish.sub(_f);if(k.KeyD)wish.add(_r);if(k.KeyA)wish.sub(_r);
   if(wish.lengthSq()>0)wish.normalize();if(k.KeyS&&!k.KeyW)wish.multiplyScalar(.7);
-  f.commit=!!f.sword&&(input.lmb||f.throwHold);f.thrust=f.ctrl.z>.56;
+  humanCtrl(f,h);f.commit=!!f.sword&&(input.lmb||f.throwHold||f.ctrlSp>1.6);f.thrust=f.ctrl.z>.56;
   if(!input.locked&&state==='playing'){
-    f.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);f.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);
+    if(f.sword){f.ctrl.x=clamp((input.mx-.5)*2.4,-1,1);f.ctrl.y=clamp(-(input.my-.5)*2.3+.2,ARC.yLo,ARC.yHi);}
+    else{f.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);f.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
     if(input.mx>.9)f.yaw-=1.6*h*(input.mx-.9)*10;if(input.mx<.1)f.yaw+=1.6*h*(.1-input.mx)*10;
   } else {
-    if(f.ctrl.x>.44)f.yaw-=(f.ctrl.x-.44)*3*h;if(f.ctrl.x<-.44)f.yaw-=(f.ctrl.x+.44)*3*h;
+    const ex=f.sword?.94:.44;if(f.ctrl.x>ex)f.yaw-=(f.ctrl.x-ex)*3*h;if(f.ctrl.x<-ex)f.yaw-=(f.ctrl.x+ex)*3*h;
   }
   return !!(k.ShiftLeft||k.ShiftRight);
 }
@@ -2652,9 +2672,9 @@ addEventListener('mousemove',e=>{
       return;}
     player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
   if(input.rmb){player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
-  c.x+=dx*.0021;c.y-=dy*.0021;
-  if(c.x>.5){player.yaw-=(c.x-.5)*1.7;c.x=.5;}if(c.x<-.5){player.yaw-=(c.x+.5)*1.7;c.x=-.5;}
-  if(c.y>.56){player.pitch=clamp(player.pitch+(c.y-.56)*1.3,-1.2,.95);c.y=.56;}if(c.y<-.46){player.pitch=clamp(player.pitch+(c.y+.46)*1.3,-1.2,.95);c.y=-.46;}
+  // the hand sweeps an arc; past the side of it the body turns after the weapon. Raising or dropping the weapon never moves the view.
+  c.x+=dx*ARC.sens;c.y=clamp(c.y-dy*ARC.sens,ARC.yLo,ARC.yHi);
+  if(c.x>1){player.yaw-=(c.x-1)*1.4;c.x=1;}if(c.x<-1){player.yaw-=(c.x+1)*1.4;c.x=-1;}
 });
 addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-clamp(e.deltaY,-120,120)*.0016,.28,.68);lastWheel=performance.now();},{passive:true});
 let lastWheel=0;
@@ -2853,7 +2873,7 @@ function frame(now){
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
   if(NET.mode==='client'&&player&&player.alive&&!player.ragdoll&&state==='playing'&&!paused&&!input.locked&&input.mx!=null){
-    if(player.sword){player.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);player.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
+    if(player.sword){player.ctrl.x=clamp((input.mx-.5)*2.4,-1,1);player.ctrl.y=clamp(-(input.my-.5)*2.3+.2,ARC.yLo,ARC.yHi);}
     else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
     if(input.mx>.85)player.yaw-=2.4*dt*(input.mx-.85)/.15;if(input.mx<.15)player.yaw+=2.4*dt*(.15-input.mx)/.15;
   }
@@ -3184,9 +3204,9 @@ function remoteInput(f,wish,h){
   const d=f.rin;if(!d)return false;f.fwd(_f);f.right(_r);const k=d.k|0;
   if(k&1)wish.add(_f);if(k&2)wish.sub(_f);if(k&4)wish.add(_r);if(k&8)wish.sub(_r);if(wish.lengthSq()>0)wish.normalize();if((k&2)&&!(k&1))wish.multiplyScalar(.7);
   const n=v=>Number.isFinite(v)?v:0;
-  f.yaw=n(d.yaw);f.pitch=clamp(n(d.pitch),-1.2,.95);f.ctrl.x=clamp(n(d.cx),-.5,.5);f.ctrl.y=clamp(n(d.cy),-.46,.56);f.ctrl.z=clamp(n(d.cz),.12,.7);
+  f.yaw=n(d.yaw);f.pitch=clamp(n(d.pitch),-1.2,.95);const ws=!!f.sword;f.ctrl.x=clamp(n(d.cx),ws?-1:-.5,ws?1:.5);f.ctrl.y=clamp(n(d.cy),ws?ARC.yLo:-.46,ws?ARC.yHi:.56);f.ctrl.z=clamp(n(d.cz),.12,.7);
   for(const sd of ['R','L']){const a=f.fists[sd],c=d['f'+sd];if(a.c&&c){a.c.x=clamp(n(c.x),-.5,.5);a.c.y=clamp(n(c.y),-.35,.55);a.c.z=clamp(n(c.z),.12,.7);}}
-  f.commit=!!f.sword&&(!!(k&32)||f.throwHold);f.thrust=f.ctrl.z>.56;
+  humanCtrl(f,h);f.commit=!!f.sword&&(!!(k&32)||f.throwHold||f.ctrlSp>1.6);f.thrust=f.ctrl.z>.56;
   return !!(k&16);
 }
 const ARMOR_SLOTS=['head','body','arms','legs'];
