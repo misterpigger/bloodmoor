@@ -194,6 +194,11 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
     <div class="frow">Hose <div class="sw" data-k="2" role="radiogroup" aria-label="Hose colour"></div></div>
     <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
+    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Peasant</button><button data-v="2" role="radio">Ranger</button></div></div>
+    <div class="frow">Hair <div class="seg" data-look="h" role="radiogroup" aria-label="Hair"><button data-v="0" role="radio">Bald</button><button data-v="1" role="radio">Short</button><button data-v="2" role="radio">Parted</button><button data-v="3" role="radio">Long</button></div></div>
+    <div class="frow">Beard <div class="seg" data-look="bd" role="radiogroup" aria-label="Beard"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Beard</button></div></div>
+    <div class="frow">Hue <div class="sw" data-look="hc" role="radiogroup" aria-label="Hair colour"></div></div>
+    <div class="frow">Skin <div class="sw" data-look="sk" role="radiogroup" aria-label="Skin tone"></div></div>
   </aside>
 </div>
 
@@ -266,7 +271,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=28;
+const BUILD=29;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -952,6 +957,54 @@ function outfitMaterial(pal,dark){
   };
   return m;
 }
+// ================================================================ looks
+// Bodies, outfits and hair are Quaternius CC0 models rebound to the game skeleton (fighters.json). A look picks the
+// outfit, hair, beard and tones; team colours dye the undyed cloth (and the shorts on a bare-chested fighter).
+const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_Parted','Hair_Long'],
+  hairCol:[[.16,.13,.11],[.42,.27,.16],[1.05,.86,.55],[.85,.36,.18],[1,1,1]],hairSw:['#2a221d','#5e3d26','#c7a46a','#9a4a26','#b9b5ad'],
+  skin:[[1.12,1.06,1.02],[1,1,1],[.74,.6,.5],[.48,.36,.29]],skinSw:['#e8c0a4','#cf9f7e','#9c7458','#654837']};
+const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1};
+function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Number.isInteger(v)&&v>=0&&v<=max?v:null;
+  const o={o:n(l.o,2),h:n(l.h,3),bd:l.bd?1:0,hc:n(l.hc,4),sk:n(l.sk,3)};return o.o===null||o.h===null||o.hc===null||o.sk===null?null:o;}
+function randomLook(){const r=Math.random();return {o:r<.35?0:r<.75?1:2,h:(Math.random()*4)|0,bd:Math.random()<.45?1:0,hc:Math.random()<.12?4:(Math.random()*4)|0,sk:(Math.random()*4)|0};}
+function tintMaterial(m,mode,pal,mats){
+  const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uBodyMail:{value:0}};
+  m.userData.U=U;mats.push(m);
+  const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.5)*(1.-step(.36,abs(vBind.x)))';
+  m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
+    s.vertexShader='varying vec3 vBind;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;');
+    s.fragmentShader='varying vec3 vBind;uniform vec3 uTint,uTrim,uHose;uniform float uParty,uMode,uBodyMail;\n'+s.fragmentShader
+    .replace('#include <map_fragment>',`#include <map_fragment>
+      { vec3 c=diffuseColor.rgb;float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sat=(mx-mn)/max(mx,1e-4),l=dot(c,vec3(.299,.587,.114));
+        float msk,gain;
+        if(uMode<.5){msk=smoothstep(.42,.22,sat);gain=1.9;}
+        else if(uMode<1.5){msk=smoothstep(.01,.06,c.g-max(c.r,c.b));gain=4.;}
+        else{msk=smoothstep(.22,.1,sat)*(1.-smoothstep(.06,.14,l));gain=7.;}
+        vec3 t=vBind.y<.95?uHose:(uParty>.5&&vBind.x>0.?uTrim:uTint);
+        diffuseColor.rgb=mix(c,t*l*gain,msk*.9);
+        float rings=.72+.28*sin(vBind.x*520.)*sin(vBind.y*520.);
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.18,.2,.22)*rings,${mail});
+      }`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.42,'+mail+');')
+    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.85,'+mail+');');};
+  m.customProgramCacheKey=()=>'bm-tint';
+}
+// strip a fresh model clone down to one look and give it that look's materials
+function dressModel(model,look,pal,mats){
+  const o=LOOK.outfits[look.o]||'peasant',pre=o==='peasant'?'Peasant_':o==='ranger'?'Ranger_':null,hair=LOOK.hair[look.h];
+  const keep=n=>n==='Eyes'||n==='Brows'||(o==='bare'?n==='Body_Bare':n==='Head')||(pre&&n.startsWith(pre))||(hair===n&&o!=='ranger')||(look.bd&&n==='Hair_Beard');
+  const drop=[],cache={};
+  model.traverse(m=>{if(!m.isMesh)return;if(!keep(m.name)){drop.push(m);return;}
+    m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;const k=m.material.name;
+    if(!cache[k]){const c=m.material.clone();
+      if(k.startsWith('skin')){c.color.setRGB(...LOOK.skin[look.sk]);if(k==='skin_body')tintMaterial(c,2,pal,mats);}
+      else if(k==='hair')c.color.setRGB(...LOOK.hairCol[look.hc]);
+      else if(k==='cloth_peasant')tintMaterial(c,0,pal,mats);
+      else if(k==='cloth_ranger')tintMaterial(c,1,pal,mats);
+      cache[k]=c;}
+    m.material=cache[k];if(m.name.startsWith('Hair_')&&m.name!=='Hair_Beard')m.userData.hair=true;});
+  for(const m of drop)m.removeFromParent();
+}
 const steelMat=std({color:0xb8c0c8,metalness:.78,roughness:.28,envMapIntensity:2.2});
 const steelDark=std({color:0x7a8088,metalness:.8,roughness:.38,envMapIntensity:1.8});
 const brassMat=std({color:0xa8823a,metalness:.95,roughness:.35});
@@ -1008,9 +1061,11 @@ const ARMOR={
   greaves:{id:'greaves',slot:'legs',name:'Greaves',prot:.42,tier:1},
 };
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
+// armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
+const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]};
 function meshGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1] of parts){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);}return g;}
-const cuirassGeo=lathe([[.11,.17],[.16,.13],[.18,.02],[.178,-.1],[.165,-.22],[.172,-.3]],24);
-const fauldGeo=lathe([[.165,.05],[.185,-.05],[.2,-.17]],24);
+const cuirassGeo=lathe([[.11,.17],[.16,.13],[.18,.02],[.178,-.1],[.165,-.22],[.172,-.3]].reverse(),24);   // profiles run bottom to top so the faces point outward
+const fauldGeo=lathe([[.165,.05],[.185,-.05],[.2,-.17]].reverse(),24);
 function armorMeshes(def){
   switch(def.slot){
     case 'head':return [['Head',makeHelmet(def.helm,def.tier>=3?steelMat:pick([steelMat,steelDark]))]];
@@ -1372,14 +1427,12 @@ class Fighter{
     this.id=fid++;this.name=name;this.isPlayer=isPlayer;this.pal=pal;this.remote=null;this.rin=null;this.sevNames=[];
     this.root=new THREE.Group();scene.add(this.root);
     this.model=SkeletonUtils.clone(GLTF.scene);this.root.add(this.model);
-    this.mats=[];
-    this.model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;const isJoint=/Joint/.test(o.name)||o.material.name.includes('Joints');o.material=outfitMaterial(pal,isJoint?.55:1);this.mats.push(o.material);}});
+    this.mats=[];this.look=cleanLook(load.look)||randomLook();dressModel(this.model,this.look,pal,this.mats);
     this.skins=[];this.model.traverse(o=>{if(o.isSkinnedMesh)this.skins.push(o);});this.wounds=[];
     this.bones=indexBones(this.model);
     const B=this.bones;
     this.armLen=[B.RightForeArm.position.length()*.01,B.RightHand.position.length()*.01];
     this.legLen=[B.RightLeg.position.length()*.01,B.RightFoot.position.length()*.01];
-    for(const s of ['Left','Right']){const pd=new THREE.Mesh(new THREE.SphereGeometry(.085,14,8,0,Math.PI*2,0,Math.PI/2),pick([steelMat,steelDark]));pd.scale.set(1.15,.75,1.2);pd.position.set(s==='Left'?.02:-.02,.03,0);pd.castShadow=true;const g=new THREE.Group();g.scale.setScalar(100);g.add(pd);B[s+'Arm'].add(g);}
     this.armor={head:null,body:null,arms:null,legs:null};this.helmet=-1;
     for(const a of load.armor||[])this.equip(ARMOR[a]);
     this.mixer=new THREE.AnimationMixer(this.model);
@@ -1406,13 +1459,13 @@ class Fighter{
   // ---------------- armor
   equip(def){
     const old=this.unequip(def.slot);const groups=[];
-    for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();att.scale.setScalar(100);att.add(g);this.bones[bn].add(att);groups.push(att);}
+    for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();const ft=ARMOR_FIT[bn]||1;if(Array.isArray(ft))att.scale.set(100*ft[0],100*ft[1],100*ft[2]);else att.scale.setScalar(100*ft);const of=ARMOR_OFF[bn];if(of)att.position.set(...of);att.add(g);this.bones[bn].add(att);groups.push(att);}
     this.armor[def.slot]={def,groups};
     if(def.id==='mail')this.setMail(1);
-    if(def.slot==='head')this.helmet=def.helm;
+    if(def.slot==='head'){this.helmet=def.helm;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}
     return old;
   }
-  unequip(slot){const a=this.armor[slot];if(!a)return null;for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head')this.helmet=-1;return a.def;}
+  unequip(slot){const a=this.armor[slot];if(!a)return null;for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head'){this.helmet=-1;this.model.traverse(o=>{if(o.userData.hair)o.visible=true;});}return a.def;}
   setMail(v){for(const m of this.mats)m.userData.U.uBodyMail.value=v;}
   prot(zone){
     const a=this.armor,p=s=>a[s]?a[s].def.prot:0,mail=a.body&&a.body.def.id==='mail';
@@ -2402,7 +2455,7 @@ function spawnMatch(withPlayer){
     }
     spots.push([x,z]);
     const isP=withPlayer&&i===0;const rc=withPlayer&&NET.mode==='host'&&i>=1?NET.conns.filter(q=>q.hello)[i-1]:null;
-    const f=new Fighter(isP?(PROFILE.name.trim()||'You'):rc?rc.name:names[i],isP,x,z,isP?PROFILE.pal.slice():rc&&rc.pal?rc.pal.slice():pals[i%pals.length],isP||rc?{weapon:'arming',armor:[]}:botLoad());
+    const f=new Fighter(isP?(PROFILE.name.trim()||'You'):rc?rc.name:names[i],isP,x,z,isP?PROFILE.pal.slice():rc&&rc.pal?rc.pal.slice():pals[i%pals.length],isP?{weapon:'arming',armor:[],look:PROFILE.look}:rc?{weapon:'arming',armor:[],look:rc.look}:botLoad());
     if(rc){f.remote=rc;rc.f=f;}
     if(!withPlayer)f.yaw=Math.atan2(-x,-z);
     fighters.push(f);
@@ -2762,8 +2815,8 @@ const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
 const SW=[['#6e1712','#1d3768','#2f5130','#5a3a6a','#8a6a3a','#2a2a2a','#b8ad98','#3a5a7a','#6a2a1a','#c8a060','#40506a','#556b2f'],
   ['#c9a227','#d8d0bc','#a02020','#1a1a1a','#e0c060','#3a2a1a','#7a1f1f','#e8e0d0','#5a2a1a','#2b4d7a'],
   ['#241c18','#24262b','#2b2a22','#3a2e22','#1e1e1e','#3a3028','#2a2e34','#4a3a2a']];
-let PROFILE={name:'',pal:['#6e1712','#c9a227','#241c18',1]};
-try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&Array.isArray(p.pal)&&p.pal.length===4)PROFILE={name:String(p.name||'').slice(0,16),pal:p.pal};}catch(e){}
+let PROFILE={name:'',pal:['#6e1712','#c9a227','#241c18',1],look:{...DEF_LOOK}};
+try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&Array.isArray(p.pal)&&p.pal.length===4)PROFILE={name:String(p.name||'').slice(0,16),pal:p.pal,look:cleanLook(p.look)||{...DEF_LOOK}};}catch(e){}
 function saveProfile(){try{localStorage.setItem('bloodmoor-fighter',JSON.stringify(PROFILE));}catch(e){}}
 const prev={r:null,scene:null,cam:null,model:null,mats:[],mixer:null};
 function buildPreview(){
@@ -2772,21 +2825,28 @@ function buildPreview(){
   prev.r.setPixelRatio(1);prev.r.toneMapping=THREE.ACESFilmicToneMapping;prev.r.toneMappingExposure=1.3;prev.r.outputColorSpace=THREE.SRGBColorSpace;
   prev.scene=new THREE.Scene();prev.cam=new THREE.PerspectiveCamera(30,240/280,.1,20);prev.cam.position.set(0,1.15,3.9);prev.cam.lookAt(0,.95,0);
   prev.scene.add(new THREE.HemisphereLight(0xffe2c0,0x302018,1.4));const d=new THREE.DirectionalLight(0xffd0a0,2.6);d.position.set(2,3,3);prev.scene.add(d);const b=new THREE.DirectionalLight(0x6080ff,1.2);b.position.set(-3,2,-2);prev.scene.add(b);
-  prev.model=SkeletonUtils.clone(GLTF.scene);prev.scene.add(prev.model);
-  prev.model.traverse(o=>{if(o.isMesh){const isJoint=/Joint/.test(o.name)||o.material.name.includes('Joints');o.material=outfitMaterial(PROFILE.pal,isJoint?.55:1);prev.mats.push(o.material);o.frustumCulled=false;}});
-  prev.mixer=new THREE.AnimationMixer(prev.model);prev.mixer.clipAction(GLTF.animations.find(a=>a.name==='idle')).play();
+  dressPreview();
 }
-function applyPreview(){for(const m of prev.mats){const U=m.userData.U;U.uCoat.value.set(PROFILE.pal[0]);U.uCoat2.value.set(PROFILE.pal[1]);U.uHose.value.set(PROFILE.pal[2]);U.uParty.value=PROFILE.pal[3];}}
+// the preview is re-dressed when the look changes; colour changes just update the dye
+function dressPreview(){if(!prev.scene)return;const ry=prev.model?prev.model.rotation.y:0;if(prev.model)prev.scene.remove(prev.model);prev.mats=[];
+  prev.model=SkeletonUtils.clone(GLTF.scene);dressModel(prev.model,PROFILE.look,PROFILE.pal,prev.mats);prev.model.rotation.y=ry;prev.scene.add(prev.model);
+  prev.mixer=new THREE.AnimationMixer(prev.model);prev.mixer.clipAction(GLTF.animations.find(a=>a.name==='idle')).play();}
+function applyPreview(){for(const m of prev.mats){const U=m.userData.U;U.uTint.value.set(PROFILE.pal[0]);U.uTrim.value.set(PROFILE.pal[1]);U.uHose.value.set(PROFILE.pal[2]);U.uParty.value=PROFILE.pal[3];}}
 function renderPreview(dt){if(!prev.r||el('menu').classList.contains('hide')||innerWidth<=1100)return;prev.mixer.update(dt);prev.model.rotation.y+=dt*.45;prev.r.render(prev.scene,prev.cam);}
 function initFighterCard(){
   el('fname').value=PROFILE.name;el('fname').addEventListener('input',e=>{PROFILE.name=e.target.value.replace(/[<>&"]/g,'').slice(0,16);saveProfile();});
   el('fname').addEventListener('keydown',e=>e.stopPropagation());
-  document.querySelectorAll('.sw').forEach(box=>{const k=+box.dataset.k;
+  document.querySelectorAll('.sw[data-k]').forEach(box=>{const k=+box.dataset.k;
     const sync=()=>box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',b.dataset.c===PROFILE.pal[k]?'true':'false'));
     for(const c of SW[k]){const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.setAttribute('role','radio');b.setAttribute('aria-label',c);
       b.addEventListener('click',()=>{PROFILE.pal[k]=c;saveProfile();sync();applyPreview();});box.appendChild(b);}sync();});
   const ps=()=>el('fpat').querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',+b.dataset.v===PROFILE.pal[3]?'true':'false'));
   el('fpat').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.pal[3]=+b.dataset.v;saveProfile();ps();applyPreview();}));ps();
+  // look: outfit, hair, beard, hair colour and skin re-dress the preview
+  document.querySelectorAll('[data-look]').forEach(box=>{const k=box.dataset.look;
+    if(box.classList.contains('sw')){const cols=k==='hc'?LOOK.hairSw:LOOK.skinSw;cols.forEach((c,i)=>{const b=document.createElement('button');b.style.background=c;b.dataset.v=i;b.setAttribute('role','radio');b.setAttribute('aria-label',(k==='hc'?'Hair colour ':'Skin tone ')+(i+1));box.appendChild(b);});}
+    const sync=()=>box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',+b.dataset.v===+PROFILE.look[k]?'true':'false'));
+    box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.look[k]=+b.dataset.v;saveProfile();sync();dressPreview();}));sync();});
   buildPreview();
 }
 
@@ -2796,17 +2856,17 @@ let MODE='br',RUN=null,END=null,MODEHUD=['',''];
 try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
-function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],human:true});return h;}
+function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),look:PROFILE.look,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,human:true});return h;}
 function botEntrant(name,skill){return {ctl:null,name,pal:PALETTES[(Math.random()*PALETTES.length)|0],human:false,skill};}
 const vb=(n,a,b)=>n+' '+(n==='You'?b:a);
 function showBanner(title,sub){const b=el('banner');b.querySelector('b').textContent=title;b.querySelector('span').textContent=sub||'';b.classList.remove('hide');b.style.animation='none';void b.offsetWidth;b.style.animation='';clearTimeout(showBanner.t);showBanner.t=setTimeout(()=>b.classList.add('hide'),3200);}
 function banner(title,sub){showBanner(title,sub);netEv(['B',title,sub||'']);}
-function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roster=fighters.map(f=>({i:f.id,n:f.name,p:f.pal}));
+function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roster=fighters.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));
   for(const x of NET.conns)if(x.c.open)x.c.send({t:'start',map:curMap,mode:MODE,you:x.f&&fighters.includes(x.f)?x.f.id:-1,roster});}
-function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
+function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
 // put entrants into the arena; kit = [weapon, armor]
 function spawnEntrant(en,x,z,kit,skill){
-  const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1]});
+  const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look});
   if(kit[0]==='fists'){f.sword.dispose();f.sword=null;f.giveFists();}
   if(en.ctl&&en.ctl!=='me'){f.remote=en.ctl;en.ctl.f=f;}
   if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
@@ -2934,7 +2994,7 @@ function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.fi
   el('leaveRoom').onclick=()=>{for(const x of NET.conns)try{x.c.send({t:'closed'});}catch(e){}netReset();};}
 function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
-  if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
+  if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.look=cleanLook(d.look);x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
@@ -2993,7 +3053,7 @@ async function netJoin(code){
   let P;try{P=await loadPeer();}catch(e){netLobby('Multiplayer could not load here.');return;}
   NET.mode='client';const peer=NET.peer=new P(undefined,peerOpts());
   peer.on('open',()=>{if(NET.host||NET.peer!==peer)return;const c=peer.connect('bloodmoor-'+code.toLowerCase(),{reliable:true});NET.host=c;
-    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal,build:BUILD});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
+    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal,look:PROFILE.look,build:BUILD});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
     c.on('data',clientData);
     c.on('close',()=>{if(window.__netdbg)console.warn('NETDBG client close',c.connectionId);if(NET.peer!==peer)return;const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('Lost the connection to the host.');});
   });
@@ -3022,7 +3082,7 @@ function clientStart(d){
   zoneReset();score=0;document.getElementById('feed').innerHTML='';
   NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.mode2=d.mode||'br';END=null;
   for(const r of d.roster){const me=r.i===d.you;const pal=Array.isArray(r.p)?r.p:PALETTES[0];
-    const f=new Fighter(String(r.n).slice(0,16),me,0,-500,pal,{weapon:'arming',armor:[]});f.sword.dispose();f.sword=null;
+    const f=new Fighter(String(r.n).slice(0,16),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;
     for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?.12:-.12,y:.25,z:.27};}
     fighters.push(f);NET.puppets.set(r.i,f);}
   player=NET.puppets.get(d.you)||null;
@@ -3031,7 +3091,7 @@ function clientStart(d){
   el('hud').classList.remove('hide');
 }
 function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;const pal=Array.isArray(r.p)?r.p:PALETTES[0];const me=r.i===d.you;
-    const f=new Fighter(String(r.n).slice(0,16),me,0,-500,pal,{weapon:'arming',armor:[]});f.sword.dispose();f.sword=null;for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?.12:-.12,y:.25,z:.27};}
+    const f=new Fighter(String(r.n).slice(0,16),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?.12:-.12,y:.25,z:.27};}
     fighters.push(f);NET.puppets.set(r.i,f);if(me){NET.myId=r.i;player=f;}}}
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){
@@ -3099,8 +3159,8 @@ el('joinCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='En
 // ================================================================ boot
 loadMap('village');
 function loadFighters(onLoad,onErr){
-  // the model ships as glTF JSON with an embedded buffer; rebuild a GLB in memory so nothing fetches a data: URL
-  fetch('xbot.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
+  // the fighters ship as glTF JSON with an embedded buffer (images included); rebuild a GLB in memory so nothing fetches a data: URL
+  fetch('fighters.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
     const uri=j.buffers[0].uri;const raw=atob(uri.slice(uri.indexOf(',')+1));const bin=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bin[i]=raw.charCodeAt(i);
     delete j.buffers[0].uri;
     const js=new TextEncoder().encode(JSON.stringify(j));const jl=Math.ceil(js.length/4)*4,bl=Math.ceil(bin.length/4)*4;
@@ -3122,5 +3182,6 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;
+window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 </script>

@@ -4,6 +4,9 @@ A physics sword-fighting game that runs in the browser: battle royale with a clo
 
 **Play:** open `index.html` from any static web host (this repo is set up for GitHub Pages).
 
+## Your fighter
+Pick a name, team colours, and a look: bare-chested, peasant or ranger garb, hair, beard, hair colour and skin tone. Friends see your fighter as you made it.
+
 ## Modes
 - **Battle royale**: everyone for themselves in the village or the arena; loot weapons and armor, stay inside the fire.
 - **Duel**: 1v1, best of three, both fighters get the same fresh kit each round.

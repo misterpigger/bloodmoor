@@ -4,7 +4,7 @@ A browser sword-fighting game: battle royale plus Duel, Tournament and Gauntlet 
 
 ## Layout
 - `index.html`: the whole game: HTML, CSS and one ES module. Sections are marked with `// ====… section name` banners. Search those rather than reading the file top to bottom (it's ~3,000 dense lines).
-- `xbot.json`: the fighter model (Mixamo X Bot) as glTF JSON with an embedded buffer. It's rebuilt into a GLB in memory at load; don't fetch it as a data: URL.
+- `fighters.json`: the fighter models as glTF JSON with an embedded buffer (textures included). It's rebuilt into a GLB in memory at load; don't fetch it as a data: URL. It holds the Quaternius CC0 bodies, outfits and hair rebound to the Mixamo X Bot skeleton (the game's bone names, `mixamorig*`), plus idle/walk/run. Each fighter keeps only the meshes of its look (`dressModel`, `LOOK`). Regenerate with `node tools/build-fighters.mjs`; don't hand-edit it.
 - `sfx/`, `music/`: CC0 recordings. Every source is listed in `CREDITS.md`. Only add audio whose licence you've checked, and credit it there.
 - `tools/`: headless test harness (Playwright). Not needed to play.
 
@@ -12,6 +12,7 @@ A browser sword-fighting game: battle royale plus Duel, Tournament and Gauntlet 
 - **Sim loop:** `logic(dt)` runs fixed steps of `H = 1/240` through `sim(h)`, then `animate(dt)` per fighter. `frame()` renders and runs audio, HUD and networking.
 - **Swords (classic engine):** `class Sword` is a hand point `H` pulled toward `Fighter.handTarget()` by a clamped spring, plus a verlet tip `T` steered by `guideDir()`. The tuning lives in `Sword.step`. Hits are blade sample points against limb capsules (`CAPS`), resolved in `resolveHit` (cut, thrust, flat, haft and blunt modes, armour, severing).
 - **Rigid-body engine** (menu switch "Rigid body"): Rapier, loaded on demand. Weapons are compound rigid bodies (`wepParts`) driven by a grip force plus wrist torque (`physStep`, tuned via `PT`). Limbs are capsule bodies sprung to the animation. A contact-free "shadow" copy runs the same spring, so only real shoves get drawn (`physParts` and `physVisual`). Damage comes from solver contacts in `physCombat`.
+- **Looks:** `look = {o: outfit, h: hair, bd: beard, hc: hair colour, sk: skin}` lives on each fighter, in `PROFILE`, in the join hello and in rosters. Team colours (`pal`) dye the undyed cloth through `tintMaterial`. Armour was shaped for a slimmer body and is widened per bone by `ARMOR_FIT`/`ARMOR_OFF`.
 - **Grip and pose:** `gripHand()` puts the hands on the weapon; the guard height is set in `handTarget()`. Check pose changes with screenshots, not just numbers.
 - **Modes:** the `// modes` section. `RUN` holds mode state. `modeKill()` decides round ends and `modeTick()` runs timers. `startCountdown()` runs at every match or round start.
 - **Multiplayer:** the `// multiplayer` section. The host's browser runs the whole sim. Friends (`NET.mode==='client'`) send input about 30 times a second (`clientSendInput`) and render 20 Hz snapshots (`netSnap` → `clientFrame`). Effects and sounds are replayed from `netEv` events. Anything that changes the world on the host must reach clients through the snapshot or an event. Clients never run `Fighter.step`.
