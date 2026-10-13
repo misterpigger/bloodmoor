@@ -266,7 +266,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=24;
+const BUILD=25;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1203,12 +1203,16 @@ class Sword{
     this.v0.copy(this.v);this.w0.copy(this.w);this.com0.copy(this.com);
   }
   physStuck(h,target){
-    const st=this.stuck;st.t-=h;
-    if(st.t<=0||!st.B.alive||st.B.ragdoll||target.distanceTo(this.H)>.5){this.unstick();spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.4).setY(.7),12,1.2,1);sHit(this.T,.4,false);}
+    const st=this.stuck;st.t-=h;st.age=(st.age||0)+h;const pull=stuckPull(this,target);
+    if(st.t<=0||!st.B.alive||st.B.ragdoll||pull>.25){const B=st.B,yank=st.t>0&&B.alive&&!B.ragdoll;this.unstick();if(yank)ripOut(this,B,this.owner,st.rip||4);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
   }
-  unstick(){if(!this.stuck)return;if(this.stuck.j&&PW){try{PW.removeImpulseJoint(this.stuck.j,true);}catch(e){}}this.stuck=null;}
+  unstick(){if(!this.stuck)return;if(this.stuck.j&&PW){try{PW.removeImpulseJoint(this.stuck.j,true);}catch(e){}}if(this.stuck.thrown&&this.rb){this.rb.setBodyType(R.RigidBodyType.Dynamic,true);this.grp=null;this.setGroup(GR_LOOSE);this.rb.wakeUp();}this.stuck=null;}
   physFree(h){
-    this.age+=h;this.wallCd-=h;if(this.planted)return;
+    this.age+=h;this.wallCd-=h;
+    if(this.stuck&&this.stuck.thrown){const st=this.stuck;st.t-=h;
+      if(st.t<=0||!st.c.on||!fighters.includes(st.B))this.unstick();
+      else{stuckPose(this);_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);_pq.setFromRotationMatrix(_sm);this.rb.setNextKinematicTranslation(this.H);this.rb.setNextKinematicRotation(_pq);return;}}
+    if(this.planted)return;
     if(this.flying){
       if(this.def.kind==='spear'&&!this.planted&&this.T.y<.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
       if(this.def.kind==='spear'&&this.v.lengthSq()>4){_pv.copy(this.v).normalize();_pw.crossVectors(this.axis,_pv);this.w.addScaledVector(_pw,40*h).multiplyScalar(1-6*h);this.rb.setAngvel(this.w,true);}
@@ -1219,10 +1223,15 @@ class Sword{
   step(h,target,guide,commit,strength){
     this.Hprev.copy(this.H);
     if(this.H.distanceToSquared(target)>4){this.stuck=null;this.reset(target,guide);return;}
-    if(this.stuck){ // thrust embedded in a body: the point stays in until the hold runs out or you yank it
-      const st=this.stuck,c=st.c;st.t-=h;
-      if(st.t<=0||!st.B.alive||!c.on||target.distanceTo(this.H)>.45){this.stuck=null;this.Hv.set(0,0,0);spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.4).setY(.7),12,1.2,1);sHit(this.T,.4,false);}
-      else{_g.copy(c.a).lerp(c.b,st.u).add(st.off);this.axis.subVectors(_g,this.H).normalize();this.H.copy(_g).addScaledVector(this.axis,-this.len);this.Hv.multiplyScalar(.5);this.T.copy(_g);this.Tp.copy(_g);this.tipVel.set(0,0,0);st.B.vel.multiplyScalar(.6);return;}
+    if(this.stuck){ // embedded in a body: it stays in, dragging them by the haft, until it works loose or you rip it out
+      const st=this.stuck,B=st.B;st.t-=h;st.age+=h;
+      const gone=!B.alive||B.ragdoll||!st.c.on||!fighters.includes(B);
+      if(!gone)stuckPose(this);
+      const pull=gone?0:stuckPull(this,target);
+      if(gone||st.t<=0||pull>.25){this.unstick();this.Hv.set(0,0,0);this.Tp.copy(this.T);this.Hp.copy(this.H);
+        if(pull>.25)ripOut(this,B,this.owner,st.rip);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
+      else{_v.subVectors(target,this.H).setY(0);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));
+        this.Hv.set(0,0,0);this.Hp.copy(this.H);this.Tp.copy(this.T);this.tipVel.set(0,0,0);return;}
     }
     const w=this.def.weight,heavy=this.def.kind==='axe'||this.def.kind==='blunt';
     // heavy weapons: the arm works harder to get them moving, momentum carries them through, and the wrist holds the head firm
@@ -1256,6 +1265,9 @@ class Sword{
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
   }
   stepFree(h){
+    if(this.stuck&&this.stuck.thrown){const st=this.stuck;st.t-=h;
+      if(st.t<=0||!st.c.on||!fighters.includes(st.B)){this.unstick();this.Hp.copy(this.H);this.Tp.copy(this.T);this.age=0;}
+      else{stuckPose(this);this.Hp.copy(this.H);this.Tp.copy(this.T);this.Hv.set(0,0,0);this.tipVel.set(0,0,0);return;}}
     this.age+=h;if(this.planted)return;if(this.age>6&&this.tipVel.lengthSq()<.01)return;
     if(this.flying&&this.def.kind==='spear'&&this.age>.05){
       if(this.T.y<.07&&this.axis.y<-.05){this.plant();return;}
@@ -1608,6 +1620,8 @@ class Fighter{
           if(A.pt>(kind==='blunt'||kind==='axe'?.42:.34)){A.phase='recover';A.pt=0;}}
         else if(A.phase==='recover'){if(A.pt>.4){A.phase='guard';A.pt=0;A.cd=rand(.3,1.1)/A.aggr;}}
       }
+      const sst=this.sword&&this.sword.stuck;   // blade in them: hold it there a moment, then wrench it out
+      if(sst&&!sst.thrown){if(sst.age<.55){this.ctrlT.x=this.ctrl.x;this.ctrlT.y=this.ctrl.y;this.ctrlT.z=this.ctrl.z;this.ctrlV.x=this.ctrlV.y=this.ctrlV.z=0;}else{this.ctrlT.z=.24;this.ctrlT.y=this.ctrl.y+.2;wish.addScaledVector(tg.pos.clone().sub(this.pos).setY(0).normalize(),-1);}A.phase='recover';A.pt=0;}
       if(this.stagger>.1){A.phase='guard';}
     } else {
       let tx,tz;if(needZone){tx=zc.c.x;tz=zc.c.z;run=true;}else{if(this.pos.distanceTo(A.wander)<3)A.wander.set(rand(-1,1)*zone.r*.6+zone.c.x,0,rand(-1,1)*zone.r*.6+zone.c.z);tx=A.wander.x;tz=A.wander.z;}
@@ -1872,7 +1886,7 @@ function pickUp(f,it){
   if(!loot.includes(it)||!canTake(f,it))return;
   removeLoot(it);
   if(it.kind==='weapon'){
-    const s=it.sword;const fi=freeSwords.indexOf(s);if(fi>=0)freeSwords.splice(fi,1);
+    const s=it.sword;const fi=freeSwords.indexOf(s);if(fi>=0)freeSwords.splice(fi,1);if(s.stuck){const B=s.stuck.B;s.unstick();if(B.alive)ripOut(s,B,f,5);}
     if(f.sword)f.dropSword(true);f.giveFists();
     s.free=false;s.flying=false;f.sword=s;s.owner=f;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));
   } else {
@@ -1981,6 +1995,26 @@ function clash(A,B){
 }
 // blades are solid: they rest on bodies and armor instead of passing through
 const _cn=V(),_cq=V();
+// a weapon that goes in straight stays in: the embedded point is pinned in the struck bone's own space, so it moves and turns with the limb
+const _stM=new THREE.Matrix4(),_stQ=new THREE.Quaternion(),_stP=new THREE.Vector3();
+function embed(s,B,cap,l,E,hold,extra){
+  const bone=B.bones[cap.ba];if(!bone)return false;bone.updateWorldMatrix(true,false);
+  _stM.copy(bone.matrixWorld).invert();bone.getWorldQuaternion(_stQ).invert();
+  s.unstick();s.stuck=Object.assign({B,c:cap,bone,lp:E.clone().applyMatrix4(_stM),la:s.axis.clone().applyQuaternion(_stQ),le:s.edge.clone().applyQuaternion(_stQ),l,t:hold,age:0},extra||{});return true;
+}
+function stuckPose(s){
+  const st=s.stuck;st.bone.updateWorldMatrix(true,false);st.bone.getWorldQuaternion(_stQ);_stP.copy(st.lp).applyMatrix4(st.bone.matrixWorld);
+  s.axis.copy(st.la).applyQuaternion(_stQ).normalize();s.edge.copy(st.le).applyQuaternion(_stQ);s.edge.addScaledVector(s.axis,-s.edge.dot(s.axis)).normalize();
+  s.H.copy(_stP).addScaledVector(s.axis,-st.l);s.T.copy(s.H).addScaledVector(s.axis,s.len);
+}
+// how hard the hand is pulling on a stuck weapon: drawn back along the blade, or wrenched across it, since it went in
+function stuckPull(s,target){const st=s.stuck;_v.subVectors(s.H,target);const ax=_v.dot(s.axis),lat=Math.sqrt(Math.max(0,_v.lengthSq()-ax*ax));if(st.d0==null){st.d0=ax;st.l0=lat;}return Math.max(ax-st.d0,(lat-st.l0)*.55);}
+// pulling a stuck weapon out tears the wound open
+function ripOut(s,B,A,dmg){
+  spawnBlood(s.T,_v.copy(s.axis).multiplyScalar(-2.2).setY(1),28,2,1.3);sHit(s.T,.75,false);
+  if(B.alive&&!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.25);B.damage(dmg,A,'torn open');}
+  if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
+}
 function bladeContact(s,B){
   let moved=false;
   for(const t of [1,.84,.68,.52]){s.pointAt(t,_bp);
@@ -2064,7 +2098,7 @@ function resolveHit(A,B,cap,t,P,pv){
     else if(glance||mode==='flat'||mode==='haft')A.stagger=Math.max(A.stagger,.12);
     if(mode==='thrust'&&!sev&&B.alive&&!B.ragdoll&&dmg>6&&!glance&&B.pb&&!s.stuck){const pp=B.pb[B.caps.indexOf(cap)];if(pp&&pp.on&&!pp.kin){
       _pv.subVectors(P,pp.p).applyQuaternion(_pq.copy(pp.q).invert());const ly=clamp(_e.subVectors(P,s.H).dot(s.axis),0,s.len);
-      s.stuck={B,t:.3+Math.random()*.15,j:PW.createImpulseJoint(R.JointData.spherical({x:0,y:ly,z:0},{x:_pv.x,y:_pv.y,z:_pv.z}),s.rb,pp.rb,true)};
+      s.stuck={B,t:1,rip:4+dmg*.15,j:PW.createImpulseJoint(R.JointData.spherical({x:0,y:ly,z:0},{x:_pv.x,y:_pv.y,z:_pv.z}),s.rb,pp.rb,true)};
       B.stagger=Math.max(B.stagger,.5);B.bleed+=1.5;tell(A,'Run through','red');}}
     s.arc=0;return;
   }
@@ -2072,7 +2106,9 @@ function resolveHit(A,B,cap,t,P,pv){
   if(sev){s.Tp.lerp(s.T,.25);s.Hv.multiplyScalar(.85);A.passT.set(B.id,simTime+.15);}
   else if(glance||mode==='flat'||mode==='haft'){reflectTip(s,_v.copy(dir).negate(),.3);s.Tp.lerp(s.T,.5);s.Hv.multiplyScalar(.3);A.stagger=Math.max(A.stagger,.15);}
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
-  if(false&&mode==='thrust'&&!sev&&B.alive&&!B.ragdoll&&dmg>6&&!glance){_pa.subVectors(cap.b,cap.a);const u=clamp(_pb.subVectors(P,cap.a).dot(_pa)/(_pa.lengthSq()||1e-9),0,1);_cq.copy(cap.a).lerp(cap.b,u);s.stuck={B,c:cap,u,off:P.clone().sub(_cq).multiplyScalar(.6),t:.3+Math.random()*.15};B.stagger=Math.max(B.stagger,.5);B.bleed+=1.5;tell(A,'Run through','red');}
+  if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>8||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
+    const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,.22);
+    if(embed(s,B,cap,t*s.len,E,ax?.8:1.5,{rip:ax?5:4+dmg*.15})){B.stagger=Math.max(B.stagger,.5);if(!ax)B.bleed+=1.5;tell(A,ax?'The axe bites deep':'Run through','red');}}
   s.arc=0;
 }
 // ---- contacts from the solver: every hit, clash and bounce below is a real collision between bodies
@@ -2180,6 +2216,9 @@ function thrownHit(s,B,hit,ht,P,pv){
     if(B.alive&&!B.ragdoll&&(hit.zone==='head'&&mode!=='flat'&&speed*W.weight>9||speed*W.weight>20))B.knockdown(rand(1.2,2),dir.clone().multiplyScalar(2.5),P);
     if(by&&by.isPlayer){note({point:'Skewered',cut:'Clean hit',blunt:'Crushed',flat:'Glancing throw'}[mode],mode==='flat'?'sm':'gold');hitMarker(false);if(dmg>14)hitstop(.06);}
     if(B.isPlayer)shake(.5);
+    if(mode==='point'&&dmg>5&&hit.on&&(B.alive||B.ragdoll)&&embed(s,B,hit,ht*s.len,P.clone().addScaledVector(s.axis,.26),B.alive?10:60,{thrown:true})){
+      s.flying=false;if(B.alive)B.bleed+=1.5;
+      if(s.rb){s.rb.setBodyType(R.RigidBodyType.KinematicPositionBased,true);for(const c of s.cols)c.setCollisionGroups(0);s.grp=0;}}
     return;
   }
 }
@@ -2561,7 +2600,7 @@ function frame(now){
     else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
     if(input.mx>.85)player.yaw-=2.4*dt*(input.mx-.85)/.15;if(input.mx<.15)player.yaw+=2.4*dt*(.15-input.mx)/.15;
   }
-  if(player&&player.sword&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
+  if(player&&player.sword&&!player.sword.stuck&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
   for(const s of freeSwords)s.sync();
   for(let i=spurts.length-1;i>=0;i--){const sp=spurts[i];if(simTime>sp.until||!sp.obj.parent){spurts.splice(i,1);continue;}sp.obj.getWorldPosition(_t1);if(_t1.distanceToSquared(camera.position)<.5)continue;const k=(sp.until-simTime);spawnBlood(_t1,_t2.set(sp.dir.x*1.2,1.4+Math.random(),sp.dir.z*1.2),Math.random()<k*.5?2:1,1.2,.9);}
   updateBlood(dt);updatePool(sparks,dt,-9.8,.5);
