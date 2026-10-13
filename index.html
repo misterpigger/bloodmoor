@@ -282,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=33;
+const BUILD=34;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1694,9 +1694,13 @@ class Fighter{
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
     if(P.Neck){const dx=P.Neck.x-P.Hips.x,dz=P.Neck.z-P.Hips.z;if(dx*dx+dz*dz>.01)this.yaw=Math.atan2(dx,dz);}
-    this.ragdoll=null;this.knocked=0;this.vel.set(0,0,0);this.crouchAmt=1;this.stagger=.7;this.useStamina(10);
+    this.beginRecover();this.ragdoll=null;this.knocked=0;this.vel.set(0,0,0);this.crouchAmt=1;this.stagger=.7;this.useStamina(10);
     if(this.isPlayer)camY=1;
   }
+  // getting up: remember the pose the body fell into (relative to where it now stands) and ease out of it into the animation,
+  // instead of popping from lying flat to crouched in one frame
+  beginRecover(){if(!this.ragdoll)return;this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;this.root.updateMatrixWorld(true);this.ragdoll.apply();
+    const q=new Map();for(const n in this.bones){const b=this.bones[n];if(b&&b.isBone)q.set(b,b.quaternion.clone());}this.rec={t:0,q,hp:this.bones.Hips.position.clone()};}
   // a blow pushes the body's weight off its feet (horizontal, in m/s of centre-of-mass speed)
   shove(dirWorld,dv){if(!this.alive||this.ragdoll)return;_v.copy(dirWorld).setY(0);const l=_v.length();if(l<1e-6)return;this.balV.addScaledVector(_v,Math.min(dv,5)/l);}
   addFlinch(dirWorld,amt){
@@ -1803,9 +1807,13 @@ class Fighter{
     const B=this.bones;
     this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;
     const sp=Math.hypot(this.vel.x,this.vel.z);this.fwd(_f);const fc=this.vel.x*_f.x+this.vel.z*_f.z;const back=sp>.3&&fc<-.35*sp;
-    let wi=1,ww=0,wr=0;if(sp>.15){if(sp<2.0){ww=clamp(sp/1.5,0,1);wi=1-ww;}else{const t=clamp((sp-2.0)/2.2,0,1);ww=1-t;wr=t;wi=0;}}if(this.slideT>0){wi=1;ww=wr=0;}
+    let wi=1,ww=0,wr=0;if(sp>.15){if(sp<1.8){ww=clamp(sp/1.3,0,1);wi=1-ww;}else{const t=clamp((sp-1.8)/1.8,0,1);ww=1-t;wr=t;wi=0;}}if(this.slideT>0){wi=1;ww=wr=0;}
     const A=this.acts;A.idle.setEffectiveWeight(wi);A.walk.setEffectiveWeight(ww);A.run.setEffectiveWeight(wr);
-    A.walk.timeScale=(back?-1:1)*clamp(sp/1.5,.6,1.9);A.run.timeScale=(back?-1:1)*clamp(sp/4.6,.75,1.35);
+    // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
+    // so the feet stay planted at every speed instead of two cycles drifting through each other (measured: walk 1.51 m/s, run 3.62 m/s)
+    const Dw=A.walk.getClip().duration,Dr=A.run.getClip().duration,rt=wr/(ww+wr||1);
+    const fq=(back?-1:1)*Math.max(sp,.5)/(1.51*Dw*(1-rt)+3.62*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
+    if(ww>0&&wr>0){const m=wr>ww?A.run:A.walk,o=m===A.run?A.walk:A.run;const ph=m.time/m.getClip().duration+(m===A.run?-.075:.075);o.time=((ph%1+1)%1)*o.getClip().duration;}
     this.mixer.update(dt);
     if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
@@ -1862,6 +1870,8 @@ class Fighter{
         ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1]);
       }
     }
+    if(this.rec){const R=this.rec;R.t+=dt;const u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);
+      if(w<=0||!this.alive)this.rec=null;else{for(const [b,q] of R.q)b.quaternion.slerp(q,w);B.Hips.position.lerp(R.hp,w);}}
     this.root.updateMatrixWorld(true);
     if(PW){this.updateCaps();this.physTargets(dt,PART_VIS);this.physVisual();this.root.updateMatrixWorld(true);}
     this.cacheBody();
@@ -2459,6 +2469,14 @@ const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){hitStopT=Math.max(hitStopT,t);}
 function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
+// camera smoothing: a damped follow pivot (shoves and stumbles move the body in frame instead of jerking the world),
+// smooth shake instead of per-frame noise, and eased blends whenever the camera changes rig (knockdown, death, getting up)
+const camPiv=new THREE.Vector3(),_camQ=new THREE.Quaternion(),_camE=new THREE.Euler(0,0,0,'YXZ'),_camM=new THREE.Matrix4(),_camUp=new THREE.Vector3(0,1,0);
+let camPivOn=false,camDistC=1,camBlend=false,camKey='',camOf=null,camOrbA=0;
+function shk(t,o){return Math.sin(t*41.3+o)*.6+Math.sin(t*67.9+o*2.1)*.4;}
+function camSet(p,q,dt){if(camBlend){const k=1-Math.exp(-8*dt);camera.position.lerp(p,k);camera.quaternion.slerp(q,k);
+  if(camera.position.distanceToSquared(p)<4e-4&&camera.quaternion.angleTo(q)<.01)camBlend=false;}else{camera.position.copy(p);camera.quaternion.copy(q);}}
+function camEuler(x,y,z){_camE.set(x,y,z,'YXZ');return _camQ.setFromEuler(_camE);}
 // a directional camera kick: the view snaps along the blow and springs back, so a heavy hit lands with weight instead of a jitter
 const KICK={p:0,y:0,r:0,vp:0,vy:0,vr:0};
 const _kr=new THREE.Vector3(),_kf=new THREE.Vector3();
@@ -2818,15 +2836,17 @@ function sim(h){
 }
 function logic(dt){
   if(NET.mode==='client'){clientFrame(dt);return;}
-  if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{hitStopT-=dt;dt*=.12;}}
+  // impact weight: a short eased slow-down (never a freeze: freezing a fixed-step sim makes it stutter 1,0,1,0 steps a frame)
+  if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
 function frame(now){
+  if(window.__manual&&!window.__inManual){requestAnimationFrame(frame);return;}   // test hook: a recorder steps frames itself
   lastFrameAt=performance.now();window.__fc=(window.__fc||0)+1;
-  requestAnimationFrame(frame);
+  if(!window.__inManual)requestAnimationFrame(frame);
   let dt=Math.min((now-last)/1000,.1);last=now;
   if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>1/38&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
   if(state==='loading')return;
@@ -2858,15 +2878,26 @@ function frame(now){
   else if(!player){attractT+=dt*.09;camera.position.set(Math.cos(attractT)*13,5.5,Math.sin(attractT)*13);camera.lookAt(0,1.2,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
   else if(player){
     shakeAmt*=Math.exp(-7*dt);kickStep(Math.min(dt,.05));
-    if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
-      camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
+    const key=player.ragdoll?'r':camMode;
+    if(camOf!==player){camOf=player;camPivOn=false;camBlend=false;camDistC=1;}
+    else if(key!==camKey){camBlend=true;if(key==='r'){const hp0=player.ragdoll.P.Hips||player.pos;camOrbA=Math.atan2(camera.position.z-hp0.z,camera.position.x-hp0.x);}else camPivOn=false;}
+    camKey=key;const st=now*.001,sa=shakeAmt;
+    if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));_t1.y=camY;
+      camSet(_t1,camEuler(player.pitch+KICK.p+shk(st,0)*sa*.012,player.yaw+Math.PI+KICK.y+shk(st,3)*sa*.012,KICK.r+shk(st,5)*sa*.008),dt);}
     else if(!player.ragdoll){ // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
-      _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
+      _t2.set(player.pos.x+player.vel.x*acc,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z+player.vel.z*acc);
+      if(!camPivOn||camPiv.distanceToSquared(_t2)>4){camPiv.copy(_t2);camY=_t2.y;camPivOn=true;}
+      const kp=1-Math.exp(-22*dt);camPiv.x=lerp(camPiv.x,_t2.x,kp);camPiv.z=lerp(camPiv.z,_t2.z,kp);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));
+      _t2.set(camPiv.x,camY,camPiv.z);
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
-      for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
-      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
-    else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
+      let fr=1;for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){fr=Math.max(0,(i-1.5)/14);break;}}
+      camDistC=fr<camDistC?fr:lerp(camDistC,fr,1-Math.exp(-4*dt));   // pull in at once so a wall never cuts the view, ease back out
+      _t3.lerpVectors(_t2,_t3,camDistC);
+      camSet(_t3,camEuler(player.pitch+CAM_TP.tilt+KICK.p*.7+shk(st,0)*sa*.01,player.yaw+Math.PI+KICK.y*.7+shk(st,3)*sa*.01,KICK.r*.7),dt);}
+    else{const hp=player.ragdoll.P.Hips||player.pos;if(!player.alive)camOrbA+=dt*.25;const rr=player.alive?2.4:3.2;
+      _t1.set(hp.x+Math.cos(camOrbA)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(camOrbA)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));
+      _t2.set(hp.x,hp.y+.3,hp.z);_camM.lookAt(camera.position,_t2,_camUp);_camQ.setFromRotationMatrix(_camM);camera.quaternion.slerp(_camQ,1-Math.exp(-6*dt));}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
@@ -3211,9 +3242,19 @@ async function netJoin(code){
 }
 function clientLobby(){netLobby(`In room <b class="code">${NET.code}</b>. Waiting for the host to start the next match… <button class="lnk" id="leaveRoom">Leave room</button>`);el('startBtn').disabled=true;el('startBtn').textContent='Waiting for host';
   el('leaveRoom').onclick=()=>{netReset();};}
+// network smoothing: a snapshot that arrives early used to snap everyone from where they were drawn to the old target.
+// Instead the next blend starts from exactly what is on screen, and the blend length follows the average snapshot interval.
+function snapAt(P,S,a,ex=0){const L=(x,y)=>x.map((v,i)=>typeof v==='number'&&typeof y[i]==='number'?lerp(v,y[i],a):y[i]);const pm=new Map();for(const o of P.f)pm.set(o.i,o);
+  return {...S,z:[...S.z.slice(0,2),lerp(P.z[2],S.z[2],a),...S.z.slice(3)],f:S.f.map(o=>{const q=pm.get(o.i);if(!q)return o;const n={...o,p:L(q.p,o.p),y:lerpA(q.y,o.y,a)};if(ex&&o.a&&!o.rg){n.p=[n.p[0]+o.v[0]*ex,n.p[1],n.p[2]+o.v[1]*ex];}
+    if(o.w&&q.w&&q.w[0]===o.w[0])n.w=[o.w[0],...L(q.w.slice(1,10),o.w.slice(1,10)),...o.w.slice(10)];
+    if(o.fs&&q.fs)n.fs=L(q.fs,o.fs);
+    if(o.rg&&q.rg)n.rg=o.rg.map((v,i)=>{const k=i-i%3;return o.rg[k+1]>-90&&q.rg[k+1]>-90?lerp(q.rg[i],v,a):v;});
+    return n;})};}
 function clientData(d){
   if(!d||typeof d!=='object')return;
-  if(d.t==='s'){if(!NET.puppets.size)return;const now=performance.now();NET.gap=NET.cur?clamp(now-NET.curAt,16,200):50;NET.prev=NET.cur;NET.cur=d;NET.curAt=now;NET.fresh=true;if(d.e&&d.e.length)clientEvents(d.e);}
+  if(d.t==='s'){if(!NET.puppets.size)return;const now=performance.now();
+    if(NET.cur){const a=clamp((now-NET.curAt)/NET.gap,0,1),ex=clamp(now-NET.curAt-NET.gap,0,60)/1000;NET.prev=NET.prev?snapAt(NET.prev,NET.cur,a,ex):NET.cur;const iv=clamp(now-NET.curAt,16,200);NET.gap=lerp(NET.gap||iv,iv,.15);}else{NET.prev=null;NET.gap=50;}
+    NET.cur=d;NET.curAt=now;NET.fresh=true;if(d.e&&d.e.length)clientEvents(d.e);}
   else if(d.t==='start')clientStart(d);
   else if(d.t==='add')clientAdd(d);
   else if(d.t==='end'){END={title:d.title,line:d.line,cause:d.cause};state=d.won?'won':'dead';deathT=performance.now();}
@@ -3246,12 +3287,12 @@ function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){
   const S=NET.cur;if(!S)return;const P=NET.prev||S;
-  const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1);
+  const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1),ex=clamp(performance.now()-NET.curAt-NET.gap,0,60)/1000;
   if(S.cd!=null)countdownTick(S.cd);
   zone.c.set(S.z[0],0,S.z[1]);zone.r=lerp(P.z[2],S.z[2],a);zone.phase=S.z[3];zone.state=S.z[4]?'shrink':'wait';zone.t=S.z[5];zone.next=S.z[6]?{c:V(S.z[6][0],0,S.z[6][1]),r:S.z[6][2]}:null;zone.dps=S.z[7];zone.off=!!S.z[8];if(S.mh)MODEHUD=S.mh;
   const pm=new Map();for(const o of P.f)pm.set(o.i,o);
   for(const o of S.f){const f=NET.puppets.get(o.i);if(!f)continue;const q=pm.get(o.i)||o;
-    f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);
+    f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);if(ex&&o.a&&!o.rg){f.pos.x+=o.v[0]*ex;f.pos.z+=o.v[1]*ex;}   // a late packet: keep walking briefly instead of stopping dead
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
     if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;
     if(f.alive&&!o.a)f.alive=false;
@@ -3264,7 +3305,7 @@ function clientFrame(dt){
     else{if(f.sword){f.sword.dispose();f.sword=null;}if(o.fs){const fs=o.fs,qf=q.fs||fs;f.fists.R.pos.set(lerp(qf[0],fs[0],a),lerp(qf[1],fs[1],a),lerp(qf[2],fs[2],a));f.fists.L.pos.set(lerp(qf[3],fs[3],a),lerp(qf[4],fs[4],a),lerp(qf[5],fs[5],a));}}
     if(o.rg){if(!f.ragdoll){f.root.updateMatrixWorld(true);f.ragdoll=new Ragdoll(f.bones,RD_NAMES.filter(n=>!f.detached.has(n)),V(),null,null);}
       const qr=q.rg||o.rg;RD_NAMES.forEach((n,k)=>{const p=f.ragdoll.P[n];if(p&&o.rg[k*3+1]>-90)p.set(lerp(qr[k*3],o.rg[k*3],a),lerp(qr[k*3+1],o.rg[k*3+1],a),lerp(qr[k*3+2],o.rg[k*3+2],a));});}
-    else if(f.ragdoll)f.ragdoll=null;
+    else if(f.ragdoll){if(f.alive)f.beginRecover();f.ragdoll=null;}
   }
   // loot mirrors the host's
   const seen=new Set();
@@ -3331,8 +3372,10 @@ loadFighters(async g=>{
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
-window.__clientData=clientData;
+window.__clientData=clientData;window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
+window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
