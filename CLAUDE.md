@@ -30,3 +30,4 @@ Measure feel changes instead of guessing: tip speed (`player.sword.tipVel`), han
 - **Commit as `misterpigger <misterpigger@users.noreply.github.com>`** (or your own GitHub noreply address). Never commit a personal email; this repo is public.
 - Keep it a single static `index.html` plus assets: no bundler and no server.
 - Work on a branch and open a pull request rather than pushing straight to `main`, because `main` is the live site.
+- Merge pull requests locally with a fast-forward (`git checkout main && git merge --ff-only <branch> && git push`), not with GitHub's merge or squash button. GitHub's buttons sign the merge with the merging account's email, which leaks it unless that account has "Keep my email addresses private" turned on.
