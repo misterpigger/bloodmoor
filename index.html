@@ -266,7 +266,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=27;
+const BUILD=28;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1389,7 +1389,7 @@ class Fighter{
     this.pos=V(x,0,z);this.vel=V();this.vy=0;this.yaw=Math.random()*6;this.pitch=0;this.hipOff=0;
     this.alive=true;this.downed=false;this.hp=100;this.stamina=100;this.staminaDelay=0;this.bleed=0;
     this.slideT=0;this.slideReq=false;this.stepHalf=0;this.passT=new Map();this.fists={R:mkArm(),L:mkArm()};this.fistHold={R:false,L:false};this.throwHold=false;this.knocked=0;this.flinchA=0;this.flinchAx=V(1,0,0);this.throwReq=false;this.limpHand=V();this.twist=0;
-    this.crouch=false;this.crouchAmt=0;this.kickT=-1;this.kickCd=0;this.kickHit=false;this.kickReq=false;this.jumpReq=false;
+    this.bal=V();this.balV=V();this.crouch=false;this.crouchAmt=0;this.kickT=-1;this.kickCd=0;this.kickHit=false;this.kickReq=false;this.jumpReq=false;
     this.limbs={head:{hp:999,sev:false},armL:{hp:45,sev:false},armR:{hp:45,sev:false},legL:{hp:50,sev:false},legR:{hp:50,sev:false}};
     this.detached=new Set();this.severedBones=[];
     this.ctrl={x:.12,y:isPlayer?.2:.08,z:isPlayer?.46:.42};this.ctrlT={x:.12,y:.08,z:.42};this.ctrlV={x:0,y:0,z:0};this.burn=0;this.fireFx=null;this.commit=false;this.thrust=false;this.stagger=0;this.mainArm='R';
@@ -1465,10 +1465,14 @@ class Fighter{
     let spd=(run?5.4:this.crouch?1.6:3.1)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(9*h);
+    // stumbling: when the weight is too far off the feet, the legs step to get back under it
+    const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(onGround&&legs&&cs>3.8&&this.stamina>8&&this.kickT<0){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
-    else{_v.copy(wish).multiplyScalar(spd);const ac=onGround?13:1.6;
+    const vx0=this.vel.x,vz0=this.vel.z;
+    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=onGround?(stum>0?20:13):1.6;
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
+    if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
     if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
     // thrusts step in behind the point
     
@@ -1488,6 +1492,18 @@ class Fighter{
     if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.6*w);this.sword.swings=0;}
     if(this.commit&&ts>3)this.useStamina(1.5*h);
     if(this.staminaDelay<=0)this.stamina=Math.min(100,this.stamina+(this.crouch?32:24)*h);
+    // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
+    if(legs&&onGround){
+      const stF=.55+.45*clamp(this.stamina/100,0,1),K=60*stF*(this.crouch?1.4:1)*((this.stanceAmt||0)>.1?1.15:1);
+      if(this.sword&&this.commit&&ts>6){_v.copy(this.sword.tipVel).setY(0);const l=_v.length();if(l>1e-3)this.balV.addScaledVector(_v,(ts-6)*w*h/l);}   // a committed swing drags the body after it
+      const sat=Math.min(1,.07/Math.max(1e-4,Math.hypot(this.bal.x,this.bal.z)));   // ankles and hips only correct a small lean; past that you have to step
+      const C=2*Math.sqrt(K)*.75*sat;
+      this.balV.x+=(-K*sat*this.bal.x-C*this.balV.x)*h;this.balV.z+=(-K*sat*this.bal.z-C*this.balV.z)*h;
+      this.bal.x+=this.balV.x*h;this.bal.z+=this.balV.z*h;
+      if(stum>0)this.stagger=Math.max(this.stagger,.12);
+      const m2=Math.hypot(this.bal.x,this.bal.z);
+      if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar(2.4/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
+    } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
     if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
     if(!this.sword&&this.mainArm)this.stepFists(h);
     if(this.sword&&this.mainArm){
@@ -1501,7 +1517,7 @@ class Fighter{
     this.fwd(_f);
     for(const o of fighters){
       if(o===this||!o.alive||o.ragdoll)continue;_v.subVectors(o.pos,this.pos).setY(0);const d=_v.length();if(d>1.45||d<.01)continue;if(_v.dot(_f)/d<.5)continue;
-      this.kickHit=true;o.vel.addScaledVector(_f,4.5);o.stagger=Math.max(o.stagger,.85);o.useStamina(24);if(o.sword)swordShove(o.sword,_f,3.5);
+      this.kickHit=true;o.vel.addScaledVector(_f,4.5);o.shove(_f,3.4);o.stagger=Math.max(o.stagger,.85);o.useStamina(24);if(o.sword)swordShove(o.sword,_f,3.5);
       if(o.kickT>=0)o.kickT=-1;sfx('kick',o.chest,1);o.addFlinch(_f,.35);
       if(o.stamina<18){o.knockdown(rand(1.4,2.2),_v.copy(_f).multiplyScalar(3.5).setY(.6),o.chest);tell(this,'Knocked down','gold');}
       if(this.isPlayer){note('Kicked','sm');shake(.25);}if(o.isPlayer){hudHurt(10);shake(.7);}
@@ -1588,6 +1604,8 @@ class Fighter{
     this.ragdoll=null;this.knocked=0;this.vel.set(0,0,0);this.crouchAmt=1;this.stagger=.7;this.useStamina(10);
     if(this.isPlayer)camY=1;
   }
+  // a blow pushes the body's weight off its feet (horizontal, in m/s of centre-of-mass speed)
+  shove(dirWorld,dv){if(!this.alive||this.ragdoll)return;_v.copy(dirWorld).setY(0);const l=_v.length();if(l<1e-6)return;this.balV.addScaledVector(_v,Math.min(dv,5)/l);}
   addFlinch(dirWorld,amt){
     _v.copy(dirWorld).setY(0);if(_v.lengthSq()<1e-6)return;
     if(this.pb&&!this.ragdoll){_v.normalize();this.physKick(3,_v,amt*4.5);this.physKick(0,_v,amt*5.5);this.physKick(2,_v,amt*2);return;}_v.normalize().applyAxisAngle(Y_AXIS,-this.yaw);
@@ -1714,6 +1732,9 @@ class Fighter{
     if(this.headSnap>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap);B.Head.quaternion.premultiply(_qr);this.headSnap*=Math.exp(-7*dt);}
     if(this.flinchA>.004){_qr.setFromAxisAngle(this.flinchAx,this.flinchA);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.8);B.Neck.quaternion.premultiply(_qr);this.flinchA*=Math.exp(-6*dt);}
     if(this.stagger>.05){_qr.setFromAxisAngle(X_AXIS,-this.stagger*.25);B.Spine1.quaternion.premultiply(_qr);}
+    // the body leans the way its weight has been pushed
+    {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
+      _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
     if(bend>.02||kk>0){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
@@ -2033,7 +2054,7 @@ function clash(A,B){
   const crush=ak==='blunt'||ak==='axe'||aw>=1.5;
   def.useStamina(4+attSp*.9*aw*Math.pow(ratio,1.5)*(crush?1.4:1));
   if(def.stamina>1&&crush&&attSp>(ak==='blunt'?3.5:5)){ // a heavy blow drives the guard back: the defender is rocked, the attacker keeps their balance
-    def.stagger=Math.max(def.stagger,.3+.15*ratio);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.vel.addScaledVector(_v,1.2+attSp*.12);def.sword.Hv.addScaledVector(_v,attSp*.35);
+    def.stagger=Math.max(def.stagger,.3+.15*ratio);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.vel.addScaledVector(_v,1.2+attSp*.12);def.sword.Hv.addScaledVector(_v,attSp*.35);def.shove(_v,.8+attSp*.12*ratio);
     if(ak==='blunt'){def.damage(Math.min(14,(attSp-4)*2.2),att,'crushed');sThud(_t3,.9);}
     tell(def,'The blow drives through your guard','red');tell(att,'Through the guard','gold');
     if(att.isPlayer||def.isPlayer){shake(.35);hitstop(.05);}
@@ -2143,7 +2164,7 @@ function resolveHit(A,B,cap,t,P,pv){
   if(B.alive&&!B.ragdoll&&dmg<1.5&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
   else if(B.alive&&!B.ragdoll&&armour){if(!phys)B.addFlinch(dir,.12);B.useStamina(4);B.stagger=Math.max(B.stagger,.06);if(A.isPlayer||B.isPlayer)tell(B,'You power through','gold');}
   else if(B.alive&&!B.ragdoll){
-    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));
+    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02);
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
     if(cap.zone==='legL'||cap.zone==='legR'){B.crouchAmt=Math.min(1,B.crouchAmt+.55);B.stagger=Math.max(B.stagger,.4);}
@@ -2234,7 +2255,7 @@ function fistCheck(A,arm){
       const face=c.zone==='head'||c.zone==='neck';
       if(face&&!B.sword&&!B.ragdoll){B.fwd(_f);if(_f.dot(dir)<-.4&&B.fists.R.phase!=='punch'&&B.fists.L.phase!=='punch'){dmg*=.4;sThud(P,.4);}}
       dmg=Math.min(dmg,38);const body=(c.zone==='torso'||face)?dmg:dmg*.5;
-      sThud(P,.5+arm.power);if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
+      sThud(P,.5+arm.power);B.shove(dir,.5+arm.power*1.6+(face?.5:0));if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
       B.addFlinch(dir,.2+arm.power*.7);if(face)B.headSnap=Math.min(1.2,(B.headSnap||0)+.35+arm.power*.6);B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
       _v.copy(dir).setY(0);B.vel.addScaledVector(_v,1.4+arm.power*3.6);if(B.sword)swordShove(B.sword,dir,speed*.25);
       B.damage(body,A,'beaten');
@@ -2272,7 +2293,7 @@ function thrownHit(s,B,hit,ht,P,pv){
     const prot=B.prot(hit.zone);const dmg=Math.min(70,Math.max(0,speed-2.5)*K*ZONE_MULT[hit.zone]*(1-prot*(1-W.pen)));
     const by=s.thrower;
     if(mode==='point'||mode==='cut'){spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.2).setY(.6),(6+dmg*.6)|0,1.6,1);sHit(P,speed/10,false);}else{sThud(P,speed/10);if(prot>.3)sClank(P,.6);}
-    B.addFlinch(dir,.2+Math.min(.4,speed*.03));B.stagger=Math.max(B.stagger,.3+Math.min(.4,speed*.03));
+    B.addFlinch(dir,.2+Math.min(.4,speed*.03));B.stagger=Math.max(B.stagger,.3+Math.min(.4,speed*.03));B.shove(dir,speed*W.weight*.12);
     if(mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed>9&&Math.random()<.5){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
     const body=(hit.zone==='torso'||hit.zone==='head'||hit.zone==='neck')?dmg:dmg*.5;
     if(dmg>4)addWound(B,B.caps.indexOf(hit),P,s.axis,dmg,mode==='point'?'stab':mode==='cut'?'cut':'bruise');
@@ -2933,7 +2954,7 @@ function netSnap(){
   const z=zone;
   const S={t:'s',cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
-    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
+    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
     if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge)];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
@@ -3022,7 +3043,7 @@ function clientFrame(dt){
   for(const o of S.f){const f=NET.puppets.get(o.i);if(!f)continue;const q=pm.get(o.i)||o;
     f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
-    f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;
+    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;
     if(f.alive&&!o.a)f.alive=false;
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
