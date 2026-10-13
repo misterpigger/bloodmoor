@@ -47,6 +47,9 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 @media (max-width:700px){.panel{background:rgba(7,8,12,.86)}.controls{font-size:13px}}
 /* multiplayer */
 .mode{min-width:0;flex:1 1 120px}
+#lockhint{position:absolute;bottom:26%;left:50%;transform:translateX(-50%);padding:10px 22px;background:rgba(7,8,12,.75);border:1px solid var(--ember);color:var(--parch);font:700 18px var(--f-ui);letter-spacing:.06em;animation:hintPulse 1.4s ease-in-out infinite}
+@keyframes hintPulse{50%{border-color:rgba(255,155,61,.25)}}
+@media (prefers-reduced-motion:reduce){#lockhint{animation:none}}
 #banner{position:absolute;top:22%;left:50%;transform:translateX(-50%);text-align:center;display:flex;flex-direction:column;gap:4px;animation:bannerIn .5s ease-out;pointer-events:none}
 #banner b{font-family:var(--f-display);font-weight:400;font-size:clamp(38px,6vw,72px);line-height:1;color:var(--parch);text-shadow:0 4px 24px rgba(0,0,0,.8),0 0 40px rgba(192,38,28,.4)}
 #banner span{font-size:17px;color:var(--ember);text-shadow:0 1px 6px #000;max-width:70ch}
@@ -195,6 +198,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 
 <div id="hud" class="hide">
   <div id="banner" class="hide" role="status" aria-live="polite"><b></b><span></span></div>
+  <div id="lockhint" class="hide">Click to take control</div>
   <canvas id="minimap" width="340" height="340"></canvas>
   <div id="topc"><div id="alive">12 alive</div><div id="zoneinfo">Ring closes in 0:40</div></div>
   <div id="feed"></div>
@@ -1250,10 +1254,14 @@ class Sword{
   }
   stepFree(h){
     this.age+=h;if(this.planted)return;if(this.age>6&&this.tipVel.lengthSq()<.01)return;
-    if(this.flying&&this.def.kind==='spear'&&this.T.y<.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
-    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;if(p.y<.04){p.y=.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}collide(p,.03,true);}
+    if(this.flying&&this.def.kind==='spear'&&this.age>.05){
+      if(this.T.y<.07&&this.axis.y<-.05){this.plant();return;}
+      // landed flat or butt-first, or ran into something: it drops where it is instead of levering back
+      if(this.H.y<.07||this.T.y<.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
+    }
+    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;if(p.y<.04){p.y=.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
-    if(this.flying&&this.def.kind==='spear'){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
+    if(this.flying&&this.def.kind==='spear'&&this.H.y>.1&&this.T.y>.1){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
     if(this.flying&&(this.age>3||(this.H.y<.08&&this.T.y<.08)||this.age>.15&&this.Hv.length()<2.5&&this.tipVel.length()<2.5))this.flying=false;
   }
@@ -1626,8 +1634,9 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03;
-    const stance=this.alive&&!this.ragdoll&&this.mainArm&&sp<3.6&&this.slideT<=0?.3:0;
-    this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:stance,1-Math.exp(-10*dt));
+    this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:0,1-Math.exp(-10*dt));
+    this.stanceAmt=lerp(this.stanceAmt||0,this.alive&&!this.ragdoll&&this.mainArm&&sp<.8&&!this.crouch&&!airborne?.24:0,1-Math.exp(-6*dt));
+    const bend=Math.min(1,this.crouchAmt+this.stanceAmt);
     const kk=this.kickT>=0?Math.sin(clamp(this.kickT/.45,0,1)*Math.PI):0;
     // unarmed: the shoulders turn and the body leans into a long punch
     let pl=0,pt=0;if(!this.sword&&this.alive){const rc=this.armLen[0]+this.armLen[1];for(const sd of ['R','L']){const a=this.fists[sd];if(!a.init)continue;const d=a.pos.distanceTo(sd==='R'?this.shR:this.shL)-rc*.92;if(d>0){pl=Math.max(pl,d);pt+=(sd==='R'?1:-1)*d;}}}
@@ -1640,11 +1649,11 @@ class Fighter{
     if(this.headSnap>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap);B.Head.quaternion.premultiply(_qr);this.headSnap*=Math.exp(-7*dt);}
     if(this.flinchA>.004){_qr.setFromAxisAngle(this.flinchAx,this.flinchA);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.8);B.Neck.quaternion.premultiply(_qr);this.flinchA*=Math.exp(-6*dt);}
     if(this.stagger>.05){_qr.setFromAxisAngle(X_AXIS,-this.stagger*.25);B.Spine1.quaternion.premultiply(_qr);}
-    if(this.crouchAmt>.02||kk>0){
+    if(bend>.02||kk>0){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
       if(!this.limbs.legR.sev){feet.Right=V();B.RightFoot.getWorldPosition(feet.Right);}
-      B.Hips.position.y-=this.crouchAmt*34;
+      B.Hips.position.y-=bend*34;
       this.root.updateMatrixWorld(true);this.fwd(_f);
       for(const s in feet){
         let tgt=feet[s];
@@ -2357,7 +2366,7 @@ function toMenuKeepRoom(){
 document.getElementById('mainBtn').addEventListener('click',toMainMenu);
 document.getElementById('endMainBtn').addEventListener('click',toMainMenu);
 addEventListener('keydown',e=>{if(state!=='playing'||e.repeat)return;if(e.code==='KeyP'||(e.code==='Escape'&&!input.locked)){e.preventDefault();if(paused){showPause(false);requestLock();last=performance.now();}else showPause(true);}});
-cvs.addEventListener('click',()=>{if(state==='playing'&&!input.locked&&lockWanted)requestLock();});
+cvs.addEventListener('click',()=>{if(state==='playing'&&!input.locked&&!paused)requestLock();});   // a match started by someone else's click needs your own click to grab the mouse
 document.getElementById('startBtn').addEventListener('click',startGame);
 document.querySelectorAll('.map[data-map]').forEach(b=>b.addEventListener('click',()=>{
   const id=b.dataset.map;document.querySelectorAll('.map[data-map]').forEach(o=>{o.classList.toggle('on',o===b);o.setAttribute('aria-checked',o===b?'true':'false');});
@@ -2577,6 +2586,7 @@ function frame(now){
   if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.14,.3);swooshFilt.frequency.value=Math.min(6000,280+ts*95/Math.sqrt(player.sword.def.weight));}else if(swooshGain)swooshGain.gain.value*=.9;
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
   updateHUD(dt);renderPreview(dt);musicTick();
+  {const show=state==='playing'&&!input.locked&&!paused&&!!player&&player.alive;const lh=el('lockhint');if(lh.classList.contains('hide')===show)lh.classList.toggle('hide',!show);}
   composer.render();
 }
 let attractRestart=0;
