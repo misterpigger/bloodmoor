@@ -266,7 +266,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=25;
+const BUILD=26;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1176,7 +1176,8 @@ class Sword{
     const k=(commit?PT.kc:PT.kg)*th/Math.sqrt(w),c=2*Math.sqrt(k)*.85*(f&&f.thrust?.7:1);
     _g.copy(f?f.vel:_zero3).sub(this.Hv);
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(_g,c);
-    const maxA=(commit?PT.ac:PT.ag)*th*strength/Math.pow(w,.65)*(guide?1:2.5);if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    const kn=this.knockT>0?.2:1;if(this.knockT>0)this.knockT-=h;
+    const maxA=(commit?PT.ac:PT.ag)*th*strength/Math.pow(w,.65)*(guide?1:2.5)*kn;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     _a.y+=9.81*PT.gc;
     // impulse at the grip: it both moves and turns the weapon, so the head lags and carries through like a real one
     _e.subVectors(this.H,this.com);_a.multiplyScalar(M*h);
@@ -1238,7 +1239,8 @@ class Sword{
     const wf=heavy?Math.pow(w,.9):w>1.4?Math.pow(w,.85):Math.pow(Math.max(.85,w),.5);
     const k=(commit?950:520)*(this.def.kind==='fist'?2:1)*(heavy?.8:1),c=2*Math.sqrt(k)*(heavy?.62:.8);
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
-    const maxA=(commit?420:220)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    const kn=this.knockT>0?.18:1;if(this.knockT>0)this.knockT-=h;   // knocked out of line: the grip takes a moment to recover
+    const maxA=(commit?420:220)*strength/wf*kn;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
     const gk=heavy?(commit?700:420):(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
     _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(heavy?(commit?.45:.85):commit?.3:.75)*tw*h);
@@ -1961,8 +1963,18 @@ function clash(A,B){
   const pen=.05-Math.sqrt(d2);s.T.addScaledVector(_n,pen*.5);s2.T.addScaledVector(_n,-pen*.5);
   const rs=_rel.length();if(rs<=1.4||A.clashCd>0)return;
   const spA=_va.length(),spB=_vb.length();
-  reflectTip(s,_n,spB>spA?.55:.2);_n.negate();reflectTip(s2,_n,spA>spB?.55:.2);_n.negate();
-  s.Hv.multiplyScalar(.5);s2.Hv.multiplyScalar(.5);
+  // the blades trade momentum along the contact: the harder, heavier blow drives the other weapon back
+  // crossing blades push apart across both of them; a fast blade may already be partway through, so orient that against the closing motion
+  _e.crossVectors(s.axis,s2.axis);if(_e.lengthSq()<.04)_e.copy(_n);else _e.normalize();if(_rel.dot(_e)>0)_e.negate();
+  const vn=_rel.dot(_e);
+  if(vn<-.5){_n.copy(_e);
+    const mA=bladeMass(A,s,sa),mB=bladeMass(B,s2,sb),J=-(1+.3)*vn/(1/mA+1/mB),dA=J/mA,dB=J/mB;
+    s.Tp.addScaledVector(_n,-dA*H);s.Hv.addScaledVector(_n,dA*.45);
+    s2.Tp.addScaledVector(_n,dB*H);s2.Hv.addScaledVector(_n,-dB*.45);
+    if(dA>3.5)s.knockT=Math.min(.4,dA*.045);if(dB>3.5)s2.knockT=Math.min(.4,dB*.045);
+    _n.subVectors(_c1,_c2);if(_n.lengthSq()<1e-8)_n.copy(_e);_n.normalize();
+  }
+  s.Hv.multiplyScalar(.7);s2.Hv.multiplyScalar(.7);
   A.clashCd=B.clashCd=.12;
   _t3.addVectors(_c1,_c2).multiplyScalar(.5);
   if(rs>3){spawnSparks(_t3,(8+rs*2)|0,_n);sClang(_t3,rs/9);}
@@ -1993,6 +2005,8 @@ function clash(A,B){
     if(att.isPlayer){if(noteCd<=0){note('Parried','sm');noteCd=1;}shake(.3);}
   }
 }
+// how much a weapon resists being knocked at the point of contact: its weight, the body behind a committed swing, and leverage (a blow near the point turns it easily)
+function bladeMass(f,s,t){const st=f.stagger>0?.6:1,sf=.6+.4*clamp(f.stamina/100,0,1);return s.def.weight*(f.commit?1.8:f.thrust?1.5:1)*st*sf/(.35+.65*t*t);}
 // blades are solid: they rest on bodies and armor instead of passing through
 const _cn=V(),_cq=V();
 // a weapon that goes in straight stays in: the embedded point is pinned in the struck bone's own space, so it moves and turns with the limb
@@ -2146,6 +2160,7 @@ function clashPhys(s,s2,P,va,vb){
   if(!A||!B)return;
   const spA=va.length(),spB=vb.length();EV.clashGame++;
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
+  { const pa=attSp*att.sword.def.weight*(att.commit?1.8:1),pd=defSp*def.sword.def.weight*(def.commit?1.8:1)+1;if(pa>pd*1.3&&attSp>4)def.sword.knockT=Math.min(.4,.06*(pa/pd));}
   if(attSp<3)return;
   if(defSp>4){att.stagger=Math.max(att.stagger,.18);def.stagger=Math.max(def.stagger,.18);att.useStamina(6);def.useStamina(6);if(att.isPlayer||def.isPlayer){shake(.25);hitstop(.04);}return;}
   def.useStamina(4+attSp*1.3*att.sword.def.weight);
