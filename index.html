@@ -162,6 +162,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
     </dl>
     <p class="small" id="physTag"></p>
+    <p class="small" id="buildTag" style="opacity:.6"></p>
     <p class="small">Wild swinging burns stamina, turns your blade flat and glances off armor. Wind up, keep the edge true, and parry to leave them open.</p>
     <div class="maps" role="radiogroup" aria-label="Mode">
       <button class="map mode" data-mode="br" role="radio"><b>Battle royale</b><span>Everyone for themselves, ring of fire</span></button>
@@ -265,6 +266,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
+const BUILD=23;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2529,13 +2531,18 @@ function logic(dt){
 }
 let lastFrameAt=0;
 function frame(now){
-  lastFrameAt=performance.now();
+  lastFrameAt=performance.now();window.__fc=(window.__fc||0)+1;
   requestAnimationFrame(frame);
   let dt=Math.min((now-last)/1000,.1);last=now;
   if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>1/38&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
   if(state==='loading')return;
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
+  if(NET.mode==='client'&&player&&player.alive&&!player.ragdoll&&state==='playing'&&!paused&&!input.locked&&input.mx!=null){
+    if(player.sword){player.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);player.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
+    else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
+    if(input.mx>.85)player.yaw-=2.4*dt*(input.mx-.85)/.15;if(input.mx<.15)player.yaw+=2.4*dt*(.15-input.mx)/.15;
+  }
   if(player&&player.sword&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
   for(const s of freeSwords)s.sync();
   for(let i=spurts.length-1;i>=0;i--){const sp=spurts[i];if(simTime>sp.until||!sp.obj.parent){spurts.splice(i,1);continue;}sp.obj.getWorldPosition(_t1);if(_t1.distanceToSquared(camera.position)<.5)continue;const k=(sp.until-simTime);spawnBlood(_t1,_t2.set(sp.dir.x*1.2,1.4+Math.random(),sp.dir.z*1.2),Math.random()<k*.5?2:1,1.2,.9);}
@@ -2771,14 +2778,14 @@ async function netHost(){
 const x=NET.conns[k];NET.conns.splice(k,1);if(x.f){x.f.remote=null;if(x.f.alive&&state==='playing')note(x.f.name+' left','sm');}hostLobby();});
   });
 }
-function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.filter(x=>x.hello).map(x=>esc(x.name));
+function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.filter(x=>x.hello).map(x=>esc(x.name)+(x.build!==BUILD?' (old build, needs to refresh)':''));
   const link=location.origin+location.pathname+'?join='+NET.code;
   netLobby(`Room code <b class="code">${NET.code}</b> · ${n.length?n.length+' joined: '+n.join(', '):'waiting for friends'}<br>Your code stays the same every time you host. <button class="lnk" id="copyInv">Copy invite link</button> <button class="lnk" id="leaveRoom">Close room</button>`);
   el('copyInv').onclick=()=>{try{navigator.clipboard.writeText(link);el('copyInv').textContent='Copied';}catch(e){prompt('Invite link',link);}};
   el('leaveRoom').onclick=()=>{for(const x of NET.conns)try{x.c.send({t:'closed'});}catch(e){}netReset();};}
 function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
-  if(d.t==='hello'){x.hello=true;x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
+  if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,16).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
@@ -2837,7 +2844,7 @@ async function netJoin(code){
   let P;try{P=await loadPeer();}catch(e){netLobby('Multiplayer could not load here.');return;}
   NET.mode='client';const peer=NET.peer=new P(undefined,peerOpts());
   peer.on('open',()=>{if(NET.host||NET.peer!==peer)return;const c=peer.connect('bloodmoor-'+code.toLowerCase(),{reliable:true});NET.host=c;
-    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
+    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal,build:BUILD});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
     c.on('data',clientData);
     c.on('close',()=>{if(window.__netdbg)console.warn('NETDBG client close',c.connectionId);if(NET.peer!==peer)return;const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('Lost the connection to the host.');});
   });
@@ -2852,6 +2859,7 @@ function clientData(d){
   else if(d.t==='add')clientAdd(d);
   else if(d.t==='end'){END={title:d.title,line:d.line,cause:d.cause};state=d.won?'won':'dead';deathT=performance.now();}
   else if(d.t==='full'){netReset();netLobby('That room is full.');}
+  else if(d.t==='old'){netLobby(`The host is on build ${d.host|0} and you're on build ${BUILD}. Whoever has the lower number: refresh the page with Ctrl+F5, then rejoin.`);}
   else if(d.t==='lobby'){if(state!=='attract')toMenuKeepRoom();clientLobby();}
   else if(d.t==='closed'){const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('The host closed the room.');}
 }
@@ -2954,7 +2962,7 @@ function loadFighters(onLoad,onErr){
 }
 loadFighters(async g=>{
   GLTF=g;await physReady;
-  el('physTag').textContent='';showEngine();initFighterCard();showMode();
+  el('physTag').textContent='';el('buildTag').textContent='Build '+BUILD+' · if a friend\'s build number differs from yours, one of you needs to refresh (Ctrl+F5)';showEngine();initFighterCard();showMode();
   {const q=new URLSearchParams(location.search).get('join');let last='';try{last=localStorage.getItem('bloodmoor-lastjoin')||'';}catch(e){}
    el('joinCode').value=(q||last||'').toUpperCase().slice(0,5);if(q&&/^[A-Za-z0-9]{5}$/.test(q))netJoin(q);}
   spawnMatch(false);state='attract';attractRestart=performance.now();
@@ -2962,5 +2970,6 @@ loadFighters(async g=>{
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
+window.__clientData=clientData;
 window.__game={MUS,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 </script>
