@@ -282,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=31;
+const BUILD=32;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -305,7 +305,7 @@ const scene=new THREE.Scene();
 const FOG=new THREE.Color(0x34405c);
 scene.fog=new THREE.FogExp2(FOG,0.03);
 scene.background=FOG.clone();
-const camera=new THREE.PerspectiveCamera(74,innerWidth/innerHeight,0.04,600);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.04,600);
 camera.rotation.order='YXZ';
 
 // ---------------------------------------------------------------- canvas textures
@@ -1376,7 +1376,10 @@ class Sword{
   }
   pointAt(t,out){return out.copy(this.H).addScaledVector(this.axis,this.len*t);}
   velAt(t,out){return out.copy(this.Hv).lerp(this.tipVel,t);}
-  sync(){_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);this.mesh.quaternion.setFromRotationMatrix(_sm);this.mesh.position.copy(this.H);}
+  sync(){_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);this.mesh.quaternion.setFromRotationMatrix(_sm);this.mesh.position.copy(this.H);
+    if(this.bloodU){const U=this.bloodU;U.uSwO.value.copy(this.H);U.uSwA.value.copy(this.axis);U.uBlood.value=this.blood||0;}}
+  // blood builds up on a weapon from its striking end down the blade, wet and dark
+  bloody(amt){if(!this.bloodU)bloodWeapon(this);this.blood=Math.min(1,(this.blood||0)+amt);}
   dispose(){scene.remove(this.mesh);this.unstick();if(this.rb&&PW){for(const c of this.cols)PHC.delete(c.handle);PW.removeRigidBody(this.rb);this.rb=null;}}
 }
 
@@ -2192,6 +2195,20 @@ function ripOut(s,B,A,dmg){
   if(B.alive&&!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.25);B.damage(dmg,A,'torn open');}
   if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
 }
+function bloodWeapon(s){
+  const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwL:{value:s.len},uBlood:{value:0}};s.bloodU=U;const cache=new Map();
+  s.mesh.traverse(o=>{if(!o.isMesh||!o.material)return;if(!cache.has(o.material)){const m=o.material.clone();
+    m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);
+      sh.vertexShader='varying vec3 vWPos;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
+      sh.fragmentShader='varying vec3 vWPos;uniform vec3 uSwO,uSwA;uniform float uSwL,uBlood;\n'+sh.fragmentShader
+      .replace('#include <color_fragment>',`#include <color_fragment>
+        float bAl=dot(vWPos-uSwO,uSwA)/uSwL,bN=fract(sin(dot(floor(vWPos*45.),vec3(12.9898,78.233,37.719)))*43758.5453);
+        float bM=min(1.,uBlood*3.)*smoothstep(1.-uBlood*.8-.06,1.-uBlood*.8+.04,bAl+(bN-.5)*.14);
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.15,.006,.005),bM*.95);`)
+      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.45,bM);')
+      .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,0.,bM);');};
+    m.customProgramCacheKey=()=>'bm-blood';cache.set(o.material,m);}o.material=cache.get(o.material);});
+}
 function bladeContact(s,B){
   let moved=false;
   for(const t of [1,.84,.68,.52]){s.pointAt(t,_bp);
@@ -2258,7 +2275,7 @@ function resolveHit(A,B,cap,t,P,pv){
     if(sev==='Head'){B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'beheaded',imp,P);tell(A,'Beheaded','red');}
     else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive)B.damage(body,A,'dismembered');}
   } else {
-    if(!glance&&dmg>4)addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');
+    if(!glance&&dmg>4){addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');if(mode!=='flat'&&mode!=='haft'&&B.prot(cap.zone)<.5)s.bloody(Math.min(.35,dmg/90));}
     B.damage(body,A,W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
     if(!B.alive&&B.ragdoll)B.ragdoll.kick(imp);
   }
@@ -2293,7 +2310,7 @@ function resolveHit(A,B,cap,t,P,pv){
   else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
   if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>8||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
-    const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,.22);
+    const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,dmg>25&&cap.zone==='torso'?.46:.22);   // a strong thrust runs the body through
     if(embed(s,B,cap,t*s.len,E,ax?.8:1.5,{rip:ax?5:4+dmg*.15})){B.stagger=Math.max(B.stagger,.5);if(!ax)B.bleed+=1.5;tell(A,ax?'The axe bites deep':'Run through','red');}}
   s.arc=0;
 }
@@ -2399,12 +2416,12 @@ function thrownHit(s,B,hit,ht,P,pv){
     B.addFlinch(dir,.2+Math.min(.4,speed*.03));B.stagger=Math.max(B.stagger,.3+Math.min(.4,speed*.03));B.shove(dir,speed*W.weight*.12);
     if(!B.noSever&&mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed>9&&Math.random()<.5){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
     const body=(hit.zone==='torso'||hit.zone==='head'||hit.zone==='neck')?dmg:dmg*.5;
-    if(dmg>4)addWound(B,B.caps.indexOf(hit),P,s.axis,dmg,mode==='point'?'stab':mode==='cut'?'cut':'bruise');
+    if(dmg>4){addWound(B,B.caps.indexOf(hit),P,s.axis,dmg,mode==='point'?'stab':mode==='cut'?'cut':'bruise');if(mode!=='flat')s.bloody(Math.min(.35,dmg/90));}
     if(B.alive)B.damage(body,by,mode==='point'?'skewered':'struck down');
     if(B.alive&&!B.ragdoll&&(hit.zone==='head'&&mode!=='flat'&&speed*W.weight>9||speed*W.weight>20))B.knockdown(rand(1.2,2),dir.clone().multiplyScalar(2.5),P);
     if(by&&by.isPlayer){note({point:'Skewered',cut:'Clean hit',blunt:'Crushed',flat:'Glancing throw'}[mode],mode==='flat'?'sm':'gold');hitMarker(false);if(dmg>14)hitstop(.06);}
     if(B.isPlayer)shake(.3);camKick(B,dir,Math.min(2,.5+dmg/30));
-    if(mode==='point'&&dmg>5&&hit.on&&(B.alive||B.ragdoll)&&embed(s,B,hit,ht*s.len,P.clone().addScaledVector(s.axis,.26),B.alive?10:60,{thrown:true})){
+    if(mode==='point'&&dmg>5&&hit.on&&(B.alive||B.ragdoll)&&embed(s,B,hit,ht*s.len,P.clone().addScaledVector(s.axis,hit.zone==='torso'&&dmg>20?.46:.26),B.alive?10:60,{thrown:true})){
       s.flying=false;if(B.alive)B.bleed+=1.5;
       if(s.rb){s.rb.setBodyType(R.RigidBodyType.KinematicPositionBased,true);for(const c of s.cols)c.setCollisionGroups(0);s.grp=0;}}
     return;
@@ -2416,6 +2433,8 @@ function aimPoint(out){
   if(_t1.y<-.01){const tg=-o.y/_t1.y;if(tg>.8&&tg<best)best=tg;}
   return out.copy(o).addScaledVector(_t1,best);
 }
+// third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
+const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){hitStopT=Math.max(hitStopT,t);}
 function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
@@ -2823,12 +2842,12 @@ function frame(now){
     else if(!player.ragdoll){ // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
       _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
-      _t3.copy(_t2).addScaledVector(_f,-3.0).addScaledVector(_r,.72);_t3.y+=.18;
+      _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
-      camera.position.copy(_t3);camera.rotation.set(player.pitch+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
+      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
-    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=74+(pv>4.4?6:0)+(player.slideT>0?6:0);
+    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
@@ -3125,7 +3144,7 @@ function netSnap(){
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
-    if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge)];}
+    if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
     if(f.ragdoll){const P=f.ragdoll.P;o.rg=[];for(const n of RD_NAMES){const q=P[n];if(q)o.rg.push(r3(q.x),r3(q.y),r3(q.z));else o.rg.push(0,-99,0);}}
     S.f.push(o);
@@ -3218,7 +3237,7 @@ function clientFrame(dt){
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
     if(o.w){const W=WEAPONS[o.w[0]];if(W){if(!f.sword||f.sword.def!==W){if(f.sword)f.sword.dispose();f.sword=new Sword(W);}
-        const s=f.sword,w=o.w,qw=q.w&&q.w[0]===w[0]?q.w:w;s.Tp.copy(s.T);
+        const s=f.sword,w=o.w,qw=q.w&&q.w[0]===w[0]?q.w:w;s.Tp.copy(s.T);if(w[10]>(s.blood||0))s.bloody(w[10]-(s.blood||0));
         s.H.set(lerp(qw[1],w[1],a),lerp(qw[2],w[2],a),lerp(qw[3],w[3],a));s.axis.set(lerp(qw[4],w[4],a),lerp(qw[5],w[5],a),lerp(qw[6],w[6],a)).normalize();s.edge.set(lerp(qw[7],w[7],a),lerp(qw[8],w[8],a),lerp(qw[9],w[9],a));
         s.edge.addScaledVector(s.axis,-s.edge.dot(s.axis)).normalize();s.T.copy(s.H).addScaledVector(s.axis,s.len);s.tipVel.subVectors(s.T,s.Tp).multiplyScalar(1/Math.max(dt,.004));}}
     else{if(f.sword){f.sword.dispose();f.sword=null;}if(o.fs){const fs=o.fs,qf=q.fs||fs;f.fists.R.pos.set(lerp(qf[0],fs[0],a),lerp(qf[1],fs[1],a),lerp(qf[2],fs[2],a));f.fists.L.pos.set(lerp(qf[3],fs[3],a),lerp(qf[4],fs[4],a),lerp(qf[5],fs[5],a));}}
