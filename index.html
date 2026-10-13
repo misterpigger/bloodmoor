@@ -282,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=32;
+const BUILD=33;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1135,6 +1135,8 @@ class Ragdoll{
     for(const n of this.names){const p=V();bones[n].updateWorldMatrix(true,false);p.setFromMatrixPosition(bones[n].matrixWorld);this.P[n]=p;
       const v=vel.clone();if(impulse&&impulsePoint){const w=Math.exp(-p.distanceToSquared(impulsePoint)/.12);v.addScaledVector(impulse,w);}
       v.x+=(Math.random()-.5)*.4;v.z+=(Math.random()-.5)*.4;this.Q[n]=p.clone().addScaledVector(v,-H*2);}
+    // nothing may start inside the ground: a toe below it gets shoved up so hard the whole body launches
+    {let pen=0;for(const n of this.names)pen=Math.max(pen,(RD_R[n]||.055)-this.P[n].y);if(pen>0)for(const n of this.names){this.P[n].y+=pen;this.Q[n].y+=pen;}}
     this.links=[];for(const [a,b] of RD_LINKS)if(this.P[a]&&this.P[b])this.links.push([a,b,this.P[a].distanceTo(this.P[b])]);
     this.mins=[];for(const [a,b,m,f] of RD_MINS)if(this.P[a]&&this.P[b]&&this.P[m])this.mins.push([a,b,f*(this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]))]);
     this.pairs=[];for(const n of this.names){const c=BONE_CHILD[n];if(c&&this.P[c]&&n!=='Hips'&&n!=='Spine1'&&n!=='Spine2'&&!bones[n].userData.severed)this.pairs.push([n,c]);}
@@ -1530,7 +1532,8 @@ class Fighter{
     if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
     const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
-    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:.26).addScaledVector(u,cm?Hd.swingUp:.5);
+    const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
+    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:.5);
     return out.normalize();
   }
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.35);}
@@ -1686,7 +1689,7 @@ class Fighter{
   knockdown(t,imp,impP){
     if(!this.alive||this.ragdoll)return;this.knocked=t;sfx(this.armor.body?'fallArmoured':'fall',this.chest,.75,1,.2);this.kickT=-1;this.crouch=false;
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
-    this.makeRagdoll(imp,impP);
+    this.makeRagdoll(imp,impP,.25);
   }
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
@@ -1774,7 +1777,7 @@ class Fighter{
           if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
             A.atk=atk;A.phase='windup';A.pt=0;}}
-        else if(A.phase==='windup'){const s=A.atk.s;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=s[1];this.ctrlT.z=A.atk.thrust?.28:.4;
+        else if(A.phase==='windup'){const s=A.atk.s,ovh=(kind==='axe'||kind==='blunt'||(this.sword&&this.sword.def.weight>=1.4))&&s[1]>.45;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=ovh?.62:s[1];this.ctrlT.z=A.atk.thrust?.28:ovh?.3:.4;
           const hv=kind==='blunt'||kind==='axe'||(this.sword&&this.sword.def.weight>=1.5),tol=hv?.16:.08;if(A.pt>.42/A.aggr+.1&&Math.abs(this.ctrl.x-s[0])<tol&&Math.abs(this.ctrl.y-s[1])<tol){A.phase='strike';A.pt=0;}if(A.pt>(hv?.8:1.2)){A.phase='strike';A.pt=0;}}
         else if(A.phase==='strike'){const e=A.atk.e;this.ctrlT.x=e[0];this.ctrlT.y=e[1];this.ctrlT.z=A.atk.thrust?.64:.46;this.commit=!A.atk.thrust;this.thrust=!!A.atk.thrust;wish.addScaledVector(_v,.6);
           if(A.pt>(kind==='blunt'||kind==='axe'?.42:.34)){A.phase='recover';A.pt=0;}}
@@ -1828,6 +1831,21 @@ class Fighter{
     if(this.headSnap>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap);B.Head.quaternion.premultiply(_qr);this.headSnap*=Math.exp(-7*dt);}
     if(this.flinchA>.004){_qr.setFromAxisAngle(this.flinchAx,this.flinchA);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.8);B.Neck.quaternion.premultiply(_qr);this.flinchA*=Math.exp(-6*dt);}
     if(this.stagger>.05){_qr.setFromAxisAngle(X_AXIS,-this.stagger*.25);B.Spine1.quaternion.premultiply(_qr);}
+    // secondary motion: the upper body lags behind starts, stops and turns, wobbles with each step and follows the weapon
+    {const dtc=Math.max(dt,1e-3),M=this.mot||(this.mot={sx:0,sz:0,vx:0,vz:0,pvx:this.vel.x,pvz:this.vel.z,ph:this.stepHalf,hp:null,tw:0});
+      const ax=clamp((this.vel.x-M.pvx)/dtc,-25,25),az=clamp((this.vel.z-M.pvz)/dtc,-25,25);M.pvx=this.vel.x;M.pvz=this.vel.z;
+      const cy=Math.cos(this.yaw),sy=Math.sin(this.yaw),af=ax*sy+az*cy,ar=ax*cy-az*sy;   // acceleration forward / to the right
+      let tz=clamp(-af*.014,-.22,.22),tx=clamp(-ar*.014,-.2,.2);
+      if(this.stepHalf!==M.ph){M.ph=this.stepHalf;const amp=Math.min(1,sp/3)*(this.isPlayer?.35:.5);M.vx+=(this.stepHalf?1:-1)*amp;}
+      // the weapon hand drags the shoulders round, and a downward blow brings the body over it
+      let twT=0;const s=this.sword&&!this.sword.free?this.sword:null;
+      if(s&&this.mainArm){if(M.hp){const hx=(s.H.x-M.hp.x)/dtc,hy=(s.H.y-M.hp.y)/dtc,hz=(s.H.z-M.hp.z)/dtc,hr=hx*cy-hz*sy;
+          twT=clamp(this.ctrl.x*.55+(this.commit?hr*.03:0),-.6,.6);if(this.commit&&hy<-2)tz+=clamp(-hy*.022,0,.3);}
+        (M.hp||(M.hp=V())).copy(s.H);}
+      M.tw=lerp(M.tw,twT,1-Math.exp(-9*dt));
+      const k=70,c=2*Math.sqrt(k)*.38;M.vx+=((tx-M.sx)*k-M.vx*c)*dtc;M.vz+=((tz-M.sz)*k-M.vz*c)*dtc;M.sx=clamp(M.sx+M.vx*dtc,-.35,.4);M.sz=clamp(M.sz+M.vz*dtc,-.3,.45);
+      const mag=Math.hypot(M.sx,M.sz);if(mag>.003){_t2.set(M.sz/mag,0,-M.sx/mag);_qr.setFromAxisAngle(_t2,mag*.6);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,mag*.4);B.Spine1.quaternion.premultiply(_qr);}
+      if(Math.abs(M.tw)>.002){_qr.setFromAxisAngle(Y_AXIS,-M.tw*.45);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(Y_AXIS,-M.tw*.35);B.Spine2.quaternion.premultiply(_qr);}}
     // the body leans the way its weight has been pushed
     {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
@@ -1973,17 +1991,20 @@ class Fighter{
   armed(){return !!this.sword;}
   giveFists(){for(const k in this.fists){const a=this.fists[k];a.init=false;a.phase='guard';a.charge=0;}}
   dropSword(noFists){if(!this.sword)return;const s=this.sword;s.owner=null;s.unstick&&s.unstick();if(s.def.kind==='fist'){s.dispose();this.sword=null;return;}s.free=true;s.stuck=null;s.Hp.copy(s.H).addScaledVector(this.vel,-H);s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:lootHalo(s.def.tier)});this.sword=null;if(!noFists)this.giveFists();}
-  goDown(by){if(!this.alive||this.downed)return;this.downed=true;this.lastHitBy=by||this.lastHitBy;this.bleed=Math.max(this.bleed,this.hp/3.5+4);this.makeRagdoll(null,null);this.dropSword();}
-  makeRagdoll(imp,impP){
+  goDown(by){if(!this.alive||this.downed)return;this.downed=true;this.lastHitBy=by||this.lastHitBy;this.bleed=Math.max(this.bleed,this.hp/3.5+4);this.makeRagdoll(null,null,.8);this.dropSword();}
+  makeRagdoll(imp,impP,crumple){
     this.root.updateMatrixWorld(true);
     const names=RD_NAMES.filter(n=>!this.detached.has(n));
     this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);
+    // the dying fold up: knees buckle forward, hips drop, the head lolls, instead of toppling like a plank
+    if(crumple){const R=this.ragdoll,f=this.fwd(V()),add=(n,x,y,z)=>{if(R.Q[n])R.Q[n].add(V(f.x*z,y,f.z*z).multiplyScalar(-H*2*crumple));};
+      for(const k of ['LeftLeg','RightLeg'])add(k,0,0,.45);add('Hips',0,0,0);for(const k of ['Spine2','Neck'])add(k,0,0,.2);add('Head',0,0,.3);}
   }
   die(by,cause,imp,impP){
     if(!this.alive)return;this.alive=false;
     sfx(this.id%2?'humanRoughDeath':'humanDeath',this.headPos,.85);sfx(this.armor.body?'fallArmoured':'fall',this.chest,.8,1,.35);
     if(!by&&this.lastHitBy&&simTime-this.lastHitT<12)by=this.lastHitBy;
-    if(!this.ragdoll)this.makeRagdoll(imp,impP);
+    if(!this.ragdoll)this.makeRagdoll(imp,impP,imp?.6:1);
     this.dropSword();
     for(const slot in this.armor){const a=this.armor[slot];if(a)loot.push({kind:'armor',def:a.def,corpse:this,slot,halo:lootHalo(a.def.tier)});}
     onKill(by,this,cause);
