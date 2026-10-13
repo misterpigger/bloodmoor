@@ -91,6 +91,15 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 .kill b{color:var(--ember);font-weight:800}
 .kill .you{color:#ff6a5a}
 .kill i{font-style:normal;color:var(--parch-dim);font-weight:500;margin:0 6px}
+#yard{position:absolute;top:22px;right:22px;width:290px;background:rgba(7,8,12,.62);border:1px solid rgba(236,220,184,.18);padding:12px 14px;font-size:13px;color:var(--parch-dim);font-variant-numeric:tabular-nums}
+#yard .yt{font-family:var(--f-display);font-size:22px;color:var(--parch);line-height:1.1}
+#yard .yk{font-size:12px;letter-spacing:.06em;margin:2px 0 8px}
+#yard .yr{display:flex;justify-content:space-between;margin:2px 0}
+#yard .yr b{color:var(--parch);font-weight:700}
+#yard .ybar{height:6px;background:rgba(236,220,184,.12);margin:3px 0 8px}#yard .ybar i{display:block;height:100%;background:var(--ember)}
+#yard .yh{border-top:1px solid rgba(236,220,184,.15);margin-top:8px;padding-top:6px}
+#yard .yl{margin:3px 0;color:var(--parch)}#yard .yl span{display:block;color:var(--parch-dim);font-size:12px}
+#yard .yl.old{opacity:.55}
 #notes{position:absolute;top:30%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px}
 .note{font-family:var(--f-display);font-size:44px;color:var(--parch);text-shadow:0 3px 12px rgba(0,0,0,.8);animation:pop 1.8s ease-out forwards;white-space:nowrap}
 .note.red{color:#ff5a48}
@@ -169,6 +178,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
       <button class="map mode" data-mode="duel" role="radio"><b>Duel</b><span>1v1, best of three, fresh kit each round</span></button>
       <button class="map mode" data-mode="tourney" role="radio"><b>Tournament</b><span>Eight fighters, knockout bracket</span></button>
       <button class="map mode" data-mode="gauntlet" role="radio"><b>Gauntlet</b><span>Survive waves together</span></button>
+      <button class="map mode" data-mode="yard" role="radio"><b>Training yard</b><span>Dummies, every weapon, hit readout</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Map">
       <button class="map on" data-map="village" role="radio" aria-checked="true"><b>Bloodmoor village</b><span>Dusk · streets, alleys, 12 fighters</span></button>
@@ -208,6 +218,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
   <canvas id="minimap" width="340" height="340"></canvas>
   <div id="topc"><div id="alive">12 alive</div><div id="zoneinfo">Ring closes in 0:40</div></div>
   <div id="feed"></div>
+  <div id="yard" class="hide" aria-live="polite"></div>
   <div id="notes"></div>
   <div id="cross"></div>
   <div id="vitals">
@@ -271,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=29;
+const BUILD=30;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1509,7 +1520,9 @@ class Fighter{
     if(this.bleed>0){this.hp-=this.bleed*h;if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
     this.stagger=Math.max(0,this.stagger-h);this.clashCd-=h;this.kickCd-=h;this.staminaDelay-=h;
     let wish=_t1.set(0,0,0),run=false;
-    if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);else run=this.think(h,wish);
+    if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);
+    else if(this.dummy&&RUN&&RUN.dm===0){this.commit=this.thrust=false;}
+    else{if(this.dummy&&RUN&&RUN.dm===1)this.ai.cd=9;run=this.think(h,wish);if(this.dummy&&RUN&&RUN.dm<2){wish.set(0,0,0);run=false;}}
     if(simTime<CD_END){wish.set(0,0,0);run=false;this.commit=false;this.kickReq=this.jumpReq=this.slideReq=this.throwReq=false;}
     const legs=!(this.limbs.legL.sev||this.limbs.legR.sev);
     const exhausted=this.stamina<12;
@@ -1903,7 +1916,7 @@ class Fighter{
     }
   }
   damage(dmg,by,cause){
-    if(!this.alive)return;this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
+    if(!this.alive)return;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
@@ -2090,6 +2103,7 @@ function clash(A,B){
     s.Tp.addScaledVector(_n,-dA*H);s.Hv.addScaledVector(_n,dA*.45);
     s2.Tp.addScaledVector(_n,dB*H);s2.Hv.addScaledVector(_n,-dB*.45);
     if(dA>3.5)s.knockT=Math.min(.4,dA*.045);if(dB>3.5)s2.knockT=Math.min(.4,dB*.045);
+    if(dA+dB>2){yardClash(A,dA,dB);yardClash(B,dB,dA);}
     _n.subVectors(_c1,_c2);if(_n.lengthSq()<1e-8)_n.copy(_e);_n.normalize();
   }
   s.Hv.multiplyScalar(.7);s2.Hv.multiplyScalar(.7);
@@ -2186,12 +2200,14 @@ function resolveHit(A,B,cap,t,P,pv){
   let dmg=Math.min(base*armorF,80);
   if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0};S.hits++;S.dmg+=dmg;S.modes[mode]=(S.modes[mode]||0)+1;S.zones[cap.zone]=(S.zones[cap.zone]||0)+1;S.speed+=speed;}
   const glance=prot>.2&&(mode==='cut'||mode==='thrust')&&armorF<.8&&dmg<12;
+  yardHit(A,W.name,mode,cap.zone,dmg,speed,glance,prot);
   let sev=null;
   if(mode==='cut'&&W.sever>0&&cap.sever&&!glance){
     const need=7+prot*7*(1-pen)-(W.sever-1)*3+(1-Math.min(arcF,1))*4;
     if(cap.zone==='neck'){if(speed>need+1&&Math.random()<.35+(speed-need-1)/3)sev='Head';}
     else if(cap.zone!=='head'&&cap.zone!=='torso'){const L=B.limbs[cap.zone];L.hp-=dmg;if(speed>need+2.5||(L.hp<=0&&speed>need-1.5)||(speed>need&&Math.random()<(speed-need)/3))sev=cap.sever;}
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
+  if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
   const imp=dir.clone().multiplyScalar(Math.min(speed*.3*(mode==='blunt'?1.4:1),3.8));
   if(glance){spawnSparks(P,10,dir);sClank(P,speed/9);}
@@ -2308,7 +2324,7 @@ function fistCheck(A,arm){
       const face=c.zone==='head'||c.zone==='neck';
       if(face&&!B.sword&&!B.ragdoll){B.fwd(_f);if(_f.dot(dir)<-.4&&B.fists.R.phase!=='punch'&&B.fists.L.phase!=='punch'){dmg*=.4;sThud(P,.4);}}
       dmg=Math.min(dmg,38);const body=(c.zone==='torso'||face)?dmg:dmg*.5;
-      sThud(P,.5+arm.power);B.shove(dir,.5+arm.power*1.6+(face?.5:0));if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
+      sThud(P,.5+arm.power);yardHit(A,'Fists','punch',c.zone,dmg,speed,false,prot);B.shove(dir,.5+arm.power*1.6+(face?.5:0));if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
       B.addFlinch(dir,.2+arm.power*.7);if(face)B.headSnap=Math.min(1.2,(B.headSnap||0)+.35+arm.power*.6);B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
       _v.copy(dir).setY(0);B.vel.addScaledVector(_v,1.4+arm.power*3.6);if(B.sword)swordShove(B.sword,dir,speed*.25);
       B.damage(body,A,'beaten');
@@ -2344,10 +2360,10 @@ function thrownHit(s,B,hit,ht,P,pv){
     else if(ht>=W.hitFrom&&(W.kind==='axe'||W.kind==='blade')&&align>.55)mode='cut';
     const K={point:6.5*W.thrust,cut:4.8*W.cut,blunt:4.4*W.cut,flat:1.4}[mode];
     const prot=B.prot(hit.zone);const dmg=Math.min(70,Math.max(0,speed-2.5)*K*ZONE_MULT[hit.zone]*(1-prot*(1-W.pen)));
-    const by=s.thrower;
+    const by=s.thrower;yardHit(by,W.name,mode,hit.zone,dmg,speed,false,prot);
     if(mode==='point'||mode==='cut'){spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.2).setY(.6),(6+dmg*.6)|0,1.6,1);sHit(P,speed/10,false);}else{sThud(P,speed/10);if(prot>.3)sClank(P,.6);}
     B.addFlinch(dir,.2+Math.min(.4,speed*.03));B.stagger=Math.max(B.stagger,.3+Math.min(.4,speed*.03));B.shove(dir,speed*W.weight*.12);
-    if(mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed>9&&Math.random()<.5){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
+    if(!B.noSever&&mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed>9&&Math.random()<.5){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
     const body=(hit.zone==='torso'||hit.zone==='head'||hit.zone==='neck')?dmg:dmg*.5;
     if(dmg>4)addWound(B,B.caps.indexOf(hit),P,s.axis,dmg,mode==='point'?'stab':mode==='cut'?'cut':'bruise');
     if(B.alive)B.damage(body,by,mode==='point'?'skewered':'struck down');
@@ -2523,6 +2539,8 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
     if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
     if(e.code==='KeyM'){setMusic(!MUS.on);note(MUS.on?'Music on':'Music off','sm');}
+    if(inYard()){const d=/^Digit([1-7])$/.exec(e.code);if(d){if(NET.mode==='client')NET.yw=+d[1]-1;else yardArm(player,+d[1]-1);}
+      if(e.code==='KeyG'){if(NET.mode==='client')NET.yg=1;else yardCycle();}}
     if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}}
   }
 });
@@ -2756,6 +2774,11 @@ function frame(now){
   // loot glow
   const pulse=.32+Math.sin(now*.004)*.12;
   for(const it of loot){if(!it.halo)continue;lootPos(it,it.halo.position);it.halo.position.y+=.12;it.halo.material.opacity=it.corpse?pulse*.5:pulse;}
+  // training yard readout: live tip speed and the peak of each swing
+  if(inYard()&&player&&state==='playing'){const sw=player.sword,sp=sw?sw.tipVel.length():Math.max(player.fists.R.vel.length(),player.fists.L.vel.length());
+    YARD.cur=lerp(YARD.cur,sp,1-Math.exp(-14*dt));if(sp>YARD.run)YARD.run=sp;if(sp<2.5&&YARD.run>4){YARD.peak=YARD.run;YARD.run=0;}
+    if((YARD.t=(YARD.t||0)+dt)>.1){YARD.t=0;yardHud();el('feed').style.display='none';}}
+  else if(!el('yard').classList.contains('hide')){el('yard').classList.add('hide');el('feed').style.display='';}
   // camera
   if(state==='attract'){attractT+=dt*.07;camera.position.set(Math.cos(attractT)*10,3.2,Math.sin(attractT)*10);camera.lookAt(0,1.3,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
   else if(!player){attractT+=dt*.09;camera.position.set(Math.cos(attractT)*13,5.5,Math.sin(attractT)*13);camera.lookAt(0,1.2,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
@@ -2853,7 +2876,7 @@ function initFighterCard(){
 // ================================================================ modes
 // Battle royale is the open match above. Duel, Tournament and Gauntlet run in the Arena with the ring off, one round at a time.
 let MODE='br',RUN=null,END=null,MODEHUD=['',''];
-try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet'].includes(m))MODE=m;}catch(e){}
+try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
 function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),look:PROFILE.look,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,human:true});return h;}
@@ -2885,6 +2908,7 @@ function modeStart(){
   else if(MODE==='tourney'){
     const ents=H.slice(0,8);const names=BOT_NAMES();let k=0;while(ents.length<8)ents.push(botEntrant(names[k++],rand(.35,.75)));
     ents.sort(()=>Math.random()-.5);RUN={mode:'tourney',round:0,ents,cur:ents.slice(),pairs:[],pi:0,results:[]};tourneyNextRound();}
+  else if(MODE==='yard')yardStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
     H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2,['arming',['kettle']]);});hostSendStart();gauntletWave();}
 }
@@ -2925,8 +2949,57 @@ function gauntletWave(){
   hostSendAdd([...back,...add]);
   MODEHUD=[`Wave ${R.wave}`,`${n} coming · ${R.kills} slain so far`];banner(`Wave ${R.wave}`,`${n} fighter${n>1?'s':''} enter the arena`);
 }
+// ---- training yard: dummies to hit, any weapon on the number keys, and a readout of every blow
+const inYard=()=>NET.mode==='client'?NET.mode2==='yard':!!(RUN&&RUN.mode==='yard');
+const YARD_W=['arming','longsword','greatsword','axe','mace','spear','fists'];
+const YARD_D=[{x:-2.2,armor:[],name:'Bare dummy'},{x:0,armor:['kettle','mail'],name:'Mail dummy'},{x:2.2,armor:['greathelm','plate','vambraces','greaves'],name:'Plate dummy'}];
+const YARD_DM=['Still','Guard','Spar'];
+const YARD={log:[],peak:0,cur:0,run:0,shown:''};
+function yardStart(H){
+  RUN={mode:'yard',H,dm:0,dummies:[]};roundSetup();CD_END=simTime;YARD.log.length=0;YARD.peak=YARD.run=0;
+  H.forEach((en,i)=>{const f=spawnEntrant(en,(i-(H.length-1)/2)*1.6,-2.2,['longsword',[]]);yardHuman(f);});
+  for(let i=0;i<YARD_D.length;i++)yardDummy(i,true);
+  hostSendStart();yardHud();banner('Training yard','1–7 switch weapons · G changes what the dummies do');
+}
+function yardHuman(f){f.noSever=true;f.yardW=1;}
+function yardDummy(i,quiet){const R=RUN,D=YARD_D[i],old=R.dummies[i];
+  if(old){const k=fighters.indexOf(old);if(k>=0)fighters.splice(k,1);old.dispose();}
+  const en=botEntrant(D.name,.5);en.pal=['#8a7a60','#5a4a3a','#3a3028',0];en.look={o:1,h:0,bd:0,hc:0,sk:1};en.dummy=true;
+  const f=spawnEntrant(en,D.x,2.2,[R.dm>0?'longsword':'fists',D.armor],.5);f.dummy=true;f.ai.aggr=.55;R.dummies[i]=f;
+  if(!quiet&&NET.mode==='host')hostSendStart();return f;}
+function yardArm(f,i){const id=YARD_W[i];if(!id||!f.alive||f.ragdoll)return;
+  if(f.sword){f.sword.unstick();f.sword.dispose();f.sword=null;}f.giveFists();
+  if(id!=='fists'){const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));}
+  f.yardW=i;sfx('unsheathe',f.chest,.6);if(f.isPlayer){YARD.peak=YARD.run=0;yardHud();}}
+function yardCycle(){const R=RUN;R.dm=(R.dm+1)%YARD_DM.length;for(let i=0;i<R.dummies.length;i++)yardDummy(i,true);if(NET.mode==='host')hostSendStart();yardHud();banner('Dummies: '+YARD_DM[R.dm],['They stand and take it','They hold a guard: knock it aside','They fight back, gently'][R.dm]);}
+function yardTick(){const R=RUN;
+  R.dummies.forEach((f,i)=>{const broken=!f.alive||f.downed||f.sevNames.length>0;
+    if(broken){if(!f.resetAt)f.resetAt=simTime+2.5;else if(simTime>f.resetAt)yardDummy(i);}
+    else if(!f.ragdoll){f.hp=100;f.bleed=0;if(R.dm===0)f.stamina=100;}});
+  for(const f of fighters)if(f.entrant&&f.entrant.human&&f.alive){f.bleed=0;if(f.hp<40)f.hp=100;}
+  MODEHUD=['Training yard','1–7 weapons · G dummies: '+YARD_DM[R.dm]];
+}
+// a line for every blow the player lands
+function yardHit(f,wname,mode,zone,dmg,speed,glance,prot){
+  if(!f||!f.isPlayer||!RUN||RUN.mode!=='yard')return;
+  const M={cut:'Cut',thrust:'Thrust',poke:'Poke',blunt:'Crush',flat:'Flat of the blade',haft:'Haft',point:'Skewer',punch:'Punch'},Z={head:'head',neck:'neck',torso:'body',armL:'arm',armR:'arm',legL:'leg',legR:'leg'};
+  const arm=glance?'glanced off the armour':prot>.05?`through ${prot>.5?'plate':'mail'} (armour stopped ${Math.round(prot*100)}%)`:'';
+  YARD.log.unshift({t:`${M[mode]||mode} · ${Z[zone]||zone} · ${Math.round(dmg)} dmg`,s:`${speed.toFixed(1)} m/s${arm?' · '+arm:''}`});YARD.log.length=Math.min(YARD.log.length,6);yardHud();
+}
+function yardClash(f,mine,theirs){if(!f||!f.isPlayer||!RUN||RUN.mode!=='yard')return;
+  YARD.log.unshift({t:mine>theirs?'Clash · you drove their blade back':'Clash · your blade was driven back',s:`their weapon knocked ${theirs.toFixed(1)} m/s · yours ${mine.toFixed(1)} m/s`});YARD.log.length=Math.min(YARD.log.length,6);yardHud();}
+function yardHud(){const y=el('yard');if(!inYard()){y.classList.add('hide');return;}y.classList.remove('hide');
+  const w=player&&player.sword?player.sword.def.name:'Bare hands',client=NET.mode==='client';
+  const sp=YARD.cur,pk=YARD.peak;
+  y.innerHTML=`<div class="yt">${esc(w)}</div><div class="yk">1 arming · 2 long · 3 great · 4 axe · 5 mace · 6 spear · 7 fists<br>G dummies: ${RUN?YARD_DM[RUN.dm]:(MODEHUD[1]||'').split(': ')[1]||'Still'}</div>`+
+   (client?'<div class="yr">Hit readout shows on the host’s screen</div>':
+   `<div class="yr"><span>Tip speed</span><b>${sp.toFixed(1)} m/s</b></div><div class="ybar"><i style="width:${Math.min(100,sp/16*100)}%"></i></div>`+
+   `<div class="yr"><span>Last swing peak</span><b>${pk?pk.toFixed(1)+' m/s':'—'}</b></div>`+
+   `<div class="yh">${YARD.log.length?YARD.log.map((l,i)=>`<div class="yl${i?' old':''}">${esc(l.t)}<span>${esc(l.s)}</span></div>`).join(''):'<div class="yl">Hit a dummy<span>every blow is listed here</span></div>'}</div>`);
+}
 function modeKill(killer,victim){
   const R=RUN;if(R.over)return;
+  if(R.mode==='yard'){if(victim.entrant&&victim.entrant.human){const en=victim.entrant;R.respawn=R.respawn||[];R.respawn.push({en,at:simTime+2.5,f:victim});}return;}
   const alive=fighters.filter(f=>f.alive);
   if(R.mode==='duel'){if(alive.length>1)return;const w=alive[0];if(w&&w.entrant===R.a)R.sa++;else if(w)R.sb++;
     const wn=w?w.name:'Nobody';MODEHUD=[`${R.a.name} ${R.sa} – ${R.sb} ${R.b.name}`,`${vb(wn,'takes','take')} round ${R.round}`];banner(`${vb(wn,'takes','take')} the round`,`${R.sa} – ${R.sb}`);
@@ -2943,10 +3016,11 @@ function modeKill(killer,victim){
     else if(!fAlive){banner(`Wave ${R.wave} cleared`,'Catch your breath');R.next=simTime+4;R.after=gauntletWave;}}
 }
 function modeTick(){const R=RUN;if(!R||R.over)return;
+  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2,['longsword',[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
-  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet'}[MODE];}
+  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet',yard:'Enter the yard'}[MODE];}
 document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{MODE=b.dataset.mode;try{localStorage.setItem('bloodmoor-mode',MODE);}catch(e){}showMode();}));
 
 // ================================================================ multiplayer
@@ -2998,6 +3072,7 @@ function hostData(c,d){
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
+    if(RUN&&RUN.mode==='yard'){if(Number.isInteger(d.yw))yardArm(f,d.yw);if(d.yg)yardCycle();}
     if(d.pk!=null){const it=loot.find(i=>i.nid===d.pk);if(it&&canTake(f,it)){lootPos(it,_t3);if(Math.hypot(_t3.x-f.pos.x,_t3.z-f.pos.z)<2.6)pickUp(f,it);}}}
 }
 function remoteInput(f,wish,h){
@@ -3043,6 +3118,7 @@ function clientSendInput(){
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
     if(NET.pick!=null){d.pk=NET.pick;NET.pick=null;}
+    if(NET.yw!=null){d.yw=NET.yw;NET.yw=null;}if(NET.yg){d.yg=1;NET.yg=0;}
     try{NET.host.send(d);}catch(e){}
   }
 }
@@ -3182,6 +3258,7 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;
+window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 </script>

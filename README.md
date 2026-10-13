@@ -12,6 +12,7 @@ Pick a name, team colours, and a look: bare-chested, peasant or ranger garb, hai
 - **Duel**: 1v1, best of three, both fighters get the same fresh kit each round.
 - **Tournament**: eight fighters, single elimination. Bouts between two bots are settled off stage.
 - **Gauntlet**: survive waves of arena fighters together; the fallen return between waves.
+- **Training yard**: three dummies (bare, mail, plate). Keys 1–7 switch weapons, G makes the dummies stand still, hold a guard or spar. A readout lists every blow: type, body part, damage, speed and what the armour stopped.
 
 ## Multiplayer
 One player clicks **Host for friends** and shares the 5-letter room code; friends type it under **Join**. The host's browser runs the match and friends' browsers connect to it directly (WebRTC via the free PeerJS service). Empty slots are filled by bots.
