@@ -266,7 +266,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=23;
+const BUILD=24;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -993,7 +993,7 @@ const WEAPONS={
   axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.35,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
   mace:{id:'mace',name:'Flanged mace',kind:'blunt',len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:2,make:makeMace},
   fists:{id:'fists',name:'Fists',kind:'fist',len:.2,grip2:0,weight:.45,cut:1.0,thrust:1.0,sever:0,pen:.55,hitFrom:0,tier:0,make:()=>{const g=new THREE.Group();scene.add(g);return g;}},
-  spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:1.5,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
+  spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:2.0,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
 };
 
 // ================================================================ armor
@@ -1130,7 +1130,8 @@ const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe
 const _a=V(),_v=V(),_g=V(),_e=V(),_z=V(),_sm=new THREE.Matrix4();
 class Sword{
   constructor(def){this.def=def;this.len=def.len;this.mesh=def.make();this.H=V();this.Hv=V();this.Hp=V();this.T=V();this.Tp=V();this.axis=V(0,1,0);this.edge=V(1,0,0);this.tipVel=V();this.free=false;this.age=0;this.arc=0;this.lastDir=V(1,0,0);this.power=0;this.swings=0;this.flying=false;this.thrower=null;this.Hprev=V();this.stuck=null;this.owner=null;this.rb=null;this.wallCd=0;this.id=swordId++;if(PW)this.physMake();}
-  reset(h,dir){if(this.planted){this.planted=false;if(this.rb)this.rb.setBodyType(R.RigidBodyType.Dynamic,true);}this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);if(this.edge.lengthSq()<1e-4)this.edge.set(0,0,1).addScaledVector(this.axis,-this.axis.z);this.edge.normalize();this.arc=0;if(this.rb)this.physPose();}
+  reset(h,dir){if(this.planted){this.planted=false;if(this.rb)this.rb.setBodyType(R.RigidBodyType.Dynamic,true);}this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);if(this.owner){this.owner.right(this.edge);}else this.edge.set(1,0,0);   // edge starts on the holder's right, the same for every fighter whichever way they face
+    this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-4)this.edge.set(0,0,1).addScaledVector(this.axis,-this.axis.z);this.edge.normalize();this.arc=0;if(this.rb)this.physPose();}
   // ---- rigid body: the weapon is a real object with weight and balance; hands and wrists push it, the solver handles every contact
   physMake(){
     const parts=wepParts(this.def);if(!parts)return;
@@ -1225,13 +1226,13 @@ class Sword{
     }
     const w=this.def.weight,heavy=this.def.kind==='axe'||this.def.kind==='blunt';
     // heavy weapons: the arm works harder to get them moving, momentum carries them through, and the wrist holds the head firm
-    const wf=heavy?Math.pow(w,.9):Math.pow(Math.max(.85,w),.5);
+    const wf=heavy?Math.pow(w,.9):w>1.4?Math.pow(w,.85):Math.pow(Math.max(.85,w),.5);
     const k=(commit?950:520)*(this.def.kind==='fist'?2:1)*(heavy?.8:1),c=2*Math.sqrt(k)*(heavy?.62:.8);
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
     const maxA=(commit?420:220)*strength/wf;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
     const gk=heavy?(commit?700:420):(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
-    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(heavy?.85:commit?.3:.75)*tw*h);
+    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(heavy?(commit?.45:.85):commit?.3:.75)*tw*h);
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
     this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*(heavy?.3+.5*(w-1):.3)*h*h;
@@ -1429,7 +1430,7 @@ class Fighter{
     if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.6*w);this.sword.swings=0;}
     if(this.commit&&ts>3)this.useStamina(1.5*h);
     if(this.staminaDelay<=0)this.stamina=Math.min(100,this.stamina+(this.crouch?32:24)*h);
-    if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?17:this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
+    if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
     if(!this.sword&&this.mainArm)this.stepFists(h);
     if(this.sword&&this.mainArm){
       const tgt=this.handTarget(_t1.clone());const guide=this.guideDir(tgt,V());
@@ -1577,15 +1578,17 @@ class Fighter{
     if(engage){
       _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();
       this.faceDir(_v,h,7);
-      const low=tg.downed||tg.knocked>0;const desired=low?.9+reach*.3:kind==='fist'?.76:.4+reach*.85;
+      const low=tg.downed||tg.knocked>0,theirs=tg.sword?tg.sword.def.len:.5,outreached=reach<theirs-.15;
+      // outreached fighters get inside the longer weapon instead of standing where only it can land
+      const desired=low?.9+reach*.3:kind==='fist'?.76:outreached?Math.max(.72,.3+reach*.75):.4+reach*.85;
       this.right(_r);
-      if(d>desired+1.2){wish.copy(_v);run=d>6;}
+      if(d>desired+1.2){wish.copy(_v);run=d>6||(outreached&&d<theirs+1.6&&this.stamina>30);}
       else{wish.copy(_r).multiplyScalar(A.strafe*.4);if(d>desired+.15)wish.addScaledVector(_v,.9);else if(d<desired-.2)wish.addScaledVector(_v,-.9);}
       if(this.stamina<22&&!tg.downed){wish.addScaledVector(_v,-.8);}
       const ty=low?.25:tg.chest.y;this.pitch=lerp(this.pitch,clamp(Math.atan2(ty-this.chest.y,Math.max(d,.5))*.9,-.9,.4),1-Math.exp(-5*h));
       if(A.throwT>=0){A.throwT+=h;wish.set(0,0,0);if(A.throwT<.55){this.ctrlT.x=.25;this.ctrlT.y=.6;this.ctrlT.z=.28;A.phase='windup';}else{this.ctrlT.x=0;this.ctrlT.y=.12+d*.02;this.ctrlT.z=.64;this.commit=true;A.phase='strike';if(A.throwT>.66){this.throwWeapon();A.throwT=-1;A.phase='guard';}}return false;}
       const ts=tg.sword&&!tg.downed?tg.sword.tipVel.length():0;
-      if(A.block<=0&&ts>4.5&&d<reach+1.8&&A.threatCd<=0&&A.phase!=='strike'){A.threatCd=.55;if(Math.random()<A.skill){A.block=.42+A.react;A.blockDelay=A.react;if(A.phase==='windup')A.phase='guard';}}
+      if(A.block<=0&&ts>4.5&&d<reach+1.8&&A.threatCd<=0&&A.phase!=='strike'&&!(A.phase==='windup'&&A.pt>.2&&(kind==='blunt'||kind==='axe'))){A.threatCd=.55;if(Math.random()<A.skill){A.block=.42+A.react;A.blockDelay=A.react;if(A.phase==='windup')A.phase='guard';}}
       if(tg.stagger>.25&&A.phase==='guard'&&d<desired+.7)A.cd=Math.min(A.cd,0);   // riposte
       if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005)this.kickReq=true;
       if(A.throwT<0&&(kind==='spear'||kind==='axe')&&d>4&&d<9&&!tg.ragdoll&&this.stamina>40&&Math.random()<(kind==='spear'?.0015:.0006))A.throwT=0;
@@ -1596,16 +1599,16 @@ class Fighter{
       } else {
         A.pt+=h;
         if(A.phase==='guard'){this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.06;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.05;this.ctrlT.z=kind==='spear'?.34:.42;
-          if(d<desired+.6&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
+          if(d<desired+(outreached?.3:.6)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
             A.atk=atk;A.phase='windup';A.pt=0;}}
-        else if(A.phase==='windup'){const s=A.atk.s;this.ctrlT.x=s[0];this.ctrlT.y=s[1];this.ctrlT.z=A.atk.thrust?.28:.4;
-          if(A.pt>.42/A.aggr+.1&&Math.abs(this.ctrl.x-s[0])<.08&&Math.abs(this.ctrl.y-s[1])<.08){A.phase='strike';A.pt=0;}if(A.pt>1.2){A.phase='strike';A.pt=0;}}
+        else if(A.phase==='windup'){const s=A.atk.s;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=s[1];this.ctrlT.z=A.atk.thrust?.28:.4;
+          const hv=kind==='blunt'||kind==='axe'||(this.sword&&this.sword.def.weight>=1.5),tol=hv?.16:.08;if(A.pt>.42/A.aggr+.1&&Math.abs(this.ctrl.x-s[0])<tol&&Math.abs(this.ctrl.y-s[1])<tol){A.phase='strike';A.pt=0;}if(A.pt>(hv?.8:1.2)){A.phase='strike';A.pt=0;}}
         else if(A.phase==='strike'){const e=A.atk.e;this.ctrlT.x=e[0];this.ctrlT.y=e[1];this.ctrlT.z=A.atk.thrust?.64:.46;this.commit=!A.atk.thrust;this.thrust=!!A.atk.thrust;wish.addScaledVector(_v,.6);
-          if(A.pt>.34){A.phase='recover';A.pt=0;}}
+          if(A.pt>(kind==='blunt'||kind==='axe'?.42:.34)){A.phase='recover';A.pt=0;}}
         else if(A.phase==='recover'){if(A.pt>.4){A.phase='guard';A.pt=0;A.cd=rand(.3,1.1)/A.aggr;}}
       }
-      if(this.stagger>0){A.phase='guard';}
+      if(this.stagger>.1){A.phase='guard';}
     } else {
       let tx,tz;if(needZone){tx=zc.c.x;tz=zc.c.z;run=true;}else{if(this.pos.distanceTo(A.wander)<3)A.wander.set(rand(-1,1)*zone.r*.6+zone.c.x,0,rand(-1,1)*zone.r*.6+zone.c.z);tx=A.wander.x;tz=A.wander.z;}
       wish.set(tx-this.pos.x,0,tz-this.pos.z);if(wish.lengthSq()>.01)wish.normalize();
@@ -1938,6 +1941,7 @@ function combatStep(h){
 function clash(A,B){
   const s=A.sword,s2=B.sword;if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
   const d2=segSeg(s.H,_bt,s2.H,_pb,_c1,_c2);if(d2>=.05*.05)return;
+  if(window.__stats){const r=A.clashCd<=0;if(r)window.__stats.clashes=(window.__stats.clashes||0)+1;}
   const sa=SS.s,sb=SS.t;s.velAt(sa,_va);s2.velAt(sb,_vb);_rel.subVectors(_va,_vb);
   _n.subVectors(_c1,_c2);if(_n.lengthSq()<1e-8)_n.crossVectors(s.axis,s2.axis);if(_n.lengthSq()<1e-8)_n.set(1,0,0);_n.normalize();
   const pen=.05-Math.sqrt(d2);s.T.addScaledVector(_n,pen*.5);s2.T.addScaledVector(_n,-pen*.5);
@@ -1955,8 +1959,16 @@ function clash(A,B){
     if(att.isPlayer||def.isPlayer){shake(.25);hitstop(.04);}
     return;
   }
-  const cost=4+attSp*.9*att.sword.def.weight;
-  def.useStamina(cost);
+  const aw=att.sword.def.weight,dw=def.sword.def.weight,ratio=Math.max(1,aw/dw),ak=att.sword.def.kind;
+  const crush=ak==='blunt'||ak==='axe'||aw>=1.5;
+  def.useStamina(4+attSp*.9*aw*Math.pow(ratio,1.5)*(crush?1.4:1));
+  if(def.stamina>1&&crush&&attSp>(ak==='blunt'?3.5:5)){ // a heavy blow drives the guard back: the defender is rocked, the attacker keeps their balance
+    def.stagger=Math.max(def.stagger,.3+.15*ratio);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.vel.addScaledVector(_v,1.2+attSp*.12);def.sword.Hv.addScaledVector(_v,attSp*.35);
+    if(ak==='blunt'){def.damage(Math.min(14,(attSp-4)*2.2),att,'crushed');sThud(_t3,.9);}
+    tell(def,'The blow drives through your guard','red');tell(att,'Through the guard','gold');
+    if(att.isPlayer||def.isPlayer){shake(.35);hitstop(.05);}
+    return;
+  }
   if(def.stamina<=1){ // guard broken: defender's blade knocked aside
     def.stagger=Math.max(def.stagger,.65);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.sword.Hv.addScaledVector(_v,3);
     tell(def,'Guard broken','red');if(att.isPlayer){note('Guard broken','gold');addScore(20);}
@@ -1982,7 +1994,7 @@ function bladeContact(s,B){
 function resolveHit(A,B,cap,t,P,pv){
   if(simTime<CD_END)return;
   const s=A.sword,W=s.def,phys=!!pv;if(phys)_va.copy(pv);else s.velAt(t,_va);_rel.subVectors(_va,B.vel);const speed=_rel.length();
-  if(speed<2.2){if(!phys){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);}return;}   // a resting touch is not a blow, and doesn't use up the next one
+  if(speed<2.2){if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0,soft:0};S.soft=(S.soft||0)+1;}if(!phys){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);}return;}   // a resting touch is not a blow, and doesn't use up the next one
   A.hitCd.set(B.id,simTime+.3);
   const dir=_rel.clone().normalize();
   const along=Math.abs(dir.dot(s.axis));
@@ -2001,9 +2013,12 @@ function resolveHit(A,B,cap,t,P,pv){
   const stamF=A.stamina<12?.55:.8+.2*A.stamina/100;
   const prot=B.prot(cap.zone);const pen=clamp(W.pen*(isThrust?1.2:1),0,1);
   const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:7*W.cut,flat:1.8,haft:1.4,poke:1.2};
-  const base=(speed-2.0)*MODE_K[mode]*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
+  // momentum, not just speed: a heavy head hits harder at the same speed; flats, hafts and pokes need real speed to hurt
+  const vmin=(mode==='flat'||mode==='haft'||mode==='poke')?4:mode==='thrust'?1:2,mw=Math.pow(W.weight/1.1,.8);
+  const base=Math.max(0,speed-vmin)*MODE_K[mode]*mw*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
   const armorF=1-prot*(1-pen);
   let dmg=Math.min(base*armorF,80);
+  if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0};S.hits++;S.dmg+=dmg;S.modes[mode]=(S.modes[mode]||0)+1;S.zones[cap.zone]=(S.zones[cap.zone]||0)+1;S.speed+=speed;}
   const glance=prot>.2&&(mode==='cut'||mode==='thrust')&&armorF<.8&&dmg<12;
   let sev=null;
   if(mode==='cut'&&W.sever>0&&cap.sever&&!glance){
@@ -2028,7 +2043,10 @@ function resolveHit(A,B,cap,t,P,pv){
     B.damage(body,A,W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
     if(!B.alive&&B.ragdoll)B.ragdoll.kick(imp);
   }
-  if(B.alive&&!B.ragdoll){
+  const bHeavy=B.sword&&(B.sword.def.kind==='blunt'||B.sword.def.kind==='axe'||B.sword.def.weight>=1.5),armour=bHeavy&&(B.commit||(!B.isPlayer&&!B.remote&&B.ai.phase==='strike'))&&dmg<10;
+  if(B.alive&&!B.ragdoll&&dmg<1.5&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
+  else if(B.alive&&!B.ragdoll&&armour){if(!phys)B.addFlinch(dir,.12);B.useStamina(4);B.stagger=Math.max(B.stagger,.06);if(A.isPlayer||B.isPlayer)tell(B,'You power through','gold');}
+  else if(B.alive&&!B.ragdoll){
     _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
