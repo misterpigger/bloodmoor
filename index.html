@@ -282,7 +282,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=30;
+const BUILD=31;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1053,11 +1053,11 @@ function makeSpear(){return wpnGroup([[new THREE.CylinderGeometry(.016,.018,1.98
 const WEAPONS={
   arming:{id:'arming',name:'Arming sword',kind:'blade',len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:1,make:()=>makeBlade(.78,.024,.15)},
   longsword:{id:'longsword',name:'Longsword',kind:'blade',len:1.0,grip2:-.12,weight:1.1,cut:1.1,thrust:1.1,sever:1.1,pen:.25,hitFrom:.22,tier:2,make:()=>makeBlade(.95,.025,.24)},
-  greatsword:{id:'greatsword',name:'Greatsword',kind:'blade',len:1.28,grip2:-.24,weight:1.75,cut:1.35,thrust:1.0,sever:1.5,pen:.3,hitFrom:.2,tier:3,make:makeGreatsword},
-  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.35,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
+  greatsword:{id:'greatsword',name:'Greatsword',kind:'blade',len:1.28,grip2:-.24,weight:1.75,cut:1.1,thrust:1.0,sever:1.5,pen:.3,hitFrom:.2,tier:3,make:makeGreatsword},
+  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.2,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
   mace:{id:'mace',name:'Flanged mace',kind:'blunt',len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:2,make:makeMace},
   fists:{id:'fists',name:'Fists',kind:'fist',len:.2,grip2:0,weight:.45,cut:1.0,thrust:1.0,sever:0,pen:.55,hitFrom:0,tier:0,make:()=>{const g=new THREE.Group();scene.add(g);return g;}},
-  spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:2.0,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
+  spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:1.6,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
 };
 
 // ================================================================ armor
@@ -1071,6 +1071,24 @@ const ARMOR={
   vambraces:{id:'vambraces',slot:'arms',name:'Vambraces',prot:.42,tier:1},
   greaves:{id:'greaves',slot:'legs',name:'Greaves',prot:.42,tier:1},
 };
+// ---- weapon handling, one row per weapon (the classic engine). Pairs are [guard, committed swing].
+//  effort   how much the weapon's weight slows the arm (the hand's top acceleration is divided by it)
+//  grip     how hard the hand is pulled to where you aim       gripDamp  how quickly that pull settles (1 = no overshoot)
+//  accel    the hand's top acceleration before effort, m/s²
+//  wrist    how firmly the blade is steered to its line        tipDamp   how much the head is held back (lower whips more)
+//  sag      how much gravity pulls the head down               edgeTurn  how fast the edge turns into the motion
+//  guardY   guard height below the chest, m                    slide     how far a thrust drives the weapon through the hands, m
+//  swingOut, swingUp  where a committed swing points the blade: forward and upward lean (the guard uses .26 and .5)
+const HANDLING={
+  arming:    {effort:.80, grip:[560,1050], gripDamp:.8, accel:[240,470],wrist:[388.24,752.94],tipDamp:[.75,.3], sag:.3,  edgeTurn:.2, guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+  longsword: {effort:1.0488,grip:[520,950], gripDamp:.8, accel:[220,420],wrist:[300,581.82],   tipDamp:[.75,.3], sag:.3,  edgeTurn:.2, guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+  greatsword:{effort:2.1,grip:[520,950], gripDamp:.8, accel:[220,420],wrist:[188.57,365.71],tipDamp:[.75,.3], sag:.3,  edgeTurn:.2, guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+  axe:       {effort:1.3972,grip:[416,760], gripDamp:.62,accel:[220,420],wrist:[420,700],      tipDamp:[.85,.45],sag:.525,edgeTurn:.08,guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+  mace:      {effort:1.2663,grip:[416,760], gripDamp:.62,accel:[220,420],wrist:[420,700],      tipDamp:[.85,.45],sag:.45, edgeTurn:.08,guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+  spear:     {effort:1.0724,grip:[520,950], gripDamp:.8, accel:[220,420],wrist:[286.96,556.52],tipDamp:[.75,.3], sag:.3,  edgeTurn:.08,guardY:-.4, slide:.55,swingOut:.45,swingUp:.18},
+  fists:     {effort:.9220,grip:[1040,1900],gripDamp:.8, accel:[220,420],wrist:[388.24,752.94],tipDamp:[.75,.3], sag:.3,  edgeTurn:.08,guardY:-.22,slide:.3,swingOut:.45,swingUp:.18},
+};
+const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
 // armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
 const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]};
@@ -1300,19 +1318,19 @@ class Sword{
       else{_v.subVectors(target,this.H).setY(0);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));
         this.Hv.set(0,0,0);this.Hp.copy(this.H);this.Tp.copy(this.T);this.tipVel.set(0,0,0);return;}
     }
-    const w=this.def.weight,heavy=this.def.kind==='axe'||this.def.kind==='blunt';
-    // heavy weapons: the arm works harder to get them moving, momentum carries them through, and the wrist holds the head firm
-    const wf=heavy?Math.pow(w,.9):w>1.4?Math.pow(w,.85):Math.pow(Math.max(.85,w),.5);
-    const k=(commit?950:520)*(this.def.kind==='fist'?2:1)*(heavy?.8:1),c=2*Math.sqrt(k)*(heavy?.62:.8);
+    // the hand is sprung toward where you aim, limited by how hard the weapon's weight makes it work (HANDLING)
+    const Hd=handling(this.def),m=commit?1:0,wf=Hd.effort;
+    const k=Hd.grip[m],c=2*Math.sqrt(k)*Hd.gripDamp;
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
     const kn=this.knockT>0?.18:1;if(this.knockT>0)this.knockT-=h;   // knocked out of line: the grip takes a moment to recover
-    const maxA=(commit?420:220)*strength/wf*kn;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    const maxA=Hd.accel[m]*strength/wf*kn;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
-    const gk=heavy?(commit?700:420):(commit?640:330)/Math.max(.85,w),tw=Math.sqrt(gk);
-    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*(heavy?(commit?.45:.85):commit?.3:.75)*tw*h);
+    // the wrist steers the blade onto its line; the head lags and carries through by tipDamp
+    const gk=Hd.wrist[m],tw=Math.sqrt(gk);
+    _v.subVectors(this.T,this.Tp).multiplyScalar(1-2*Hd.tipDamp[m]*tw*h);
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
-    this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*(heavy?.3+.5*(w-1):.3)*h*h;
+    this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*Hd.sag*h*h;
     if(this.T.y<.03)this.T.y=.03;
     collide(this.T,.02,true);
     this.constrain(h);
@@ -1328,7 +1346,7 @@ class Sword{
     this.tipVel.subVectors(this.T,this.Tp).multiplyScalar(1/h);
     _e.copy(this.tipVel).addScaledVector(this.axis,-this.tipVel.dot(this.axis));
     // the edge turns into the motion slowly: wild direction changes land with the flat
-    if(_e.lengthSq()>2){_e.normalize();const dd=_e.dot(this.edge);if(dd<0&&this.def.kind==='blade')_e.negate();if(this.def.kind==='blade'||dd>.2)this.edge.lerp(_e,this.def.kind==='blade'?.2:.08);}
+    if(_e.lengthSq()>2){_e.normalize();const dd=_e.dot(this.edge);if(dd<0&&this.def.kind==='blade')_e.negate();if(this.def.kind==='blade'||dd>.2)this.edge.lerp(_e,handling(this.def).edgeTurn);}
     if(this.def.kind==='axe'&&this.owner&&!this.free){this.owner.fwd(_g);_g.addScaledVector(this.axis,-_g.dot(this.axis));if(_g.lengthSq()>.05){_g.normalize();this.edge.lerp(_g,.06);}}
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
   }
@@ -1494,9 +1512,10 @@ class Fighter{
   frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cp).addScaledVector(_f,-sp);}
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
-    out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y-(this.sword&&this.sword.def.kind==='spear'?.4:.22)).addScaledVector(f,this.ctrl.z);
+    const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
+    out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY).addScaledVector(f,this.ctrl.z);
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
-    const slide=(this.sword&&this.sword.def.kind==='spear'?.55:.3)*clamp((this.ctrl.z-.46)/.16,0,1);
+    const slide=Hd.slide*clamp((this.ctrl.z-.46)/.16,0,1);
     out.addScaledVector(f,slide);
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
@@ -1506,7 +1525,9 @@ class Fighter{
     const f=_t2,u=_t3;this.frame(f,u);
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
     if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
-    out.copy(hand).sub(this.chest).addScaledVector(f,.26).addScaledVector(u,.5);
+    // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
+    const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
+    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:.26).addScaledVector(u,cm?Hd.swingUp:.5);
     return out.normalize();
   }
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.35);}
@@ -1724,12 +1745,18 @@ class Fighter{
       // outreached fighters get inside the longer weapon instead of standing where only it can land
       const desired=low?.9+reach*.3:kind==='fist'?.76:outreached?Math.max(.72,.3+reach*.75):.4+reach*.85;
       this.right(_r);
-      if(d>desired+1.2){wish.copy(_v);run=d>6||(outreached&&d<theirs+1.6&&this.stamina>30);}
+      if(A.rushT>0){A.rushT-=h;if(d>.75){wish.copy(_v);run=this.stamina>15;}}
+      else if(d>desired+1.2){wish.copy(_v);const opening=tg.stagger>0||(tg.sword&&tg.sword.knockT>0);run=d>6||(outreached&&opening&&d<theirs+1.6&&this.stamina>30);}   // don't run onto a longer point unless it has been knocked aside
       else{wish.copy(_r).multiplyScalar(A.strafe*.4);if(d>desired+.15)wish.addScaledVector(_v,.9);else if(d<desired-.2)wish.addScaledVector(_v,-.9);}
       if(this.stamina<22&&!tg.downed){wish.addScaledVector(_v,-.8);}
       const ty=low?.25:tg.chest.y;this.pitch=lerp(this.pitch,clamp(Math.atan2(ty-this.chest.y,Math.max(d,.5))*.9,-.9,.4),1-Math.exp(-5*h));
       if(A.throwT>=0){A.throwT+=h;wish.set(0,0,0);if(A.throwT<.55){this.ctrlT.x=.25;this.ctrlT.y=.6;this.ctrlT.z=.28;A.phase='windup';}else{this.ctrlT.x=0;this.ctrlT.y=.12+d*.02;this.ctrlT.z=.64;this.commit=true;A.phase='strike';if(A.throwT>.66){this.throwWeapon();A.throwT=-1;A.phase='guard';}}return false;}
       const ts=tg.sword&&!tg.downed?tg.sword.tipVel.length():0;
+      // a longer point aimed at you is a threat even when it's still: keep the guard on it and come in carefully
+      // a shorter weapon gets inside while the longer one is recovering from its swing
+      if(outreached&&!(A.rushT>0)&&d<theirs+1.4&&this.stamina>25&&this.stagger<=0&&(tg.ai&&!tg.isPlayer&&!tg.remote?tg.ai.phase==='recover':tg.sword&&tg.sword.arc>.8&&tg.sword.tipVel.length()<4)&&Math.random()<A.skill*.5){A.rushT=.6;A.cd=0;}
+      const pointThreat=tg.sword&&!tg.downed&&(tg.sword.def.kind==='spear'||tg.thrust)&&outreached&&d<theirs+.9&&!(A.rushT>0);
+      if(pointThreat&&A.block<=0&&A.phase==='guard'&&A.threatCd<=0&&Math.random()<A.skill){A.threatCd=.5;A.block=.55;A.blockDelay=A.react*.5;}
       if(A.block<=0&&ts>4.5&&d<reach+1.8&&A.threatCd<=0&&A.phase!=='strike'&&!(A.phase==='windup'&&A.pt>.2&&(kind==='blunt'||kind==='axe'))){A.threatCd=.55;if(Math.random()<A.skill){A.block=.42+A.react;A.blockDelay=A.react;if(A.phase==='windup')A.phase='guard';}}
       if(tg.stagger>.25&&A.phase==='guard'&&d<desired+.7)A.cd=Math.min(A.cd,0);   // riposte
       if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005)this.kickReq=true;
@@ -1741,7 +1768,7 @@ class Fighter{
       } else {
         A.pt+=h;
         if(A.phase==='guard'){this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.06;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.05;this.ctrlT.z=kind==='spear'?.34:.42;
-          if(d<desired+(outreached?.3:.6)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
+          if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
             A.atk=atk;A.phase='windup';A.pt=0;}}
         else if(A.phase==='windup'){const s=A.atk.s;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=s[1];this.ctrlT.z=A.atk.thrust?.28:.4;
@@ -2097,9 +2124,9 @@ function clash(A,B){
   // the blades trade momentum along the contact: the harder, heavier blow drives the other weapon back
   // crossing blades push apart across both of them; a fast blade may already be partway through, so orient that against the closing motion
   _e.crossVectors(s.axis,s2.axis);if(_e.lengthSq()<.04)_e.copy(_n);else _e.normalize();if(_rel.dot(_e)>0)_e.negate();
-  const vn=_rel.dot(_e);
+  const vn=_rel.dot(_e);let dA=0,dB=0;
   if(vn<-.5){_n.copy(_e);
-    const mA=bladeMass(A,s,sa),mB=bladeMass(B,s2,sb),J=-(1+.3)*vn/(1/mA+1/mB),dA=J/mA,dB=J/mB;
+    const mA=bladeMass(A,s,sa),mB=bladeMass(B,s2,sb),J=-(1+.3)*vn/(1/mA+1/mB);dA=J/mA;dB=J/mB;
     s.Tp.addScaledVector(_n,-dA*H);s.Hv.addScaledVector(_n,dA*.45);
     s2.Tp.addScaledVector(_n,dB*H);s2.Hv.addScaledVector(_n,-dB*.45);
     if(dA>3.5)s.knockT=Math.min(.4,dA*.045);if(dB>3.5)s2.knockT=Math.min(.4,dB*.045);
@@ -2131,7 +2158,11 @@ function clash(A,B){
     def.stagger=Math.max(def.stagger,.65);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.sword.Hv.addScaledVector(_v,3);
     tell(def,'Guard broken','red');if(att.isPlayer){note('Guard broken','gold');addScore(20);}
     if(att.isPlayer||def.isPlayer){shake(.4);hitstop(.07);}
-  } else { // clean parry: attacker is left open
+  } else if((att===A?dB:dA)>(att===A?dA:dB)*1.25){ // the blow beat the guard aside: the defender's blade was knocked further than the attacker's
+    def.stagger=Math.max(def.stagger,.15);def.useStamina(4);
+    if(!att.isPlayer&&!att.remote){att.ai.rushT=.7;att.ai.cd=0;}   // a bot that beats the guard aside steps in behind it
+    if(att.isPlayer&&noteCd<=0){note('Beat aside','sm');noteCd=1;}
+  } else { // clean parry: the guard held firm and the attacker is left open
     att.stagger=Math.max(att.stagger,.55);att.useStamina(8);
     if(def.isPlayer){note('Parried','gold');addScore(25);hitstop(.07);shake(.2);}
     if(att.isPlayer){if(noteCd<=0){note('Parried','sm');noteCd=1;}shake(.3);}
@@ -2195,9 +2226,11 @@ function resolveHit(A,B,cap,t,P,pv){
   const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:7*W.cut,flat:1.8,haft:1.4,poke:1.2};
   // momentum, not just speed: a heavy head hits harder at the same speed; flats, hafts and pokes need real speed to hurt
   const vmin=(mode==='flat'||mode==='haft'||mode==='poke')?4:mode==='thrust'?1:2,mw=Math.pow(W.weight/1.1,.8);
-  const base=Math.max(0,speed-vmin)*MODE_K[mode]*mw*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
+  // a thrust hurts by the point's own drive; walking onto a held point only adds part of the closing speed
+  const hitSp=(mode==='thrust'||mode==='poke')?Math.min(speed,_va.length()+.3*Math.max(0,speed-_va.length())):speed;
+  const base=Math.max(0,hitSp-vmin)*MODE_K[mode]*mw*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
   const armorF=1-prot*(1-pen);
-  let dmg=Math.min(base*armorF,80);
+  let dmg=Math.min(base*armorF,mode==='thrust'||mode==='poke'?50:80);   // a single thrust can't fell a fighter outright
   if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0};S.hits++;S.dmg+=dmg;S.modes[mode]=(S.modes[mode]||0)+1;S.zones[cap.zone]=(S.zones[cap.zone]||0)+1;S.speed+=speed;}
   const glance=prot>.2&&(mode==='cut'||mode==='thrust')&&armorF<.8&&dmg<12;
   yardHit(A,W.name,mode,cap.zone,dmg,speed,glance,prot);
@@ -2230,7 +2263,7 @@ function resolveHit(A,B,cap,t,P,pv){
     if(!B.alive&&B.ragdoll)B.ragdoll.kick(imp);
   }
   const bHeavy=B.sword&&(B.sword.def.kind==='blunt'||B.sword.def.kind==='axe'||B.sword.def.weight>=1.5),armour=bHeavy&&(B.commit||(!B.isPlayer&&!B.remote&&B.ai.phase==='strike'))&&dmg<10;
-  if(B.alive&&!B.ragdoll&&dmg<1.5&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
+  if(B.alive&&!B.ragdoll&&dmg<3&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
   else if(B.alive&&!B.ragdoll&&armour){if(!phys)B.addFlinch(dir,.12);B.useStamina(4);B.stagger=Math.max(B.stagger,.06);if(A.isPlayer||B.isPlayer)tell(B,'You power through','gold');}
   else if(B.alive&&!B.ragdoll){
     _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02);
@@ -2257,6 +2290,7 @@ function resolveHit(A,B,cap,t,P,pv){
   // weapon response: a clean cut carries through, everything else bounces
   if(sev){s.Tp.lerp(s.T,.25);s.Hv.multiplyScalar(.85);A.passT.set(B.id,simTime+.15);}
   else if(glance||mode==='flat'||mode==='haft'){reflectTip(s,_v.copy(dir).negate(),.3);s.Tp.lerp(s.T,.5);s.Hv.multiplyScalar(.3);A.stagger=Math.max(A.stagger,.15);}
+  else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
   if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>8||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
     const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,.22);
