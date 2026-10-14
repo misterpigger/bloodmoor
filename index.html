@@ -205,7 +205,10 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
     <div class="frow">Hose <div class="sw" data-k="2" role="radiogroup" aria-label="Hose colour"></div></div>
     <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
-    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Braies</button><button data-v="1" role="radio">Linen</button><button data-v="2" role="radio">Tunic</button></div></div>
+    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Peasant</button><button data-v="2" role="radio">Ranger</button></div></div>
+    <div class="frow">Hair <div class="seg" data-look="h" role="radiogroup" aria-label="Hair"><button data-v="0" role="radio">Bald</button><button data-v="1" role="radio">Short</button><button data-v="2" role="radio">Parted</button><button data-v="3" role="radio">Long</button></div></div>
+    <div class="frow">Beard <div class="seg" data-look="bd" role="radiogroup" aria-label="Beard"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Beard</button></div></div>
+    <div class="frow">Hue <div class="sw" data-look="hc" role="radiogroup" aria-label="Hair colour"></div></div>
     <div class="frow">Skin <div class="sw" data-look="sk" role="radiogroup" aria-label="Skin tone"></div></div>
   </aside>
 </div>
@@ -281,7 +284,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=40;
+const BUILD=41;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1241,8 +1244,8 @@ const HANDLING={
 };
 const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
-// the armour was shaped on the X Bot body, so it fits as built (these widened it for the older Quaternius bodies)
-const ARMOR_FIT={},ARMOR_OFF={};
+// armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
+const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]};
 function meshGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1] of parts){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);}return g;}
 const cuirassGeo=lathe([[.11,.17],[.16,.13],[.18,.02],[.178,-.1],[.165,-.22],[.172,-.3]].reverse(),24);   // profiles run bottom to top so the faces point outward
 const fauldGeo=lathe([[.165,.05],[.185,-.05],[.2,-.17]].reverse(),24);
@@ -1724,9 +1727,6 @@ class Fighter{
     out.addScaledVector(f,slide);
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
-    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'){   // both hands stay on a two-handed haft (a spear's front hand lets the shaft slide through a thrust): the aim is kept where the off hand can reach its grip too
-      const so=this.mainArm==='L'?this.shR:this.shL;_v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length(),rc=this.armLen[0]+this.armLen[1]+.05;
-      if(d>rc)out.addScaledVector(_v,-(d-rc)/d);}
     return out;
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
@@ -2031,7 +2031,7 @@ class Fighter{
     // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
     // so the feet stay planted at every speed instead of two cycles drifting through each other (measured on the X Bot: walk 1.54 m/s, run 3.53 m/s)
     const Dw=A.walk.getClip().duration,Dr=A.run.getClip().duration,rt=wr/(ww+wr||1);
-    const fq=(back?-1:1)*Math.max(sp,.5)/(1.54*Dw*(1-rt)+3.53*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
+    const fq=(back?-1:1)*Math.max(sp,.5)/(1.51*Dw*(1-rt)+3.62*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
     if(ww>0&&wr>0){const m=wr>ww?A.run:A.walk,o=m===A.run?A.walk:A.run;const ph=m.time/m.getClip().duration+(m===A.run?-.075:.075);o.time=((ph%1+1)%1)*o.getClip().duration;}
     this.mixer.update(dt);
     if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww);}}
@@ -2741,10 +2741,7 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-// Half Sword's camera: high and close behind the fighter, nearly centred, looking down on the fight; it trails the body's turn smoothly
-const CAM_TP={dist:2.3,side:.12,up:.66,tilt:-.44};let camYawS=null;
-// turning: mouse movement past the side of the hand's range turns the body, eased, at a natural top speed (never blocked while swinging)
-function consumeTurn(f,h){const tp=clamp(f.turnPush||0,-1.2,1.2);if(!tp){f.turnPush=0;return;}let d=tp*(1-Math.exp(-8*h));const mx=2.6*h/1.3;d=clamp(d,-mx,mx);f.yaw-=d*1.3;f.turnPush=Math.abs(tp-d)<1e-4?0:tp-d;}
+const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){hitStopT=Math.max(hitStopT,t);}
 function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
@@ -2894,7 +2891,7 @@ function playerInput(f,wish,h){
     f.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);f.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);
     if(input.mx>.9)f.yaw-=1.6*h*(input.mx-.9)*10;if(input.mx<.1)f.yaw+=1.6*h*(.1-input.mx)*10;
   } else {
-    consumeTurn(f,h);
+    if(f.sword){if(f.ctrl.x>.44)f.yaw-=(f.ctrl.x-.44)*3*h;if(f.ctrl.x<-.44)f.yaw-=(f.ctrl.x+.44)*3*h;}
   }
   return !!(k.ShiftLeft||k.ShiftRight);
 }
@@ -2928,16 +2925,14 @@ addEventListener('mousemove',e=>{
   if(!player.sword){
     if(input.lmb||input.rmb){for(const sd of ['R','L']){if(!(sd==='R'?input.lmb:input.rmb))continue;const a=player.fists[sd];if(!a.c)continue;const sg=sd==='R'?1:-1;
         a.c.x+=dx*.0021;a.c.y-=dy*.0021;
-        // past the side the body turns after the fist, eased; raising or dropping a fist never tilts the view (reach low to stoop)
-        if(a.c.x>.5){player.turnPush=(player.turnPush||0)+(a.c.x-.5);a.c.x=.5;}if(a.c.x<-.5){player.turnPush=(player.turnPush||0)+(a.c.x+.5);a.c.x=-.5;}
-        a.c.y=clamp(a.c.y,-.6,.55);}
+        if(a.c.x>.5){player.yaw-=(a.c.x-.5)*1.7;a.c.x=.5;}if(a.c.x<-.5){player.yaw-=(a.c.x+.5)*1.7;a.c.x=-.5;}
+        if(a.c.y>.55){player.pitch=clamp(player.pitch+(a.c.y-.55)*1.3,-1.2,.95);a.c.y=.55;}if(a.c.y<-.6){player.pitch=clamp(player.pitch+(a.c.y+.6)*1.3,-1.2,.95);a.c.y=-.6;}}
       return;}
     player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
   if(input.rmb){player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
-  // swinging (LMB held) the hand stops at the edge of its reach and the view stays put; without LMB, pushing past the side
-  // turns you, eased out over a moment (turnPush) instead of whipping the camera. Raising or dropping the weapon never tilts the view.
-  c.x+=dx*.0021;c.y=clamp(c.y-dy*.0021,-.46,.56);
-  if(c.x>.5){player.turnPush=(player.turnPush||0)+(c.x-.5);c.x=.5;}if(c.x<-.5){player.turnPush=(player.turnPush||0)+(c.x+.5);c.x=-.5;}
+  c.x+=dx*.0021;c.y-=dy*.0021;
+  if(c.x>.5){player.yaw-=(c.x-.5)*1.7;c.x=.5;}if(c.x<-.5){player.yaw-=(c.x+.5)*1.7;c.x=-.5;}
+  if(c.y>.56){player.pitch=clamp(player.pitch+(c.y-.56)*1.3,-1.2,.95);c.y=.56;}if(c.y<-.46){player.pitch=clamp(player.pitch+(c.y+.46)*1.3,-1.2,.95);c.y=-.46;}
 });
 addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-clamp(e.deltaY,-120,120)*.0016,.28,.68);lastWheel=performance.now();},{passive:true});
 let lastWheel=0;
@@ -3141,7 +3136,6 @@ function frame(now){
   if(state==='loading')return;
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
-  if(NET.mode==='client'&&player&&player.turnPush)consumeTurn(player,dt);   // friends steer at the edge the same eased way
   if(NET.mode==='client'&&player&&player.alive&&!player.ragdoll&&state==='playing'&&!paused&&!input.locked&&input.mx!=null){
     if(player.sword){player.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);player.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
     else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
@@ -3171,12 +3165,11 @@ function frame(now){
     if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
       camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
     else if(!player.ragdoll){ // over-the-shoulder third person
-      if(camYawS===null||Math.abs(wrapA(player.yaw-camYawS))>2.5)camYawS=player.yaw;camYawS+=wrapA(player.yaw-camYawS)*(1-Math.exp(-9*dt));const cy=camYawS;
-      const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(cy)*cp,sp,Math.cos(cy)*cp);_r.set(-Math.cos(cy),0,Math.sin(cy));
+      const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
       _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
-      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,cy+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
+      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
@@ -3634,7 +3627,7 @@ el('joinCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='En
 loadMap('village');
 function loadFighters(onLoad,onErr){
   // the fighters ship as glTF JSON with an embedded buffer (images included); rebuild a GLB in memory so nothing fetches a data: URL
-  fetch('xbot.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
+  fetch('fighters.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
     const uri=j.buffers[0].uri;const raw=atob(uri.slice(uri.indexOf(',')+1));const bin=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bin[i]=raw.charCodeAt(i);
     delete j.buffers[0].uri;
     const js=new TextEncoder().encode(JSON.stringify(j));const jl=Math.ceil(js.length/4)*4,bl=Math.ceil(bin.length/4)*4;
