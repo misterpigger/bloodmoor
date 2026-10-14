@@ -1,0 +1,17 @@
+name: fetch CC0 assets
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: cc0-fetch }
+      - run: python3 tools/fetch_cc0.py
+      - run: |
+          git config user.name misterpigger
+          git config user.email misterpigger@users.noreply.github.com
+          git add assets
+          git commit -m "CC0 textures and HDRI from Poly Haven" || echo "nothing new"
+          git push origin HEAD:cc0-fetch
