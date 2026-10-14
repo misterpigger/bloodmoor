@@ -163,12 +163,12 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
       <dt><kbd>Mouse</kbd></dt><dd>Move your sword hand. Push past the side (without LMB) to turn. Swinging never moves the view.</dd>
       <dt><kbd>LMB</kbd></dt><dd>Hold while you swing for full power. Big, fast mouse sweeps hit hardest.</dd>
       <dt><kbd>RMB</kbd></dt><dd>Hold to look around freely</dd>
-      <dt><kbd>Wheel</kbd></dt><dd>Flick forward to thrust: the point drives out and comes back. Spears reach furthest.</dd>
+      <dt><kbd>Wheel</kbd></dt><dd>Swords and spears: scroll to thrust; the point stays on line while you keep scrolling. Axes and maces: scroll changes your reach.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch, or slide while sprinting · <kbd>Space</kbd> jump and vault</dd>
-      <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q while you swing and let go to throw</dd>
+      <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q to wind up over the shoulder, let go to throw from that hand</dd>
       <dt><kbd>V</kbd> <kbd>M</kbd></dt><dd>Switch between third and first person · music on/off</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
-      <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
+      <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs. Ease an open hand onto someone to grab and drag them; reach low to stoop for a body.</dd>
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small" id="buildTag" style="opacity:.6"></p>
@@ -183,6 +183,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <div class="maps" role="radiogroup" aria-label="Map">
       <button class="map on" data-map="village" role="radio" aria-checked="true"><b>Bloodmoor village</b><span>Dusk · streets, alleys, 12 fighters</span></button>
       <button class="map" data-map="arena" role="radio" aria-checked="false"><b>The Arena</b><span>Midday · sand pit, crowd · duels, tournament and gauntlet are fought here</span></button>
+      <button class="map" data-map="pit" role="radio" aria-checked="false"><b>The Pit</b><span>Midday · walled yard round a deep shaft · knock them in</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
@@ -282,7 +283,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=37;
+const BUILD=38;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -697,7 +698,14 @@ function addMountains(c1,c2){
   const mtn=new THREE.MeshBasicMaterial({color:c1,fog:false}),mtn2=new THREE.MeshBasicMaterial({color:c2,fog:false});
   for(let i=0;i<34;i++){const a=i/34*Math.PI*2+Math.random()*.1,far=i%2;const r=far?300:230;const h=far?rand(50,110):rand(30,70);const m=new THREE.Mesh(new THREE.ConeGeometry(rand(60,110),h,5),far?mtn2:mtn);m.position.set(Math.cos(a)*r,h/2-6,Math.sin(a)*r);m.rotation.y=Math.random()*3;world.add(m);}
 }
-function clearWorld(){
+// ground height: flat everywhere except the Pit map's shaft (a plank bridge runs across it along x)
+let PIT=null;
+function onBridge(x,z){return !!PIT&&Math.abs(z-PIT.z)<PIT.bw;}
+function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
+function groundY(x,z,y=0){if(!PIT)return 0;const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
+  return inC&&(y<-.12||!onBridge(x,z))?-PIT.d:0;}
+function pitWall(p,r){if(!PIT||p.y>-.02)return;const dx=p.x-PIT.x,dz=p.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r-r;if(d>m&&d>1e-6){p.x=PIT.x+dx/d*m;p.z=PIT.z+dz/d*m;}}   // below the rim you're inside the shaft
+function clearWorld(){PIT=null;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -744,6 +752,35 @@ function buildArena(){
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
 }
+// ================================================================ the pit (walled yard round a deep shaft, after Half Sword's)
+function buildPit(){
+  const W=15,wallH=4.2;PIT={x:0,z:0,r:2.6,d:6,bw:.62};
+  {const gg=new THREE.RingGeometry(PIT.r,110,96,8);gg.rotateX(-Math.PI/2);scaleUV(gg,55,55);const g=new THREE.Mesh(gg,std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1,color:0xcfc6b4}));g.receiveShadow=true;world.add(g);}
+  // the shaft: stone walls going down into the dark, a dirt floor, and a low stone rim broken where the bridge crosses
+  addGeo('stoneLight',scaleUV(new THREE.CylinderGeometry(PIT.r,PIT.r,PIT.d,48,1,true),PIT.r*6.283/2.5,PIT.d/2.5).translate(0,-PIT.d/2,0),T(PIT.x,0,PIT.z));
+  {const fg=new THREE.CircleGeometry(PIT.r,40);fg.rotateX(-Math.PI/2);scaleUV(fg,3,3);const m=new THREE.Mesh(fg,std({map:TX.ground,roughness:1,color:0x4a3f33}));m.position.set(PIT.x,-PIT.d+.01,PIT.z);m.receiveShadow=true;world.add(m);}
+  const gap=Math.asin(Math.min(.95,(PIT.bw+.08)/PIT.r)),prof=[[PIT.r,-.25],[PIT.r,.14],[PIT.r+.18,.2],[PIT.r+.4,.14],[PIT.r+.42,0]].map(([x,y])=>new THREE.Vector2(x,y));
+  for(const st of [Math.PI/2+gap,Math.PI*1.5+gap])addGeo('stoneLight',scaleUV(new THREE.LatheGeometry(prof,30,st,Math.PI-2*gap),8,1),T(PIT.x,0,PIT.z));
+  // the plank bridge across, on two iron-banded beams
+  {const L=PIT.r*2+.7;for(const sz of [-1,1])addGeo('wood',boxUV(L,.16,.12,1),T(PIT.x,-.1,PIT.z+sz*(PIT.bw-.08)));
+    for(let k=0;k<Math.round(L/.19);k++)addGeo('woodLight',boxUV(.17,.06,2*PIT.bw,1),T(PIT.x-L/2+.1+k*.19,-.03,PIT.z));
+    for(const sx of [-1,1])addGeo('iron',boxUV(.06,.07,2*PIT.bw+.04,1),T(PIT.x+sx*(PIT.r-.25),-.02,PIT.z));}
+  // the yard walls, with a gate, and the wooden fences inside them
+  for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
+    addGeo('stoneLight',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
+    for(let k=-7;k<=7;k++){const o=k*len/15.5;addGeo('stoneLight',boxUV(.9,.6,.95,1),T(x+(ry?0:o),wallH+.3,z+(ry?o:0),ry));}}
+  addBox(-W-1,W+1,W,W+1.2,wallH);addBox(-W-1,W+1,-W-1.2,-W,wallH);addBox(W,W+1.2,-W-1,W+1,wallH);addBox(-W-1.2,-W,-W-1,W+1,wallH);
+  addGeo('wood',boxUV(3.2,3.3,.25,1.5),T(0,1.65,W-.05));for(const y of [.8,2.5])addGeo('iron',boxUV(3.3,.12,.32,1),T(0,y,W-.05));
+  const fence=(x0,z0,x1,z1)=>{const L=Math.hypot(x1-x0,z1-z0),ry=-Math.atan2(z1-z0,x1-x0),n=Math.max(1,Math.round(L/2.2));
+    for(let k=0;k<=n;k++){const t=k/n;addGeo('woodLight',boxUV(.14,1.25,.14,1),T(x0+(x1-x0)*t,.62,z0+(z1-z0)*t));}
+    for(const y of [.45,1.05])addGeo('woodLight',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));};
+  const F=W-1.6;fence(-F,F,-2.4,F);fence(2.4,F,F,F);fence(-F,-F,F,-F);fence(-F,-F,-F,F);fence(F,-F,F,F);
+  for(const [x,z] of [[-W+1.6,-W+1.6],[W-1.6,-W+1.6],[-W+1.6,W-1.6],[W-1.6,W-1.6]])brazier(x,z);
+  barrel(-W+.9,4);barrel(-W+.9,4.8);crate(W-.9,-5);crate(W-.9,-4.1,.7);hay(-6,-W+1);
+  for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  addMountains(0x8d99ae,0xa9b4c6);
+  flushBatch();
+}
 function buildCrowd(r0,y0,dr,dy,tiers){
   const parts=[new THREE.BoxGeometry(.42,.6,.3).translate(0,.32,0),new THREE.SphereGeometry(.12,6,4).translate(0,.78,0),new THREE.BoxGeometry(.62,.11,.12).translate(0,.52,.06)];
   const geo=mergeGeometries(parts.map(g=>g.index?g.toNonIndexed():g));
@@ -770,6 +807,7 @@ for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
   arena:{name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  pit:{name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
 function applyLighting(k){
@@ -1156,7 +1194,9 @@ class Ragdoll{
     for(let it=0;it<7;it++){
       for(const [a,b,l] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
-      for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;if(p.y<r){p.y=r;const q=this.Q[n];q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}
+      for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+r){const q=this.Q[n];if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
+        if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>1e-3){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?Math.sign(p.z-PIT.z||1)*.004:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
     for(const n of this.names){if(this.P[n].y<5)collide(this.P[n],RD_R[n]||.055,true);}
     if(this.age>4&&maxv<1e-7)this.sleep=true;
@@ -1189,7 +1229,14 @@ function physStatic(){
   if(!PW||physKey===mapKey)return;physKey=mapKey;
   for(const c of physStatics)PW.removeCollider(c,false);physStatics.length=0;
   const add=d=>physStatics.push(PW.createCollider(d.setCollisionGroups(GR_WORLD).setFriction(.75).setRestitution(.08)));
-  add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-.5,0));
+  if(!PIT)add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-.5,0));
+  else{   // the Pit: ground ring round the shaft, the plank bridge, the shaft wall and its floor
+    const N=48,ro=(MAP+10)*1.5,v=[],ix=[];for(let i=0;i<N;i++){const a=i/N*6.283;v.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*ro,0,PIT.z+Math.sin(a)*ro);}
+    for(let i=0;i<N;i++){const j=(i+1)%N;ix.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(v),new Uint32Array(ix)));
+    const w=[],wi=[];for(let i=0;i<N;i++){const a=i/N*6.283;w.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*PIT.r,-PIT.d,PIT.z+Math.sin(a)*PIT.r);}
+    for(let i=0;i<N;i++){const j=(i+1)%N;wi.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(w),new Uint32Array(wi)));
+    add(R.ColliderDesc.cuboid(PIT.r+.6,.5,PIT.r+.6).setTranslation(PIT.x,-PIT.d-.5,PIT.z));
+    add(R.ColliderDesc.cuboid(PIT.r+.3,.05,PIT.bw).setTranslation(PIT.x,-.05,PIT.z));}
   for(const b of boxes)add(R.ColliderDesc.cuboid(Math.max(.01,(b.x1-b.x0)/2),b.h/2,Math.max(.01,(b.z1-b.z0)/2)).setTranslation((b.x0+b.x1)/2,b.h/2,(b.z0+b.z1)/2));
   for(const c of circles)add(R.ColliderDesc.cylinder(c.h/2,c.r).setTranslation(c.x,c.h/2,c.z));
   if(ARENA_R>0){const n=72;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,th=-(a+Math.PI/2);add(R.ColliderDesc.cuboid(ARENA_R*Math.PI/n+.06,1.7,.3).setTranslation(Math.cos(a)*(ARENA_R+.3),1.7,Math.sin(a)*(ARENA_R+.3)).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)}));}}
@@ -1209,6 +1256,18 @@ const PART_W=[16,16,13,13,34,34,34,34,22,22,22,22];         // how hard each lim
 const PART_A=[70,70,38,38,320,320,320,320,120,120,120,120];     // how much a limb can resist a shove (m/s^2)
 const PART_VIS=[[2,'Spine'],[3,'Spine2'],[1,'Neck'],[0,'Head'],[8,'LeftUpLeg'],[9,'LeftLeg'],[10,'RightUpLeg'],[11,'RightLeg']];
 const ARM_PARTS={R:[6,7],L:[4,5]},ARM_IDX=[4,5,6,7];
+// how each weapon is held: two-handed weapons keep the off hand on the haft; one-handed ones leave it free in a guarding fist
+const THROW_T=.11;   // seconds from letting go of Q to the weapon leaving the hand
+const TWO_HANDED={longsword:1,greatsword:1,axe:1,spear:1},twoH=d=>!!TWO_HANDED[d.id];
+// forearm roll: a gripped haft turns only as far as the forearm rotates from the knuckle line (less with both hands on it).
+// Returns the signed roll past the limit (0 inside it) and leaves the clamped edge in out.
+const _rr=new THREE.Vector3(),_rp=new THREE.Vector3();
+function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind==='fist')return 0;const A=s.axis;
+  _rr.copy(f.foreF).addScaledVector(A,-f.foreF.dot(A));if(_rr.lengthSq()<.25)return 0;   // blade near the forearm line: the knuckle reference is unreliable_rr.normalize();
+  let c=_rr.dot(s.edge);if(s.def.kind==='blade'&&c<0){_rr.negate();c=-c;}
+  const mx=(twoH(s.def)?40:70)*Math.PI/180,th=Math.acos(clamp(c,-1,1));if(th<=mx)return 0;
+  _rp.copy(s.edge).addScaledVector(_rr,-c);if(_rp.lengthSq()<1e-8)_rp.crossVectors(A,_rr);_rp.normalize();
+  const sg=Math.sign(_wl1.crossVectors(_rr,s.edge).dot(A))||1;out.copy(_rr).multiplyScalar(Math.cos(mx)).addScaledVector(_rp,Math.sin(mx));return (th-mx)*sg;}
 // wrist joint limit: a gripped weapon stays between 12 and 112 degrees of the forearm line; it can't fold back past the hand
 const WR_MAX=Math.cos(112*Math.PI/180),WR_MIN=Math.cos(12*Math.PI/180),_wl1=new THREE.Vector3(),_wl2=new THREE.Vector3(),_wl3=new THREE.Vector3();
 const PT={kc:950,kg:520,ac:420,ag:220,ktc:420,ktg:300,zc:.45,zg:.8,tc:110,tg:40,gc:.92,hold:.8,thr:2.2};
@@ -1229,7 +1288,7 @@ class Sword{
       cd.setTranslation(p[0],p[1],p[2]).setMass(m).setFriction(.35).setRestitution(.05).setCollisionGroups(GR_HELD);
       const c=PW.createCollider(cd,this.rb);PHC.set(c.handle,{s:this});this.cols.push(c);M+=m;cy+=m*p[1];cx+=m*p[0];}
     cy/=M;cx/=M;let I=0;for(const [t,d,p,m] of parts){const ext=t==='box'?d[1]*2:t==='cap'?d[0]*2:d[0];I+=m*((p[1]-cy)**2+(p[0]-cx)**2+ext*ext/12);}
-    this.M=M;this.comY=cy;this.comX=cx;this.I=Math.max(I,.004);this.lever=1+Math.abs(this.def.grip2||0)/.12;   // hands spread along the haft give the wrists leverage
+    this.M=M;this.comY=cy;this.comX=cx;this.I=Math.max(I,.004);this.lever=twoH(this.def)?1+Math.abs(this.def.grip2||0)/.12:1;   // hands spread along the haft give the wrists leverage
     this.v=V();this.w=V();this.com=V();this.v0=V();this.w0=V();this.com0=V();this.grp=GR_HELD;
   }
   setGroup(g){if(g===GR_HELD)g=grpHeld(this.owner||(this.flying&&this.age<.35?this.thrower:null));if(!this.rb||this.grp===g)return;this.grp=g;for(const c of this.cols)c.setCollisionGroups(g);}
@@ -1289,6 +1348,8 @@ class Sword{
         const r=_pv.crossVectors(this.edge,_g).dot(this.axis);this.w.addScaledVector(this.axis,clamp(170*r-26*wr,-500,500)*h);}
       else this.w.addScaledVector(this.axis,-wr*Math.min(1,10*h));
     }
+    {const ex=rollLimit(this,_wl2);if(ex){const wr=this.w.dot(this.axis);if(wr*ex>0)this.w.addScaledVector(this.axis,-wr);this.w.addScaledVector(this.axis,-Math.sign(ex)*Math.min(Math.abs(ex)*30,8));}
+     const wr2=this.w.dot(this.axis);if(Math.abs(wr2)>7)this.w.addScaledVector(this.axis,(Math.sign(wr2)*7-wr2));}   // forearm roll speed limit
     if(f&&f.foreF&&this.def.kind!=='fist'){const F=f.foreF,c=this.axis.dot(F);
       if(c<WR_MAX||c>WR_MIN){_wl1.crossVectors(this.axis,F);const sn=_wl1.length();if(sn>1e-5){_wl1.multiplyScalar(1/sn);const sg=c<WR_MAX?1:-1;
         const wn=this.w.dot(_wl1)*sg;if(wn<0)this.w.addScaledVector(_wl1,-wn*sg);   // the wrist stops it going further
@@ -1308,7 +1369,7 @@ class Sword{
       else{stuckPose(this);_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);_pq.setFromRotationMatrix(_sm);this.rb.setNextKinematicTranslation(this.H);this.rb.setNextKinematicRotation(_pq);return;}}
     if(this.planted)return;
     if(this.flying){
-      if(this.def.kind==='spear'&&!this.planted&&this.T.y<.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
+      if(this.def.kind==='spear'&&!this.planted&&this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07&&this.axis.y<-.05&&this.age>.05){this.plant();return;}
       if(this.def.kind==='spear'&&this.v.lengthSq()>4){_pv.copy(this.v).normalize();_pw.crossVectors(this.axis,_pv);this.w.addScaledVector(_pw,40*h).multiplyScalar(1-6*h);this.rb.setAngvel(this.w,true);}
       if(this.age>3||this.age>.15&&this.v.length()<2.5)this.flying=false;
     }
@@ -1340,7 +1401,7 @@ class Sword{
     this.Tp.copy(this.T);
     _g.copy(this.H).addScaledVector(guide,this.len).sub(this.T);
     this.T.add(_v).addScaledVector(_g,gk*h*h);this.T.y-=9.8*Hd.sag*h*h;
-    if(this.T.y<.03)this.T.y=.03;
+    {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.03)this.T.y=gy+.03;}
     collide(this.T,.02,true);
     this.constrain(h);
     const of=this.owner;if(of&&of.foreF&&this.def.kind!=='fist'){const F=of.foreF,c=this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;
@@ -1358,12 +1419,17 @@ class Sword{
   }
   constrain(h){
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;this.axis.copy(_e).multiplyScalar(1/d);this.T.copy(this.H).addScaledVector(this.axis,this.len);
+    _rp.copy(this.edge).addScaledVector(this.axis,-this.edge.dot(this.axis));const pe0=_rp.lengthSq()>1e-6;if(pe0)_rp.normalize();const peX=_rp.x,peY=_rp.y,peZ=_rp.z;
     this.tipVel.subVectors(this.T,this.Tp).multiplyScalar(1/h);
     _e.copy(this.tipVel).addScaledVector(this.axis,-this.tipVel.dot(this.axis));
     // the edge turns into the motion slowly: wild direction changes land with the flat
     if(_e.lengthSq()>2){_e.normalize();const dd=_e.dot(this.edge);if(dd<0&&this.def.kind==='blade')_e.negate();if(this.def.kind==='blade'||dd>.2)this.edge.lerp(_e,handling(this.def).edgeTurn);}
     if(this.def.kind==='axe'&&this.owner&&!this.free){this.owner.fwd(_g);_g.addScaledVector(this.axis,-_g.dot(this.axis));if(_g.lengthSq()>.05){_g.normalize();this.edge.lerp(_g,.06);}}
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
+    if(rollLimit(this,_wl2))this.edge.lerp(_wl2,.25).normalize();   // the grip can't spin the head round the haft
+    // and the forearm can only roll so fast (about 400 deg/s): the head never whirls round in the hand
+    if(pe0&&!this.free&&this.owner){_rp.set(peX,peY,peZ);const sn=_wl3.crossVectors(_rp,this.edge).dot(this.axis),cs=_rp.dot(this.edge),th=Math.atan2(sn,cs),mx=7*h;
+      if(Math.abs(th)>mx){_wl3.crossVectors(this.axis,_rp);this.edge.copy(_rp).multiplyScalar(Math.cos(mx)).addScaledVector(_wl3,Math.sin(mx)*Math.sign(th));}}
   }
   stepFree(h){
     if(this.stuck&&this.stuck.thrown){const st=this.stuck;st.t-=h;
@@ -1371,15 +1437,15 @@ class Sword{
       else{stuckPose(this);this.Hp.copy(this.H);this.Tp.copy(this.T);this.Hv.set(0,0,0);this.tipVel.set(0,0,0);return;}}
     this.age+=h;if(this.planted)return;if(this.age>6&&this.tipVel.lengthSq()<.01)return;
     if(this.flying&&this.def.kind==='spear'&&this.age>.05){
-      if(this.T.y<.07&&this.axis.y<-.05){this.plant();return;}
+      if(this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07&&this.axis.y<-.05){this.plant();return;}
       // landed flat or butt-first, or ran into something: it drops where it is instead of levering back
-      if(this.H.y<.07||this.T.y<.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
+      if(this.H.y<groundY(this.H.x,this.H.z,this.H.y)+.07||this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
     }
-    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;if(p.y<.04){p.y=.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
+    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
     if(this.flying&&this.def.kind==='spear'&&this.H.y>.1&&this.T.y>.1){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
-    if(this.flying&&(this.age>3||(this.H.y<.08&&this.T.y<.08)||this.age>.15&&this.Hv.length()<2.5&&this.tipVel.length()<2.5))this.flying=false;
+    if(this.flying&&(this.age>3||(this.H.y<groundY(this.H.x,this.H.z,this.H.y)+.08&&this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.08)||this.age>.15&&this.Hv.length()<2.5&&this.tipVel.length()<2.5))this.flying=false;
   }
   // a thrown spear that lands point-first sticks in the ground instead of levering back over its point
   plant(){this.planted=true;this.flying=false;this.T.y=Math.max(this.T.y,.02);this.T.addScaledVector(this.axis,.12);this.H.copy(this.T).addScaledVector(this.axis,-this.len);this.Hp.copy(this.H);this.Tp.copy(this.T);this.Hv.set(0,0,0);this.tipVel.set(0,0,0);
@@ -1387,7 +1453,7 @@ class Sword{
   stepLimp(h,hand){
     this.Hp.copy(this.H);this.H.copy(hand);
     const vx=(this.T.x-this.Tp.x)*.99,vy=(this.T.y-this.Tp.y)*.99,vz=(this.T.z-this.Tp.z)*.99;this.Tp.copy(this.T);this.T.x+=vx;this.T.y+=vy-9.8*h*h;this.T.z+=vz;
-    if(this.T.y<.04)this.T.y=.04;collide(this.T,.02,true);this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
+    {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.04)this.T.y=gy+.04;}collide(this.T,.02,true);this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
   }
   pointAt(t,out){return out.copy(this.H).addScaledVector(this.axis,this.len*t);}
   velAt(t,out){return out.copy(this.Hv).lerp(this.tipVel,t);}
@@ -1488,7 +1554,7 @@ class Fighter{
     for(const k in this.acts){const a=this.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);a.time=Math.random()*a.getClip().duration;}
     this.pos=V(x,0,z);this.vel=V();this.vy=0;this.yaw=Math.random()*6;this.pitch=0;this.hipOff=0;
     this.alive=true;this.downed=false;this.hp=100;this.stamina=100;this.staminaDelay=0;this.bleed=0;
-    this.slideT=0;this.slideReq=false;this.stepHalf=0;this.passT=new Map();this.fists={R:mkArm(),L:mkArm()};this.fistHold={R:false,L:false};this.throwHold=false;this.knocked=0;this.flinchA=0;this.flinchAx=V(1,0,0);this.throwReq=false;this.limpHand=V();this.twist=0;
+    this.slideT=0;this.slideReq=false;this.stepHalf=0;this.passT=new Map();this.fists={R:mkArm(),L:mkArm()};this.fistHold={R:false,L:false};this.throwHold=false;this.throwT=-1;this.knocked=0;this.flinchA=0;this.flinchAx=V(1,0,0);this.throwReq=false;this.limpHand=V();this.twist=0;
     this.bal=V();this.balV=V();this.crouch=false;this.crouchAmt=0;this.kickT=-1;this.kickCd=0;this.kickHit=false;this.kickReq=false;this.jumpReq=false;
     this.limbs={head:{hp:999,sev:false},armL:{hp:45,sev:false},armR:{hp:45,sev:false},legL:{hp:50,sev:false},legR:{hp:50,sev:false}};
     this.detached=new Set();this.severedBones=[];
@@ -1531,10 +1597,13 @@ class Fighter{
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
     const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
+    if(this.sword&&(this.throwHold||this.throwT>=0)){const sg=this.mainArm==='L'?-1:1,sh=this.mainArm==='L'?this.shL:this.shR,k=this.throwT>=0?clamp(this.throwT/THROW_T,0,1):0,e=k*k*(3-2*k);
+      const jv=this.sword.def.kind==='spear';   // a javelin rides above and outside the head so the shaft clears it
+      return out.copy(sh).addScaledVector(u,(jv?.3:.17)+.08*e).addScaledVector(f,-.3+.68*e).addScaledVector(_r,(jv?.14:.05)*sg);}   // wound back above the shoulder, then driven forward and up
     // a jab puts the point on line first and only then drives out along the blade, so it lands point-first instead of chopping down
-    let cz=this.ctrl.z;if(this.thrust&&this.sword&&this.sword.def.kind!=='spear'&&cz>.46){this.jabDir(_wl1);this.frame(f,u);
-      const al=clamp((this.sword.axis.dot(_wl1)-.9)/.08,0,1);this.jabLift=(1-al)*clamp((cz-.46)/.08,0,1)*this.sword.len*.2;cz=.46+(cz-.46)*al;}
-    else{this.jabLift=0;if(!this.thrust)this.jabL=null;}
+    let cz=this.ctrl.z;if(this.thrust&&this.sword&&this.sword.def.kind==='blade'&&cz>.46){_wl1.copy(this.chest).addScaledVector(f,1.5).addScaledVector(u,(this.ctrl.y-.1)*.8+(this.isPlayer||this.remote?.3:0)).sub(this.sword.H).normalize();
+      const al=clamp((this.sword.axis.dot(_wl1)-.95)/.04,0,1);this.jabLift=(1-al)*clamp((cz-.46)/.08,0,1)*this.sword.len*.3;cz=.46+(cz-.46)*al;}
+    else this.jabLift=0;
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz);
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
@@ -1542,29 +1611,32 @@ class Fighter{
     out.addScaledVector(f,slide);
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
+    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'){   // both hands stay on a two-handed haft (a spear's front hand lets the shaft slide through a thrust): the aim is kept where the off hand can reach its grip too
+      const so=this.mainArm==='L'?this.shR:this.shL;_v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length(),rc=this.armLen[0]+this.armLen[1]+.05;
+      if(d>rc)out.addScaledVector(_v,-(d-rc)/d);}
     return out;
   }
-  // a sword jab goes where the point already aims, nudged part way toward the centre line: a small turn, then straight out along the blade
-  // (aiming it all the way to chest height swung the point 60 cm down first: a chop). Fixed in the body frame when the jab starts.
-  jabDir(out){const f=_t2,u=_t3;this.frame(f,u);const s=this.sword;
-    if(!this.jabL){_wl3.copy(this.chest).addScaledVector(f,1.5).addScaledVector(u,(this.ctrl.y-.1)*.8).sub(s.H).normalize();
-      _wl2.copy(s.axis).lerp(_wl3,.3).normalize();this.jabL={f:_wl2.dot(f),u:_wl2.dot(u),r:_wl2.dot(_r)};}
-    const j=this.jabL;return out.copy(f).multiplyScalar(j.f).addScaledVector(u,j.u).addScaledVector(_r,j.r).normalize();}
+  throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
   guideDir(hand,out){
     const f=_t2,u=_t3;this.frame(f,u);
+    if(this.sword&&(this.throwHold||this.throwT>=0)){
+      if(this.sword.def.kind==='spear'){this.throwAim(out);out.y+=.12;this.frame(f,u);return out.normalize();}   // javelin: held overhand, point on the target
+      const k=this.throwT>=0?clamp(this.throwT/THROW_T,0,1):0;out.copy(u).multiplyScalar(.75-.6*k).addScaledVector(f,-.65+1.5*k);return out.normalize();}   // cocked back over the shoulder, whipped through
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
-    if(this.thrust&&this.sword&&this.sword.def.kind!=='spear')return this.jabDir(out);
-    if(this.thrust||(this.sword&&this.sword.def.kind==='spear')){const sp=this.sword&&this.sword.def.kind==='spear';out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)).sub(hand);return out.normalize();}
+    if(this.thrust||(this.sword&&(this.sword.def.kind==='spear'||(this.sword.def.kind==='blade'&&this.pointT>0)))){const sp=this.sword&&this.sword.def.kind==='spear';const hb=!sp&&(this.isPlayer||this.remote)?.3:0;out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)+hb).sub(hand);return out.normalize();}   // a human's sword jab aims at the face, where the guard already points
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
     const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
     const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
-    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:.5);
+    // a human's sword guard holds the point toward the opponent's face (about 25 degrees up), so a jab is a straight poke, not a drop from upright
+    const pg=(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'&&!cm&&hi<.5;
+    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:pg?.36:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:pg?.36:.5);
     return out.normalize();
   }
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.35);}
   // ---------------- sim step
   step(h){
     if(this.ragdoll){this.ragdoll.step(h);
+      if(this.pitT!=null&&this.alive&&PIT&&this.ragdoll.P.Hips&&(this.ragdoll.P.Hips.y<-PIT.d+.7||(this.ragdoll.P.Hips.y<-.4&&simTime-this.pitT>2.5))){this.die(null,'fell into the pit');return;}   // the landing at the bottom of the shaft kills
       if(this.alive&&(this.downed||this.bleed>0)){this.hp-=this.bleed*h;if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.getUp();}
       return;}
@@ -1578,6 +1650,9 @@ class Fighter{
     if(simTime<CD_END){wish.set(0,0,0);run=false;this.commit=false;this.kickReq=this.jumpReq=this.slideReq=this.throwReq=false;}
     const legs=!(this.limbs.legL.sev||this.limbs.legR.sev);
     const exhausted=this.stamina<12;
+    if(PIT&&this.alive&&inPit(this.pos.x,this.pos.z,.18)&&this.pos.y<.05){this.pitFall();return;}   // stepped or shoved over the edge
+    if(PIT&&!this.isPlayer&&!this.remote){const dx=this.pos.x-PIT.x,dz=this.pos.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r+1.3;   // bots keep back from the edge
+      if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     const onGround=this.pos.y<=.001;
     run=run&&!exhausted&&!this.crouch&&onGround;
     let spd=(run?5.4:this.crouch?1.6:3.1)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
@@ -1599,7 +1674,9 @@ class Fighter{
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
-    if(this.throwReq){this.throwReq=false;if(this.sword&&this.mainArm)this.throwWeapon();}
+    // a throw: Q held winds the weapon back over the shoulder; letting go drives the arm through and the weapon leaves that hand
+    if(this.throwReq){this.throwReq=false;if(this.sword&&this.mainArm&&this.throwT<0)this.throwT=0;}
+    if(this.throwT>=0){this.throwT+=h;if(!this.sword||this.ragdoll){this.throwT=-1;}else if(this.throwT>=THROW_T){this.throwWeapon();this.throwT=-1;}}
     // zone
     const dz=Math.hypot(this.pos.x-zone.c.x,this.pos.z-zone.c.z);this.outside=!zone.off&&dz>zone.r;
     if(this.outside){this.hp-=zone.dps*h;this.burn=3.5;if(this.hp<=0){this.die(null,'the ring',null);return;}}
@@ -1645,7 +1722,7 @@ class Fighter{
   }
   // two independent fists: hold to wind up, let go to punch along your view
   stepFists(h){
-    const f=_t2,u=_t3;this.frame(f,u);const reach=this.armLen[0]+this.armLen[1];
+    const f=_t2,u=_t3;this.frame(f,u);const reach=this.armLen[0]+this.armLen[1];this.stoop=false;
     for(const side of ['R','L']){
       const arm=this.fists[side];if(this.limbs[side==='R'?'armR':'armL'].sev)continue;
       const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
@@ -1684,11 +1761,14 @@ class Fighter{
       _g.copy(this.chest).addScaledVector(_r,c.x).addScaledVector(u,c.y).addScaledVector(f,c.z);
       _v.subVectors(_g,sh);if(_v.length()>reach){_v.setLength(reach);_g.copy(sh).add(_v);}
     }
+    (arm.tgtW||(arm.tgtW=V())).copy(_g);
     const str=(this.stamina<12?.6:1)*(this.stagger>0?.5:1);
     const k=held?1300:420,cc=2*Math.sqrt(k)*(held?.7:.95),maxA=(held?520:160)*str;
     _a.subVectors(_g,arm.pos).multiplyScalar(k).addScaledVector(arm.vel,-cc);if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
     arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);
     _v.subVectors(arm.pos,sh);if(_v.length()>reach*1.32){_v.setLength(reach*1.32);arm.pos.copy(sh).add(_v);_v.normalize();const vn=arm.vel.dot(_v);if(vn>0)arm.vel.addScaledVector(_v,-vn);}
+    arm.held=held;if(held&&c.y<-.2)this.stoop=true;   // reaching low bends the body down to it
+    if(grabStep(this,arm,held,h))return;
     arm.cd-=h;const sp=arm.vel.length();
     if(sp>5.5&&!arm.wh){arm.wh=true;sSwing(arm.pos,sp+2,'fist');this.useStamina(2+sp*.4);}if(sp<3)arm.wh=false;
     if(sp>3&&arm.cd<=0){arm.power=clamp((sp-2)/5,.2,1);arm.hit=false;arm.phase='punch';fistCheck(this,arm);if(arm.hit){arm.cd=.28;arm.phase='guard';}else arm.phase='guard';}
@@ -1705,12 +1785,13 @@ class Fighter{
     else{const cp=Math.cos(this.pitch);_e.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
     if(cs>.5)_v.copy(_g).multiplyScalar(1/cs).lerp(_e,.88).normalize();else _v.copy(_e);
     const spin=s.def.kind==='spear'?0:.45;_a.subVectors(s.tipVel,_g).multiplyScalar(spin);if(_a.length()<4&&spin>0)_a.copy(Y_AXIS).multiplyScalar(6);_a.addScaledVector(s.axis,-_a.dot(s.axis));
-    if(s.def.kind==='spear'){_g.copy(this.mainArm==='L'?this.shL:this.shR);_g.y+=.08;s.reset(_g,_v);}   // javelin: thrown overhand from the shoulder
+    if(s.def.kind==='spear'){_g.copy(s.H);s.reset(_g,_v);}   // javelin: leaves the throwing hand point-first along its flight
     if(s.rb){_g.crossVectors(s.axis,_a).multiplyScalar(1/s.len);s.v.copy(_v).multiplyScalar(speed);s.w.copy(_g);s.rb.setLinvel(s.v,true);s.rb.setAngvel(s.w,true);s.setGroup(GR_HELD);}
     else{s.Hp.copy(s.H).addScaledVector(_v,-speed*H).addScaledVector(_a,H*.5);s.Tp.copy(s.T).addScaledVector(_v,-speed*H).addScaledVector(_a,-H*.5);}
     s.flying=true;s.thrower=this;s.age=0;
     if(speed>4)sSwing(s.H,speed+3,s.def.kind);tell(this,speed>6?'Thrown':'Dropped','sm');
   }
+  pitFall(){this.pitT=simTime;tell(this,'Over the edge!','red');_v.set(PIT.x-this.pos.x,0,PIT.z-this.pos.z).normalize().multiplyScalar(1.6).add(this.vel).setY(-1.5);this.knockdown(99,_v.clone(),this.chest.clone());}   // momentum carries them over the lip
   knockdown(t,imp,impP){
     if(!this.alive||this.ragdoll)return;this.knocked=t;sfx(this.armor.body?'fallArmoured':'fall',this.chest,.75,1,.2);this.kickT=-1;this.crouch=false;
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
@@ -1849,7 +1930,7 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03;
-    this.crouchAmt=lerp(this.crouchAmt,this.crouch?1:airborne?.45:0,1-Math.exp(-10*dt));
+    this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop?1:airborne?.45:0,1-Math.exp(-10*dt));
     this.stanceAmt=lerp(this.stanceAmt||0,this.alive&&!this.ragdoll&&this.mainArm&&sp<.8&&!this.crouch&&!airborne?.24:0,1-Math.exp(-6*dt));
     const bend=Math.min(1,this.crouchAmt+this.stanceAmt);
     const kk=this.kickT>=0?Math.sin(clamp(this.kickT/.45,0,1)*Math.PI):0;
@@ -1909,13 +1990,17 @@ class Fighter{
       _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');
       B[main+'ForeArm'].getWorldPosition(_wl1);B[main+'Hand'].getWorldPosition(_wl2);(this.foreF||(this.foreF=V())).subVectors(_wl2,_wl1).normalize();
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
-      if(!offLimb.sev){if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
-        if(_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.05){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
+      if(!offLimb.sev){const one=s.def.kind!=='fist'&&(!twoH(s.def)||this.throwHold||this.throwT>=0);
+        if(one){   // one-handed weapon: the off hand stays up in a loose guarding fist by the chest
+          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);
+          _hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();gripHand(B,offS,_t2,_hv,_r.clone().multiplyScalar(sgn).add(Y_AXIS).normalize(),_t1,this.armLen,1.3);}
+        else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
+        if(!one&&_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.08){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
       s.sync();
     } else if(!this.sword&&this.alive){
       this.fwd(_f);this.right(_r);
       for(const side of ['R','L']){const arm=this.fists[side];if(!arm.init||this.limbs[side==='R'?'armR':'armL'].sev)continue;const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
-        _t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();gripHand(B,side==='R'?'Right':'Left',arm.pos,_hv,Y_AXIS,_t1,this.armLen,1.35);
+        _t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();gripHand(B,side==='R'?'Right':'Left',arm.pos,_hv,Y_AXIS,_t1,this.armLen,arm.held&&!arm.grab&&arm.vel.length()<3?.35:1.35);   // open while reaching, closed to grab or punch
 }
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
@@ -2145,7 +2230,7 @@ function playerLootCandidate(){
 const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','mail',9],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
 function rollLoot(){const tot=LOOT_TABLE.reduce((s,r)=>s+r[2],0);let x=Math.random()*tot;for(const r of LOOT_TABLE){x-=r[2];if(x<=0)return r;}return LOOT_TABLE[0];}
 function spawnMapLoot(n){
-  for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8);}
+  for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2);}
     if(!ok)continue;const [t,id]=rollLoot();if(t==='w')spawnWeaponLoot(WEAPONS[id],x,z);else spawnArmorLoot(ARMOR[id],x,z);}
 }
 
@@ -2434,6 +2519,37 @@ const physLive=[],EV={clash:0,clashGame:0,hit:0,wall:0,thrown:0,bodyTouch:0,last
 let swordId=0;
 function swordShove(s,dir,dv){if(s.rb){s.rb.applyImpulseAtPoint(_pv.copy(dir).multiplyScalar(dv*s.M),s.T,true);}else s.Hv.addScaledVector(dir,dv);}
 function mkArm(){return {phase:'guard',t:0,charge:0,pos:V(),vel:V(),tgt:V(),power:0,hit:false,init:false};}
+// ---- bare-handed grabbing: an open hand brought slowly onto a body closes on it. Moving the hand then pulls or shoves a
+// standing fighter off balance, or drags a body (ragdoll) by that limb. Letting go of the button opens the hand.
+const _gp=new THREE.Vector3();
+function grabStep(A,arm,held,h){
+  if(!held){if(arm.grab){arm.grab=null;}return false;}
+  if(!arm.grab){if(arm.vel.length()<3&&arm.cd<=0&&simTime>=CD_END)grabTry(A,arm);if(!arm.grab)return false;tell(A,'Grabbed','sm');sThud(arm.pos,.25);}
+  const G=arm.grab;
+  // a standing body that falls becomes a ragdoll grab on the nearest point
+  if(G.k==='f'&&(G.B.ragdoll||!fighters.includes(G.B))){const R=G.B.ragdoll;arm.grab=R?grabRag(R,arm.pos):null;if(!arm.grab)return false;}
+  if(arm.grab.k==='f'){const B=G.B;G.bone.updateWorldMatrix(true,false);_gp.copy(G.loc).applyMatrix4(G.bone.matrixWorld);
+    const sh=arm===A.fists.R?A.shR:A.shL;if(_gp.distanceTo(sh)>(A.armLen[0]+A.armLen[1])*1.45||!B.alive){arm.grab=null;return false;}   // they got clear of your reach
+    _v.subVectors(arm.tgtW,_gp);const d=_v.length();
+    _v.y=0;const pull=Math.min(d,1);if(d>1e-4){_v.multiplyScalar(pull/d);
+      B.vel.addScaledVector(_v,30*h);B.balV.addScaledVector(_v,40*h);A.vel.addScaledVector(_v,-10*h);   // the harder you haul, the harder they're dragged off their feet; you feel their weight
+      if(G.bone===B.bones.Head||G.bone===B.bones.Neck)B.balV.addScaledVector(_v,6*h);}
+    arm.pos.copy(_gp);arm.vel.copy(B.vel);return true;}
+  const R=arm.grab.R,P=R.P[arm.grab.n];if(!P||R.dead){arm.grab=null;return false;}
+  _v.subVectors(arm.tgtW,P);const d=_v.length();if(d>.9){arm.grab=null;return false;}
+  _v.multiplyScalar(Math.min(d,.05)/Math.max(d,1e-4));P.add(_v);R.sleep=false;R.age=0;   // drag that limb toward the hand
+  arm.pos.copy(P);arm.vel.set(0,0,0);return true;}
+function grabRag(R,p){let best=null,bd=1e9;for(const n in R.P){const q=R.P[n],dx=q.x-p.x,dz=q.z-p.z,dy=p.y-q.y,hz=dx*dx+dz*dz;
+    // in reach, or lying below the hand (you stoop to take hold of a body on the ground)
+    const ok=q.distanceToSquared(p)<.2*.2||(hz<.3*.3&&dy>-.1&&dy<.75);if(ok&&hz+Math.max(0,dy)*.3<bd){bd=hz+Math.max(0,dy)*.3;best=n;}}return best?{k:'r',R,n:best}:null;}
+function grabTry(A,arm){
+  for(const B of fighters){if(B===A||(B.ragdoll&&B.ragdoll.P.Hips||B.pos).distanceToSquared(A.pos)>4)continue;   // a body lies where it fell, not where it stood
+    if(B.ragdoll){const g=grabRag(B.ragdoll,arm.pos);if(g){arm.grab=g;return;}continue;}
+    if(!B.alive)continue;
+    for(const c of B.caps){if(!c.on)continue;const rr=c.r+.06;if(distPointSeg2(arm.pos,c.a,c.b)>=rr*rr)continue;
+      const bone=B.bones[c.bb]||B.bones[c.ba];if(!bone)continue;bone.updateWorldMatrix(true,false);
+      arm.grab={k:'f',B,bone,loc:arm.pos.clone().applyMatrix4(_m4.copy(bone.matrixWorld).invert())};return;}}
+  for(const d of debris){if(!d.rag||d.rag.P==null)continue;const g=grabRag(d.rag,arm.pos);if(g){arm.grab=g;return;}}}
 function fistCheck(A,arm){
   if(simTime<CD_END)return;
   for(const B of fighters){
@@ -2648,7 +2764,9 @@ function playerInput(f,wish,h){
   const k=input.keys;f.fwd(_f);f.right(_r);
   if(k.KeyW)wish.add(_f);if(k.KeyS)wish.sub(_f);if(k.KeyD)wish.add(_r);if(k.KeyA)wish.sub(_r);
   if(wish.lengthSq()>0)wish.normalize();if(k.KeyS&&!k.KeyW)wish.multiplyScalar(.7);
-  f.commit=!!f.sword&&(input.lmb||f.throwHold);f.thrust=f.ctrl.z>.56;
+  f.commit=!!f.sword&&(input.lmb||f.throwHold||f.throwT>=0);f.thrust=f.ctrl.z>.56&&!!f.sword&&(f.sword.def.kind==='blade'||f.sword.def.kind==='spear');
+  // using the wheel puts a sword in a thrusting stance for a moment, so repeated scrolls poke along the line instead of levelling and lifting the blade each time
+  f.pointT=f.sword&&f.sword.def.kind==='blade'&&f.ctrl.z>.5?.8:Math.max(0,(f.pointT||0)-h);
   if(!input.locked&&state==='playing'){
     f.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);f.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);
     if(input.mx>.9)f.yaw-=1.6*h*(input.mx-.9)*10;if(input.mx<.1)f.yaw+=1.6*h*(.1-input.mx)*10;
@@ -2687,8 +2805,9 @@ addEventListener('mousemove',e=>{
   if(!player.sword){
     if(input.lmb||input.rmb){for(const sd of ['R','L']){if(!(sd==='R'?input.lmb:input.rmb))continue;const a=player.fists[sd];if(!a.c)continue;const sg=sd==='R'?1:-1;
         a.c.x+=dx*.0021;a.c.y-=dy*.0021;
-        if(a.c.x>.5){player.yaw-=(a.c.x-.5)*1.7;a.c.x=.5;}if(a.c.x<-.5){player.yaw-=(a.c.x+.5)*1.7;a.c.x=-.5;}
-        if(a.c.y>.55){player.pitch=clamp(player.pitch+(a.c.y-.55)*1.3,-1.2,.95);a.c.y=.55;}if(a.c.y<-.35){player.pitch=clamp(player.pitch+(a.c.y+.35)*1.3,-1.2,.95);a.c.y=-.35;}}
+        // past the side the body turns after the fist, eased; raising or dropping a fist never tilts the view (reach low to stoop)
+        if(a.c.x>.5){player.turnPush=(player.turnPush||0)+(a.c.x-.5);a.c.x=.5;}if(a.c.x<-.5){player.turnPush=(player.turnPush||0)+(a.c.x+.5);a.c.x=-.5;}
+        a.c.y=clamp(a.c.y,-.6,.55);}
       return;}
     player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
   if(input.rmb){player.yaw-=dx*.0024;player.pitch=clamp(player.pitch-dy*.0022,-1.2,.95);return;}
@@ -2747,7 +2866,7 @@ function startGame(){
   if(NET.mode==='client')return;
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
-  if(MODE!=='br'){paused=false;initAudio();state='playing';if(curMap!=='arena')loadMap('arena');modeStart();
+  if(MODE!=='br'){paused=false;initAudio();state='playing';if(curMap!=='arena'&&curMap!=='pit')loadMap('arena');modeStart();
     document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);requestLock();return;}
   RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';startCountdown();
   if(NET.mode==='host'){NET.ev.length=0;hostSendStart();}
@@ -2782,6 +2901,7 @@ function buildMinimap(){
   const c=mkCanvas(600,600),g=c.getContext('2d');const k=600/(MAP*2),X=x=>(x+MAP)*k;
   g.fillStyle='#3b3a24';g.fillRect(0,0,600,600);
   speckle(g,600,600,600,['#46452c','#33321f'],3,14,.6);
+  if(PIT){g.fillStyle='#0d0b09';g.beginPath();g.arc(X(PIT.x),X(PIT.z),PIT.r*k,0,7);g.fill();g.fillStyle='#8a6a40';g.fillRect(X(PIT.x-PIT.r-.4),X(PIT.z-PIT.bw),(PIT.r*2+.8)*k,PIT.bw*2*k);}
   if(curMap==='village'){g.fillStyle='#8a7a58';g.fillRect(X(-3.7),0,7.4*k,600);g.fillRect(0,X(-3.7),600,7.4*k);
     for(const s of [-36,36]){g.fillRect(X(s-3.2),X(-39),6.4*k,78*k);g.fillRect(X(-39),X(s-3.2),78*k,6.4*k);}
     g.beginPath();g.arc(X(0),X(0),16*k,0,7);g.fill();}
@@ -2920,27 +3040,15 @@ function frame(now){
   else if(!player){attractT+=dt*.09;camera.position.set(Math.cos(attractT)*13,5.5,Math.sin(attractT)*13);camera.lookAt(0,1.2,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
   else if(player){
     shakeAmt*=Math.exp(-7*dt);kickStep(Math.min(dt,.05));
-    const key=player.ragdoll?'r':camMode;
-    if(camOf!==player){camOf=player;camPivOn=false;camBlend=false;camDistC=1;}
-    else if(key!==camKey&&key!=='fp'&&(key==='r'||camKey==='r')){camBlend=true;if(key==='r'){const hp0=player.ragdoll.P.Hips||player.pos;camOrbA=Math.atan2(camera.position.z-hp0.z,camera.position.x-hp0.x);}else camPivOn=false;}
-    else if(key!==camKey){camBlend=false;camPivOn=false;}   // first person, or a view switch: snap straight there, never drift through the body
-    camKey=key;const st=now*.001,sa=shakeAmt;
-    if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));_t1.y=camY;
-      camSet(_t1,camEuler(player.pitch+KICK.p+shk(st,0)*sa*.012,player.yaw+Math.PI+KICK.y+shk(st,3)*sa*.012,KICK.r+shk(st,5)*sa*.008),dt);}
+    if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
+      camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
     else if(!player.ragdoll){ // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
-      _t2.set(player.pos.x+player.vel.x*acc,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z+player.vel.z*acc);
-      if(!camPivOn||camPiv.distanceToSquared(_t2)>4){camPiv.copy(_t2);camY=_t2.y;camPivOn=true;}
-      const kp=1-Math.exp(-22*dt);camPiv.x=lerp(camPiv.x,_t2.x,kp);camPiv.z=lerp(camPiv.z,_t2.z,kp);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));
-      _t2.set(camPiv.x,camY,camPiv.z);
+      _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
-      let fr=1;for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){fr=Math.max(0,(i-1.5)/14);break;}}
-      camDistC=fr<camDistC?fr:lerp(camDistC,fr,1-Math.exp(-4*dt));   // pull in at once so a wall never cuts the view, ease back out
-      _t3.lerpVectors(_t2,_t3,camDistC);
-      camSet(_t3,camEuler(player.pitch+CAM_TP.tilt+KICK.p*.7+shk(st,0)*sa*.01,player.yaw+Math.PI+KICK.y*.7+shk(st,3)*sa*.01,KICK.r*.7),dt);}
-    else{const hp=player.ragdoll.P.Hips||player.pos;if(!player.alive)camOrbA+=dt*.25;const rr=player.alive?2.4:3.2;
-      _t1.set(hp.x+Math.cos(camOrbA)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(camOrbA)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));
-      _t2.set(hp.x,hp.y+.3,hp.z);_camM.lookAt(camera.position,_t2,_camUp);_camQ.setFromRotationMatrix(_camM);camera.quaternion.slerp(_camQ,1-Math.exp(-6*dt));}
+      for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
+      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
+    else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
@@ -3037,6 +3145,7 @@ function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roste
 function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
 // put entrants into the arena; kit = [weapon, armor]
 function spawnEntrant(en,x,z,kit,skill){
+  if(PIT){let dx=x-PIT.x,dz=z-PIT.z,d=Math.hypot(dx,dz);const m=PIT.r+2;if(d<m){if(d<1e-3){dx=0;dz=-1;d=1;}x=PIT.x+dx/d*m;z=PIT.z+dz/d*m;}}   // the Pit: start clear of the edge
   const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look});
   if(kit[0]==='fists'){f.sword.dispose();f.sword=null;f.giveFists();}
   if(en.ctl&&en.ctl!=='me'){f.remote=en.ctl;en.ctl.f=f;}
@@ -3228,8 +3337,10 @@ function remoteInput(f,wish,h){
   if(k&1)wish.add(_f);if(k&2)wish.sub(_f);if(k&4)wish.add(_r);if(k&8)wish.sub(_r);if(wish.lengthSq()>0)wish.normalize();if((k&2)&&!(k&1))wish.multiplyScalar(.7);
   const n=v=>Number.isFinite(v)?v:0;
   f.yaw=n(d.yaw);f.pitch=clamp(n(d.pitch),-1.2,.95);f.ctrl.x=clamp(n(d.cx),-.5,.5);f.ctrl.y=clamp(n(d.cy),-.46,.56);f.ctrl.z=clamp(n(d.cz),.12,.7);
-  for(const sd of ['R','L']){const a=f.fists[sd],c=d['f'+sd];if(a.c&&c){a.c.x=clamp(n(c.x),-.5,.5);a.c.y=clamp(n(c.y),-.35,.55);a.c.z=clamp(n(c.z),.12,.7);}}
-  f.commit=!!f.sword&&(!!(k&32)||f.throwHold);f.thrust=f.ctrl.z>.56;
+  for(const sd of ['R','L']){const a=f.fists[sd],c=d['f'+sd];if(a.c&&c){a.c.x=clamp(n(c.x),-.5,.5);a.c.y=clamp(n(c.y),-.6,.55);a.c.z=clamp(n(c.z),.12,.7);}}
+  f.commit=!!f.sword&&(!!(k&32)||f.throwHold||f.throwT>=0);f.thrust=f.ctrl.z>.56&&!!f.sword&&(f.sword.def.kind==='blade'||f.sword.def.kind==='spear');
+  // using the wheel puts a sword in a thrusting stance for a moment, so repeated scrolls poke along the line instead of levelling and lifting the blade each time
+  f.pointT=f.sword&&f.sword.def.kind==='blade'&&f.ctrl.z>.5?.8:Math.max(0,(f.pointT||0)-h);
   return !!(k&16);
 }
 const ARMOR_SLOTS=['head','body','arms','legs'];
@@ -3237,7 +3348,7 @@ function netSnap(){
   const z=zone;
   const S={t:'s',cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
-    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
+    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
     if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
