@@ -182,7 +182,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     </div>
     <div class="maps" role="radiogroup" aria-label="Map">
       <button class="map on" data-map="village" role="radio" aria-checked="true"><b>Bloodmoor village</b><span>Dusk · streets, alleys, 12 fighters</span></button>
-      <button class="map" data-map="arena" role="radio" aria-checked="false"><b>The Arena</b><span>Midday · sand pit, crowd · duels, tournament and gauntlet are fought here</span></button>
+      <button class="map" data-map="arena" role="radio" aria-checked="false"><b>The Yard</b><span>Midday · walled castle yard, fenced ring · duels, tournament and gauntlet are fought here</span></button>
       <button class="map" data-map="pit" role="radio" aria-checked="false"><b>The Pit</b><span>Midday · walled yard round a deep shaft · knock them in</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
@@ -205,10 +205,7 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
     <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
     <div class="frow">Hose <div class="sw" data-k="2" role="radiogroup" aria-label="Hose colour"></div></div>
     <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
-    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Peasant</button><button data-v="2" role="radio">Ranger</button></div></div>
-    <div class="frow">Hair <div class="seg" data-look="h" role="radiogroup" aria-label="Hair"><button data-v="0" role="radio">Bald</button><button data-v="1" role="radio">Short</button><button data-v="2" role="radio">Parted</button><button data-v="3" role="radio">Long</button></div></div>
-    <div class="frow">Beard <div class="seg" data-look="bd" role="radiogroup" aria-label="Beard"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Beard</button></div></div>
-    <div class="frow">Hue <div class="sw" data-look="hc" role="radiogroup" aria-label="Hair colour"></div></div>
+    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Braies</button><button data-v="1" role="radio">Linen</button><button data-v="2" role="radio">Tunic</button></div></div>
     <div class="frow">Skin <div class="sw" data-look="sk" role="radiogroup" aria-label="Skin tone"></div></div>
   </aside>
 </div>
@@ -273,6 +270,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 // ================================================================ utils
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
@@ -283,7 +281,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=38;
+const BUILD=39;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -377,6 +375,43 @@ function radialCanvas(stops,w=128,h=128){const c=mkCanvas(w,h),g=c.getContext('2
 function flameCanvas(){const c=mkCanvas(64,128),g=c.getContext('2d');g.translate(32,92);g.scale(1,2.6);const gr=g.createRadialGradient(0,0,0,0,0,30);gr.addColorStop(0,'rgba(255,250,225,1)');gr.addColorStop(.25,'rgba(255,200,90,1)');gr.addColorStop(.55,'rgba(255,100,25,.6)');gr.addColorStop(1,'rgba(255,60,10,0)');g.fillStyle=gr;g.beginPath();g.arc(0,0,30,0,7);g.fill();return c;}
 function clothCanvas(a,b){const c=mkCanvas(128,128),g=c.getContext('2d');for(let x=0;x<128;x+=32){g.fillStyle=a;g.fillRect(x,0,16,128);g.fillStyle=b;g.fillRect(x+16,0,16,128);}speckle(g,128,128,200,['#000'],1,4,.15);return c;}
 
+// ---- detailed surfaces, after Half Sword's yard: tileable noise, shaded pebbles and limestone blocks, with real normal maps
+function vnoise(w,h,cell,seed){const gw=Math.max(1,Math.round(w/cell)),gh=Math.max(1,Math.round(h/cell));let s=(seed*9301+49297)%233280+1;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
+  const G=new Float32Array(gw*gh);for(let i=0;i<G.length;i++)G[i]=rnd();const out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){const fy=y/h*gh,y0=Math.floor(fy),ty=fy-y0,sy=ty*ty*(3-2*ty),ya=y0%gh,yb=(y0+1)%gh;
+    for(let x=0;x<w;x++){const fx=x/w*gw,x0=Math.floor(fx),tx=fx-x0,sx=tx*tx*(3-2*tx),xa=x0%gw,xb=(x0+1)%gw;const a=G[ya*gw+xa],b=G[ya*gw+xb],c=G[yb*gw+xa],d=G[yb*gw+xb];out[y*w+x]=a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;}}return out;}
+function fbm(w,h,base,oct,seed){const o=new Float32Array(w*h);let amp=1,tot=0,cell=base;for(let k=0;k<oct;k++){const n=vnoise(w,h,cell,seed+k*17);for(let i=0;i<o.length;i++)o[i]+=n[i]*amp;tot+=amp;amp*=.5;cell=Math.max(2,cell/2);}for(let i=0;i<o.length;i++)o[i]/=tot;return o;}
+function normalCanvas(H,w,h,str){const c=mkCanvas(w,h),g=c.getContext('2d'),im=g.createImageData(w,h),d=im.data;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const l=H[y*w+(x-1+w)%w],r=H[y*w+(x+1)%w],u=H[((y-1+h)%h)*w+x],dn=H[((y+1)%h)*w+x];const nx=(l-r)*str,ny=(dn-u)*str,il=1/Math.hypot(nx,ny,1),i=(y*w+x)*4;
+    d[i]=(nx*il*.5+.5)*255;d[i+1]=(ny*il*.5+.5)*255;d[i+2]=(il*.5+.5)*255;d[i+3]=255;}g.putImageData(im,0,0);return c;}
+function rgbCanvas(A,w,h){const c=mkCanvas(w,h),g=c.getContext('2d'),im=g.createImageData(w,h),d=im.data;for(let i=0;i<w*h;i++){d[i*4]=A[i*3];d[i*4+1]=A[i*3+1];d[i*4+2]=A[i*3+2];d[i*4+3]=255;}g.putImageData(im,0,0);return c;}
+function lumHeight(c){const w=c.width,h=c.height,d=c.getContext('2d').getImageData(0,0,w,h).data,H=new Float32Array(w*h);for(let i=0;i<w*h;i++)H[i]=(d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11)/255;return H;}
+function gravelMaps(W,P){const H=fbm(W,W,160,6,P.seed),n2=fbm(W,W,40,4,P.seed+5),A=new Float32Array(W*W*3);
+  for(let i=0;i<W*W;i++){const v=.78+.55*(H[i]-.5)+.35*(n2[i]-.5);A[i*3]=P.base[0]*v;A[i*3+1]=P.base[1]*v;A[i*3+2]=P.base[2]*v;H[i]=H[i]*.25+n2[i]*.08;}
+  let s=P.seed*7+3;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
+  const M=fbm(W,W,220,3,P.seed+9);for(let k=0;k<P.n;k++){const cx=Math.floor(rnd()*W),cy=Math.floor(rnd()*W);if(M[cy*W+cx]<P.patch+rnd()*.12)continue;const rad=P.rmin+Math.pow(rnd(),2.8)*(P.rmax-P.rmin),e=.55+rnd()*.45,an=rnd()*3.14,ca=Math.cos(an),sa=Math.sin(an),col=P.peb[(rnd()*P.peb.length)|0],br=.72+rnd()*.5,R=Math.ceil(rad*1.45);
+    for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const u=(dx*ca+dy*sa)/rad,v=(-dx*sa+dy*ca)/(rad*e),q=u*u+v*v;if(q>2)continue;const x=((cx+dx)%W+W)%W,y=((cy+dy)%W+W)%W,i=y*W+x;
+      if(q>1){const sh=(2-q)*.3;A[i*3]*=1-sh;A[i*3+1]*=1-sh;A[i*3+2]*=1-sh;continue;}   // a little contact shadow round each stone
+      const hg=.3+Math.sqrt(1-q)*rad/14;if(hg>H[i]){H[i]=hg;const sh=br*(.62+.38*Math.sqrt(1-q));A[i*3]=col[0]*sh;A[i*3+1]=col[1]*sh;A[i*3+2]=col[2]*sh;}}}
+  return {map:rgbCanvas(A,W,W),normal:normalCanvas(H,W,W,P.ns)};}
+function limestoneMaps(W){const N=fbm(W,W,64,5,21),N2=fbm(W,W,12,3,33),H=new Float32Array(W*W),A=new Float32Array(W*W*3);let s=11;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
+  const P2=fbm(W,W,180,4,51);const rows=7,rh=[];let tot=0;for(let r=0;r<rows;r++){const v=.75+rnd()*.5;rh.push(v);tot+=v;}let y0=0;const gap=5;
+  for(let r=0;r<rows;r++){const hgt=r===rows-1?W-y0:Math.round(rh[r]/tot*W);let x=Math.floor(rnd()*W);const xEnd=x+W;
+    while(x<xEnd){const bw=Math.min(Math.round(110+rnd()*170),xEnd-x),t=.82+rnd()*.28,warm=rnd()*.08;
+      for(let yy=0;yy<hgt;yy++)for(let xx=0;xx<bw;xx++){const X=(x+xx)%W,Y=y0+yy,i=Y*W+X,e=Math.min(xx,bw-1-xx,yy,hgt-1-yy)-gap/2;
+        if(e<0){H[i]=.05+N2[i]*.05;A[i*3]=138;A[i*3+1]=128;A[i*3+2]=112;continue;}   // sunk mortar joint
+        const bev=Math.min(1,e/7),n=N[i]-.5,pit=N2[i]<.18?.5:1;H[i]=.25+.4*bev+.25*n+(pit<1?-.12:0);
+        const c=t*(.9+.35*n)*(.86+.14*bev)*pit;A[i*3]=Math.min(255,222*c*(1+warm));A[i*3+1]=Math.min(255,208*c);A[i*3+2]=Math.min(255,184*c*(1-warm));}
+      x+=bw;}y0+=hgt;}
+  for(let i=0;i<W*W;i++){const pl=P2[i];if(pl>.56){const k=Math.min(1,(pl-.56)*9),n=N[i]-.5;H[i]=H[i]*(1-k)+(.62+.12*n)*k;   // old lime plaster skimmed over the stones
+      A[i*3]=A[i*3]*(1-k)+(230+28*n)*k;A[i*3+1]=A[i*3+1]*(1-k)+(220+26*n)*k;A[i*3+2]=A[i*3+2]*(1-k)+(198+24*n)*k;}}
+  return {map:rgbCanvas(A,W,W),normal:normalCanvas(H,W,W,6)};}
+// sun-bleached fence timber: pale grey-tan with long grain, checks and knots
+function paleWoodMaps(W){const G=fbm(W,W/8,64,4,71),N=fbm(W,W,48,3,72),A=new Float32Array(W*W*3),H=new Float32Array(W*W);
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){const i=y*W+x,g=G[Math.floor(y/8)*W+x],gr=Math.sin(x*.21+g*14)*.5+.5,n=N[i]-.5,ck=Math.abs(Math.sin(x*.05+g*30))>.985?.55:1;
+    const v=(.84+.12*gr+.18*n)*ck;A[i*3]=196*v;A[i*3+1]=180*v;A[i*3+2]=152*v;H[i]=.5+.18*gr+.2*n-(ck<1?.25:0);}
+  return {map:rgbCanvas(A,W,W),normal:normalCanvas(H,W,W,3.5)};}
+function addNormal(t,c,str){const n=tex(normalCanvas(lumHeight(c),c.width,c.height,str),false);return n;}
 const TX={};
 for(let v=0;v<3;v++){const c=plasterCanvas(v);TX['plaster'+v]=tex(c);TX['plaster'+v+'b']=tex(c,false);}
 {const c=stoneCanvas();TX.stone=tex(c);TX.stoneb=tex(c,false);}
@@ -716,8 +751,15 @@ function sandCanvas(){const c=mkCanvas(512,512),g=c.getContext('2d');g.fillStyle
   g.strokeStyle='rgba(90,70,45,.16)';g.lineWidth=2;for(let i=0;i<40;i++){g.beginPath();const x=Math.random()*512,y=Math.random()*512;g.moveTo(x,y);g.quadraticCurveTo(x+rand(-60,60),y+rand(-60,60),x+rand(-120,120),y+rand(-120,120));g.stroke();}return c;}
 {const c=sandCanvas();TX.sand=tex(c);TX.sandb=tex(c,false);}
 MATS.sand=std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1});
+{const g=gravelMaps(1024,{seed:4,base:[206,192,168],n:16000,patch:.5,rmin:1,rmax:8,ns:4,peb:[[186,178,164],[160,152,140],[208,200,186],[142,134,122],[176,160,136],[194,186,172]]});TX.gravel=tex(g.map);TX.graveln=tex(g.normal,false);}
+{const l=limestoneMaps(1024);TX.lime=tex(l.map);TX.limen=tex(l.normal,false);}
+MATS.gravel=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.2,1.2),roughness:1});
+MATS.lime=std({map:TX.lime,normalMap:TX.limen,normalScale:new THREE.Vector2(1.1,1.1),roughness:.95,side:THREE.DoubleSide});
+MATS.limeDark=std({map:TX.lime,normalMap:TX.limen,color:0x8d8272,roughness:.95,side:THREE.DoubleSide});
 MATS.stoneLight=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xe8d9bc,roughness:.95,side:THREE.DoubleSide});
 MATS.woodLight=std({map:TX.wood,bumpMap:TX.woodb,bumpScale:1.5,color:0xd6b08a,roughness:.85});
+{const w=paleWoodMaps(512);TX.palewood=tex(w.map);TX.palewoodn=tex(w.normal,false);}
+MATS.woodPale=std({map:TX.palewood,normalMap:TX.palewoodn,roughness:.92});   // weathered fence timber
 let crowd=null;const crowdU={uTime:{value:0},uCheer:{value:0}};
 function scaleUV(g,su,sv){const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv);return g;}
 const tang=a=>-a-Math.PI/2, faceIn=a=>Math.atan2(-Math.cos(a),-Math.sin(a));
@@ -755,29 +797,63 @@ function buildArena(){
 // ================================================================ the pit (walled yard round a deep shaft, after Half Sword's)
 function buildPit(){
   const W=15,wallH=4.2;PIT={x:0,z:0,r:2.6,d:6,bw:.62};
-  {const gg=new THREE.RingGeometry(PIT.r,110,96,8);gg.rotateX(-Math.PI/2);scaleUV(gg,55,55);const g=new THREE.Mesh(gg,std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1,color:0xcfc6b4}));g.receiveShadow=true;world.add(g);}
+  {const gg=new THREE.RingGeometry(PIT.r,110,96,8);gg.rotateX(-Math.PI/2);scaleUV(gg,220/6.5,220/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
   // the shaft: stone walls going down into the dark, a dirt floor, and a low stone rim broken where the bridge crosses
-  addGeo('stoneLight',scaleUV(new THREE.CylinderGeometry(PIT.r,PIT.r,PIT.d,48,1,true),PIT.r*6.283/2.5,PIT.d/2.5).translate(0,-PIT.d/2,0),T(PIT.x,0,PIT.z));
+  addGeo('lime',scaleUV(new THREE.CylinderGeometry(PIT.r,PIT.r,PIT.d,48,1,true),PIT.r*6.283/2.5,PIT.d/2.5).translate(0,-PIT.d/2,0),T(PIT.x,0,PIT.z));
   {const fg=new THREE.CircleGeometry(PIT.r,40);fg.rotateX(-Math.PI/2);scaleUV(fg,3,3);const m=new THREE.Mesh(fg,std({map:TX.ground,roughness:1,color:0x4a3f33}));m.position.set(PIT.x,-PIT.d+.01,PIT.z);m.receiveShadow=true;world.add(m);}
   const gap=Math.asin(Math.min(.95,(PIT.bw+.08)/PIT.r)),prof=[[PIT.r,-.25],[PIT.r,.14],[PIT.r+.18,.2],[PIT.r+.4,.14],[PIT.r+.42,0]].map(([x,y])=>new THREE.Vector2(x,y));
-  for(const st of [Math.PI/2+gap,Math.PI*1.5+gap])addGeo('stoneLight',scaleUV(new THREE.LatheGeometry(prof,30,st,Math.PI-2*gap),8,1),T(PIT.x,0,PIT.z));
+  for(const st of [Math.PI/2+gap,Math.PI*1.5+gap])addGeo('lime',scaleUV(new THREE.LatheGeometry(prof,30,st,Math.PI-2*gap),8,1),T(PIT.x,0,PIT.z));
   // the plank bridge across, on two iron-banded beams
   {const L=PIT.r*2+.7;for(const sz of [-1,1])addGeo('wood',boxUV(L,.16,.12,1),T(PIT.x,-.1,PIT.z+sz*(PIT.bw-.08)));
-    for(let k=0;k<Math.round(L/.19);k++)addGeo('woodLight',boxUV(.17,.06,2*PIT.bw,1),T(PIT.x-L/2+.1+k*.19,-.03,PIT.z));
+    for(let k=0;k<Math.round(L/.19);k++)addGeo('woodPale',boxUV(.17,.06,2*PIT.bw,1),T(PIT.x-L/2+.1+k*.19,-.03,PIT.z));
     for(const sx of [-1,1])addGeo('iron',boxUV(.06,.07,2*PIT.bw+.04,1),T(PIT.x+sx*(PIT.r-.25),-.02,PIT.z));}
   // the yard walls, with a gate, and the wooden fences inside them
   for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
-    addGeo('stoneLight',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
-    for(let k=-7;k<=7;k++){const o=k*len/15.5;addGeo('stoneLight',boxUV(.9,.6,.95,1),T(x+(ry?0:o),wallH+.3,z+(ry?o:0),ry));}}
+    addGeo('lime',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
+    for(let k=-7;k<=7;k++){const o=k*len/15.5;addGeo('lime',boxUV(.9,.6,.95,1),T(x+(ry?0:o),wallH+.3,z+(ry?o:0),ry));}}
   addBox(-W-1,W+1,W,W+1.2,wallH);addBox(-W-1,W+1,-W-1.2,-W,wallH);addBox(W,W+1.2,-W-1,W+1,wallH);addBox(-W-1.2,-W,-W-1,W+1,wallH);
   addGeo('wood',boxUV(3.2,3.3,.25,1.5),T(0,1.65,W-.05));for(const y of [.8,2.5])addGeo('iron',boxUV(3.3,.12,.32,1),T(0,y,W-.05));
   const fence=(x0,z0,x1,z1)=>{const L=Math.hypot(x1-x0,z1-z0),ry=-Math.atan2(z1-z0,x1-x0),n=Math.max(1,Math.round(L/2.2));
-    for(let k=0;k<=n;k++){const t=k/n;addGeo('woodLight',boxUV(.14,1.25,.14,1),T(x0+(x1-x0)*t,.62,z0+(z1-z0)*t));}
-    for(const y of [.45,1.05])addGeo('woodLight',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));};
+    for(let k=0;k<=n;k++){const t=k/n;addGeo('woodPale',boxUV(.14,1.25,.14,1),T(x0+(x1-x0)*t,.62,z0+(z1-z0)*t));}
+    for(const y of [.45,1.05])addGeo('woodPale',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));};
   const F=W-1.6;fence(-F,F,-2.4,F);fence(2.4,F,F,F);fence(-F,-F,F,-F);fence(-F,-F,-F,F);fence(F,-F,F,F);
   for(const [x,z] of [[-W+1.6,-W+1.6],[W-1.6,-W+1.6],[-W+1.6,W-1.6],[W-1.6,W-1.6]])brazier(x,z);
   barrel(-W+.9,4);barrel(-W+.9,4.8);crate(W-.9,-5);crate(W-.9,-4.1,.7);hay(-6,-W+1);
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  addMountains(0x8d99ae,0xa9b4c6);
+  flushBatch();
+}
+// ================================================================ the yard (a walled castle yard with a fenced ring, after Half Sword's)
+function hsFence(x0,z0,x1,z1,out,collide=true){   // pale timber fence: posts, two rails and a raking brace on the outer side of each post
+  const L=Math.hypot(x1-x0,z1-z0),dx=(x1-x0)/L,dz=(z1-z0)/L,ry=-Math.atan2(dz,dx),n=Math.max(1,Math.round(L/2.4));
+  for(let k=0;k<=n;k++){const t=k/n,x=x0+(x1-x0)*t,z=z0+(z1-z0)*t;addGeo('woodPale',boxUV(.16,1.35,.16,1),T(x,.67,z));
+    addGeo('woodPale',boxUV(.12,1.25,.12,1),T(x+out[0]*.38,.5,z+out[1]*.38,Math.atan2(out[0],out[1]),.58));}   // the raking brace
+  for(const y of [.5,1.12])addGeo('woodPale',boxUV(L+.2,.13,.09,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));
+  addGeo('woodPale',boxUV(L+.3,.07,.22,1.5),T((x0+x1)/2,1.36,(z0+z1)/2,ry));
+  if(collide){const c=Math.abs(dx),sn=Math.abs(dz);addBox(Math.min(x0,x1)-.12-sn*.0,Math.max(x0,x1)+.12,Math.min(z0,z1)-.12,Math.max(z0,z1)+.12,1.2);}}
+function buildYard(){
+  const W=18,F=13.5,wallH=7.5;
+  {const gg=new THREE.PlaneGeometry(170,170);gg.rotateX(-Math.PI/2);scaleUV(gg,170/6.5,170/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
+  // high limestone curtain walls with a crenellated top and a timber gallery along the inside, square towers at the corners
+  for(const [x,z,ry,sx,sz] of [[0,W,0,0,1],[0,-W,0,0,-1],[W,0,Math.PI/2,1,0],[-W,0,Math.PI/2,-1,0]]){
+    addGeo('lime',boxUV(2*W+2,wallH,1.6,6),T(x,wallH/2,z,ry));
+    for(let k=-W+1;k<=W-1;k+=1.6){const px=ry?x+sx*.55:k,pz=ry?k:z+sz*.55;addGeo('lime',boxUV(.85,1,.5,1.5),T(px,wallH+.5,pz,ry));}
+    const gx=x-sx*1.35,gz=z-sz*1.35;addGeo('wood',boxUV(2*W-2,.14,1.3,1.5),T(gx,wallH-1.5,gz,ry));
+    addGeo('wood',boxUV(2*W-2,.1,.08,1.5),T(gx-sx*.6,wallH-.55,gz-sz*.6,ry));
+    for(let k=-W+2;k<=W-2;k+=2.2){const px=ry?gx-sx*.6:k,pz=ry?k:gz-sz*.6;addGeo('wood',boxUV(.12,2.4,.12,1),T(px,wallH-1.5+.2,pz));addGeo('wood',boxUV(.1,.1,1.5,1),T(ry?gx:k,wallH-1.62,ry?k:gz,ry));}
+    addGeo('tile',boxUV(2*W-2,.08,1.9,2),T(gx-sx*.2,wallH+.55,gz-sz*.2,ry,ry?0:sz*.42,ry?-sx*.42:0));}
+  addBox(-W-1,W+1,W-.8,W+1,wallH);addBox(-W-1,W+1,-W-1,-W+.8,wallH);addBox(W-.8,W+1,-W-1,W+1,wallH);addBox(-W-1,-W+.8,-W-1,W+1,wallH);
+  for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
+  // the gatehouse in the north wall: an iron-banded door under a little tiled roof
+  addGeo('wood',boxUV(3.6,4.2,.3,1.5),T(0,2.1,W-.95));for(const y of [.9,2.1,3.3])addGeo('iron',boxUV(3.7,.14,.36,1),T(0,y,W-.95));
+  addGeo('lime',boxUV(5.2,1.1,1.2,1.5),T(0,4.75,W-1.1));for(const sd of [-1,1])addGeo('tile',boxUV(5.8,.1,1.6,2),T(0,5.65,W-1.55+sd*.0-.3,0,.5));
+  // heraldic banners hanging from the north gallery
+  const cl=['cloth1','cloth2','cloth3'];for(let i=0;i<12;i++){const x=-W+3.2+i*(2*W-6.4)/11;if(Math.abs(x)<3)continue;addGeo(cl[i%3],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.05,W-2.05,Math.PI));}
+  // the fenced ring the fights happen in, open on the south side
+  hsFence(-F,F,F,F,[0,1]);hsFence(F,F,F,-F,[1,0]);hsFence(-F,-F,-F,F,[-1,0]);hsFence(-F,-F,-2,-F,[0,-1]);hsFence(2,-F,F,-F,[0,-1]);
+  // odds and ends between fence and wall
+  for(const [x,z] of [[-W+2.4,6],[-W+2.4,6.8],[W-2.4,-7],[-6,-W+2.3]])barrel(x,z);crate(W-2.3,5);crate(W-2.3,5.9,.7);hay(5,-W+2.4);hay(6.3,-W+2.2);
+  for(const [x,z] of [[-F+1,-F+1],[F-1,-F+1],[-F+1,F-1],[F-1,F-1]])brazier(x,z);
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
 }
@@ -800,18 +876,20 @@ function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=
 const LIGHTS={
   dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xc4bba8,dens:.0075,top:0x4f74a8,mid:0x93aac6,hor:0xdcd0b8,glow:0xfff0cc,glowDir:[.35,.55,-.75],stars:0,hs:0xcfdcf0,hg:0x7a6748,hi:1.15,sun:0xfff0d8,si:2.7,dir:[.4,.78,-.48],moon:false,exp:.92,cool:.2,halo:.07,
+  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x9a8466,hi:.95,sun:0xffe2b6,si:3.4,dir:[.5,.62,-.6],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
-  arena:{name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  arena:{name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
   pit:{name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
 function applyLighting(k){
-  const L=LIGHTS[k];scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;scene.background.setHex(L.fog);
+  const L=LIGHTS[k];
+  {const r=L.shR||32,m=L.shMap||2048;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.updateProjectionMatrix();   // a tight, fine shadow map where the fighting is
+    if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;scene.background.setHex(L.fog);
   const u=sky.material.uniforms;u.top.value.setHex(L.top);u.mid.value.setHex(L.mid);u.hor.value.setHex(L.hor);u.glowCol.value.setHex(L.glow);u.glowDir.value.set(...L.glowDir).normalize();u.stars.value=L.stars;
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
   renderer.toneMappingExposure=L.exp;scene.environment=L.envTex;grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
@@ -1007,7 +1085,7 @@ function outfitMaterial(pal,dark){
   return m;
 }
 // ================================================================ looks
-// Bodies, outfits and hair are Quaternius CC0 models rebound to the game skeleton (fighters.json). A look picks the
+// (Older bodies: Quaternius models rebound to the game skeleton, kept for reference; the game now dresses the X Bot below.) A look picks the
 // outfit, hair, beard and tones; team colours dye the undyed cloth (and the shorts on a bare-chested fighter).
 const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_Parted','Hair_Long'],
   hairCol:[[.16,.13,.11],[.42,.27,.16],[1.05,.86,.55],[.85,.36,.18],[1,1,1]],hairSw:['#2a221d','#5e3d26','#c7a46a','#9a4a26','#b9b5ad'],
@@ -1038,8 +1116,43 @@ function tintMaterial(m,mode,pal,mats){
     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.85,'+mail+');');};
   m.customProgramCacheKey=()=>'bm-tint';
 }
+// ---- Half Sword-style fighters: the X Bot mannequin (realistic proportions) in smooth skin, with a baggy linen shirt and
+// braies or hose grown out of the body mesh itself. Outfits: 0 bare-chested (braies), 1 linen shirt, 2 dyed tunic and hose.
+const HS_LOOK={outfits:['braies','linen shirt','tunic and hose']};
+let HSC=null;   // cached cloth geometry, built once from the first body
+function linenCanvas(){const W=256,N=fbm(W,W,32,4,81),A=new Float32Array(W*W*3),H=new Float32Array(W*W);
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){const i=y*W+x,wv=(Math.sin(x*1.6)*Math.sin(y*1.6)>0?1:.95),n=N[i]-.5,v=(.9+.14*n)*wv;A[i*3]=232*v;A[i*3+1]=222*v;A[i*3+2]=200*v;H[i]=.5+.25*wv+.3*n;}
+  return {map:rgbCanvas(A,W,W),normal:normalCanvas(H,W,W,2.5)};}
+const LINEN=(()=>{const l=linenCanvas();const m=tex(l.map),n=tex(l.normal,false);m.repeat.set(22,22);n.repeat.set(22,22);return {m,n};})();
+function hsCloth(body){
+  if(HSC)return HSC;const src=body.geometry,pos=src.attributes.position,nor=src.attributes.normal,si=src.attributes.skinIndex,sw=src.attributes.skinWeight,idx=src.index;
+  const bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
+  const wsum=(v,set)=>{let s=0;for(let k=0;k<4;k++)if(set.has(si.getComponent(v,k)))s+=sw.getComponent(v,k);return s;};
+  const S=names=>new Set(names.map(n=>bi[n]).filter(i=>i!==undefined));
+  const torso=S(['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftUpLeg','RightUpLeg']),neck=S(['Neck','Head']),hand=S(['LeftHand','RightHand']);
+  const legs=S(['Hips','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot']);
+  const build=(keep,inflate)=>{const n=pos.count,ok=new Uint8Array(n);for(let v=0;v<n;v++)ok[v]=keep(v)?1:0;const tri=[];
+    for(let i=0;i<idx.count;i+=3){const a=idx.getX(i),b=idx.getX(i+1),c=idx.getX(i+2);if(ok[a]&&ok[b]&&ok[c])tri.push(a,b,c);}
+    const g=src.clone();g.setIndex(tri);const p=g.attributes.position;for(let v=0;v<n;v++){if(!ok[v])continue;const k=inflate(v);p.setXYZ(v,pos.getX(v)+nor.getX(v)*k,pos.getY(v)+nor.getY(v)*k,pos.getZ(v)+nor.getZ(v)*k);}
+    g.computeVertexNormals();g.computeBoundingSphere();return g;};
+  const wr=v=>.0018*Math.sin(pos.getX(v)*55+pos.getY(v)*31)+.0012*Math.sin(pos.getY(v)*90-pos.getZ(v)*40);   // creases
+  const shirt=build(v=>wsum(v,torso)>.5&&wsum(v,neck)<.25&&wsum(v,hand)<.2&&pos.getY(v)>.86,v=>{const y=pos.getY(v),ax=Math.abs(pos.getX(v));
+    const loose=y<1.25&&ax<.24?.006+.018*clamp((1.18-y)/.3,0,1):.002;return .006+loose+wr(v);});   // baggy at the waist and hem, closer at the shoulders
+  const braies=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.6&&pos.getY(v)<1.12,v=>.006+wr(v)*.6);
+  const hose=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.07&&pos.getY(v)<1.12,v=>.0035+wr(v)*.3);
+  return HSC={shirt,braies,hose};}
+function dressHS(model,look,pal,mats){
+  let body=null;model.traverse(m=>{if(m.isSkinnedMesh&&m.name==='Beta_Surface')body=m;});
+  const tone=LOOK.skin[look.sk]||LOOK.skin[1];const skin=std({color:new THREE.Color().setRGB(.83*tone[0],.56*tone[1],.43*tone[2]),roughness:.62});tintMaterial(skin,2,pal,mats);
+  model.traverse(m=>{if(!m.isMesh)return;m.material=skin;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;});
+  const C=hsCloth(body),o=look.o|0;
+  const cloth=(geo,dyed)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);
+    if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}   // undyed linen
+    const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;body.parent.add(sm);};
+  if(o>=1)cloth(C.shirt,o===2);cloth(o===2?C.hose:C.braies,true);}
 // strip a fresh model clone down to one look and give it that look's materials
 function dressModel(model,look,pal,mats){
+  if(model.getObjectByName('Beta_Surface'))return dressHS(model,look,pal,mats);
   const o=LOOK.outfits[look.o]||'peasant',pre=o==='peasant'?'Peasant_':o==='ranger'?'Ranger_':null,hair=LOOK.hair[look.h];
   const keep=n=>n==='Eyes'||n==='Brows'||(o==='bare'?n==='Body_Bare':n==='Head')||(pre&&n.startsWith(pre))||(hair===n&&o!=='ranger')||(look.bd&&n==='Hair_Beard');
   const drop=[],cache={};
@@ -1128,8 +1241,8 @@ const HANDLING={
 };
 const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
-// armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
-const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]};
+// the armour was shaped on the X Bot body, so it fits as built (these widened it for the older Quaternius bodies)
+const ARMOR_FIT={},ARMOR_OFF={};
 function meshGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1] of parts){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);}return g;}
 const cuirassGeo=lathe([[.11,.17],[.16,.13],[.18,.02],[.178,-.1],[.165,-.22],[.172,-.3]].reverse(),24);   // profiles run bottom to top so the faces point outward
 const fauldGeo=lathe([[.165,.05],[.185,-.05],[.2,-.17]].reverse(),24);
@@ -1916,9 +2029,9 @@ class Fighter{
     let wi=1,ww=0,wr=0;if(sp>.15){if(sp<1.8){ww=clamp(sp/1.3,0,1);wi=1-ww;}else{const t=clamp((sp-1.8)/1.8,0,1);ww=1-t;wr=t;wi=0;}}if(this.slideT>0){wi=1;ww=wr=0;}
     const A=this.acts;A.idle.setEffectiveWeight(wi);A.walk.setEffectiveWeight(ww);A.run.setEffectiveWeight(wr);
     // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
-    // so the feet stay planted at every speed instead of two cycles drifting through each other (measured: walk 1.51 m/s, run 3.62 m/s)
+    // so the feet stay planted at every speed instead of two cycles drifting through each other (measured on the X Bot: walk 1.54 m/s, run 3.53 m/s)
     const Dw=A.walk.getClip().duration,Dr=A.run.getClip().duration,rt=wr/(ww+wr||1);
-    const fq=(back?-1:1)*Math.max(sp,.5)/(1.51*Dw*(1-rt)+3.62*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
+    const fq=(back?-1:1)*Math.max(sp,.5)/(1.54*Dw*(1-rt)+3.53*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
     if(ww>0&&wr>0){const m=wr>ww?A.run:A.walk,o=m===A.run?A.walk:A.run;const ph=m.time/m.getClip().duration+(m===A.run?-.075:.075);o.time=((ph%1+1)%1)*o.getClip().duration;}
     this.mixer.update(dt);
     if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww);}}
@@ -2621,7 +2734,10 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
+// Half Sword's camera: high and close behind the fighter, nearly centred, looking down on the fight; it trails the body's turn smoothly
+const CAM_TP={dist:2.3,side:.12,up:.66,tilt:-.44};let camYawS=null;
+// turning: mouse movement past the side of the hand's range turns the body, eased, at a natural top speed (never blocked while swinging)
+function consumeTurn(f,h){const tp=clamp(f.turnPush||0,-1.2,1.2);if(!tp){f.turnPush=0;return;}let d=tp*(1-Math.exp(-8*h));const mx=2.6*h/1.3;d=clamp(d,-mx,mx);f.yaw-=d*1.3;f.turnPush=Math.abs(tp-d)<1e-4?0:tp-d;}
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){hitStopT=Math.max(hitStopT,t);}
 function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
@@ -2771,7 +2887,7 @@ function playerInput(f,wish,h){
     f.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);f.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);
     if(input.mx>.9)f.yaw-=1.6*h*(input.mx-.9)*10;if(input.mx<.1)f.yaw+=1.6*h*(.1-input.mx)*10;
   } else {
-    const tp=f.turnPush||0;if(tp){const d=tp*(1-Math.exp(-12*h));f.yaw-=d*1.7;f.turnPush=Math.abs(tp-d)<1e-4?0:tp-d;}
+    consumeTurn(f,h);
   }
   return !!(k.ShiftLeft||k.ShiftRight);
 }
@@ -2814,7 +2930,7 @@ addEventListener('mousemove',e=>{
   // swinging (LMB held) the hand stops at the edge of its reach and the view stays put; without LMB, pushing past the side
   // turns you, eased out over a moment (turnPush) instead of whipping the camera. Raising or dropping the weapon never tilts the view.
   c.x+=dx*.0021;c.y=clamp(c.y-dy*.0021,-.46,.56);
-  if(c.x>.5){if(!input.lmb)player.turnPush=(player.turnPush||0)+(c.x-.5);c.x=.5;}if(c.x<-.5){if(!input.lmb)player.turnPush=(player.turnPush||0)+(c.x+.5);c.x=-.5;}
+  if(c.x>.5){player.turnPush=(player.turnPush||0)+(c.x-.5);c.x=.5;}if(c.x<-.5){player.turnPush=(player.turnPush||0)+(c.x+.5);c.x=-.5;}
 });
 addEventListener('wheel',e=>{if(state!=='playing'||!player)return;if(!player.sword){for(const sd of ['R','L']){const a=player.fists[sd];if(!a.c)continue;if((input.lmb||input.rmb)&&!(sd==='R'?input.lmb:input.rmb))continue;a.c.z=clamp(a.c.z-e.deltaY*.0011,.12,.7);}return;}player.ctrl.z=clamp(player.ctrl.z-clamp(e.deltaY,-120,120)*.0016,.28,.68);lastWheel=performance.now();},{passive:true});
 let lastWheel=0;
@@ -2877,6 +2993,10 @@ function startGame(){
 // ================================================================ post processing
 const composer=new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene,camera));
+// ambient occlusion: creases, corners and feet darken where light can't reach, so everything sits in the world instead of floating
+let gtao=null;try{gtao=new GTAOPass(scene,camera,innerWidth,innerHeight);gtao.output=GTAOPass.OUTPUT.Default;
+  gtao.updateGtaoMaterial({radius:.55,distanceExponent:1.6,thickness:1.2,scale:1.25,samples:12,distanceFallOff:1,screenSpaceRadius:false});
+  gtao.updatePdMaterial({lumaPhi:10,depthPhi:2,normalPhi:3,radius:5,rings:2,samples:12});gtao.blendIntensity=.95;composer.addPass(gtao);}catch(e){console.warn('AO unavailable',e);gtao=null;}
 const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.6,.55,.85);composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uHurt:{value:0},uZone:{value:0},uDesat:{value:0},uCool:{value:1}},
@@ -2884,7 +3004,7 @@ const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uHur
   fragmentShader:`uniform sampler2D tDiffuse;uniform float uTime,uHurt,uZone,uDesat,uCool;varying vec2 vUv;
   float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
   void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;float l=dot(c,vec3(.299,.587,.114));
-    c*=mix(mix(vec3(.98,.99,1.02),vec3(.84,.93,1.12),uCool),mix(vec3(1.05,1.,.94),vec3(1.08,1.,.88),uCool),smoothstep(.12,.7,l));
+    c*=mix(mix(vec3(.98,.99,1.02),vec3(.82,.95,1.1),uCool),mix(vec3(1.05,1.,.94),vec3(1.1,1.,.86),uCool),smoothstep(.1,.72,l));
     c=mix(vec3(l),c,1.-uDesat*.85);
     c=(c-.5)*1.07+.5;
     vec2 d=vUv-.5;c*=clamp(1.-dot(d,d)*1.15,0.,1.);
@@ -2905,6 +3025,7 @@ function buildMinimap(){
   if(curMap==='village'){g.fillStyle='#8a7a58';g.fillRect(X(-3.7),0,7.4*k,600);g.fillRect(0,X(-3.7),600,7.4*k);
     for(const s of [-36,36]){g.fillRect(X(s-3.2),X(-39),6.4*k,78*k);g.fillRect(X(-39),X(s-3.2),78*k,6.4*k);}
     g.beginPath();g.arc(X(0),X(0),16*k,0,7);g.fill();}
+  else if(curMap==='arena'){g.fillStyle='#6e6352';g.fillRect(X(-18),X(-18),36*k,36*k);g.fillStyle='#c9b088';g.fillRect(X(-13.5),X(-13.5),27*k,27*k);}
   else{g.fillStyle='#6e6352';g.beginPath();g.arc(X(0),X(0),49*k,0,7);g.fill();g.fillStyle='#c9b088';g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.fill();g.strokeStyle='#3a2e22';g.lineWidth=3;g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.stroke();}
   g.fillStyle='#2a1c14';for(const b of boxes)g.fillRect(X(b.x0),X(b.z0),(b.x1-b.x0)*k,(b.z1-b.z0)*k);
   g.fillStyle='#1d2716';for(const ci of circles)if(ci.r<.5&&ci.h>3){g.beginPath();g.arc(X(ci.x),X(ci.z),2.2*k,0,7);g.fill();}
@@ -3009,11 +3130,11 @@ function frame(now){
   lastFrameAt=performance.now();window.__fc=(window.__fc||0)+1;
   if(!window.__inManual)requestAnimationFrame(frame);
   let dt=Math.min((now-last)/1000,.1);last=now;
-  if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>1/38&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
+  if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>1/38&&gtao&&gtao.enabled){gtao.enabled=false;}else if(avg>1/38&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
   if(state==='loading')return;
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
-  if(NET.mode==='client'&&player&&player.turnPush){const tp=player.turnPush,d=tp*(1-Math.exp(-12*dt));player.yaw-=d*1.7;player.turnPush=Math.abs(tp-d)<1e-4?0:tp-d;}   // friends steer at the edge the same eased way
+  if(NET.mode==='client'&&player&&player.turnPush)consumeTurn(player,dt);   // friends steer at the edge the same eased way
   if(NET.mode==='client'&&player&&player.alive&&!player.ragdoll&&state==='playing'&&!paused&&!input.locked&&input.mx!=null){
     if(player.sword){player.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);player.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
     else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
@@ -3043,11 +3164,12 @@ function frame(now){
     if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
       camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
     else if(!player.ragdoll){ // over-the-shoulder third person
-      const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
+      if(camYawS===null||Math.abs(wrapA(player.yaw-camYawS))>2.5)camYawS=player.yaw;camYawS+=wrapA(player.yaw-camYawS)*(1-Math.exp(-9*dt));const cy=camYawS;
+      const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(cy)*cp,sp,Math.cos(cy)*cp);_r.set(-Math.cos(cy),0,Math.sin(cy));
       _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
-      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
+      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,cy+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
@@ -3201,7 +3323,7 @@ function gauntletWave(){
   const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2,['arming',['kettle']]));}}
   const n=Math.min(6,1+Math.floor(R.wave*.7)+(hn-1)),tier=Math.min(5,Math.floor(R.wave/2));const add=[];
   for(let i=0;i<n;i++){const a=i/n*6.283+rand(-.3,.3),kit=KITS[Math.min(5,(Math.random()*(2+tier))|0)];const en=botEntrant(R.names[R.ni++%R.names.length],.3+R.wave*.06);en.foe=true;
-    add.push(spawnEntrant(en,Math.cos(a)*24,Math.sin(a)*24,kit,en.skill));}
+    add.push(spawnEntrant(en,Math.cos(a)*Math.min(24,MAP-2),Math.sin(a)*Math.min(24,MAP-2),kit,en.skill));}
   for(const f of fighters)f.ai.retarget=0;
   hostSendAdd([...back,...add]);
   MODEHUD=[`Wave ${R.wave}`,`${n} coming · ${R.kills} slain so far`];banner(`Wave ${R.wave}`,`${n} fighter${n>1?'s':''} enter the arena`);
@@ -3505,7 +3627,7 @@ el('joinCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='En
 loadMap('village');
 function loadFighters(onLoad,onErr){
   // the fighters ship as glTF JSON with an embedded buffer (images included); rebuild a GLB in memory so nothing fetches a data: URL
-  fetch('fighters.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
+  fetch('xbot.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
     const uri=j.buffers[0].uri;const raw=atob(uri.slice(uri.indexOf(',')+1));const bin=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bin[i]=raw.charCodeAt(i);
     delete j.buffers[0].uri;
     const js=new TextEncoder().encode(JSON.stringify(j));const jl=Math.ceil(js.length/4)*4,bl=Math.ceil(bin.length/4)*4;
