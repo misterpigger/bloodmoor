@@ -281,7 +281,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=39;
+const BUILD=40;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1925,7 +1925,7 @@ class Fighter{
   addFlinch(dirWorld,amt){
     _v.copy(dirWorld).setY(0);if(_v.lengthSq()<1e-6)return;
     if(this.pb&&!this.ragdoll){_v.normalize();this.physKick(3,_v,amt*4.5);this.physKick(0,_v,amt*5.5);this.physKick(2,_v,amt*2);return;}_v.normalize().applyAxisAngle(Y_AXIS,-this.yaw);
-    this.flinchAx.set(_v.z,0,-_v.x).normalize();this.flinchA=Math.min(.7,this.flinchA+amt);
+    this.flinchAx.set(_v.z,0,-_v.x).normalize();this.flinchV=(this.flinchV||0)+amt*19;   // a kick to the upper body's spring: it whips back along the blow and rebounds
   }
   // ---------------- AI
   think(h,wish){
@@ -2044,7 +2044,8 @@ class Fighter{
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03;
     this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop?1:airborne?.45:0,1-Math.exp(-10*dt));
-    this.stanceAmt=lerp(this.stanceAmt||0,this.alive&&!this.ragdoll&&this.mainArm&&sp<.8&&!this.crouch&&!airborne?.24:0,1-Math.exp(-6*dt));
+    const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne;this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?1:0,1-Math.exp(-5*dt));
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:.2):0,1-Math.exp(-6*dt));
     const bend=Math.min(1,this.crouchAmt+this.stanceAmt);
     const kk=this.kickT>=0?Math.sin(clamp(this.kickT/.45,0,1)*Math.PI):0;
     // unarmed: the shoulders turn and the body leans into a long punch
@@ -2055,8 +2056,12 @@ class Fighter{
     const tw=this.sword?0:clamp(-pt*2.6,-.6,.6);this.twist=lerp(this.twist,tw,1-Math.exp(-10*dt));
     _qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);
     // hit flinch: the upper body gets knocked along the blow and springs back
-    if(this.headSnap>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap);B.Head.quaternion.premultiply(_qr);this.headSnap*=Math.exp(-7*dt);}
-    if(this.flinchA>.004){_qr.setFromAxisAngle(this.flinchAx,this.flinchA);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.8);B.Neck.quaternion.premultiply(_qr);this.flinchA*=Math.exp(-6*dt);}
+    {const st=Math.min(dt,.033);   // underdamped springs: upper body and head snap along the blow, overshoot a little and settle
+      const k=95,c=2*Math.sqrt(k)*.32,fv=this.flinchV||0,fa=this.flinchA||0;this.flinchV=fv+(-k*fa-c*fv)*st;this.flinchA=clamp(fa+this.flinchV*st,-.35,.95);
+      const kh=140,ch=2*Math.sqrt(kh)*.3,hv=this.headV||0,ha=this.headSnap||0;this.headV=hv+(-kh*ha-ch*hv)*st;this.headSnap=clamp(ha+this.headV*st,-.4,1.2);}
+    if(Math.abs(this.headSnap)>.004){_qr.setFromAxisAngle(this.flinchAx,this.headSnap+this.flinchA*.4);B.Head.quaternion.premultiply(_qr);}
+    if(Math.abs(this.flinchA)>.004){_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.55);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.8);B.Neck.quaternion.premultiply(_qr);
+      for(const sd of ['Left','Right']){_qr.setFromAxisAngle(this.flinchAx,this.flinchA*.9);B[sd+'Shoulder'].quaternion.premultiply(_qr);}}   // the shoulders and arms fly with it
     if(this.stagger>.05){_qr.setFromAxisAngle(X_AXIS,-this.stagger*.25);B.Spine1.quaternion.premultiply(_qr);}
     // secondary motion: the upper body lags behind starts, stops and turns, wobbles with each step and follows the weapon
     {const dtc=Math.max(dt,1e-3),M=this.mot||(this.mot={sx:0,sz:0,vx:0,vz:0,pvx:this.vel.x,pvz:this.vel.z,ph:this.stepHalf,hp:null,tw:0});
@@ -2080,8 +2085,10 @@ class Fighter{
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
       if(!this.limbs.legR.sev){feet.Right=V();B.RightFoot.getWorldPosition(feet.Right);}
-      B.Hips.position.y-=bend*34;
-      this.root.updateMatrixWorld(true);this.fwd(_f);
+      const bob=(this.stillAmt||0)*(1+Math.sin(simTime*4.6+this.id))*1.3;B.Hips.position.y-=bend*34+bob;   // a fighter's bounce in the knees
+      this.root.updateMatrixWorld(true);this.fwd(_f);this.right(_r);
+      {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
+        for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w);}}
       for(const s in feet){
         let tgt=feet[s];
         if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);tgt=_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);tgt.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);}
@@ -2552,12 +2559,12 @@ function resolveHit(A,B,cap,t,P,pv){
   if(B.alive&&!B.ragdoll&&dmg<3&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
   else if(B.alive&&!B.ragdoll&&armour){if(!phys)B.addFlinch(dir,.12);B.useStamina(4);B.stagger=Math.max(B.stagger,.06);if(A.isPlayer||B.isPlayer)tell(B,'You power through','gold');}
   else if(B.alive&&!B.ragdoll){
-    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02);
+    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,(speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02)*1.35);B.addFlinch(dir,Math.min(.6,.12+dmg*.012));
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
     if(cap.zone==='legL'||cap.zone==='legR'){B.crouchAmt=Math.min(1,B.crouchAmt+.55);B.stagger=Math.max(B.stagger,.4);}
     if(!phys){
-    if(cap.zone==='head'||cap.zone==='neck')B.headSnap=Math.min(1.1,(B.headSnap||0)+speed*.07*(mode==='blunt'?1.5:1));
+    if(cap.zone==='head'||cap.zone==='neck')B.headV=(B.headV||0)+Math.min(14,speed*.85*(mode==='blunt'?1.5:1));
     B.addFlinch(dir,clamp(speed*.045*(mode==='blunt'?1.6:1)*(cap.zone==='head'?1.4:1)+dmg*.004,.08,.85));
     if(B.sword){B.sword.Hv.addScaledVector(dir,speed*.18);}}
     const heavy=W.weight*speed*(mode==='blunt'?1.5:1);
@@ -2676,7 +2683,7 @@ function fistCheck(A,arm){
       if(face&&!B.sword&&!B.ragdoll){B.fwd(_f);if(_f.dot(dir)<-.4&&B.fists.R.phase!=='punch'&&B.fists.L.phase!=='punch'){dmg*=.4;sThud(P,.4);}}
       dmg=Math.min(dmg,38);const body=(c.zone==='torso'||face)?dmg:dmg*.5;
       sThud(P,.5+arm.power);yardHit(A,'Fists','punch',c.zone,dmg,speed,false,prot);B.shove(dir,.5+arm.power*1.6+(face?.5:0));if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
-      B.addFlinch(dir,.2+arm.power*.7);if(face)B.headSnap=Math.min(1.2,(B.headSnap||0)+.35+arm.power*.6);B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
+      B.addFlinch(dir,.2+arm.power*.7);if(face)B.headV=(B.headV||0)+4+arm.power*8;B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
       _v.copy(dir).setY(0);B.vel.addScaledVector(_v,1.4+arm.power*3.6);if(B.sword)swordShove(B.sword,dir,speed*.25);
       B.damage(body,A,'beaten');
       if(B.alive&&!B.ragdoll&&(face&&arm.power>.75&&(B.stamina<35||Math.random()<.3)||B.stamina<5&&arm.power>.6)){B.knockdown(rand(1.8,3),_v.copy(dir).multiplyScalar(2+arm.power*2),P);tell(A,'Knocked out','gold');cheer(.5);}
