@@ -62,6 +62,13 @@ The score is written in the game's code and played on recordings of real instrum
 - Bodies, heads, peasant and ranger outfits and hair: [Quaternius](https://quaternius.com) — *Universal Base Characters* and *Modular Character Outfits – Fantasy* (Standard editions), released under **CC0 1.0**. Taken from the CC0 redistribution in [OpenAgentsInc/openagents](https://github.com/OpenAgentsInc/openagents/tree/main/assets/verse/characters/quaternius), which keeps the original licence texts. Textures were downscaled for the web.
 - Skeleton and idle/walk/run animations: Mixamo X Bot (Adobe Mixamo). The Quaternius meshes are rebound to this skeleton by `tools/build-fighters.mjs`.
 
+## Textures and sky
+Photo-scanned surfaces and the daylight sky are from [Poly Haven](https://polyhaven.com), released under **CC0 1.0**. They were downloaded by `tools/fetch_cc0.py` and resized and repacked for the web (colour, normal, and a packed map with ambient occlusion in red and roughness in green); `assets/cc0.json` lists them.
+- Ground gravel: [Rocky Trail](https://polyhaven.com/a/rocky_trail)
+- Arena sand: [Gravelly Sand](https://polyhaven.com/a/gravelly_sand)
+- Stone walls: [Castle Wall Slates](https://polyhaven.com/a/castle_wall_slates)
+- Sky: [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky)
+
 ## Code libraries
 - [three.js](https://threejs.org) (MIT)
 - [Rapier](https://rapier.rs) physics, `@dimforge/rapier3d-compat` (Apache-2.0), only loaded for the Rigid body engine
