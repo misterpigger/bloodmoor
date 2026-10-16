@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=49;
+const BUILD=50;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2008,6 +2008,9 @@ class Fighter{
     out.addScaledVector(f,slide);
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
+    // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
+    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
+      _v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length();if(d>ro)out.addScaledVector(_v,-(d-ro)/d);}
     return out;
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
@@ -2608,10 +2611,11 @@ let GRIP_IN=.075,GRIP_UP=.035;window.__grip=(a,b)=>{GRIP_IN=a;GRIP_UP=b;};
 const _fq=new THREE.Quaternion(),_fq2=new THREE.Quaternion(),_fa=V();
 function forearmRoll(B,side,qHand){const F=B[side+'ForeArm'],Hd=B[side+'Hand'];if(!F||!Hd)return 0;
   const rq=Hd.userData.rq||(Hd.userData.rq=Hd.quaternion.clone());   // the relaxed hand, as the animation first holds it
-  F.updateWorldMatrix(true,false);F.matrixWorld.decompose(_pp,_fq,_ps);
+  F.updateWorldMatrix(true,false);F.matrixWorld.decompose(_pp,_fq,_ps);Hd.updateWorldMatrix(false,false);_fa.setFromMatrixPosition(Hd.matrixWorld).sub(_pp);
+  if(_fa.lengthSq()<1e-8)return 0;_fa.normalize().applyQuaternion(_fq2.copy(_fq).invert());   // the forearm's own long axis (elbow to wrist), in its frame: rolling about it can't move the hand
   _fq2.copy(_fq).invert().multiply(qHand).multiply(_fq.copy(rq).invert());   // how far the wanted hand is turned from relaxed, in the forearm's frame
-  _fa.set(_fq2.x,_fq2.y,_fq2.z);const ty=_fa.y;let tw=2*Math.atan2(ty,_fq2.w);tw=wrapA(tw);   // its twist about the bone (local +Y)
-  const roll=clamp(tw*.8,-1.45,1.45);if(Math.abs(roll)>1e-3){_fq.setFromAxisAngle(Y_AXIS,roll);F.quaternion.multiply(_fq);F.updateWorldMatrix(false,false);}
+  const t=_fq2.x*_fa.x+_fq2.y*_fa.y+_fq2.z*_fa.z;let tw=wrapA(2*Math.atan2(t,_fq2.w));   // its twist about that axis
+  const roll=clamp(tw*.8,-1.45,1.45);if(Math.abs(roll)>1e-3){_fq.setFromAxisAngle(_fa,roll);F.quaternion.multiply(_fq);F.updateWorldMatrix(false,false);}
   const W=window.__wstat;if(W){W.n++;W.raw+=Math.abs(tw);W.res+=Math.abs(tw-roll);if(Math.abs(tw-roll)>.9)W.bad++;if(Math.abs(tw)>.9)W.rawBad++;}
   return tw-roll;}
 function gripHand(B,side,grip,E,A,pole,lens,curl,wrap){
