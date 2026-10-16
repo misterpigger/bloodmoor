@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=45;
+const BUILD=46;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1264,8 +1264,8 @@ function dressModel(model,look,pal,mats){
     m.material=cache[k];if(m.name.startsWith('Hair_')&&m.name!=='Hair_Beard')m.userData.hair=true;});
   for(const m of drop)m.removeFromParent();
 }
-const steelMat=std({color:0xb8c0c8,metalness:.78,roughness:.28,envMapIntensity:2.2});
-const steelDark=std({color:0x7a8088,metalness:.8,roughness:.38,envMapIntensity:1.8});
+const steelMat=std({color:0x9ea6ae,metalness:.8,roughness:.36,envMapIntensity:1.15});   // worn, not chrome: brighter than this blows out to a white blob in the midday sun
+const steelDark=std({color:0x6e747c,metalness:.8,roughness:.42,envMapIntensity:1.05});
 const brassMat=std({color:0xa8823a,metalness:.95,roughness:.35});
 const slitMat=std({color:0x050505,roughness:1});
 const mailMat=std({color:0x6d747b,metalness:.85,roughness:.5});
@@ -3274,10 +3274,15 @@ document.getElementById('endMainBtn').addEventListener('click',toMainMenu);
 addEventListener('keydown',e=>{if(state!=='playing'||e.repeat)return;if(e.code==='KeyP'||(e.code==='Escape'&&!input.locked)){e.preventDefault();if(paused){showPause(false);requestLock();last=performance.now();}else showPause(true);}});
 cvs.addEventListener('click',()=>{if(state==='playing'&&!input.locked&&!paused)requestLock();});   // a match started by someone else's click needs your own click to grab the mouse
 document.getElementById('startBtn').addEventListener('click',startGame);
+// the map is built a beat after the click so the loading note can paint; starting a match in that beat must build it first, or the
+// late build would wipe the new match and leave the menu's background fight running with no player
+let mapPending=0;
+function finishMapSwitch(id){clearTimeout(mapPending);mapPending=0;if(id!==curMap)loadMap(id);if(state!=='playing'){spawnMatch(false);attractRestart=performance.now();}el('loading').classList.add('hide');}
+function flushMapSwitch(){if(!mapPending)return;const b=document.querySelector('.map.on[data-map]');finishMapSwitch(b?b.dataset.map:curMap);}
 document.querySelectorAll('.map[data-map]').forEach(b=>b.addEventListener('click',()=>{
   const id=b.dataset.map;document.querySelectorAll('.map[data-map]').forEach(o=>{o.classList.toggle('on',o===b);o.setAttribute('aria-checked',o===b?'true':'false');});
-  if(id===curMap)return;el('loading').textContent='Building '+MAPS[id].name+'…';el('loading').classList.remove('hide');
-  setTimeout(()=>{loadMap(id);spawnMatch(false);attractRestart=performance.now();el('loading').classList.add('hide');},40);
+  if(id===curMap&&!mapPending)return;el('loading').textContent='Building '+MAPS[id].name+'…';el('loading').classList.remove('hide');
+  clearTimeout(mapPending);mapPending=setTimeout(finishMapSwitch,40,id);
 }));
 document.getElementById('againBtn').addEventListener('click',startGame);
 // switch combat engines from the menu: tear the match down, swap the world, rebuild
@@ -3296,6 +3301,7 @@ async function setEngine(on){
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
 function startGame(){document.body.classList.toggle('sim',MODE!=='br');
   if(NET.mode==='client')return;
+  flushMapSwitch();
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
   if(MODE!=='br'){paused=false;initAudio();state='playing';if(curMap==='village')loadMap('colosseum');modeStart();
@@ -3590,6 +3596,8 @@ function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roste
   for(const x of NET.conns)if(x.c.open)x.c.send({t:'start',map:curMap,mode:MODE,you:x.f&&fighters.includes(x.f)?x.f.id:-1,roster});}
 function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
 // put entrants into the arena; kit = [weapon, armor]
+// arena modes are fought round the map's middle; on The Pit that middle is the shaft, so they shift to the open ground beside it
+const MO=()=>curMap==='pit'?-6.5:0;
 function spawnEntrant(en,x,z,kit,skill){
   if(PIT){let dx=x-PIT.x,dz=z-PIT.z,d=Math.hypot(dx,dz);const m=PIT.r+2;if(d<m){if(d<1e-3){dx=0;dz=-1;d=1;}x=PIT.x+dx/d*m;z=PIT.z+dz/d*m;}}   // the Pit: start clear of the edge
   const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look});
@@ -3613,12 +3621,12 @@ function modeStart(){
     ents.sort(()=>Math.random()-.5);RUN={mode:'tourney',round:0,ents,cur:ents.slice(),pairs:[],pi:0,results:[]};tourneyNextRound();}
   else if(MODE==='yard')yardStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
-    H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2,['arming',['kettle']]);});hostSendStart();gauntletWave();}
+    H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),['arming',['kettle']]);});hostSendStart();gauntletWave();}
 }
 // ---- duel: best of three, a fresh kit each round
 function duelRound(){
   const R=RUN;R.round++;const kit=KITS[(Math.random()*KITS.length)|0];roundSetup();
-  spawnEntrant(R.a,0,-3,kit,null);spawnEntrant(R.b,0,3,kit,R.b.human?null:.55+R.round*.05);
+  spawnEntrant(R.a,0,-3+MO(),kit,null);spawnEntrant(R.b,0,3+MO(),kit,R.b.human?null:.55+R.round*.05);
   MODEHUD=[`${R.a.name} ${R.sa} – ${R.sb} ${R.b.name}`,`Duel · round ${R.round} · ${kit[2]}`];
   hostSendStart();banner(`Round ${R.round}`,kit[2]);
 }
@@ -3633,7 +3641,7 @@ function tourneyNextBout(){
   while(R.pi<R.pairs.length){const [a,b]=R.pairs[R.pi];
     if(!a.human&&!b.human){const w=Math.random()<.5+(a.skill-b.skill)?a:b;R.next.push(w);R.results.push(`${w.name} beat ${w===a?b.name:a.name}`);R.pi++;continue;}
     const kit=KITS[(Math.random()*6)|0];roundSetup();
-    spawnEntrant(a,0,-3,kit,a.human?null:a.skill+R.round*.08);spawnEntrant(b,0,3,kit,b.human?null:b.skill+R.round*.08);
+    spawnEntrant(a,0,-3+MO(),kit,a.human?null:a.skill+R.round*.08);spawnEntrant(b,0,3+MO(),kit,b.human?null:b.skill+R.round*.08);
     MODEHUD=[`${a.name} vs ${b.name}`,`${stage} · bout ${R.pi+1} of ${R.pairs.length} · ${kit[2]}`];
     hostSendStart();banner(stage,`${a.name} vs ${b.name} · ${kit[2]}`+(R.results.length?` — ${R.results.splice(0).join(', ')}`:''));
     if(!player&&state==='playing')note('You are watching this bout','sm');
@@ -3644,7 +3652,7 @@ function tourneyNextBout(){
 function gauntletWave(){
   const R=RUN;R.wave++;const hn=R.H.length;
   // the fallen come back between waves, and everyone patches up
-  const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2,['arming',['kettle']]));}}
+  const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),['arming',['kettle']]));}}
   const n=Math.min(6,1+Math.floor(R.wave*.7)+(hn-1)),tier=Math.min(5,Math.floor(R.wave/2));const add=[];
   // they come in through the gate (or the gap in the fence) one after another and walk out to meet you; nobody appears out of thin air
   const E=MAPS[curMap].entry;R.queue=[];
@@ -3663,7 +3671,7 @@ const YARD_DM=['Still','Guard','Spar'];
 const YARD={log:[],peak:0,cur:0,run:0,shown:''};
 function yardStart(H){
   RUN={mode:'yard',H,dm:0,dummies:[]};roundSetup();CD_END=simTime;YARD.log.length=0;YARD.peak=YARD.run=0;
-  H.forEach((en,i)=>{const f=spawnEntrant(en,(i-(H.length-1)/2)*1.6,-2.2,['longsword',[]]);yardHuman(f);});
+  H.forEach((en,i)=>{const f=spawnEntrant(en,(i-(H.length-1)/2)*1.6,-2.2+MO(),['longsword',[]]);yardHuman(f);});
   for(let i=0;i<YARD_D.length;i++)yardDummy(i,true);
   hostSendStart();yardHud();banner('Training yard','1–7 switch weapons · G changes what the dummies do');
 }
@@ -3671,7 +3679,7 @@ function yardHuman(f){f.noSever=true;f.yardW=1;}
 function yardDummy(i,quiet){const R=RUN,D=YARD_D[i],old=R.dummies[i];
   if(old){const k=fighters.indexOf(old);if(k>=0)fighters.splice(k,1);old.dispose();}
   const en=botEntrant(D.name,.5);en.pal=['#8a7a60','#5a4a3a','#3a3028',0];en.look={o:1,h:0,bd:0,hc:0,sk:1};en.dummy=true;
-  const f=spawnEntrant(en,D.x,2.2,[R.dm>0?'longsword':'fists',D.armor],.5);f.dummy=true;f.ai.aggr=.55;R.dummies[i]=f;
+  const f=spawnEntrant(en,D.x,2.2+MO(),[R.dm>0?'longsword':'fists',D.armor],.5);f.dummy=true;f.ai.aggr=.55;R.dummies[i]=f;
   if(!quiet&&NET.mode==='host')hostSendStart();return f;}
 function yardArm(f,i){const id=YARD_W[i];if(!id||!f.alive||f.ragdoll)return;
   if(f.sword){f.sword.unstick();f.sword.dispose();f.sword=null;}f.giveFists();
@@ -3724,7 +3732,7 @@ function modeKill(killer,victim){
 function modeTick(){const R=RUN;if(!R||R.over)return;
   if(R.mode==='gauntlet'&&R.queue&&R.queue.length&&simTime>=R.queue[0].at){const q=R.queue.shift(),E=MAPS[curMap].entry;
     const f=spawnEntrant(q.en,E.x+E.dz*q.lat-E.dx*q.back,E.z-E.dx*q.lat-E.dz*q.back,q.kit,q.en.skill);f.yaw=Math.atan2(E.dx,E.dz);f.vel.set(E.dx*1.2,0,E.dz*1.2);f.ai.retarget=0;hostSendAdd([f]);}
-  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2,['longsword',[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
+  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),['longsword',[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
