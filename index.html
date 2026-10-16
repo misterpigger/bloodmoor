@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=46;
+const BUILD=47;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1418,7 +1418,8 @@ class Ragdoll{
   constructor(bones,names,vel,impulse,impulsePoint){
     this.b=bones;this.names=names.filter(n=>bones[n]);this.P={};this.Q={};
     for(const n of this.names){const p=V();bones[n].updateWorldMatrix(true,false);p.setFromMatrixPosition(bones[n].matrixWorld);this.P[n]=p;
-      const v=vel.clone();if(impulse&&impulsePoint){const w=Math.exp(-p.distanceToSquared(impulsePoint)/.12);v.addScaledVector(impulse,w);}
+      // a blow moves the whole body a little and the struck part more; all of it on one spot whips the far end over like a flail
+      const v=vel.clone();if(impulse&&impulsePoint){const w=Math.exp(-p.distanceToSquared(impulsePoint)/.2);v.addScaledVector(impulse,.35+.4*w);}
       v.x+=(Math.random()-.5)*.4;v.z+=(Math.random()-.5)*.4;this.Q[n]=p.clone().addScaledVector(v,-H*2);}
     // nothing may start inside the ground: a toe below it gets shoved up so hard the whole body launches
     {let pen=0;for(const n of this.names)pen=Math.max(pen,(RD_R[n]||.055)-this.P[n].y);if(pen>0)for(const n of this.names){this.P[n].y+=pen;this.Q[n].y+=pen;}}
@@ -1432,7 +1433,7 @@ class Ragdoll{
       const cq=new THREE.Quaternion();bones.Spine2.updateWorldMatrix(true,false);bones.Spine2.matrixWorld.decompose(_pp,cq,_ps);
       this.offC=basisQ(_rv.subVectors(this.P.Neck,this.P.Spine1),_ru.subVectors(this.P.LeftArm,this.P.RightArm),new THREE.Quaternion()).invert().multiply(cq);
     }
-    this.age=0;this.sleep=false;
+    this.age=0;this.sleep=false;this.tone=0;
   }
   kick(v){for(const n of this.names)this.Q[n].addScaledVector(v,-H*2);this.sleep=false;this.age=0;}
   step(h){
@@ -1446,6 +1447,10 @@ class Ragdoll{
             const dx=(tx-p.x)*k,dy=(ty-p.y)*k,dz=(tz-p.z)*k,q=this.Q[hn];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.6;q.y+=dy*.6;q.z+=dz*.6;}}}}   // mostly placed, a little thrown
     for(let it=0;it<7;it++){
       for(const [a,b,l] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}
+      if(it===0&&this.tone>0){const c=this.tone;   // muscle tone: joints resist spinning, so a conscious body folds and drops instead of flopping like a doll
+        for(const [a,b] of this.links){const A=this.P[a],B=this.P[b],qa=this.Q[a],qb=this.Q[b];
+          const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
+          qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
       for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+r){const q=this.Q[n];if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
@@ -2162,7 +2167,7 @@ class Fighter{
   knockdown(t,imp,impP){
     if(!this.alive||this.ragdoll)return;this.knocked=t;sfx(this.armor.body?'fallArmoured':'fall',this.chest,.75,1,.2);this.kickT=-1;this.crouch=false;
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
-    this.makeRagdoll(imp,impP,.25);this.ragdoll.reflex=.75;   // conscious: the arms go out to catch the fall
+    this.makeRagdoll(imp,impP,.25);this.ragdoll.reflex=.75;this.ragdoll.tone=.22;   // conscious: the arms go out to catch the fall
   }
   // getting up is work: roll onto hands and knees, push up onto one knee, then stand. Hurt, it is slow and shaky and can fail.
   startRise(){const Rg=this.ragdoll;if(!Rg||Rg.rise)return;const P=Rg.P;this.knocked=0;
@@ -2345,14 +2350,27 @@ class Fighter{
     // the body leans the way its weight has been pushed
     {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
-    if(bend>.02||kk>0){
+    // standing, shuffling and turning, the feet stay where they were put and step when the body has moved off them, instead of skating
+    const plantOK=this.alive&&!this.ragdoll&&!airborne&&kk<=0&&sp<.45&&this.slideT<=0;this.plantW=lerp(this.plantW||0,plantOK?1:0,1-Math.exp(-(plantOK?6:14)*dt));
+    if(bend>.02||kk>0||this.plantW>.01){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
       if(!this.limbs.legR.sev){feet.Right=V();B.RightFoot.getWorldPosition(feet.Right);}
-      const bob=(this.stillAmt||0)*(1+Math.sin(simTime*4.6+this.id))*1.3;B.Hips.position.y-=bend*34+bob;   // a fighter's bounce in the knees
+      // a fighter's bounce in the knees, never quite regular, and a slow shift of weight from foot to foot
+      const sa=this.stillAmt||0,ph=simTime+this.id*1.7,bob=sa*(1+Math.sin(ph*4.6+Math.sin(ph*1.3)*.8))*1.1;B.Hips.position.y-=bend*34+bob;
+      if(sa>.01){B.Hips.position.x+=sa*(Math.sin(ph*.9)*1.6+Math.sin(ph*2.3)*.5);B.Hips.position.z+=sa*Math.sin(ph*.6+1)*.8;}
       this.root.updateMatrixWorld(true);this.fwd(_f);this.right(_r);
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
         for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w);}}
+      const PL=this.plant||(this.plant={}),pw=this.plantW;
+      for(const s in feet){const want=feet[s];let p=PL[s];
+        if(!p||pw<.02){p=PL[s]={at:want.clone(),from:want.clone(),t:1};}
+        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z);
+          if(p.t>=1&&d>(this.isPlayer?.13:.16)&&(!o||o.t>=1||d>.32)){p.from.copy(p.at);p.t=0;}
+          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*.06;
+            if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false);}
+          else{p.at.y=want.y;p.lift=0;}
+          feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
       for(const s in feet){
         let tgt=feet[s];
         if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);tgt=_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);tgt.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);}
@@ -2519,7 +2537,7 @@ class Fighter{
   makeRagdoll(imp,impP,crumple){
     this.root.updateMatrixWorld(true);
     const names=RD_NAMES.filter(n=>!this.detached.has(n));
-    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);
+    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;   // even the dying keep some stiffness for a moment
     // the dying fold up: knees buckle forward, hips drop, the head lolls, instead of toppling like a plank
     if(crumple){const R=this.ragdoll,f=this.fwd(V()),add=(n,x,y,z)=>{if(R.Q[n])R.Q[n].add(V(f.x*z,y,f.z*z).multiplyScalar(-H*2*crumple));};
       for(const k of ['LeftLeg','RightLeg'])add(k,0,0,.45);add('Hips',0,0,0);for(const k of ['Spine2','Neck'])add(k,0,0,.2);add('Head',0,0,.3);}
