@@ -55,6 +55,8 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 #banner span{font-size:17px;color:var(--ember);text-shadow:0 1px 6px #000;max-width:70ch}
 @keyframes bannerIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){#banner{animation:none}}
+/* arena modes: a plain line of text at the top, the way Half Sword says "You won! Hold G to continue" */
+body.sim #banner{top:5%;animation:fadeq 3s ease-out forwards}body.sim #banner b{font-size:clamp(20px,2.4vw,30px);text-shadow:0 2px 8px rgba(0,0,0,.9)}body.sim #banner span{font-size:14px;color:var(--parch)}
 .mprow{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
 .join{display:flex;border:1px solid rgba(236,220,184,.25)}
 #joinCode{width:92px;font:700 18px var(--f-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--parch);background:rgba(236,220,184,.05);border:none;padding:0 10px;-webkit-user-select:text;user-select:text}
@@ -82,6 +84,10 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
+body.sim #vitals{opacity:0;transition:opacity .25s}body.sim.showvit #vitals{opacity:1}
+.note{font-size:24px!important;animation:fadeq 2.4s ease-out forwards!important;text-shadow:0 2px 6px rgba(0,0,0,.9)}
+@keyframes fadeq{0%{opacity:0}10%{opacity:.95}75%{opacity:.95}100%{opacity:0}}
 #minimap{position:absolute;left:22px;top:22px;width:170px;height:170px;border-radius:50%;box-shadow:0 0 0 2px rgba(236,220,184,.25),0 6px 24px rgba(0,0,0,.6)}
 #topc{position:absolute;top:22px;left:50%;transform:translateX(-50%);text-align:center}
 #alive{font-family:var(--f-display);font-size:30px;line-height:1;color:var(--parch);text-shadow:0 2px 8px #000}
@@ -736,17 +742,69 @@ function buildWorld(){
   grass.count=gi;grass.receiveShadow=true;world.add(grass);
 }
 const grassTime={value:0};
-function addMountains(c1,c2){
-  const mtn=new THREE.MeshBasicMaterial({color:c1,fog:false}),mtn2=new THREE.MeshBasicMaterial({color:c2,fog:false});
-  for(let i=0;i<34;i++){const a=i/34*Math.PI*2+Math.random()*.1,far=i%2;const r=far?300:230;const h=far?rand(50,110):rand(30,70);const m=new THREE.Mesh(new THREE.ConeGeometry(rand(60,110),h,5),far?mtn2:mtn);m.position.set(Math.cos(a)*r,h/2-6,Math.sin(a)*r);m.rotation.y=Math.random()*3;world.add(m);}
+function addMountains(c1,c2){   // distant country: two rolling ridge lines (forested hills, then hazier ones), not cones
+  let sd=77;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  const ph=[r()*6.3,r()*6.3,r()*6.3,r()*6.3,r()*6.3,r()*6.3];
+  const ridge=(R,h0,amp,col,k)=>{const N=180,pos=[],idx=[],cols=[];const cA=new THREE.Color(col),cB=new THREE.Color(col).multiplyScalar(.82);
+    for(let i=0;i<=N;i++){const a=i/N*6.283;const hgt=h0+amp*(.55*Math.sin(a*3+ph[k])+.3*Math.sin(a*7+ph[k+1])+.15*Math.sin(a*17+ph[k+2])+.08*Math.sin(a*41+ph[k]*2));
+      pos.push(Math.cos(a)*R,-8,Math.sin(a)*R,Math.cos(a)*R,hgt,Math.sin(a)*R);cols.push(cB.r,cB.g,cB.b,cA.r,cA.g,cA.b);
+      if(i<N)idx.push(i*2,i*2+1,i*2+2,i*2+1,i*2+3,i*2+2);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));g.setIndex(idx);
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,fog:false,side:THREE.DoubleSide}));world.add(m);};
+  ridge(300,26,22,c2,0);ridge(210,12,9,new THREE.Color(c1).lerp(new THREE.Color(0x4f5a43),.45).getHex(),3);
 }
 // ground height: flat everywhere except the Pit map's shaft (a plank bridge runs across it along x)
 let PIT=null;
-function onBridge(x,z){if(!PIT||Math.abs(z-PIT.z)>=PIT.bw)return false;if(PIT.planks){const k=Math.round((x-PIT.p0)/.19),pl=PIT.planks[k];if(pl&&pl.broken)return false;}return true;}   // a gap where planks are gone
+function onBridge(x,z){const G=PIT&&PIT.grate;if(!G||G.mode!=='rest')return false;return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}   // standing on the grate while it lies across the shaft
 function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
-function groundY(x,z,y=0){if(!PIT)return 0;const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
+function groundY(x,z,y=0){if(!PIT)return 0;
+  if(PIT.grate&&PIT.grate.mode!=='rest'){const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
   return inC&&(y<-.12||!onBridge(x,z))?-PIT.d:0;}
 function pitWall(p,r){if(!PIT||p.y>-.02)return;const dx=p.x-PIT.x,dz=p.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r-r;if(d>m&&d>1e-6){p.x=PIT.x+dx/d*m;p.z=PIT.z+dz/d*m;}}   // below the rim you're inside the shaft
+// ---- the iron grate over the Pit, after Half Sword's: a heavy woven grate lying across the shaft on the rim stones.
+// It shifts when it's walked on, struck or hauled by hand. If an end slides off the rim it tips in about the other end,
+// slips off that too and ends up leaning down in the shaft. Its pose is a centre C and a tilt phi about the z axis (long axis along x).
+const GR={L:4.3,W:1.8};
+function grateNew(){return {x:0,z:1.45,y:.07,vx:0,vz:0,mode:'rest',th:0,thv:0,piv:1,e:0,slip:0,t:0,C:V(0,.07,1.45),phi:0,mesh:null,col:null,cd:new Map(),f0:null,f1:null,clang:0};}
+function grateXr(G){return Math.sqrt(Math.max(.01,PIT.r*PIT.r-G.z*G.z));}   // where the grate's centre line crosses the rim
+function grateSurf(x,z){const G=PIT&&PIT.grate;if(!G)return null;if(Math.abs(z-G.C.z)>GR.W/2)return null;const c=Math.cos(G.phi);if(Math.abs(c)<.2)return null;
+  const u=(x-G.C.x)/c;if(Math.abs(u)>GR.L/2)return null;return G.C.y+u*Math.sin(G.phi);}
+function grateEndHeld(G,sg){   // does this end still lie on stone? (any part of its last 15 cm outside the shaft)
+  const xe=G.x+sg*GR.L/2;for(const dz of [-.45,-.15,.15,.45]){const z=G.z+dz*GR.W/(.9);for(const k of [0,.07,.14]){const x=xe-sg*k;if(x*x+z*z>(PIT.r+.03)**2)return true;}}return false;}
+function grateKick(dvx,dvz){const G=PIT&&PIT.grate;if(!G||G.mode!=='rest')return;G.vx+=dvx;G.vz+=dvz;}
+function grateStep(h){const G=PIT&&PIT.grate;if(!G)return;G.t+=h;
+  if(G.mode==='rest'){
+    // people on it push it back with every step they take; friction on the stone soaks most of it up
+    for(const f of fighters){const pv=f._gpv||(f._gpv=V());if(f.alive&&!f.ragdoll&&onBridge(f.pos.x,f.pos.z)){G.vx-=(f.vel.x-pv.x)*.045;G.vz-=(f.vel.z-pv.z)*.045;
+        if(Math.abs(f.vel.x-pv.x)+Math.abs(f.vel.z-pv.z)>.04&&Math.random()<.02)G.clang=Math.max(G.clang,.25);}pv.set(f.vel.x,0,f.vel.z);}
+    const sp=Math.hypot(G.vx,G.vz);if(sp<.015){G.vx=G.vz=0;}else{const k=Math.max(0,1-h*5);G.vx*=k;G.vz*=k;G.x+=G.vx*h;G.z+=G.vz*h;}
+    G.C.set(PIT.x+G.x,G.y,PIT.z+G.z);G.phi=0;
+    const a=grateEndHeld(G,1),b=grateEndHeld(G,-1);
+    if(!a||!b){if(a||b){G.mode='tip';G.piv=a?1:-1;G.th=0;G.thv=0;G.e=G.piv*G.x;G.slip=0;}else{G.mode='fall';G.f0={C:G.C.clone(),phi:0,v:0,t:0};}
+      sClang(G.C,.9);sThud(G.C,1);for(const f of fighters)if(f.alive&&!f.ragdoll&&onBridgeAt(G,f.pos.x,f.pos.z)){f.pitT=simTime;f.knockdown(99,V(0,-1,0),f.chest.clone());if(f.ragdoll)f.ragdoll.reflex=0;tell(f,'Over the edge!','red');}}
+  } else if(G.mode==='tip'){
+    const xr=grateXr(G),uc=xr-G.e;   // pivot on the rim; the centre lies uc inside it
+    const I=GR.L*GR.L/12+uc*uc;G.thv+=9.8*uc*Math.cos(G.th)/I*h;G.th=Math.min(1.45,G.th+G.thv*h);
+    if(G.th>.45){G.slip+=9.8*Math.sin(G.th)*.55*h;G.e-=G.slip*h;}   // steep enough and it slides off the lip
+    const u=xr-G.e,P=V(PIT.x+G.piv*xr,G.y,PIT.z+G.z);G.C.set(P.x-G.piv*u*Math.cos(G.th),P.y-u*Math.sin(G.th),P.z);G.phi=G.piv*G.th;
+    if(G.e+GR.L/2<xr-.02){G.mode='fall';G.f0={C:G.C.clone(),phi:G.phi,v:-u*G.thv*.3,t:0};}
+  } else if(G.mode==='fall'){
+    // drops down the shaft; the lower end hits the floor and it ends up leaning against the wall on the pivot side
+    const F=G.f0;F.t+=h;F.v-=9.8*h;G.C.y+=F.v*h;const hs=Math.min(GR.L*.55,PIT.r*1.1),hh=Math.sqrt(GR.L*GR.L-hs*hs),phiF=G.piv>0?Math.atan2(hh,hs):Math.PI-Math.atan2(hh,hs);
+    const k=clamp(F.t/.6,0,1);let dp=phiF-F.phi;G.phi=F.phi+dp*k*k;const cx=PIT.x+G.piv*(PIT.r-hs/2-.05),fy=-PIT.d+hh/2;G.C.x+= (cx-G.C.x)*Math.min(1,h*4);
+    if(G.C.y<=fy){G.C.y=fy;G.C.x=cx;G.phi=phiF;G.mode='fallen';sClang(G.C,1);sThud(G.C,1.2);spawnSparks(V(G.C.x-G.piv*hs/2,-PIT.d+.05,G.C.z),14,null);}
+  }
+  if(G.clang>0){sClang(G.C,G.clang);G.clang=0;}
+  if(G.col){G.col.setTranslation({x:G.C.x,y:G.C.y-.03,z:G.C.z});G.col.setRotation({x:0,y:0,z:Math.sin(G.phi/2),w:Math.cos(G.phi/2)});}}
+function onBridgeAt(G,x,z){return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}
+function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
+  const iron=std({color:0x3b342e,roughness:.62,metalness:.55});
+  for(let z=-W/2+.06;z<=W/2-.05;z+=p)geos.push(new THREE.BoxGeometry(L-.08,.022,.032).translate(0,-.012,z));            // flat bars along the length
+  for(let x=-L/2+.07;x<=L/2-.06;x+=p)geos.push(new THREE.BoxGeometry(.032,.022,W-.08).translate(x,.008,0));             // woven across them
+  for(const sz of [-1,1])geos.push(new THREE.BoxGeometry(L,.045,.05).translate(0,0,sz*(W/2-.025)));                   // the frame
+  for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
+  const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
+function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
 function clearWorld(){PIT=null;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
@@ -778,7 +836,9 @@ function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoad
       M.map=rep(d);M.normalMap=rep(n);M.normalScale=new THREE.Vector2(c.ns,c.ns);M.aoMap=rep(m);M.aoMapIntensity=.9;M.roughnessMap=M.aoMap;M.roughness=1;M.bumpMap=null;
       M.color.setHex(c.col||0xffffff);M.needsUpdate=true;}}).catch(()=>{});}
   // a photographed sky for daylight reflections and fill
-  new RGBELoader().load('assets/hdri/sky_1k.hdr',t=>{t.mapping=THREE.EquirectangularReflectionMapping;const pm=new THREE.PMREMGenerator(renderer);LIGHTS.day.envTex=pm.fromEquirectangular(t).texture;pm.dispose();t.dispose();
+  new RGBELoader().load('assets/hdri/sky_1k.hdr',t=>{t.mapping=THREE.EquirectangularReflectionMapping;const pm=new THREE.PMREMGenerator(renderer);LIGHTS.day.envTex=pm.fromEquirectangular(t).texture;pm.dispose();LIGHTS.day.bg=t;
+    // the photographed sky is far brighter than the painted one: polished steel was blowing out to white
+    steelMat.envMapIntensity=1.05;steelDark.envMapIntensity=.9;mailMat.envMapIntensity=.9;
     LIGHTS.day.hi=.55;if(MAPS[curMap]&&MAPS[curMap].light==='day')applyLighting('day');},undefined,()=>{});}
 let crowd=null;const crowdU={uTime:{value:0},uCheer:{value:0}};
 function scaleUV(g,su,sv){const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv);return g;}
@@ -816,21 +876,24 @@ function buildArena(){
 }
 // ================================================================ the pit (walled yard round a deep shaft, after Half Sword's)
 function buildPit(){
-  const W=15,wallH=4.2;PIT={x:0,z:0,r:2.6,d:6,bw:.62};
-  {const gg=new THREE.RingGeometry(PIT.r,110,96,8);gg.rotateX(-Math.PI/2);scaleUV(gg,220/6.5,220/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
-  // the shaft: stone walls going down into the dark, a dirt floor, and a low stone rim broken where the bridge crosses
+  const W=15,wallH=4.2;PIT={x:0,z:0,r:2.6,d:6};
+  {const gg=new THREE.RingGeometry(PIT.r+.38,110,96,8);gg.rotateX(-Math.PI/2);scaleUV(gg,220/6.5,220/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
+  // the shaft: stone walls going down into the dark and a dirt floor
   addGeo('lime',scaleUV(new THREE.CylinderGeometry(PIT.r,PIT.r,PIT.d,48,1,true),PIT.r*6.283/2.5,PIT.d/2.5).translate(0,-PIT.d/2,0),T(PIT.x,0,PIT.z));
   {const fg=new THREE.CircleGeometry(PIT.r,40);fg.rotateX(-Math.PI/2);scaleUV(fg,3,3);const m=new THREE.Mesh(fg,std({map:TX.ground,roughness:1,color:0x4a3f33}));m.position.set(PIT.x,-PIT.d+.01,PIT.z);m.receiveShadow=true;world.add(m);}
   // sharpened stakes planted in the floor: what kills you is landing on them, not the drop
   {let sd=9;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};PIT.spikes=[];
     for(let i=0;i<34;i++){const a=r()*6.283,d=Math.sqrt(r())*(PIT.r-.2),x=PIT.x+Math.cos(a)*d,z=PIT.z+Math.sin(a)*d,h=.45+r()*.4,tx=(r()-.5)*.35,tz=(r()-.5)*.35;
       const g=new THREE.ConeGeometry(.045,h,6);g.translate(0,h/2,0);addGeo(r()<.35?'dirt':'wood',g,T(x,-PIT.d,z,r()*6,tx,tz));PIT.spikes.push([x,z,h]);}}
-  const gap=Math.asin(Math.min(.95,(PIT.bw+.08)/PIT.r)),prof=[[PIT.r,-.25],[PIT.r,.14],[PIT.r+.18,.2],[PIT.r+.4,.14],[PIT.r+.42,0]].map(([x,y])=>new THREE.Vector2(x,y));
-  for(const st of [Math.PI/2+gap,Math.PI*1.5+gap])addGeo('lime',scaleUV(new THREE.LatheGeometry(prof,30,st,Math.PI-2*gap),8,1),T(PIT.x,0,PIT.z));
-  // the plank bridge across, on two iron-banded beams
-  {const L=PIT.r*2+.7;for(const sz of [-1,1])addGeo('wood',boxUV(L,.16,.12,1),T(PIT.x,-.1,PIT.z+sz*(PIT.bw-.08)));
-    PIT.planks=[];PIT.p0=PIT.x-L/2+.1;for(let k=0;k<Math.round(L/.19);k++){const m=new THREE.Mesh(boxUV(.17,.06,2*PIT.bw,1),MATS.woodPale);const x=PIT.p0+k*.19;m.position.set(x,-.03,PIT.z);PIT.planks.push(propAdd('plank',m,x,PIT.z,PIT.bw,0,9,null));}
-    for(const sx of [-1,1])addGeo('iron',boxUV(.06,.07,2*PIT.bw+.04,1),T(PIT.x+sx*(PIT.r-.25),-.02,PIT.z));}
+  // the rim: a ring of dressed stone blocks, each set a little differently
+  {let sd=31;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};const N=34,Rr=PIT.r+.2;
+    for(let i=0;i<N;i++){const a=(i+.5)/N*6.283,w=6.283*Rr/N-.025;addGeo('lime',boxUV(.42,.26+r()*.03,w,1),T(PIT.x+Math.cos(a)*Rr,-.06+r()*.012,PIT.z+Math.sin(a)*Rr,-a,0,(r()-.5)*.02));}}
+  // sharpened stakes set into the top of the shaft wall, pointing in and down: nobody climbs back out
+  {let sd=57;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};const N=40;
+    for(let i=0;i<N;i++){const a=i/N*6.283+r()*.05,len=.55+r()*.25,dir=V(-Math.cos(a),-.35-r()*.2,-Math.sin(a)).normalize(),g=new THREE.ConeGeometry(.035,len,5);g.translate(0,len/2,0);
+      const q=new THREE.Quaternion().setFromUnitVectors(Y_AXIS,dir),m=new THREE.Matrix4().compose(V(PIT.x+Math.cos(a)*(PIT.r+.05),-.42-r()*.15,PIT.z+Math.sin(a)*(PIT.r+.05)),q,V(1,1,1));addGeo('wood',g,m);}}
+  // the iron grate lying across it
+  PIT.grate=grateNew();PIT.grate.mesh=grateMesh();grateVisual();
   // the yard walls, with a gate, and the wooden fences inside them
   for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
     addGeo('lime',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
@@ -908,15 +971,15 @@ const LIGHTS={
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
-  arena:{name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
-  colosseum:{name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
-  pit:{name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
+  arena:{entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
+  colosseum:{entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  pit:{entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
 function applyLighting(k){
   const L=LIGHTS[k];
   {const r=L.shR||32,m=L.shMap||2048;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.updateProjectionMatrix();   // a tight, fine shadow map where the fighting is
-    if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;scene.background.setHex(L.fog);
+    if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;sky.visible=!L.bg;if(L.bg){scene.background=L.bg;scene.backgroundIntensity=.85;}else{if(!scene.background||!scene.background.isColor)scene.background=new THREE.Color();scene.background.setHex(L.fog);}
   const u=sky.material.uniforms;u.top.value.setHex(L.top);u.mid.value.setHex(L.mid);u.hor.value.setHex(L.hor);u.glowCol.value.setHex(L.glow);u.glowDir.value.set(...L.glowDir).normalize();u.stars.value=L.stars;
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
   renderer.toneMappingExposure=L.exp;scene.environment=L.envTex;grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
@@ -928,8 +991,15 @@ const BLOOD_N=900;
 const bloodMesh=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),std({color:0x5c0606,roughness:.3,metalness:.1}),BLOOD_N);
 bloodMesh.frustumCulled=false;scene.add(bloodMesh);
 const bP=new Float32Array(BLOOD_N*3),bV=new Float32Array(BLOOD_N*3),bL=new Float32Array(BLOOD_N),bS=new Float32Array(BLOOD_N);let bI=0;
-const DEC_N=420;const decalGeo=new THREE.CircleGeometry(1,12);decalGeo.rotateX(-Math.PI/2);
-const decals=new THREE.InstancedMesh(decalGeo,std({color:0x2e0404,roughness:.5,metalness:0,envMapIntensity:.12,transparent:true,opacity:.95,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-6}),DEC_N);
+// blood on the ground: an irregular splash with satellite drops, darker and thicker in the middle (not a disc)
+function splatCanvas(){const S=256,c=mkCanvas(S,S),g=c.getContext('2d'),C=S/2;let sd=3;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  g.fillStyle='#000';g.fillRect(0,0,S,S);const blob=(x,y,rad,a)=>{g.fillStyle=`rgba(255,255,255,${a})`;g.beginPath();for(let i=0;i<=28;i++){const t=i/28*6.283,d=rad*(.72+r()*.5);i?g.lineTo(x+Math.cos(t)*d,y+Math.sin(t)*d):g.moveTo(x+Math.cos(t)*d,y+Math.sin(t)*d);}g.fill();};
+  blob(C,C,C*.5,1);for(let i=0;i<7;i++){const a=r()*6.283,d=C*(.3+r()*.25);blob(C+Math.cos(a)*d,C+Math.sin(a)*d,C*(.14+r()*.14),1);}
+  for(let i=0;i<26;i++){const a=r()*6.283,d=C*(.55+r()*.4);blob(C+Math.cos(a)*d,C+Math.sin(a)*d,C*(.02+r()*.05),.95);}   // flung drops
+  const im=g.getImageData(0,0,S,S);for(let i=0;i<im.data.length;i+=4){im.data[i+3]=255;}g.putImageData(im,0,0);return c;}
+const DEC_N=420;const decalGeo=new THREE.PlaneGeometry(2,2);decalGeo.rotateX(-Math.PI/2);
+const splatTex=new THREE.CanvasTexture(splatCanvas());
+const decals=new THREE.InstancedMesh(decalGeo,std({alphaMap:splatTex,alphaTest:.35,color:0x2e0404,roughness:.5,metalness:0,envMapIntensity:.12,transparent:true,opacity:.95,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-6}),DEC_N);
 decals.frustumCulled=false;decals.receiveShadow=true;scene.add(decals);let dI=0;
 const _mx=new THREE.Matrix4(),_zero=new THREE.Matrix4().makeScale(0,0,0);
 for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);
@@ -1379,7 +1449,7 @@ class Ragdoll{
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
       for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+r){const q=this.Q[n];if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
-        if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>1e-3){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?Math.sign(p.z-PIT.z||1)*.004:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
+        if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>1e-3){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
     for(const n of this.names){if(this.P[n].y<5)collide(this.P[n],RD_R[n]||.055,true);}
     if(this.pin&&this.P[this.pin]){this.P[this.pin].copy(this.pinP);this.Q[this.pin].copy(this.pinP);}   // run through on a stake
@@ -1433,8 +1503,7 @@ function physStatic(){
     const w=[],wi=[];for(let i=0;i<N;i++){const a=i/N*6.283;w.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*PIT.r,-PIT.d,PIT.z+Math.sin(a)*PIT.r);}
     for(let i=0;i<N;i++){const j=(i+1)%N;wi.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(w),new Uint32Array(wi)));
     add(R.ColliderDesc.cuboid(PIT.r+.6,.5,PIT.r+.6).setTranslation(PIT.x,-PIT.d-.5,PIT.z));
-    if(PIT.planks)for(const pl of PIT.planks){if(!pl.broken)pl.phys=add(R.ColliderDesc.cuboid(.095,.035,PIT.bw).setTranslation(pl.x,-.035,PIT.z));}   // plank by plank, so a broken one leaves a gap
-    else add(R.ColliderDesc.cuboid(PIT.r+.3,.05,PIT.bw).setTranslation(PIT.x,-.05,PIT.z));}
+    if(PIT.grate){const G=PIT.grate;G.col=add(R.ColliderDesc.cuboid(GR.L/2,.03,GR.W/2).setTranslation(G.C.x,G.C.y-.03,G.C.z));}}
   for(const b of boxes)b.phys=add(R.ColliderDesc.cuboid(Math.max(.01,(b.x1-b.x0)/2),b.h/2,Math.max(.01,(b.z1-b.z0)/2)).setTranslation((b.x0+b.x1)/2,b.h/2,(b.z0+b.z1)/2));
   for(const c of circles)c.phys=add(R.ColliderDesc.cylinder(c.h/2,c.r).setTranslation(c.x,c.h/2,c.z));
   if(ARENA_R>0){const n=72;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,th=-(a+Math.PI/2);add(R.ColliderDesc.cuboid(ARENA_R*Math.PI/n+.06,1.7,.3).setTranslation(Math.cos(a)*(ARENA_R+.3),1.7,Math.sin(a)*(ARENA_R+.3)).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)}));}}
@@ -1523,7 +1592,10 @@ function propHitTest(){if(!PROPS.length)return;
         const v=sp*t,k=s.def.kind==='blunt'||s.def.kind==='axe'?1.6:s.def.kind==='spear'?.5:.9,dmg=Math.max(0,v-3)*s.def.weight*k;p.hp-=dmg;p.jig=.25;
         sThud(_v,Math.min(1,v/10));s.Tp.lerp(s.T,.55);s.Hv.multiplyScalar(.6);
         if(p.hp<=0){_e.copy(s.tipVel).setY(0);if(_e.lengthSq()>1e-4)_e.normalize();propBreak(p,_e,A);}break;}}};
-  for(const f of fighters)if(f.alive&&f.sword)test(f.sword,f);for(const s of freeSwords)if(s.flying)test(s,s.thrower);}
+  for(const f of fighters)if(f.alive&&f.sword)test(f.sword,f);for(const s of freeSwords)if(s.flying)test(s,s.thrower);
+  const G=PIT&&PIT.grate;if(G&&G.mode==='rest')for(const f of fighters){const s=f.sword;if(!f.alive||!s||s.def.kind==='fist')continue;const sp=s.tipVel.length();if(sp<4)continue;
+    for(let i=2;i<=4;i++){const t=s.def.hitFrom+(1-s.def.hitFrom)*i/4;_v.copy(s.H).addScaledVector(s.axis,s.len*t);if(_v.y>.1||!onBridgeAt(G,_v.x,_v.z))continue;if((G.cd.get(s)||0)>simTime)break;G.cd.set(s,simTime+.3);
+      const k=s.def.weight*(s.def.kind==='blunt'||s.def.kind==='axe'?.02:.012)*t;grateKick(s.tipVel.x*k,s.tipVel.z*k);sClang(_v,Math.min(1,sp/10));spawnSparks(_v,(4+sp)|0,null);s.Tp.lerp(s.T,.6);break;}}}
 function propVisual(dt){for(const p of PROPS){if(p.jig>0){p.jig-=dt;const a=Math.sin(p.jig*70)*p.jig*.12;p.mesh.rotation.z=a;p.mesh.rotation.x=a*.6;}}}
 class Sword{
   constructor(def){this.def=def;this.len=def.len;this.mesh=def.make();this.H=V();this.Hv=V();this.Hp=V();this.T=V();this.Tp=V();this.axis=V(0,1,0);this.edge=V(1,0,0);this.tipVel=V();this.free=false;this.age=0;this.arc=0;this.lastDir=V(1,0,0);this.power=0;this.swings=0;this.flying=false;this.thrower=null;this.Hprev=V();this.stuck=null;this.owner=null;this.rb=null;this.wallCd=0;this.id=swordId++;if(PW)this.physMake();}
@@ -1946,15 +2018,17 @@ class Fighter{
     run=run&&!exhausted&&!this.crouch&&onGround;
     const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45)run=false;
     const drag=this.dragT>simTime;if(drag)run=false;
-    let spd=(drag?.5:1)*(1-.55*legF)*(run?5.4:this.crouch?1.6:3.1)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
+    // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
+    const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
+    let spd=(drag?.5:1)*(1-.55*legF)*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(9*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
     const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
-    if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(onGround&&legs&&cs>3.8&&this.stamina>8&&this.kickT<0){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
+    if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
     const vx0=this.vel.x,vz0=this.vel.z;
-    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=onGround?(stum>0?20:13):1.6;
+    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=onGround?(stum>0?20:run?4.5:7):1.6;   // a body takes a moment to get going and to stop
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
     if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
     if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
@@ -2520,7 +2594,7 @@ function spawnDebris(f,boneName,vel){
 
 // ================================================================ loot
 const TIER_COL=[0,0xe8dcc0,0x6fa8ff,0xffb84a];
-function lootHalo(tier){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:TX.glow,color:TIER_COL[tier]||0xffffff,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.45}));s.scale.setScalar(.9);s.renderOrder=3;scene.add(s);return s;}
+function lootHalo(tier){return null;const s=new THREE.Sprite(new THREE.SpriteMaterial({map:TX.glow,color:TIER_COL[tier]||0xffffff,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.45}));s.scale.setScalar(.9);s.renderOrder=3;scene.add(s);return s;}
 function spawnArmorLoot(def,x,z){const g=armorPreview(def);g.position.set(x,0,z);g.rotation.y=Math.random()*6.28;scene.add(g);loot.push({kind:'armor',def,obj:g,halo:lootHalo(def.tier)});}
 function spawnWeaponLoot(def,x,z){const s=new Sword(def);const a=Math.random()*6.28;const d=V(Math.cos(a),0,Math.sin(a));s.reset(V(x-d.x*def.len*.4,.05,z-d.z*def.len*.4),d);s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);s.age=1;}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:lootHalo(def.tier)});}
 function lootPos(it,out){
@@ -2883,6 +2957,10 @@ function grabStep(A,arm,held,h){
       B.vel.addScaledVector(_v,30*h);B.balV.addScaledVector(_v,40*h);A.vel.addScaledVector(_v,-10*h);   // the harder you haul, the harder they're dragged off their feet; you feel their weight
       if(G.bone===B.bones.Head||G.bone===B.bones.Neck)B.balV.addScaledVector(_v,6*h);}
     arm.pos.copy(_gp);arm.vel.copy(B.vel);return true;}
+  if(arm.grab.k==='g'){const G=PIT&&PIT.grate;if(!G||G.mode!=='rest'){arm.grab=null;return false;}_gp.copy(G.C).add(arm.grab.off);_gp.y=G.C.y+.05;
+    _v.subVectors(arm.tgtW,_gp);_v.y=0;const d=_v.length();if(d>1.1){arm.grab=null;return false;}   // a dead weight: it moves only as hard as you haul, and drags you as much
+    if(d>.08){G.vx+=_v.x*2.2*h;G.vz+=_v.z*2.2*h;A.vel.addScaledVector(_v,-3*h);A.dragT=simTime+.15;if(Math.random()<h*3)G.clang=Math.max(G.clang,.2);}
+    arm.pos.copy(_gp);arm.vel.set(0,0,0);return true;}
   const R=arm.grab.R,P=R.P[arm.grab.n];if(!P||R.dead){arm.grab=null;return false;}
   _v.subVectors(arm.tgtW,P);const d=_v.length();if(d>.9){arm.grab=null;return false;}
   // drag that limb toward the hand: firmly but not instantly, the rest of the body comes along through its joints, and its weight holds you back
@@ -2901,8 +2979,8 @@ function grabTry(A,arm){
       arm.grab={k:'f',B,bone,loc:arm.pos.clone().applyMatrix4(_m4.copy(bone.matrixWorld).invert())};return;}}
   const side=arm===A.fists.R?'R':'L';
   for(const d of debris){if(!d.rag||d.rag.P==null||d.wep)continue;const g=grabRag(d.rag,arm.pos);if(g){if(NET.mode!=='client'&&debrisWeapon(A,d,side)){arm.grab=null;return;}arm.grab=g;return;}}
-  if(PIT&&PIT.planks&&NET.mode!=='client')for(const pl of PIT.planks){if(pl.broken)continue;if(Math.abs(arm.pos.x-pl.x)<.14&&Math.abs(arm.pos.z-pl.z)<PIT.bw+.05&&arm.pos.y<.45){   // stoop and wrench a plank loose
-      propBreak(pl,null,A);const s=freeSwords[freeSwords.length-1],it=loot[loot.length-1];if(s&&it&&it.sword===s){A.mainArm=A.mainArm||side;pickUp(A,it);}return;}}}
+  const G=PIT&&PIT.grate;if(G&&G.mode==='rest'&&arm.pos.y<.5&&Math.abs(arm.pos.x-G.C.x)<GR.L/2+.12&&Math.abs(arm.pos.z-G.C.z)<GR.W/2+.12){   // stoop, get your fingers through the bars and haul
+    arm.grab={k:'g',off:V(arm.pos.x-G.C.x,0,arm.pos.z-G.C.z)};return;}}
 function fistCheck(A,arm){
   if(simTime<CD_END)return;
   for(const B of fighters){
@@ -2976,8 +3054,8 @@ function aimPoint(out){
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
 const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
 let hitStopT=0,shakeAmt=0;
-function hitstop(t){hitStopT=Math.max(hitStopT,t);}
-function shake(a){shakeAmt=Math.min(1,shakeAmt+a);}
+function hitstop(t){}   // no freeze-frames: the sim never pauses for effect
+function shake(a){shakeAmt=Math.min(.35,shakeAmt+a*.3);}   // a jolt, not a screen-shake
 // camera smoothing: a damped follow pivot (shoves and stumbles move the body in frame instead of jerking the world),
 // smooth shake instead of per-frame noise, and eased blends whenever the camera changes rig (knockdown, death, getting up)
 const camPiv=new THREE.Vector3(),_camQ=new THREE.Quaternion(),_camE=new THREE.Euler(0,0,0,'YXZ'),_camM=new THREE.Matrix4(),_camUp=new THREE.Vector3(0,1,0);
@@ -3109,8 +3187,10 @@ function countdownTick(left){ // shown on every screen; the host's clock decides
   else if(left>-1){showBanner('Fight!','');sfx('clash',null,.8,1,0,false);cheer(.6);}
 }
 function tell(f,text,cls){if(!f)return;if(f.isPlayer)note(text,cls);else if(f.remote)netEv(['o',f.id,text,cls||'']);}
-let hmT=null;function hitMarker(kill){const c=document.getElementById('cross');c.classList.remove('hit','kill');void c.offsetWidth;c.classList.add(kill?'kill':'hit');clearTimeout(hmT);hmT=setTimeout(()=>c.classList.remove('hit','kill'),kill?420:160);}
-function note(text,cls=''){const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
+let hmT=null;function hitMarker(kill){return;const c=document.getElementById('cross');c.classList.remove('hit','kill');void c.offsetWidth;c.classList.add(kill?'kill':'hit');clearTimeout(hmT);hmT=setTimeout(()=>c.classList.remove('hit','kill'),kill?420:160);}
+function note(text,cls=''){if(cls!=='red'||!SIM_NOTE(text))return;const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
+// the only notes left are what your own body tells you
+const SIM_NOTE=t=>/arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside/i.test(t);
 let hurtV=0;function hudHurt(d){hurtV=Math.min(1,hurtV+d/40);}
 
 function playerInput(f,wish,h){
@@ -3132,6 +3212,7 @@ function playerInput(f,wish,h){
 // ---------------------------------------------------------------- input
 const cvs=renderer.domElement;
 addEventListener('keydown',e=>{
+  if(e.code==='Tab'&&state==='playing'){e.preventDefault();document.body.classList.add('showvit');}   // hold Tab to check your wounds
   input.keys[e.code]=true;
   if(['Space','KeyW','KeyA','KeyS','KeyD','KeyC','KeyF','KeyE','KeyQ','KeyV'].includes(e.code))e.preventDefault();
   if(e.code==='KeyR'&&(state==='dead'||state==='won')&&NET.mode!=='client')startGame();
@@ -3147,7 +3228,7 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}else if(NET.mode!=='client'&&player&&player.alive&&!player.ragdoll&&player.mainArm){let best=null,bd=1.6;for(const d of debris){if(d.wep||!d.rag)continue;const q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-player.pos.x,q.z-player.pos.z);if(dd<bd){bd=dd;best=d;}}if(best)debrisWeapon(player,best,player.mainArm);}}
   }
 });
-addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
+addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
 addEventListener('mousedown',e=>{if(state!=='playing'||paused)return;if(e.button===0)input.lmb=true;if(e.button===2)input.rmb=true;});
 addEventListener('mouseup',e=>{if(e.button===0)input.lmb=false;if(e.button===2)input.rmb=false;});
 addEventListener('contextmenu',e=>e.preventDefault());
@@ -3213,7 +3294,7 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
-function startGame(){
+function startGame(){document.body.classList.toggle('sim',MODE!=='br');
   if(NET.mode==='client')return;
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
@@ -3258,7 +3339,7 @@ function buildMinimap(){
   const c=mkCanvas(600,600),g=c.getContext('2d');const k=600/(MAP*2),X=x=>(x+MAP)*k;
   g.fillStyle='#3b3a24';g.fillRect(0,0,600,600);
   speckle(g,600,600,600,['#46452c','#33321f'],3,14,.6);
-  if(PIT){g.fillStyle='#0d0b09';g.beginPath();g.arc(X(PIT.x),X(PIT.z),PIT.r*k,0,7);g.fill();g.fillStyle='#8a6a40';g.fillRect(X(PIT.x-PIT.r-.4),X(PIT.z-PIT.bw),(PIT.r*2+.8)*k,PIT.bw*2*k);}
+  if(PIT){g.fillStyle='#0d0b09';g.beginPath();g.arc(X(PIT.x),X(PIT.z),PIT.r*k,0,7);g.fill();if(PIT.grate&&PIT.grate.mode==='rest'){const G=PIT.grate;g.fillStyle='#4a443c';g.fillRect(X(G.C.x-GR.L/2),X(G.C.z-GR.W/2),GR.L*k,GR.W*k);}}
   if(curMap==='village'){g.fillStyle='#8a7a58';g.fillRect(X(-3.7),0,7.4*k,600);g.fillRect(0,X(-3.7),600,7.4*k);
     for(const s of [-36,36]){g.fillRect(X(s-3.2),X(-39),6.4*k,78*k);g.fillRect(X(-39),X(s-3.2),78*k,6.4*k);}
     g.beginPath();g.arc(X(0),X(0),16*k,0,7);g.fill();}
@@ -3314,10 +3395,10 @@ function updateHUD(dt){
       if(it){let t;if(it.kind==='weapon')t=(player.armed()?'Swap for ':'Take ')+it.def.name;else{const cur=player.armor[it.def.slot];t=`${it.corpse?'Strip':'Wear'} ${it.def.name} · ${SLOT_NAME[it.def.slot].toLowerCase()} ${Math.round(it.def.prot*100)}%`+(cur?` (now ${Math.round(cur.def.prot*100)}%)`:'');}
         hud.ptext.textContent=t;hud.prompt.style.setProperty('--tier',TIER_CSS[it.def.tier]);}}
   }
-  hurtV=Math.max(0,hurtV-dt*.8);grade.uniforms.uHurt.value=hurtV+(player&&player.hp<30&&player.alive?.25+Math.sin(simTime*5)*.08:0);
+  hurtV=Math.max(0,hurtV-dt*.8);{const lost=player&&player.alive?clamp((80-player.hp)/80,0,1):0;grade.uniforms.uHurt.value=hurtV+lost*(.45+Math.sin(simTime*(4+lost*3))*.08*lost);if(player&&player.alive&&!END)grade.uniforms.uDesat.value=lost*.55;}
   grade.uniforms.uZone.value=player&&player.burn>0&&player.alive?(player.outside?1:.55):0;
   if(player){const b=player.burn>0&&player.alive;if(b&&!wasBurning)note('You are on fire','red');wasBurning=b;}
-  grade.uniforms.uDesat.value=state==='dead'?Math.min(1,(performance.now()-deathT)/1500):0;
+  if(state==='dead')grade.uniforms.uDesat.value=Math.min(1,(performance.now()-deathT)/1500);
   if((state==='dead'||state==='won')&&performance.now()-deathT>2600&&el('end').classList.contains('hide')){
     el('end').classList.remove('hide');if(document.pointerLockElement)document.exitPointerLock();lockWanted=false;hud.prompt.classList.add('hide');
     const t=el('endtitle');t.textContent=state==='won'?'Victory':'Slain';t.className=state==='won'?'win':'lose';
@@ -3332,10 +3413,13 @@ function updateHUD(dt){
 let acc=0,last=performance.now(),camYaw=0,camY=1.7,attractT=0,sub=0,physPhase=0;
 function sim(h){
   simTime+=h;
-  propHitTest();improvStep();
+  propHitTest();improvStep();grateStep(h);
   physTick=!!PW&&(physPhase^=1)===1;
   for(const f of fighters)f.step(h);
-  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),k=(.6-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;}}}
+  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),k=(.6-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;
+      // bodies collide: closing speed is shared out, and running into someone knocks both off balance (the one who was standing more)
+      const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0),mb=1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0),ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
+        a.vel.x-=nx*ja;a.vel.z-=nz*ja;b.vel.x+=nx*jb;b.vel.z+=nz*jb;if(-vn>1.6){_v.set(nx,0,nz);b.shove(_v,jb*.7);_v.negate();a.shove(_v,ja*.45);if(-vn>2.6)sThud(a.chest,.4);}}}}}
   if(PW){if(physTick){const h=PH_H;
     for(const f of fighters)if(f.pb)f.physParts(h);
     for(const s of freeSwords)if(s.rb)s.physFree(h);
@@ -3360,7 +3444,7 @@ function logic(dt){
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
-  propVisual(dt);
+  propVisual(dt);grateVisual();
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -3562,8 +3646,11 @@ function gauntletWave(){
   // the fallen come back between waves, and everyone patches up
   const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2,['arming',['kettle']]));}}
   const n=Math.min(6,1+Math.floor(R.wave*.7)+(hn-1)),tier=Math.min(5,Math.floor(R.wave/2));const add=[];
-  for(let i=0;i<n;i++){const a=i/n*6.283+rand(-.3,.3),kit=KITS[Math.min(5,(Math.random()*(2+tier))|0)];const en=botEntrant(R.names[R.ni++%R.names.length],.3+R.wave*.06);en.foe=true;
-    add.push(spawnEntrant(en,Math.cos(a)*Math.min(24,MAP-2),Math.sin(a)*Math.min(24,MAP-2),kit,en.skill));}
+  // they come in through the gate (or the gap in the fence) one after another and walk out to meet you; nobody appears out of thin air
+  const E=MAPS[curMap].entry;R.queue=[];
+  for(let i=0;i<n;i++){const kit=KITS[Math.min(5,(Math.random()*(2+tier))|0)];const en=botEntrant(R.names[R.ni++%R.names.length],.3+R.wave*.06);en.foe=true;
+    if(E)R.queue.push({en,kit,at:simTime+.8+i*1.5,lat:(i%3-1)*.9,back:Math.floor(i/3)*.8});
+    else{const a=i/n*6.283+rand(-.3,.3);add.push(spawnEntrant(en,Math.cos(a)*Math.min(24,MAP-2),Math.sin(a)*Math.min(24,MAP-2),kit,en.skill));}}
   for(const f of fighters)f.ai.retarget=0;
   hostSendAdd([...back,...add]);
   MODEHUD=[`Wave ${R.wave}`,`${n} coming · ${R.kills} slain so far`];banner(`Wave ${R.wave}`,`${n} fighter${n>1?'s':''} enter the arena`);
@@ -3632,9 +3719,11 @@ function modeKill(killer,victim){
     const hAlive=alive.filter(f=>f.entrant&&f.entrant.human).length,fAlive=alive.filter(f=>f.entrant&&f.entrant.foe).length;
     MODEHUD=[`Wave ${R.wave}`,`${fAlive} left · ${R.kills} slain`];
     if(!hAlive){R.next=simTime+2.5;R.after=()=>endRun([],'Overwhelmed',`You survived ${R.wave-1} wave${R.wave===2?'':'s'} · ${R.kills} slain`,'The arena claims another.');}
-    else if(!fAlive){banner(`Wave ${R.wave} cleared`,'Catch your breath');R.next=simTime+4;R.after=gauntletWave;}}
+    else if(!fAlive&&!(R.queue&&R.queue.length)){banner(`Wave ${R.wave} cleared`,'Catch your breath');R.next=simTime+4;R.after=gauntletWave;}}
 }
 function modeTick(){const R=RUN;if(!R||R.over)return;
+  if(R.mode==='gauntlet'&&R.queue&&R.queue.length&&simTime>=R.queue[0].at){const q=R.queue.shift(),E=MAPS[curMap].entry;
+    const f=spawnEntrant(q.en,E.x+E.dz*q.lat-E.dx*q.back,E.z-E.dx*q.lat-E.dz*q.back,q.kit,q.en.skill);f.yaw=Math.atan2(E.dx,E.dz);f.vel.set(E.dx*1.2,0,E.dz*1.2);f.ai.retarget=0;hostSendAdd([f]);}
   if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2,['longsword',[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
@@ -3708,7 +3797,7 @@ function remoteInput(f,wish,h){
 const ARMOR_SLOTS=['head','body','arms','legs'];
 function netSnap(){
   const z=zone;
-  const S={t:'s',cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
+  const S={t:'s',gr:PIT&&PIT.grate?[r3(PIT.grate.C.x),r3(PIT.grate.C.y),r3(PIT.grate.C.z),r3(PIT.grate.phi),PIT.grate.mode==='rest'?0:1]:0,cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
@@ -3803,7 +3892,8 @@ function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){
   simTime+=dt;   // local clock for effects (spurts, clutching) on a friend's screen
-  const S=NET.cur;if(!S)return;const P=NET.prev||S;
+  const S=NET.cur;if(!S)return;
+  if(S.gr&&PIT&&PIT.grate){const G=PIT.grate;G.C.set(S.gr[0],S.gr[1],S.gr[2]);G.phi=S.gr[3];G.mode=S.gr[4]?'moved':'rest';G.x=G.C.x-PIT.x;G.z=G.C.z-PIT.z;}const P=NET.prev||S;
   const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1),ex=clamp(performance.now()-NET.curAt-NET.gap,0,60)/1000;
   if(S.cd!=null)countdownTick(S.cd);
   zone.c.set(S.z[0],0,S.z[1]);zone.r=lerp(P.z[2],S.z[2],a);zone.phase=S.z[3];zone.state=S.z[4]?'shrink':'wait';zone.t=S.z[5];zone.next=S.z[6]?{c:V(S.z[6][0],0,S.z[6][1]),r:S.z[6][2]}:null;zone.dps=S.z[7];zone.off=!!S.z[8];if(S.mh)MODEHUD=S.mh;
@@ -3838,7 +3928,7 @@ function clientFrame(dt){
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);
+  propVisual(dt);grateVisual();
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -3898,6 +3988,6 @@ window.__clientData=clientData;window.__grabTry=grabTry;window.__onBridge=onBrid
 window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
