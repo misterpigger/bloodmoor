@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=47;
+const BUILD=48;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -758,7 +758,7 @@ let PIT=null;
 function onBridge(x,z){const G=PIT&&PIT.grate;if(!G||G.mode!=='rest')return false;return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}   // standing on the grate while it lies across the shaft
 function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
 function groundY(x,z,y=0){if(!PIT)return 0;
-  if(PIT.grate&&PIT.grate.mode!=='rest'){const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
+  if(PIT.grate&&PIT.grate.mode!=='rest'&&Math.abs(Math.sin(PIT.grate.phi))<.55){const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}   /* steeper than about 33° it's a wall of iron, not a ramp: nobody walks up out of the shaft on it */const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
   return inC&&(y<-.12||!onBridge(x,z))?-PIT.d:0;}
 function pitWall(p,r){if(!PIT||p.y>-.02)return;const dx=p.x-PIT.x,dz=p.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r-r;if(d>m&&d>1e-6){p.x=PIT.x+dx/d*m;p.z=PIT.z+dz/d*m;}}   // below the rim you're inside the shaft
 // ---- the iron grate over the Pit, after Half Sword's: a heavy woven grate lying across the shaft on the rim stones.
@@ -796,6 +796,12 @@ function grateStep(h){const G=PIT&&PIT.grate;if(!G)return;G.t+=h;
   }
   if(G.clang>0){sClang(G.C,G.clang);G.clang=0;}
   if(G.col){G.col.setTranslation({x:G.C.x,y:G.C.y-.03,z:G.C.z});G.col.setRotation({x:0,y:0,z:Math.sin(G.phi/2),w:Math.cos(G.phi/2)});}}
+// once it has dropped into the shaft the grate is a solid slab: bodies land on it and slide down it, people can't walk through it
+function grateSlab(p,r,horiz){const G=PIT&&PIT.grate;if(!G||G.mode==='rest')return false;const c=Math.cos(G.phi),s=Math.sin(G.phi);
+  const dx=p.x-G.C.x,dy=p.y-G.C.y,w=p.z-G.C.z;if(Math.abs(w)>GR.W/2+r)return false;const u=dx*c+dy*s;if(Math.abs(u)>GR.L/2)return false;
+  const dn=-dx*s+dy*c,m=r+.03;if(Math.abs(dn)>=m)return false;const push=(dn>=0?m:-m)-dn;
+  if(horiz){if(Math.abs(s)<.3)return false;p.x-=push/s;return true;}   // standing: shove sideways only, the feet stay on the floor
+  p.x+=-s*push;p.y+=c*push;return true;}
 function onBridgeAt(G,x,z){return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}
 function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   const iron=std({color:0x3b342e,roughness:.62,metalness:.55});
@@ -1402,7 +1408,10 @@ const RISE_A=[['Hips',0,0,.52],['Spine1',.18,0,.56],['Spine2',.36,0,.6],['Neck',
   ['LeftLeg',.02,.13,.06],['RightLeg',.02,-.13,.06],['LeftFoot',-.38,.13,.07],['RightFoot',-.38,-.13,.07]];
 const RISE_B=[['Hips',-.05,0,.62],['Spine1',-.02,0,.82],['Spine2',.02,0,1.02],['Neck',.05,0,1.22],['Head',.07,0,1.36],['HeadTop_End',.08,0,1.5],
   ['LeftLeg',-.08,.13,.06],['RightLeg',-.08,-.13,.06],['LeftFoot',-.45,.13,.07],['RightFoot',-.45,-.13,.07],['LeftHand',.3,.15,.5],['RightHand',.3,-.15,.5]];
-const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06]};   // the leading leg: knee up, foot flat ahead
+const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06]};
+// C: pushed up off the front knee into a low, guarded crouch, close to the pose the legs take over from, so the hand-over doesn't pop
+const RISE_C=[['Hips',0,0,.84],['Spine1',.04,0,.99],['Spine2',.08,0,1.17],['Neck',.1,0,1.37],['Head',.12,0,1.48],['HeadTop_End',.13,0,1.63],
+  ['LeftLeg',.12,.12,.47],['RightLeg',.12,-.12,.47],['LeftFoot',-.04,.15,.07],['RightFoot',-.04,-.15,.07],['LeftHand',.34,.04,1.0],['RightHand',.34,-.04,1.0],['LeftForeArm',.16,.2,.98],['RightForeArm',.16,-.2,.98]];   // hands come together where the grip will be   // the leading leg: knee up, foot flat ahead
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
 const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck','Head'],['Head','HeadTop_End'],['Head','Spine2'],['HeadTop_End','Neck'],
   ['Spine2','LeftArm'],['Spine2','RightArm'],['Neck','LeftArm'],['Neck','RightArm'],['LeftArm','RightArm'],['Spine1','LeftArm'],['Spine1','RightArm'],['Hips','LeftArm'],['Hips','RightArm'],
@@ -1452,7 +1461,7 @@ class Ragdoll{
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
-      for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+r){const q=this.Q[n];if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const gy=groundY(p.x,p.z,p.y);if(p.y<gy+r){const q=this.Q[n];if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>1e-3){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
@@ -1462,17 +1471,20 @@ class Ragdoll{
   }
   // the rising body is the same loose body, pulled by its own muscles toward each stage's pose; gravity still acts, so it strains and wobbles
   riseStep(h){const R=this.rise,P=this.P;R.t+=h;
-    if(R.fail&&R.t>R.a*.75&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;}   // the arms give and they slump back down for a moment
+    if(R.fail&&R.t>R.a*.75&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
     if(R.t<0)return;
-    const st=R.t<R.a?0:1,u=st?clamp((R.t-R.a)/R.b,0,1):clamp(R.t/R.a,0,1),f=R.f,rx=-f.z,rz=f.x,sd=R.kneel;
-    const ramp=Math.min(1,R.t/.25),shake=1+Math.sin(R.t*23)*.25*R.hurt+Math.sin(R.t*7.1)*.15*R.hurt;
-    const k=(st?.06:.045)*R.str*ramp*shake;
+    // one continuous effort, not three snapped poses: each stage's targets travel smoothly from where the body was when the stage began
+    const st=R.t<R.a?0:R.t<R.a+R.b?1:2,u=st===0?clamp(R.t/R.a,0,1):st===1?clamp((R.t-R.a)/R.b,0,1):clamp((R.t-R.a-R.b)/R.c,0,1),f=R.f,rx=-f.z,rz=f.x,sd=R.kneel;
+    if(R.st!==st){R.st=st;R.from={};for(const n in P)R.from[n]=P[n].clone();}
+    const e=u*u*(3-2*u),ramp=Math.min(1,R.t/.25),shake=1+Math.sin(R.t*11)*.2*R.hurt+Math.sin(R.t*4.3)*.15*R.hurt;
+    const k=(st?.05:.04)*R.str*ramp*shake,S=R.S||1;
     // [particle, forward, right, up] relative to where the hips came to rest, facing the way the head lies
-    const T=st===0?RISE_A:RISE_B;
-    for(const [n,fw,ri,up] of T){const p=P[n];if(!p)continue;const ss=n.startsWith('Left')?1:n.startsWith('Right')?-1:0,r2=st&&ss?ri*(ss===sd?1:1):ri;
-      let F=fw,U=up;if(st&&ss===-sd&&RISE_B_FRONT[n.replace(/^Left|^Right/,'')]){[F,U]=RISE_B_FRONT[n.replace(/^Left|^Right/,'')];}
-      const tx=R.base.x+f.x*F+rx*r2,tz=R.base.z+f.z*F+rz*r2,ty=R.gy+U*(st?1:.6+.4*u);
-      const kk=k*(n==='Hips'||n==='Spine1'||n==='Spine2'?1.2:1);p.x+=(tx-p.x)*kk;p.y+=(ty-p.y)*kk;p.z+=(tz-p.z)*kk;}}
+    const T=st===0?RISE_A:st===1?RISE_B:RISE_C;
+    for(const [n,fw,ri,up] of T){const p=P[n];if(!p)continue;const ss=n.startsWith('Left')?1:n.startsWith('Right')?-1:0;
+      let F=fw,U=up;if(st===1&&ss===-sd&&RISE_B_FRONT[n.replace(/^Left|^Right/,'')]){[F,U]=RISE_B_FRONT[n.replace(/^Left|^Right/,'')];}
+      const tx=R.base.x+f.x*F+rx*ri,tz=R.base.z+f.z*F+rz*ri,ty=R.gy+U*S;
+      const o=R.from[n]||p,gx=o.x+(tx-o.x)*e,gy=o.y+(ty-o.y)*e,gz=o.z+(tz-o.z)*e;
+      const kk=k*(n==='Hips'||n==='Spine1'||n==='Spine2'?1.2:1);p.x+=(gx-p.x)*kk;p.y+=(gy-p.y)*kk;p.z+=(gz-p.z)*kk;}}
   apply(rootDebris){
     const b=this.b,P=this.P;
     if(this.hips){
@@ -2004,7 +2016,8 @@ class Fighter{
         else if(hy<-PIT.d+1.6&&simTime-this.pitT>9){this.die(null,'fell into the pit');return;}}   // wedged on the way down of the shaft kills
       if(this.alive&&(this.downed||this.bleeds&&this.bleeds.length)){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.startRise();}
-      else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(r.t>=r.a+r.b)this.getUp();}   // up off the knee: hand over to the legs
+      else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(this.sword&&!this.sword.free){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}   // the weapon comes up with the hand that holds it
+        if(r.t>=r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
       return;}
     if(!this.alive)return;
     if(this.bleeds&&this.bleeds.length){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
@@ -2040,7 +2053,7 @@ class Fighter{
     // thrusts step in behind the point
     
     if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;if(this.pos.y<=0){this.pos.y=0;this.vy=0;}}
-    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true);
+    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
@@ -2174,7 +2187,7 @@ class Fighter{
     const legF=Math.max(this.limbF('legL'),this.limbF('legR')),armOut=(this.limbs.armL.sev||this.limbs.armL.dead?1:0)+(this.limbs.armR.sev||this.limbs.armR.dead?1:0);
     const hurt=clamp((1-this.hp/100)*.9+legF*.6+armOut*.25+(this.stamina<25?.3:0),0,1.6);
     const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()<1e-4)this.fwd(f);f.normalize();
-    Rg.rise={t:0,a:.55+hurt*1.3,b:.45+hurt*.9,f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
+    Rg.rise={t:0,a:.6+hurt*1.3,b:.5+hurt*.9,c:.35+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
     Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5);}}
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
@@ -2294,6 +2307,9 @@ class Fighter{
     this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;
     const sp=Math.hypot(this.vel.x,this.vel.z);this.fwd(_f);const fc=this.vel.x*_f.x+this.vel.z*_f.z;const back=sp>.3&&fc<-.35*sp;
     let wi=1,ww=0,wr=0;if(sp>.15){if(sp<1.8){ww=clamp(sp/1.3,0,1);wi=1-ww;}else{const t=clamp((sp-1.8)/1.8,0,1);ww=1-t;wr=t;wi=0;}}if(this.slideT>0){wi=1;ww=wr=0;}
+    // stepping sideways or backing off, a fighter doesn't turn his hips and walk: he keeps square and steps, foot by foot (the plant code below takes the steps)
+    {this.right(_r);const lat=sp>.3?Math.abs(this.vel.x*_r.x+this.vel.z*_r.z)/sp:0,want=sp>.3&&sp<2.8&&(lat>.8||back)&&this.slideT<=0&&this.pos.y<.03?1:0;
+      this.sideW=lerp(this.sideW||0,want,1-Math.exp(-8*dt));if(this.sideW>.01){const k=this.sideW;wi+=(ww+wr)*k;ww*=1-k;wr*=1-k;}}
     const A=this.acts;A.idle.setEffectiveWeight(wi);A.walk.setEffectiveWeight(ww);A.run.setEffectiveWeight(wr);
     // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
     // so the feet stay planted at every speed instead of two cycles drifting through each other (measured on the X Bot: walk 1.54 m/s, run 3.53 m/s)
@@ -2304,7 +2320,7 @@ class Fighter{
     if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
     if(this.isPlayer&&!this.limbs.head.sev)B.Head.scale.setScalar(camMode==='fp'?.001:1);
-    let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1);}
+    let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1)*(1-(this.sideW||0));}
     this.hipOff=lerp(this.hipOff,off,1-Math.exp(-8*dt));
     _qr.setFromAxisAngle(Y_AXIS,this.hipOff);B.Hips.quaternion.premultiply(_qr);
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
@@ -2351,7 +2367,7 @@ class Fighter{
     {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
     // standing, shuffling and turning, the feet stay where they were put and step when the body has moved off them, instead of skating
-    const plantOK=this.alive&&!this.ragdoll&&!airborne&&kk<=0&&sp<.45&&this.slideT<=0;this.plantW=lerp(this.plantW||0,plantOK?1:0,1-Math.exp(-(plantOK?6:14)*dt));
+    const stepping=(this.sideW||0)>.5,plantOK=this.alive&&!this.ragdoll&&!airborne&&kk<=0&&(sp<.45||stepping)&&this.slideT<=0;this.plantW=lerp(this.plantW||0,plantOK?1:0,1-Math.exp(-(plantOK?6:14)*dt));
     if(bend>.02||kk>0||this.plantW>.01){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
@@ -2363,11 +2379,12 @@ class Fighter{
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
         for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w);}}
       const PL=this.plant||(this.plant={}),pw=this.plantW;
-      for(const s in feet){const want=feet[s];let p=PL[s];
+      const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
+      for(const s in feet){const want=feet[s];if(sp>.3)want.addScaledVector(this.vel,lead/sp*.9);let p=PL[s];
         if(!p||pw<.02){p=PL[s]={at:want.clone(),from:want.clone(),t:1};}
-        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z);
-          if(p.t>=1&&d>(this.isPlayer?.13:.16)&&(!o||o.t>=1||d>.32)){p.from.copy(p.at);p.t=0;}
-          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*.06;
+        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),th=(this.isPlayer?.13:.16)+sp*.06;
+          if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*2.2)){p.from.copy(p.at);p.t=0;}
+          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02));
             if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false);}
           else{p.at.y=want.y;p.lift=0;}
           feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
@@ -2402,6 +2419,7 @@ class Fighter{
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
         if(!one&&_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.08){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
       s.sync();
+      if(this.rec){const R=this.rec,u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);if(w>0)for(const n of [offS+'Arm',offS+'ForeArm',offS+'Hand']){const b=B[n],q=R.q.get(b);if(q)b.quaternion.slerp(q,w);}}   // just up: the free arm eases to its place instead of snapping
     } else if(!this.sword&&this.alive){
       this.fwd(_f);this.right(_r);
       const cs=this.clutchT>simTime&&this.clutchP?(this.limbs.armL.sev||this.limbs.armL.dead?'R':'L'):null;
@@ -2793,13 +2811,17 @@ function bloodWeapon(s){
 }
 function bladeContact(s,B){
   let moved=false;
-  for(const t of [1,.84,.68,.52]){s.pointAt(t,_bp);
+  // the whole blade is solid against the body, not just its point: it lies on the flesh it struck instead of sinking through,
+  // and what it presses on gets pushed, so leaning on a blade shoves a man and a blow that doesn't cut still moves him
+  let J=0;const O=s.owner;
+  for(const t of [1,.9,.8,.7,.6,.5,.4,.3]){s.pointAt(t,_bp);
     for(const c of B.caps){if(!c.on)continue;_pa.subVectors(c.b,c.a);const u=clamp(_cq.subVectors(_bp,c.a).dot(_pa)/(_pa.lengthSq()||1e-9),0,1);_cq.copy(c.a).addScaledVector(_pa,u);
       _cn.subVectors(_bp,_cq);const d=_cn.length(),rr=c.r+.01;if(d>=rr||d<1e-5)continue;_cn.multiplyScalar(1/d);
-      const push=Math.min(.02,(rr-d)*.5)*Math.min(1.6,1/t);s.T.addScaledVector(_cn,push);s.Tp.addScaledVector(_cn,push);
-      _v.subVectors(s.T,s.Tp);const vn=_v.dot(_cn);if(vn<0){_v.addScaledVector(_cn,-vn*.7);s.Tp.copy(s.T).sub(_v);}
-      moved=true;}}
-  if(moved)s.constrain(H);
+      const lev=Math.min(2.5,1/Math.max(t,.3)),push=Math.min(.05,(rr-d)*.8)*lev;s.T.addScaledVector(_cn,push);s.Tp.addScaledVector(_cn,push*.85);
+      _v.subVectors(s.T,s.Tp);const vn=_v.dot(_cn);if(vn<0){_v.addScaledVector(_cn,-vn*.92);s.Tp.copy(s.T).sub(_v);J+=-vn/H*.12;}
+      if(B.alive&&!B.ragdoll){_hv.copy(_cn).negate();B.vel.addScaledVector(_hv,Math.min(.025,push*.4));}
+      moved=true;break;}}
+  if(moved){s.constrain(H);if(J>.4&&B.alive&&!B.ragdoll&&O){_hv.copy(_cn).negate();B.shove(_hv,Math.min(1.2,J*s.def.weight*.05));}}
 }
 function resolveHit(A,B,cap,t,P,pv){
   if(simTime<CD_END)return;
@@ -3071,6 +3093,17 @@ function aimPoint(out){
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
 const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
+// nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
+const _cs=V(),_cd=V();let camPull=1;
+function camClear(a,b,dt){_cd.subVectors(b,a);const L=_cd.length();if(L<1e-4)return;_cd.multiplyScalar(1/L);let t=L;
+  const hit=(c,r)=>{_cs.subVectors(c,a);const along=_cs.dot(_cd);if(along<0||along>t+r)return;const d2=_cs.lengthSq()-along*along,rr=r*r;if(d2>=rr)return;const e=along-Math.sqrt(rr-d2);t=Math.max(.35,Math.min(t,e));};
+  for(const f of fighters){if(f===player||f.pos.distanceToSquared(a)>36)continue;
+    if(f.ragdoll){const P=f.ragdoll.P;for(const n of ['Hips','Spine2','Head','LeftLeg','RightLeg','LeftForeArm','RightForeArm'])if(P[n])hit(P[n],n==='Head'?.24:.3);}
+    else{hit(f.headPos,.42);hit(f.chest,.46);_cs.set(f.pos.x,f.pos.y+.95,f.pos.z);hit(_cs.clone(),.4);}}   // generous: a body grazing the lens fills the screen as surely as one it passes through
+  // down in the shaft, stay inside it
+  if(PIT&&a.y<.2){const dx=a.x-PIT.x,dz=a.z-PIT.z;if(Math.hypot(dx,dz)<PIT.r){for(let i=1;i<=12;i++){const u=i/12*t;const x=a.x+_cd.x*u-PIT.x,z=a.z+_cd.z*u-PIT.z,y=a.y+_cd.y*u;if(y<.3&&Math.hypot(x,z)>PIT.r-.3){t=Math.max(.3,u-t/12);break;}}}}
+  // pull in at once, ease back out, so a body brushing past doesn't make the view pump
+  const want=t/L;camPull=want<camPull?want:lerp(camPull,want,1-Math.exp(-4*dt));b.copy(a).addScaledVector(_cd,L*camPull);}
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){}   // no freeze-frames: the sim never pauses for effect
 function shake(a){shakeAmt=Math.min(.35,shakeAmt+a*.3);}   // a jolt, not a screen-shake
@@ -3517,8 +3550,8 @@ function frame(now){
       _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
-      camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
-    else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
+      camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
+    else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
@@ -4011,7 +4044,7 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;window.__grabTry=grabTry;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
-window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
+window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
