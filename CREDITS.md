@@ -77,6 +77,9 @@ Gear materials (since Build 58), released under **CC0 1.0**, fetched by `tools/f
 - Wood for hafts (`wood2_d.jpg`, `wood2_n.jpg`): [ambientCG Wood049](https://ambientcg.com/view?id=Wood049)
 - Leather for grips and belts (`leather_d.jpg`, `leather_n.jpg`): [Poly Haven Brown Leather](https://polyhaven.com/a/brown_leather)
 
+## Animation
+- Leg clips `guard` (from *Sword_Idle*) and `crouchwalk` (from *Crouch_Fwd_Loop*) in `fighters.json` (since Build 59): [Quaternius](https://quaternius.com) — *Universal Animation Library* (Standard), released under **CC0 1.0** ([OpenGameArt](https://opengameart.org/content/universal-animation-library)). Fetched by `tools/fetch_cc0_3.py` on the `cc0-fetch` branch and retargeted onto the fighters' skeleton by `tools/anim-retarget.mjs`.
+
 ## Code libraries
 - [three.js](https://threejs.org) (MIT)
 - [Rapier](https://rapier.rs) physics, `@dimforge/rapier3d-compat` (Apache-2.0), only loaded for the Rigid body engine
