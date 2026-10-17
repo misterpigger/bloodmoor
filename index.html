@@ -47,6 +47,8 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 @media (max-width:700px){.panel{background:rgba(7,8,12,.86)}.controls{font-size:13px}}
 /* multiplayer */
 .mode{min-width:0;flex:1 1 120px}
+#spec{position:absolute;top:18px;left:50%;transform:translateX(-50%);padding:8px 20px;background:rgba(7,8,12,.7);border:1px solid rgba(201,162,39,.5);color:var(--parch);font:600 15px var(--f-ui);text-align:center;letter-spacing:.04em;pointer-events:none;z-index:5}
+#spec b{display:block;font-size:19px;color:#e8d9a8}#spec span{font-size:12px;opacity:.75}
 #lockhint{position:absolute;bottom:26%;left:50%;transform:translateX(-50%);padding:10px 22px;background:rgba(7,8,12,.75);border:1px solid var(--ember);color:var(--parch);font:700 18px var(--f-ui);letter-spacing:.06em;animation:hintPulse 1.4s ease-in-out infinite}
 @keyframes hintPulse{50%{border-color:rgba(255,155,61,.25)}}
 @media (prefers-reduced-motion:reduce){#lockhint{animation:none}}
@@ -257,11 +259,12 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
 <div id="pause" class="overlay hide"><div class="box"><h2>Paused</h2><p>The fight is frozen until you come back</p>
   <div class="menu-btns"><button class="btn" id="resumeBtn">Resume</button><button class="btn ghost" id="restartBtn">Restart match</button><button class="btn ghost" id="mainBtn">Main menu</button></div>
   <p class="small">Esc or P pauses · V switches view</p></div></div>
+<div id="spec" class="hide"><b id="specName">Spectating</b><span>Click or ← → to switch · Esc for the menu</span></div>
 <div id="end" class="overlay hide"><div class="box">
   <h2 id="endtitle">Slain</h2>
   <p id="endline">Placed #7 of 12</p>
   <p id="endcause"></p>
-  <div class="menu-btns"><button class="btn" id="againBtn">Fight again</button><button class="btn ghost" id="endMainBtn">Main menu</button></div>
+  <div class="menu-btns"><button class="btn" id="againBtn">Fight again</button><button class="btn ghost" id="specBtn">Spectate</button><button class="btn ghost" id="endMainBtn">Main menu</button></div>
 </div></div>
 
 <script type="importmap">
@@ -292,7 +295,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=59;
+const BUILD=60;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2235,6 +2238,7 @@ function clearWounds(B){if(B.bloodSrc)B.bloodSrc.length=0;for(const o of B.wound
 let GLTF=null;
 const fighters=[],debris=[],freeSwords=[],loot=[];
 // extra leg clips from fighters.json (retargeted by tools/anim-retarget.mjs), sampled by hand and blended over the mixer's pose
+const GAIT_ON=!/[?&]clipgait/.test(location.search);   // ?clipgait brings back the looped walk cycle for comparison
 const GUARD={};function initGuard(){for(const nm of ['guard','crouchwalk']){const c=GLTF.animations.find(a=>a.name===nm);if(!c)continue;
   GUARD[nm]={d:c.duration,tracks:c.tracks.filter(t=>t.name.endsWith('.quaternion')).map(t=>({bone:t.name.split('.')[0].replace('mixamorig','').replace(':',''),ip:t.createInterpolant()}))};}}
 const PALETTES=[['#7a1d18','#c9a227','#2a2420',1],['#1d3768','#d8d0bc','#24262b',1],['#2f5130','#e0c060','#2b2a22',0],['#5a3a6a','#c8c0b0','#26222a',1],['#8a6a3a','#3a2a1a','#3a2e22',0],['#2a2a2a','#a02020','#1e1e1e',1],['#b8ad98','#7a1f1f','#3a3028',1],['#3a5a7a','#e8e0d0','#2a2e34',0],['#6a2a1a','#1a1a1a','#2a1e1a',1],['#c8a060','#5a2a1a','#30261c',1],['#40506a','#b03030','#22262c',1],['#556b2f','#2b2b2b','#262a1e',0]];
@@ -2274,6 +2278,7 @@ class Fighter{
     const B=this.bones;
     this.armLen=[B.RightForeArm.position.length()*.01,B.RightHand.position.length()*.01];
     this.legLen=[B.RightLeg.position.length()*.01,B.RightFoot.position.length()*.01];
+    {this.model.updateMatrixWorld(true);const a=V(),b=V();B.LeftFoot.getWorldPosition(a);this.model.getWorldPosition(b);this.ankY=clamp(a.y-b.y,.04,.14);}   // ankle height over the sole, at rest
     this.armor={head:null,body:null,arms:null,legs:null};this.helmet=-1;
     for(const a of load.armor||[])this.equip(ARMOR[a]);
     this.mixer=new THREE.AnimationMixer(this.model);
@@ -2714,6 +2719,32 @@ class Fighter{
     return run;
   }
   faceDir(d,h,rate){const want=Math.atan2(d.x,d.z);this.yaw+=clamp(wrapA(want-this.yaw),-rate*h,rate*h);}
+  gaitStep(dt,feet,sp){const B=this.bones,G=this.gait||(this.gait={t:0}),v=this.vel,GW=this.gaitW;G.t+=dt;
+    const Ts=clamp(.42-sp*.05,.21,.42),dbl=clamp(.1-sp*.03,0,.1),ld=sp>2.6?.42:.5;   // a step's swing time, and how long both feet share the weight first
+    this.fwd(_f);this.right(_r);const sw=(this.stillAmt||0)*(this.stanceAmt||0)/.4,leadS=this.mainArm==='L'?'Right':'Left';
+    const hurt=Math.max(this.limbF('legL'),this.limbF('legR')),bx=this.bal.x*1.6,bz=this.bal.z*1.6;
+    const home=(s,ahead,out)=>{const side=s==='Right'?1:-1,lat=.1+.06*sw,stg=(s===leadS?.15:-.11)*sw;
+      out.x=this.pos.x+v.x*(ahead+Ts*ld)+_r.x*side*lat+_f.x*stg+bx;out.z=this.pos.z+v.z*(ahead+Ts*ld)+_r.z*side*lat+_f.z*stg+bz;out.y=groundY(out.x,out.z,this.pos.y+.4)+this.ankY;return out;};
+    const sides=['Left','Right'].filter(s=>feet[s]);
+    for(const s of sides)if(!G[s]){G[s]={at:feet[s].clone(),from:V(),to:V(),t:1,dur:Ts,land:-1,lift:0};}
+    const swing=sides.find(s=>G[s].t<1);
+    if(!swing){let worst=null,we=0;for(const s of sides){home(s,0,_t2);const e=Math.hypot(_t2.x-G[s].at.x,_t2.z-G[s].at.z)*(s===this._lastStep?.85:1);if(e>we){we=e;worst=s;}}
+      const o=sides.find(s=>s!==worst),ready=!o||G.t-G[o].land>dbl||we>.45;
+      if(worst&&ready&&we>.07+.03*(1-Math.min(1,sp))){const g=G[worst];g.from.copy(g.at);g.t=0;g.dur=Ts*(we>.5?.72:1)*(1+hurt*.5);this._lastStep=worst;}}
+    else if(sides.length===2){const o=sides.find(s=>s!==swing);home(o,0,_t2);if(Math.hypot(_t2.x-G[o].at.x,_t2.z-G[o].at.z)>.75){const g=G[o];g.from.copy(g.at);g.t=.15;g.dur=Ts*.7;}}   // shoved hard: both feet scramble
+    let rise=0,swayS=0;
+    for(const s of sides){const g=G[s];
+      if(g.t<1){g.t=Math.min(1,g.t+dt/g.dur);if(g.t<.8)home(s,g.dur*(1-g.t),g.to);   // keeps aiming for where the body is going until it's nearly down
+        const u=g.t,e=u*u*(3-2*u);g.at.x=lerp(g.from.x,g.to.x,e);g.at.z=lerp(g.from.z,g.to.z,e);g.at.y=lerp(g.from.y,g.to.y,e);g.lift=Math.sin(Math.PI*Math.min(1,u*1.1))*(.045+Math.min(.07,sp*.016));
+        rise+=Math.sin(Math.PI*u)*.014*Math.min(1,sp*.6+.3);swayS=s==='Right'?1:-1;   // the body rides up over the planted leg and leans onto it
+        if(g.t>=1){g.land=G.t;g.lift=0;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<300)sStep(g.at,(this.isPlayer?.4:.28)*Math.min(1,.4+sp*.3),sp>3,this);}}
+      else g.lift=0;
+      feet[s].lerp(_t3.copy(g.at).setY(g.at.y+g.lift),GW);}
+    // the hips drop as far as the legs need to reach both feet, and rise and sway with each step
+    let drop=0;const L=(this.legLen[0]+this.legLen[1])*.97;
+    for(const s of sides){if(G[s].t<1)continue;B[s+'UpLeg'].getWorldPosition(_t2);const f=feet[s],h=Math.hypot(f.x-_t2.x,f.z-_t2.z),need=Math.sqrt(Math.max(0,L*L-h*h)),cur=_t2.y-f.y;drop=Math.max(drop,cur-need);}
+    G.drop=lerp(G.drop||0,Math.min(.09,Math.max(0,drop))-rise,1-Math.exp(-18*dt));G.sway=lerp(G.sway||0,swayS*Math.min(1,sp*.5)*.022,1-Math.exp(-8*dt));
+    B.Hips.position.y-=G.drop*100*GW;B.Hips.position.x+=G.sway*100*GW;this.root.updateMatrixWorld(true);}
   // ---------------- per-frame animation
   animate(dt){
     if(this.ragdoll){this.ragdoll.apply();this.updateCaps();if(PW)this.physTargets(dt,null);if(this.sword&&!this.sword.free){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}if(this.sword)this.sword.sync();return;}
@@ -2738,7 +2769,7 @@ class Fighter{
       if(gw>.01||cw>.01){this._gT=((this._gT||Math.random()*5)+dt);
         for(const [clip,w,tm] of [[GUARD.guard,gw,this._gT%GUARD.guard.d],[GUARD.crouchwalk,cw,(A.walk.time/A.walk.getClip().duration)*GUARD.crouchwalk.d]]){if(!clip||w<=.01)continue;
           for(const t of clip.tracks){const bn=B[t.bone];if(!bn)continue;const v=t.ip.evaluate(tm);_qq.set(v[0],v[1],v[2],v[3]);bn.quaternion.slerp(_qq,w);}}}}
-    if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
+    if(this.pos.y<.02&&sp>.6&&this.slideT<=0&&(this.gaitW||0)<.5){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
     if(this.isPlayer&&!this.limbs.head.sev)B.Head.scale.setScalar(camMode==='fp'?.001:1);
     let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1)*(1-(this.sideW||0));}
@@ -2796,7 +2827,11 @@ class Fighter{
       _qr.setFromAxisAngle(Y_AXIS,-L.y*(this.isPlayer?.6:.45));B.Head.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,-L.p*.6);B.Head.quaternion.premultiply(_qr);}
     // standing, shuffling and turning, the feet stay where they were put and step when the body has moved off them, instead of skating
     const stepping=(this.sideW||0)>.5,plantOK=this.alive&&!this.ragdoll&&!airborne&&kk<=0&&(sp<.45||stepping)&&this.slideT<=0;this.plantW=lerp(this.plantW||0,plantOK?1:0,1-Math.exp(-(plantOK?6:14)*dt));
-    if(bend>.02||kk>0||this.plantW>.01){
+    // the physical gait: the body is a weight carried on two legs, and a foot steps out to wherever it must land to keep that weight over
+    // the feet (where the body will be, a half stride ahead, pushed further by a blow). Walking, running, turning and stumbling all come
+    // out of that one rule, instead of a looped walk cycle
+    const gaitOK=GAIT_ON&&this.alive&&!this.ragdoll&&!airborne&&kk<=0&&this.slideT<=0&&this.fallT==null;this.gaitW=lerp(this.gaitW||0,gaitOK?1:0,1-Math.exp(-(gaitOK?5:16)*dt));
+    if(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
       if(!this.limbs.legR.sev){feet.Right=V();B.RightFoot.getWorldPosition(feet.Right);}
@@ -2806,9 +2841,10 @@ class Fighter{
       this.root.updateMatrixWorld(true);this.fwd(_f);this.right(_r);
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
         for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w);}}
-      const PL=this.plant||(this.plant={}),pw=this.plantW;
+      if(this.gaitW>.01)this.gaitStep(dt,feet,sp);
+      const PL=this.plant||(this.plant={}),pw=this.gaitW>.5?0:this.plantW;
       const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
-      for(const s in feet){const want=feet[s];if(sp>.3)want.addScaledVector(this.vel,lead/sp*.9);let p=PL[s];
+      if(this.gaitW<=.5)for(const s in feet){const want=feet[s];if(sp>.3)want.addScaledVector(this.vel,lead/sp*.9);let p=PL[s];
         if(!p||pw<.02){p=PL[s]={at:want.clone(),from:want.clone(),t:1};}
         else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),th=(this.isPlayer?.13:.16)+sp*.06;
           if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*2.2)){p.from.copy(p.at);p.t=0;}
@@ -3655,7 +3691,7 @@ const input={keys:{},lmb:false,rmb:false,locked:false,mx:.5,my:.5};
 const BOT_WEAPONS=['arming','longsword','axe','mace','spear','arming','longsword'];
 function botLoad(){const armor=[];if(Math.random()<.55)armor.push(pick(['kettle','nasal','kettle','bascinet']));if(Math.random()<.3)armor.push('mail');if(Math.random()<.15)armor.push('vambraces');if(Math.random()<.12)armor.push('greaves');return {weapon:pick(BOT_WEAPONS),armor};}
 function clearMatch(){
-  physStatic();clearDetails();
+  physStatic();clearDetails();specStop();SPEC.dismissed=false;
   for(const f of fighters)f.dispose();fighters.length=0;
   for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;
   for(const it of [...loot])removeLoot(it);
@@ -3810,6 +3846,7 @@ document.querySelectorAll('.map[data-map]').forEach(b=>b.addEventListener('click
   clearTimeout(mapPending);mapPending=setTimeout(finishMapSwitch,40,id);
 }));
 document.getElementById('againBtn').addEventListener('click',startGame);
+document.getElementById('specBtn').addEventListener('click',e=>{e.stopPropagation();if(specTargets().length){SPEC.dismissed=false;specStart();}});
 // switch combat engines from the menu: tear the match down, swap the world, rebuild
 function showEngine(){document.querySelectorAll('.eng').forEach(o=>{const on=(o.dataset.eng==='physics')===!!PW;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});}
 async function setEngine(on){
@@ -3931,9 +3968,16 @@ function updateHUD(dt){
   grade.uniforms.uZone.value=player&&player.burn>0&&player.alive?(player.outside?1:.55):0;
   if(player){const b=player.burn>0&&player.alive;if(b&&!wasBurning)note('You are on fire','red');wasBurning=b;}
   if(state==='dead')grade.uniforms.uDesat.value=Math.min(1,(performance.now()-deathT)/1500);
+  const meDead=!!player&&!player.alive;if(SPEC.on&&player&&player.alive)specStop();
+  if(meDead&&!SPEC.diedAt)SPEC.diedAt=performance.now();if(!meDead)SPEC.diedAt=0;
+  if(meDead&&NET.mode&&performance.now()-SPEC.diedAt>2600&&!END&&!SPEC.dismissed&&el('end').classList.contains('hide')){   // slain in multiplayer: watch the others fight it out (between rounds too)
+    const L=specTargets();if(NET.mode&&L.length>=2){if(!SPEC.on)specStart();}else if(SPEC.on&&L.length<2)specStop();
+    if(SPEC.on){specTick(dt);return;}}
+  if(SPEC.on){specTick(dt);if(END&&el('end').classList.contains('hide'))specStop();else return;}
   if((state==='dead'||state==='won')&&performance.now()-deathT>2600&&el('end').classList.contains('hide')){
     el('end').classList.remove('hide');if(document.pointerLockElement)document.exitPointerLock();lockWanted=false;hud.prompt.classList.add('hide');
     const t=el('endtitle');t.textContent=state==='won'?'Victory':'Slain';t.className=state==='won'?'win':'lose';
+    el('specBtn').style.display=state==='dead'&&specTargets().length?'':'none';
     el('againBtn').textContent=NET.mode==='client'?'Waiting for the host…':'Fight again';el('againBtn').disabled=NET.mode==='client';
     if(END){t.textContent=END.title;el('endline').textContent=END.line;el('endcause').textContent=END.cause||'';}
     else{el('endline').textContent=`Placed #${placement} of ${MAPS[curMap].fighters} · ${player?player.kills:0} ${player&&player.kills===1?'kill':'kills'} · ${score} points`;
@@ -3943,6 +3987,19 @@ function updateHUD(dt){
 
 // ================================================================ main loop
 let acc=0,last=performance.now(),camYaw=0,camY=1.7,attractT=0,sub=0,physPhase=0;
+// ---- spectating: once you're slain in multiplayer the camera follows the fighters still standing (your killer first)
+const SPEC={on:false,f:null,yo:0,deadT:0,look:new THREE.Vector3(),snap:false,dismissed:false,diedAt:0};
+function specTargets(){return fighters.filter(f=>f.alive&&f!==player);}
+function specLabel(){el('specName').textContent=SPEC.f?'Spectating '+SPEC.f.name:'Spectating';}
+function specStart(){const k=player&&player.lastHitBy;const L=specTargets();SPEC.on=true;SPEC.f=k&&k.alive&&L.includes(k)?k:L[0]||null;SPEC.yo=0;SPEC.deadT=0;SPEC.snap=true;SPEC.look.set(0,0,0);
+  el('spec').classList.remove('hide');el('end').classList.add('hide');hud.prompt.classList.add('hide');if(document.pointerLockElement)document.exitPointerLock();lockWanted=false;specLabel();}
+function specNext(d){const L=specTargets();if(!L.length)return;let i=L.indexOf(SPEC.f);i=i<0?0:((i+d)%L.length+L.length)%L.length;SPEC.f=L[i];SPEC.deadT=0;SPEC.snap=true;specLabel();}
+function specStop(){SPEC.on=false;el('spec').classList.add('hide');}
+function specTick(dt){if(!SPEC.f||!fighters.includes(SPEC.f))specNext(1);else if(!SPEC.f.alive){SPEC.deadT+=dt;if(SPEC.deadT>2.5)specNext(1);}   // watch the fall, then move on
+}
+addEventListener('keydown',e=>{if(!SPEC.on||e.repeat)return;if(e.code==='ArrowRight'||e.code==='KeyD'||e.code==='KeyE'){specNext(1);e.preventDefault();}if(e.code==='ArrowLeft'||e.code==='KeyA'||e.code==='KeyQ'){specNext(-1);e.preventDefault();}
+  if(e.code==='Escape'){SPEC.dismissed=true;specStop();deathT=performance.now()-3000;}});
+addEventListener('mousedown',e=>{if(!SPEC.on||e.target.closest('button'))return;specNext(e.button===2?-1:1);});
 function sim(h){
   simTime+=h;
   propHitTest();improvStep();grateStep(h);
@@ -4015,6 +4072,11 @@ function frame(now){
   else if(!el('yard').classList.contains('hide')){el('yard').classList.add('hide');el('feed').style.display='';}
   // camera
   if(state==='attract'){attractT+=dt*.07;camera.position.set(Math.cos(attractT)*10,3.2,Math.sin(attractT)*10);camera.lookAt(0,1.3,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
+  else if(SPEC.on&&SPEC.f){const t=SPEC.f,hp=t.ragdoll&&t.ragdoll.P.Hips?t.ragdoll.P.Hips:null;   // following someone else's fight from behind their shoulder
+    _t2.set(hp?hp.x:t.pos.x,(hp?hp.y+.5:t.pos.y+1.55),hp?hp.z:t.pos.z);const yw=t.yaw+SPEC.yo;
+    _t3.set(_t2.x-Math.sin(yw)*3.6+Math.cos(yw)*.6,_t2.y+.55,_t2.z-Math.cos(yw)*3.6-Math.sin(yw)*.6);collide(_t3,.3);camClear(_t2,_t3,dt);
+    if(SPEC.snap){camera.position.copy(_t3);SPEC.snap=false;}else camera.position.lerp(_t3,1-Math.exp(-4*dt));
+    SPEC.look.lerp(_t2,SPEC.look.lengthSq()?1-Math.exp(-8*dt):1);camera.lookAt(SPEC.look.x,SPEC.look.y-.15,SPEC.look.z);camYaw=yw;}
   else if(!player){attractT+=dt*.09;camera.position.set(Math.cos(attractT)*13,5.5,Math.sin(attractT)*13);camera.lookAt(0,1.2,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
   else if(player){
     shakeAmt*=Math.exp(-7*dt);kickStep(Math.min(dt,.05));
@@ -4040,7 +4102,7 @@ function frame(now){
     zoneMesh.position.set(zone.c.x,0,zone.c.z);fireMesh.scale.set(zone.r,1,zone.r);smokeMesh.scale.set(zone.r,1,zone.r);
     const rep=Math.max(14,Math.round(zone.r*6.283/2.4));fireMat.uniforms.uRep.value=rep;smokeMat.uniforms.uRep.value=Math.max(6,rep*.18);
     scorch.position.x=zone.c.x;scorch.position.z=zone.c.z;scorchMat.uniforms.uC.value.set(zone.c.x,zone.c.z);scorchMat.uniforms.uR.value=zone.r;
-    fireMat.uniforms.uTime.value=smokeMat.uniforms.uTime.value=scorchMat.uniforms.uTime.value=now*.001;crowdU.uTime.value=now*.001;if(player)crowdU.uFocus.value.lerp(player.pos,.03);crowdU.uCheer.value=Math.max(0,crowdU.uCheer.value-dt*.35);if(crowdGain)crowdGain.gain.value=curMap==='colosseum'&&state!=='loading'?.05+crowdU.uCheer.value*.06:0;
+    fireMat.uniforms.uTime.value=smokeMat.uniforms.uTime.value=scorchMat.uniforms.uTime.value=now*.001;crowdU.uTime.value=now*.001;if(player)crowdU.uFocus.value.lerp(SPEC.on&&SPEC.f?SPEC.f.pos:player.pos,.03);crowdU.uCheer.value=Math.max(0,crowdU.uCheer.value-dt*.35);if(crowdGain)crowdGain.gain.value=curMap==='colosseum'&&state!=='loading'?.05+crowdU.uCheer.value*.06:0;
     _v.set(camera.position.x-zone.c.x,0,camera.position.z-zone.c.z);if(_v.lengthSq()<1e-4)_v.set(1,0,0);_v.normalize();
     const ex=zone.c.x+_v.x*zone.r,ez=zone.c.z+_v.z*zone.r,ed=Math.hypot(camera.position.x-ex,camera.position.z-ez);
     fireLight.position.set(ex,2.6,ez);fireLight.intensity=on&&ed<40?11*(1-ed/40)*(.85+Math.random()*.3):0;
@@ -4218,7 +4280,7 @@ function detailTick(dt){
   const drip=s=>{if(!s||(s.blood||0)<.12||s.bloodT==null)return;const age=simTime-s.bloodT;if(age>30||Math.random()>dt*4*s.blood*(1-age/30))return;s.pointAt(s.axis.y<-.2?1:s.axis.y>.5?.35:.8,_fd);if(_fd.distanceToSquared(camera.position)<400)dripBlood(_fd);};
   for(const f of fighters)drip(f.sword);for(const s of freeSwords)drip(s);
 }
-window.__det={PRINTS,DRAGS,DUST,FLY,BRUISES,dentArmor,knockHelmet,armorPreview:d=>armorPreview(d)};
+window.__det={PRINTS,DRAGS,DUST,FLY,BRUISES,dentArmor,knockHelmet,armorPreview:d=>armorPreview(d),get SPEC(){return SPEC}};
 function clearDetails(){for(const F of FLY)scene.remove(F.g);FLY.length=0;BRUISES.length=0;for(const M of [PRINTS,DRAGS]){for(let i=0;i<M.n;i++)M.m.setMatrixAt(i,_zero);M.m.instanceMatrix.needsUpdate=true;}DUST.life.fill(0);DUST.al.fill(0);}
 const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
 
