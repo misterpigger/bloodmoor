@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=53;
+const BUILD=54;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1249,13 +1249,13 @@ function tintMaterial(m,mode,pal,mats){
 // ---- Half Sword-style fighters: the X Bot mannequin (realistic proportions) in smooth skin, with a baggy linen shirt and
 // braies or hose grown out of the body mesh itself. Outfits: 0 bare-chested (braies), 1 linen shirt, 2 dyed tunic and hose.
 const HS_LOOK={outfits:['braies','linen shirt','tunic and hose']};
-let HSC=null;   // cached cloth geometry, built once from the first body
+let HSC=null,HSCK=null;   // cached cloth geometry, built once per body shape
 function linenCanvas(){const W=256,N=fbm(W,W,32,4,81),A=new Float32Array(W*W*3),H=new Float32Array(W*W);
   for(let y=0;y<W;y++)for(let x=0;x<W;x++){const i=y*W+x,wv=(Math.sin(x*1.6)*Math.sin(y*1.6)>0?1:.95),n=N[i]-.5,v=(.9+.14*n)*wv;A[i*3]=232*v;A[i*3+1]=222*v;A[i*3+2]=200*v;H[i]=.5+.25*wv+.3*n;}
   return {map:rgbCanvas(A,W,W),normal:normalCanvas(H,W,W,2.5)};}
 const LINEN=(()=>{const l=linenCanvas();const m=tex(l.map),n=tex(l.normal,false);m.repeat.set(22,22);n.repeat.set(22,22);return {m,n};})();
 function hsCloth(body){
-  if(HSC)return HSC;const src=body.geometry,pos=src.attributes.position,nor=src.attributes.normal,si=src.attributes.skinIndex,sw=src.attributes.skinWeight,idx=src.index;
+  if(HSC&&HSCK===body.name)return HSC;HSCK=body.name;const src=body.geometry,pos=src.attributes.position,nor=src.attributes.normal,si=src.attributes.skinIndex,sw=src.attributes.skinWeight,idx=src.index;
   const bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
   const wsum=(v,set)=>{let s=0;for(let k=0;k<4;k++)if(set.has(si.getComponent(v,k)))s+=sw.getComponent(v,k);return s;};
   const S=names=>new Set(names.map(n=>bi[n]).filter(i=>i!==undefined));
@@ -1280,8 +1280,42 @@ function dressHS(model,look,pal,mats){
     if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}   // undyed linen
     const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;body.parent.add(sm);};
   if(o>=1)cloth(C.shirt,o===2);cloth(o===2?C.hose:C.braies,true);}
+// ---- realistic bodies (MakeHuman, CC0): four builds sharing one skeleton, a baked skin texture set (colour variation,
+// pores and creases, and masks for shaved scalp, beard and cavities) tinted to the fighter's skin tone. Hair and beard are
+// painted on as stubble from the masks, so every fighter can differ without extra meshes.
+const MHC=[];   // cloth geometry per body
+let MHT=null;
+function mhTex(){if(MHT)return MHT;const L=new THREE.TextureLoader(),t=(u,srgb)=>{const x=L.load(u);if(srgb)x.colorSpace=THREE.SRGBColorSpace;x.anisotropy=MAXANI;return x;};
+  return MHT={d:t('assets/tex/skin_d.jpg',1),n:t('assets/tex/skin_n.jpg'),m:t('assets/tex/skin_m.jpg'),eye:t('assets/tex/eye_d.png',1)};}
+const MH_BODIES=['MH_Body_A','MH_Body_B','MH_Body_C','MH_Body_D'];
+function dressMH(model,look,pal,mats){
+  const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
+  const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
+  for(const m of drop)m.removeFromParent();
+  const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
+  const skin=std({map:T.d,normalMap:T.n,normalScale:new THREE.Vector2(.9,.9),color:new THREE.Color().setRGB(.45*tone[0],.275*tone[1],.2*tone[2]),roughness:.5});
+  tintMaterial(skin,2,pal,mats);
+  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.7,1,1][look.h]||0},uBeardAmt:{value:look.bd?1:.35}};
+  const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
+    sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol;uniform float uHairAmt,uBeardAmt;\n'+sh.fragmentShader.replace('float bld=0.;',`
+      { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
+        float g1=fract(sin(dot(floor(vMapUv*3072.),vec2(12.9898,78.233)))*43758.5453),g2=fract(sin(dot(floor(vMapUv*1400.),vec2(39.346,11.135)))*24634.63);
+        float hairA=clamp(hm.r*uHairAmt*(.62+.38*g1)*(.85+.3*g2)*1.15,0.,1.),beardA=clamp(hm.g*uBeardAmt*(.4+.6*g1)*1.1,0.,1.);
+        diffuseColor.rgb*=1.-hm.b*.3;   // creases sit in shadow
+        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(hairA*.94,beardA*.86)); }
+      float bld=0.;`);};   // (after the cloth tint, which would recolour anything dark and grey as hose)
+  skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
+  model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
+    if(m===body)m.material=skin;else m.material=std({map:T.eye,roughness:.12,alphaTest:.5});});
+  const C=hsCloth(body),o=look.o|0;
+  const cloth=(geo,dyed)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);
+    if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}
+    const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};
+  if(o>=1)cloth(C.shirt,o===2);cloth(o===2?C.hose:C.braies,true);
+  model.userData.mh=true;}
 // strip a fresh model clone down to one look and give it that look's materials
 function dressModel(model,look,pal,mats){
+  if(model.getObjectByName('MH_Body_A'))return dressMH(model,look,pal,mats);
   if(model.getObjectByName('Beta_Surface'))return dressHS(model,look,pal,mats);
   const o=LOOK.outfits[look.o]||'peasant',pre=o==='peasant'?'Peasant_':o==='ranger'?'Ranger_':null,hair=LOOK.hair[look.h];
   const keep=n=>n==='Eyes'||n==='Brows'||(o==='bare'?n==='Body_Bare':n==='Head')||(pre&&n.startsWith(pre))||(hair===n&&o!=='ranger')||(look.bd&&n==='Hair_Beard');
@@ -1404,7 +1438,8 @@ const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 const WMASS={arming:1.15,longsword:1.6,greatsword:3.2,axe:2.4,mace:2.2,spear:2.0,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
 // armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
-const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]};
+const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]},
+  ARMOR_FIT_MH={Spine2:[1.2,1.14,1.22],Hips:[1.14,1.05,1.14]},ARMOR_OFF_MH={Spine2:[0,-3.8,3.9],Hips:[0,-6.5,5.1],Head:[0,3.2,4.6]};   // the realistic bodies' joints sit differently (spine further back, pelvis higher, head pivot lower)
 function meshGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1] of parts){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);}return g;}
 const cuirassGeo=lathe([[.11,.17],[.16,.13],[.18,.02],[.178,-.1],[.165,-.22],[.172,-.3]].reverse(),24);   // profiles run bottom to top so the faces point outward
 const fauldGeo=lathe([[.165,.05],[.185,-.05],[.2,-.17]].reverse(),24);
@@ -1984,7 +2019,7 @@ class Fighter{
   // ---------------- armor
   equip(def){
     const old=this.unequip(def.slot);const groups=[];
-    for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();const ft=ARMOR_FIT[bn]||1;if(Array.isArray(ft))att.scale.set(100*ft[0],100*ft[1],100*ft[2]);else att.scale.setScalar(100*ft);const of=ARMOR_OFF[bn];if(of)att.position.set(...of);att.add(g);this.bones[bn].add(att);groups.push(att);}
+    for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();const ft=(this.model.userData.mh&&ARMOR_FIT_MH[bn])||ARMOR_FIT[bn]||1;if(Array.isArray(ft))att.scale.set(100*ft[0],100*ft[1],100*ft[2]);else att.scale.setScalar(100*ft);const of=(this.model.userData.mh?ARMOR_OFF_MH:ARMOR_OFF)[bn];if(of)att.position.set(...of);att.add(g);this.bones[bn].add(att);groups.push(att);}
     this.armor[def.slot]={def,groups};
     if(def.id==='mail')this.setMail(1);
     if(def.slot==='head'){this.helmet=def.helm;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}
