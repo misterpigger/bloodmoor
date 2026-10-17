@@ -227,5 +227,18 @@ for B in BODIES:
                           'heads': J, 'tails': JT, 'eyes': EP.round(5).ravel().tolist()})
     print(B['name'], 'height', round(P[:, 1].max() - P[:, 1].min(), 3), 'hips', J['mixamorig:Hips'])
 
+# facial expressions as morph targets, shared by every body (MakeHuman's expression units, scaled like the bodies):
+# blink, slack jaw, and a pained grimace (brows knit, eyes narrowed, lips drawn back)
+EXP = 'expression/units/caucasian/'
+MORPHS = {'blink': [('eye-left-closure', 1), ('eye-right-closure', 1)],
+          'jaw': [('mouth-open', .75)],
+          'pain': [('eyebrows-left-inner-up', .8), ('eyebrows-right-inner-up', .8), ('eyebrows-left-down', .5), ('eyebrows-right-down', .5),
+                   ('eye-left-slit', .55), ('eye-right-slit', .55), ('mouth-retraction', .7), ('mouth-upward-retraction', .4),
+                   ('nose-left-elevation', .5), ('nose-right-elevation', .5), ('neck-platysma', .5)]}
+sc = HEIGHT * 10 / (V0[body_idx][:, 1].max() - V0[body_idx][:, 1].min()) * .1
+out['morphs'] = {}
+for name, parts in MORPHS.items():
+    dlt = sum(w * T(EXP + t + '.target') for t, w in parts)
+    out['morphs'][name] = (dlt[rv_v] * sc).round(5).ravel().tolist()
 json.dump(out, open(os.path.join(OUT, 'mh_bodies.json'), 'w'))
 print('wrote', os.path.join(OUT, 'mh_bodies.json'), os.path.getsize(os.path.join(OUT, 'mh_bodies.json')))

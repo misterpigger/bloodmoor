@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=56;
+const BUILD=57;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -970,7 +970,7 @@ function buildCrowd(r0,y0,dr,dy,tiers){
   spots.forEach(([rr,y,a],i)=>{mm.compose(V(Math.cos(a)*rr,y,Math.sin(a)*rr),_qq.setFromAxisAngle(Y_AXIS,faceIn(a)),V(1,.9+Math.random()*.2,1));crowd.setMatrixAt(i,mm);c.setHex(pick(cols)).multiplyScalar(.7+Math.random()*.5);crowd.setColorAt(i,c);});
   crowd.receiveShadow=true;world.add(crowd);
 }
-function cheer(x){netEv(['C',x]);crowdU.uCheer.value=Math.min(1.3,crowdU.uCheer.value+x);if(curMap==='colosseum')sCheer(x);}
+function cheer(x,gasp){netEv(['C',x,gasp?1:0]);crowdU.uCheer.value=Math.min(1.3,crowdU.uCheer.value+x);if(curMap==='colosseum'){if(gasp)sGasp(x);else sCheer(x);}}
 
 // ================================================================ maps and lighting
 function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,128);stops.forEach(([o,col])=>gr.addColorStop(o,col));g.fillStyle=gr;g.fillRect(0,0,256,128);
@@ -1217,12 +1217,12 @@ function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uBodyMail:{value:0}};
   // blood on the body: every wound wets the skin round it and runs down from it, further the longer it bleeds; cloth soaks dark.
   // One set of wound positions per fighter, shared by all their materials (fed each frame by bodyBlood)
-  if(!mats.bloodU)mats.bloodU={uWd:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,-99,0,0))}};Object.assign(U,mats.bloodU);
+  if(!mats.bloodU)mats.bloodU={uWd:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,-99,0,0))},uWa:{value:new Array(BL_N).fill(0)},uSweat:{value:0},uDirt:{value:0},uDirtCol:DIRT_U};Object.assign(U,mats.bloodU);
   m.userData.U=U;mats.push(m);
   const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.5)*(1.-step(.36,abs(vBind.x)))';
   m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
     s.vertexShader='varying vec3 vBind;varying vec3 vWPb;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPb=(modelMatrix*vec4(transformed,1.0)).xyz;');
-    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform float uParty,uMode,uBodyMail;uniform vec4 uWd['+BL_N+'];\n'+s.fragmentShader
+    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform float uParty,uMode,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];\n'+s.fragmentShader
     .replace('#include <map_fragment>',`#include <map_fragment>
       { vec3 c=diffuseColor.rgb;float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sat=(mx-mn)/max(mx,1e-4),l=dot(c,vec3(.299,.587,.114));
         float msk,gain;
@@ -1234,7 +1234,7 @@ function tintMaterial(m,mode,pal,mats){
         float rings=.72+.28*sin(vBind.x*520.)*sin(vBind.y*520.);
         diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.18,.2,.22)*rings,${mail});
       }
-      float bld=0.;
+      float bld=0.,dryA=0.;
       float cl=uMode<.5?1.:0.;   // cloth soaks a broad blotch; bare skin carries thin runs
       float nz=.5+.5*sin(dot(vWPb,vec3(53.1,71.7,47.3))+2.6*sin(dot(vWPb,vec3(23.,-31.,19.)))),nz2=.5+.5*sin(dot(vWPb,vec3(17.3,-23.9,21.1))+2.*sin(dot(vWPb,vec3(-9.,13.,7.))));   // smooth, uneven edges
       for(int i=0;i<${BL_N};i++){vec4 w=uWd[i];if(w.w<=0.)continue;vec3 d=vWPb-w.xyz;float a=w.w;
@@ -1244,10 +1244,19 @@ function tintMaterial(m,mode,pal,mats){
         float wd=(.0004+.0013*a)*(1.+cl*4.)*(.5+.9*nz);
         float run=d.y<.02?exp(-dot(q,q)/wd)*exp(d.y/(.05+.38*a*(1.-cl*.45))):0.;
         float run2=d.y<0.?exp(-dot(q+vec2(.035,-.02),q+vec2(.035,-.02))/(wd*.6))*exp(d.y/(.03+.22*a)):0.;   // and splits off
-        bld+=spot*1.3+run*(1.6-cl*.6)+run2*(1.-cl);}
-      bld=clamp(bld,0.,1.);
-      diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.42,.03,.03),vec3(.2,.01,.01),bld)*(uMode<.5?.85:1.),bld*.92);`)
-    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.3,bld*(uMode<.5?.4:1.));')
+        float c0=spot*1.3+run*(1.6-cl*.6)+run2*(1.-cl);bld+=c0;dryA+=c0*uWa[i];
+        if(cl>.5){float tr=(.018+.016*min(a,1.))*(.6+.8*nz2);if(length(d)<tr)discard;}}   // the cloth is torn open where the blade went through
+      float dry=bld>.001?clamp(dryA/bld,0.,1.):0.;bld=clamp(bld,0.,1.);
+      vec3 bcol=mix(vec3(.42,.03,.03),vec3(.2,.01,.01),bld)*(uMode<.5?.85:1.);bcol=mix(bcol,vec3(.11,.035,.022),dry*.9);   // fresh blood is red and wet, old blood brown-black and matte
+      diffuseColor.rgb=mix(diffuseColor.rgb,bcol,bld*.92);
+      float dirtM=0.;
+      { vec3 b=vBind;float knee=exp(-pow((b.y-.5)/.08,2.))*smoothstep(-.02,.05,b.z),back=smoothstep(.0,-.08,b.z)*smoothstep(.85,1.,b.y)*smoothstep(1.6,1.4,b.y),
+          seat=smoothstep(-.02,-.1,b.z)*smoothstep(.78,.9,b.y)*smoothstep(1.08,.95,b.y),hand=smoothstep(.55,.72,abs(b.x))*step(1.2,b.y),elbow=exp(-pow((abs(b.x)-.45)/.07,2.))*step(1.2,b.y);
+        dirtM=uDirt*clamp((knee+back*.9+seat+hand+elbow*.7)*(.35+.9*nz)+.18*nz2,0.,1.)*(1.-bld);   // sand ground in where a body lay and pushed itself up
+        diffuseColor.rgb=mix(diffuseColor.rgb,uDirtCol*(.75+.5*nz2),dirtM*.8); }
+      if(uMode>1.5)diffuseColor.rgb*=1.-.07*uSweat;
+      else if(uMode<.5){float sp=uSweat*smoothstep(.22,.02,abs(vBind.x))*smoothstep(1.12,1.3,vBind.y)*smoothstep(1.58,1.42,vBind.y)*(.6+.6*nz2);diffuseColor.rgb*=1.-.28*clamp(sp,0.,1.);}   // sweat soaks through down the chest and back`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,mix(.3,.8,dry),bld*(uMode<.5?.4:1.));roughnessFactor=mix(roughnessFactor,.24,uSweat*step(1.5,uMode)*(1.-bld)*(1.-dirtM)*.8);roughnessFactor=mix(roughnessFactor,.97,dirtM);')
     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.42,'+mail+');')
     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.85,'+mail+');');};
   m.customProgramCacheKey=()=>'bm-tint';
@@ -1269,7 +1278,7 @@ function hsCloth(body){
   const legs=S(['Hips','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot']);
   const build=(keep,inflate)=>{const n=pos.count,ok=new Uint8Array(n);for(let v=0;v<n;v++)ok[v]=keep(v)?1:0;const tri=[];
     for(let i=0;i<idx.count;i+=3){const a=idx.getX(i),b=idx.getX(i+1),c=idx.getX(i+2);if(ok[a]&&ok[b]&&ok[c])tri.push(a,b,c);}
-    const g=src.clone();g.setIndex(tri);const p=g.attributes.position;for(let v=0;v<n;v++){if(!ok[v])continue;const k=inflate(v);p.setXYZ(v,pos.getX(v)+nor.getX(v)*k,pos.getY(v)+nor.getY(v)*k,pos.getZ(v)+nor.getZ(v)*k);}
+    const g=src.clone();g.morphAttributes={};g.setIndex(tri);const p=g.attributes.position;for(let v=0;v<n;v++){if(!ok[v])continue;const k=inflate(v);p.setXYZ(v,pos.getX(v)+nor.getX(v)*k,pos.getY(v)+nor.getY(v)*k,pos.getZ(v)+nor.getZ(v)*k);}
     g.computeVertexNormals();g.computeBoundingSphere();return g;};
   const wr=v=>.0018*Math.sin(pos.getX(v)*55+pos.getY(v)*31)+.0012*Math.sin(pos.getY(v)*90-pos.getZ(v)*40);   // creases
   const shirt=build(v=>wsum(v,torso)>.5&&wsum(v,neck)<.25&&wsum(v,hand)<.2&&pos.getY(v)>.86,v=>{const y=pos.getY(v),ax=Math.abs(pos.getX(v));
@@ -1589,6 +1598,7 @@ class Ragdoll{
         if(sp>.25){_rv.multiplyScalar(1/(sp*h));const gy=groundY(c.x,c.z,c.y),k=Math.min(1,sp*.5)*.035;
           for(const [hn,sd] of [['LeftHand',1],['RightHand',-1]]){const p=P[hn];if(!p)continue;const tx=c.x+_rv.x*.5-_rv.z*sd*.24,tz=c.z+_rv.z*.5+_rv.x*sd*.24,ty=Math.max(gy+.06,c.y-.5);
             const dx=(tx-p.x)*k,dy=(ty-p.y)*k,dz=(tz-p.z)*k,q=this.Q[hn];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.6;q.y+=dy*.6;q.z+=dz*.6;}}}}   // mostly placed, a little thrown
+    if(this.clutch){const c=this.clutch,p=this.P[c.h];if(p&&c.p){const k=.006+.006*Math.sin(this.age*1.3),dx=(c.p.x-p.x)*k,dy=(c.p.y-p.y)*k,dz=(c.p.z-p.z)*k,q=this.Q[c.h];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.9;q.y+=dy*.9;q.z+=dz*.9;}}   // a hand pressed to the wound
     if(PIT&&this.P.Hips)this.under=this.P.Hips.y<-.15;   // gone below the deck: the bridge no longer holds any part of this body up
     for(let it=0;it<7;it++){
       for(const [a,b,l] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}
@@ -1943,7 +1953,7 @@ class Sword{
       // landed flat or butt-first, or ran into something: it drops where it is instead of levering back
       if(this.H.y<groundY(this.H.x,this.H.z,this.H.y)+.07||this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
     }
-    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
+    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){const vy=(p.y-q.y)/h;if(vy<-1.6&&simTime>(this.clT||0)){this.clT=simTime+.12;clatter(this,p,-vy);}p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
     if(this.flying&&this.def.kind==='spear'&&this.H.y>.1&&this.T.y>.1){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
@@ -1960,9 +1970,10 @@ class Sword{
   pointAt(t,out){return out.copy(this.H).addScaledVector(this.axis,this.len*t);}
   velAt(t,out){return out.copy(this.Hv).lerp(this.tipVel,t);}
   sync(){_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);this.mesh.quaternion.setFromRotationMatrix(_sm);this.mesh.position.copy(this.H);
-    if(this.bloodU){const U=this.bloodU;U.uSwO.value.copy(this.H);U.uSwA.value.copy(this.axis);U.uBlood.value=this.blood||0;}}
+    if(this.bloodU){const U=this.bloodU;U.uSwO.value.copy(this.H);U.uSwA.value.copy(this.axis);U.uBlood.value=this.blood||0;U.uWear.value=this.wear||0;U.uDry.value=clamp((simTime-(this.bloodT??simTime)-12)/50,0,1);}}
   // blood builds up on a weapon from its striking end down the blade, wet and dark
-  bloody(amt){if(!this.bloodU)bloodWeapon(this);this.blood=Math.min(1,(this.blood||0)+amt);}
+  bloody(amt){if(!this.bloodU)bloodWeapon(this);this.blood=Math.min(1,(this.blood||0)+amt);this.bloodT=simTime;}
+  worn(amt){if(this.def.kind==='fist')return;if(!this.bloodU)bloodWeapon(this);this.wear=Math.min(1,(this.wear||0)+amt);}
   dispose(){scene.remove(this.mesh);this.unstick();if(this.rb&&PW){for(const c of this.cols)PHC.delete(c.handle);PW.removeRigidBody(this.rb);this.rb=null;}}
 }
 
@@ -1991,11 +2002,14 @@ function addWound(B,ci,P,axis,dmg,kind){
   B.model.updateMatrixWorld(true);for(const m of B.skins)m.boundingSphere=null;
   _wr.set(_wb.copy(_wq).addScaledVector(_wn,c.r+.3),_wx.copy(_wn).negate());_wr.far=c.r+.35;
   const hit=_wr.intersectObjects(B.skins,false)[0];const S=hit?hit.point.clone():_wq.clone().addScaledVector(_wn,c.r*.8);
+  // a fresh cut or stab landing on an old one opens it wider instead of leaving a second mark beside it
+  let grown=0;if(kind!=='bruise')for(let i=0;i<B.wounds.length;i++){const w=B.wounds[i],u=w.userData;if(u.kind!==kind||!w.parent)continue;w.localToWorld(_wx.copy(u.c));
+    if(_wx.distanceToSquared(S)<.0036){dmg+=u.dmg*.75;grown=1;S.lerp(_wx,.5);w.parent.remove(w);w.geometry.dispose();B.wounds.splice(i,1);break;}}
   const R=Math.max(.04,_wb.subVectors(S,_wq).dot(_wn));
   _wa.normalize();_wt.crossVectors(_wa,_wn).normalize();
   // shape: a gash runs along the edge that made it; a stab is round; a bruise spreads
   let Lh,Wh,phi=0;
-  if(kind==='cut'){Lh=Math.min(.2,.05+dmg*.0035);Wh=Math.min(.045,.014+dmg*.0005);phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
+  if(kind==='cut'){Lh=Math.min(.24,.05+dmg*.0035);Wh=Math.min(.06,.014+dmg*.0005);phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
   else if(kind==='stab'){Lh=Wh=Math.min(.05,.022+dmg*.0007);}
   else{Lh=Math.min(.1,.04+dmg*.0016);Wh=Lh*.8;phi=Math.random()*3;}
   const NR=4,NA=14,pos=[],uv=[],idx=[],cp=Math.cos(phi),sp=Math.sin(phi);
@@ -2004,7 +2018,8 @@ function addWound(B,ci,P,axis,dmg,kind){
     pos.push(S.x+_wt.x*R*Math.sin(th)+_wa.x*v+_wn.x*dn,S.y+_wt.y*R*Math.sin(th)+_wa.y*v+_wn.y*dn,S.z+_wt.z*R*Math.sin(th)+_wa.z*v+_wn.z*dn);uv.push(a*.5+.5,b*.5+.5);}
   for(let i=0;i<NR;i++)for(let j=0;j<NA;j++){const a=i*NA+j,b=i*NA+(j+1)%NA,c2=(i+1)*NA+j,d=(i+1)*NA+(j+1)%NA;idx.push(a,c2,b,b,c2,d);}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
-  const m=new THREE.Mesh(g,woundMat(kind));m.renderOrder=2;scene.add(m);B.bones[c.ba].attach(m);
+  let mt=woundMat(kind);if(kind==='bruise'){mt=mt.clone();mt.opacity=.25;BRUISES.push({m:mt,t0:simTime});}   // a bruise comes up and darkens over the next seconds
+  const m=new THREE.Mesh(g,mt);m.renderOrder=2;scene.add(m);B.bones[c.ba].attach(m);g.computeBoundingSphere();m.userData={kind,dmg,c:g.boundingSphere.center.clone()};
   if(kind!=='bruise')(B.bloodSrc||(B.bloodSrc=[])).push({o:m,c:(g.computeBoundingSphere(),g.boundingSphere.center.clone()),amt:clamp(dmg/(kind==='stab'?30:40),.18,1),born:simTime});
   B.wounds.push(m);if(B.wounds.length>28){const o=B.wounds.shift();o.parent&&o.parent.remove(o);o.geometry.dispose();}
 }
@@ -2016,7 +2031,7 @@ function bodyBlood(f){const U=f.mats&&f.mats.bloodU;if(!U)return;const L=f.blood
   const flow=f.alive?(f.bleed>0||f.downed?1:.15):(simTime-(f.deathT||0)<8?.6:0);   // runs while the heart pumps, and a little after
   for(const b of L){b.g=(b.g||0)+dt*flow;b.a=b.amt*Math.min(1.25,.35+b.g/7);}
   const top=L.length>BL_N?L.slice().sort((x,y)=>y.a-x.a).slice(0,BL_N):L;
-  for(let i=0;i<BL_N;i++){const b=top[i];if(!b){W[i].w=0;continue;}b.o.localToWorld(_bw.copy(b.c));W[i].set(_bw.x,_bw.y,_bw.z,b.a);}}
+  const WA=U.uWa.value;for(let i=0;i<BL_N;i++){const b=top[i];if(!b){W[i].w=0;continue;}b.o.localToWorld(_bw.copy(b.c));W[i].set(_bw.x,_bw.y,_bw.z,b.a);WA[i]=clamp((simTime-b.born-14)/55,0,1);}}   // a wound's blood browns and dries over a minute
 function clearWounds(B){if(B.bloodSrc)B.bloodSrc.length=0;for(const o of B.wounds||[]){o.parent&&o.parent.remove(o);o.geometry.dispose();}if(B.wounds)B.wounds.length=0;}
 
 // ================================================================ fighters
@@ -2515,7 +2530,7 @@ class Fighter{
     const fq=(back?-1:1)*Math.max(sp,.5)/(1.51*Dw*(1-rt)+3.62*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
     if(ww>0&&wr>0){const m=wr>ww?A.run:A.walk,o=m===A.run?A.walk:A.run;const ph=m.time/m.getClip().duration+(m===A.run?-.075:.075);o.time=((ph%1+1)%1)*o.getClip().duration;}
     this.mixer.update(dt);
-    if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww);}}
+    if(this.pos.y<.02&&sp>.6&&this.slideT<=0){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
     if(this.isPlayer&&!this.limbs.head.sev)B.Head.scale.setScalar(camMode==='fp'?.001:1);
     let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1)*(1-(this.sideW||0));}
@@ -2546,6 +2561,8 @@ class Fighter{
     const tw=thTw||(this.sword?0:clamp(-pt*2.6,-.6,.6));this.twist=lerp(this.twist,tw,1-Math.exp(-(thTw?16:10)*dt));
     _qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);
     if(this.stagger>.05){_qr.setFromAxisAngle(X_AXIS,-this.stagger*.25);B.Spine1.quaternion.premultiply(_qr);}
+    {const k=Math.max(clamp(1-this.stamina/70,0,1),clamp((60-this.hp)/60,0,1)*.7);this._brP=((this._brP||0)+dt*lerp(1.7,4.6,k))%6.2832;   // breathing: slow at rest, deep and quick when winded
+      const a=(.006+.04*k)*Math.sin(this._brP);_qr.setFromAxisAngle(X_AXIS,-a);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,a*.45);B.Neck.quaternion.premultiply(_qr);}
     // secondary motion: the upper body lags behind starts, stops and turns, wobbles with each step and follows the weapon
     {const dtc=Math.max(dt,1e-3),M=this.mot||(this.mot={sx:0,sz:0,vx:0,vz:0,pvx:this.vel.x,pvz:this.vel.z,ph:this.stepHalf,hp:null,tw:0});
       const ax=clamp((this.vel.x-M.pvx)/dtc,-25,25),az=clamp((this.vel.z-M.pvz)/dtc,-25,25);M.pvx=this.vel.x;M.pvz=this.vel.z;
@@ -2583,7 +2600,7 @@ class Fighter{
         else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),th=(this.isPlayer?.13:.16)+sp*.06;
           if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*2.2)){p.from.copy(p.at);p.t=0;}
           if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02));
-            if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false);}
+            if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false,this);}
           else{p.at.y=want.y;p.lift=0;}
           feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
       for(const s in feet){
@@ -2773,7 +2790,7 @@ class Fighter{
     for(const slot in this.armor){const a=this.armor[slot];if(a)loot.push({kind:'armor',def:a.def,corpse:this,slot,halo:lootHalo(a.def.tier)});}
     onKill(by,this,cause);
   }
-  dispose(){scene.remove(this.root);clearWounds(this);if(this.sword)this.sword.dispose();if(this.pb&&PW){for(const p of this.pb){PHC.delete(p.col.handle);PW.removeRigidBody(p.rb);}this.pb=null;}if(this.fireFx)this.fireFx.forEach(s=>scene.remove(s));}
+  dispose(){scene.remove(this.root);clearWounds(this);if(this.pool){scene.remove(this.pool);this.pool.material.dispose();this.pool=null;}if(this.sword)this.sword.dispose();if(this.pb&&PW){for(const p of this.pb){PHC.delete(p.col.handle);PW.removeRigidBody(p.rb);}this.pb=null;}if(this.fireFx)this.fireFx.forEach(s=>scene.remove(s));}
 }
 const _iS2=V(),_iT2=V(),_iD2=V(),_iP2=V(),_iE2=V();
 // a real grip: the handle runs through the palm, fingers curl round it, knuckles follow the edge, thumb toward the guard
@@ -2956,7 +2973,7 @@ function clash(A,B){
   s.Hv.multiplyScalar(.7);s2.Hv.multiplyScalar(.7);
   A.clashCd=B.clashCd=.12;
   _t3.addVectors(_c1,_c2).multiplyScalar(.5);
-  if(rs>3){spawnSparks(_t3,(8+rs*2)|0,_n);sClang(_t3,rs/9);}
+  if(rs>3){spawnSparks(_t3,(8+rs*2)|0,_n);sClang(_t3,rs/9);s.worn(rs*.004);s2.worn(rs*.004);}
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
   if(attSp<4.5)return;
   if(defSp>5){ // both swinging: a bind, both rock back
@@ -3002,6 +3019,7 @@ function embed(s,B,cap,l,E,hold,extra){
 function stuckPose(s){
   const st=s.stuck;st.bone.updateWorldMatrix(true,false);st.bone.getWorldQuaternion(_stQ);_stP.copy(st.lp).applyMatrix4(st.bone.matrixWorld);
   s.axis.copy(st.la).applyQuaternion(_stQ).normalize();s.edge.copy(st.le).applyQuaternion(_stQ);s.edge.addScaledVector(s.axis,-s.edge.dot(s.axis)).normalize();
+  if(st.thrown){const age=simTime-(st.born??(st.born=simTime)),w=.16*Math.exp(-age*4.5)*Math.sin(age*34);if(Math.abs(w)>.002){_stQ.setFromAxisAngle(s.edge,w);s.axis.applyQuaternion(_stQ);}}   // and quivers from the impact
   s.H.copy(_stP).addScaledVector(s.axis,-st.l);s.T.copy(s.H).addScaledVector(s.axis,s.len);
 }
 // how hard the hand is pulling on a stuck weapon: drawn back along the blade, or wrenched across it, since it went in
@@ -3013,17 +3031,22 @@ function ripOut(s,B,A,dmg){
   if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
 }
 function bloodWeapon(s){
-  const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwL:{value:s.len},uBlood:{value:0}};s.bloodU=U;const cache=new Map();
+  const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwL:{value:s.len},uBlood:{value:0},uDry:{value:0},uWear:{value:0}};s.bloodU=U;const cache=new Map();
   s.mesh.traverse(o=>{if(!o.isMesh||!o.material)return;if(!cache.has(o.material)){const m=o.material.clone();
     m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);
-      sh.vertexShader='varying vec3 vWPos;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
-      sh.fragmentShader='varying vec3 vWPos;uniform vec3 uSwO,uSwA;uniform float uSwL,uBlood;\n'+sh.fragmentShader
+      sh.vertexShader='varying vec3 vWPos,vLoc;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvLoc=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
+      sh.fragmentShader='varying vec3 vWPos,vLoc;uniform vec3 uSwO,uSwA;uniform float uSwL,uBlood,uDry,uWear;\n'+sh.fragmentShader
       .replace('#include <color_fragment>',`#include <color_fragment>
         float bAl=dot(vWPos-uSwO,uSwA)/uSwL,bN=fract(sin(dot(floor(vWPos*45.),vec3(12.9898,78.233,37.719)))*43758.5453);
         float bM=min(1.,uBlood*3.)*smoothstep(1.-uBlood*.8-.06,1.-uBlood*.8+.04,bAl+(bN-.5)*.14);
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.15,.006,.005),bM*.95);`)
-      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.45,bM);')
-      .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,0.,bM);');};
+        diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.15,.006,.005),vec3(.06,.022,.015),uDry),bM*.95);`)
+      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,mix(.45,.85,uDry),bM);')
+      .replace('#include <metalnessmap_fragment>',`#include <metalnessmap_fragment>
+        { float wm=uWear*step(.5,metalnessFactor)*(1.-bM);vec3 L=vLoc;   // steel that has met armour: bright scratches and dark nicks, in the weapon's own frame so they ride with it
+          float s1=pow(abs(sin(dot(L,vec3(410.,230.,120.))+2.*sin(dot(L,vec3(37.,-61.,23.))))),220.),s2=pow(abs(sin(dot(L,vec3(-190.,350.,260.))+2.*sin(dot(L,vec3(-29.,17.,53.))))),260.);
+          float nk=step(.94,fract(sin(dot(floor(L*170.),vec3(12.9898,78.233,37.719)))*43758.5453))*wm,sc=clamp(s1+s2,0.,1.)*wm;
+          diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*1.4+.05,sc*.8)*(1.-nk*.5);roughnessFactor=mix(roughnessFactor,.65,max(sc*.55,nk*.6)); }
+        metalnessFactor=mix(metalnessFactor,0.,bM);`);};
     m.customProgramCacheKey=()=>'bm-blood';cache.set(o.material,m);}o.material=cache.get(o.material);});
 }
 function bladeContact(s,B){
@@ -3081,6 +3104,10 @@ function resolveHit(A,B,cap,t,P,pv){
   if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
   const imp=dir.clone().multiplyScalar(Math.min(speed*.3*(mode==='blunt'?1.4:1),3.8));
+  const arm=armorAt(B,cap.zone);
+  if(arm&&prot>.2&&W.kind!=='fist'){s.worn((arm.mail?.006:.014)*speed/6);   // steel on steel scars the edge
+    if(arm.mail){if(!glance)sfx('hitMail',P,.55*clamp(speed/8,.4,1.2),.85);}   // mail swallows a blow with a dull jingle
+    else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,clamp(speed*W.weight*.0011,.002,.016));}}
   if(glance){spawnSparks(P,10,dir);sClank(P,speed/9);}
   else if(mode==='blunt'||mode==='flat'||mode==='haft'){sThud(P,speed/9);if(dmg>8)spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.15).setY(.6),(4+dmg*.4)|0,1.2,1);if(prot>.3&&mode==='blunt')sClank(P,.6);}
   else{spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.25).setY(.8),Math.min(60,(10+dmg*.9)|0),1.8,1+dmg/60);sHit(P,speed/9,!!sev);}
@@ -3090,7 +3117,9 @@ function resolveHit(A,B,cap,t,P,pv){
     if(A.isPlayer||B.isPlayer)hitstop(glance?.02:clamp((.025+dmg/500)*wf,.025,.13));if(A.isPlayer)shake((.04+dmg/220)*wf);
     camKick(A,dir,-Math.min(1.2,(.2+dmg/70)*wf));camKick(B,dir,Math.min(2,(.3+dmg/35)*wf));
     if(W.weight>1.25&&mode!=='blunt'&&dmg>15)sThud(P,.5);}
-  if(sev){
+  if(!sev&&cap.zone==='head'&&B.armor.head&&!B.noSever&&(mode==='blunt'?speed*W.weight>9:speed*W.weight>13)&&Math.random()<.55)knockHelmet(B,dir,speed);   // a big blow to the head can knock the helmet clean off
+  if((sev&&sev!=='Head')||(mode==='blunt'&&dmg>26&&cap.zone!=='torso'))sfx('crush',P,.7,1.45);   // bone giving way
+  if(sev){cheer(.55,1);
     B.sever(sev,dir.clone().multiplyScalar(speed*.45));
     spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.3).setY(1.5),30,2.5,1.4);
     if(sev==='Head'){B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'beheaded',imp,P);tell(A,'Beheaded','red');}
@@ -3179,7 +3208,7 @@ function clashPhys(s,s2,P,va,vb){
   const A=s.owner,B=s2.owner;_rel.subVectors(va,vb);const rs=_rel.length();
   if(rs<=1.4||(A&&A.clashCd>0)||(B&&B.clashCd>0))return;
   if(A)A.clashCd=.12;if(B)B.clashCd=.12;
-  if(rs>3){spawnSparks(P,(8+rs*2)|0,_n.copy(_rel).normalize());sClang(P,rs/9);}
+  if(rs>3){spawnSparks(P,(8+rs*2)|0,_n.copy(_rel).normalize());sClang(P,rs/9);s.worn(rs*.004);s2.worn(rs*.004);}
   if(!A||!B)return;
   const spA=va.length(),spB=vb.length();EV.clashGame++;
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
@@ -3356,7 +3385,7 @@ function camKick(f,dir,amt){if(!f)return;if(f.isPlayer)applyKick(dir,amt);else i
 function kickStep(dt){const k=240,c=2*Math.sqrt(k)*.42;for(const a of ['p','y','r']){const v='v'+a;KICK[v]+=(-k*KICK[a]-c*KICK[v])*dt;KICK[a]+=KICK[v]*dt;KICK[a]=clamp(KICK[a],-.3,.3);}}
 function sThud(p,power=1){netEv(['t',r3v(p),power]);if(sfx(power>.8?'crush':power>.45?'strike':'punch',p,.9*clamp(power+.2,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.8;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,.1,'lowpass',500,.7,v);const o=AC.createOscillator();o.frequency.setValueAtTime(90,t);o.frequency.exponentialRampToValueAtTime(32,t+.14);const g=AC.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.16);o.connect(g);g.connect(master);o.start(t);o.stop(t+.18);}
 function sClank(p,power=1){netEv(['n',r3v(p),power]);if(sfx(Math.random()<.5?'hitPlate':'hitMail',p,.8*clamp(power+.3,.4,1.2),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1)*.35;if(v<.01)return;const t=AC.currentTime,base=380+Math.random()*200;[1,2.7,4.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=base*r;const g=AC.createGain();g.gain.setValueAtTime(v/(1+i),t);g.gain.exponentialRampToValueAtTime(.0005,t+.18/(1+i*.3));o.connect(g);g.connect(master);o.start(t);o.stop(t+.25);});noiseBurst(t,.05,'bandpass',2200,1,v*.6);}
-function sStep(p,vol,run){if(sfx(curMap==='arena'||curMap==='colosseum'?'stepSand':'stepStone',p,vol*1.5,run?1.06:1,0,false))return;if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,run?.07:.05,'lowpass',run?650:480,.9,v);noiseBurst(t+.01,.03,'bandpass',2600,2,v*.18);}
+function sStep(p,vol,run,f){if(f&&stepFx(f,p,vol,run))return;if(sfx(curMap==='arena'||curMap==='colosseum'?'stepSand':'stepStone',p,vol*1.5,run?1.06:1,0,false))return;if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,run?.07:.05,'lowpass',run?650:480,.9,v);noiseBurst(t+.01,.03,'bandpass',2600,2,v*.18);}
 function sCheer(x){if(!AC)return;const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.7;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=900;f.Q.value=.4;const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.32*x,t+.35);g.gain.exponentialRampToValueAtTime(.001,t+2.4);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+2.5);}
 function sPickup(){if(sfx('pickup',null,.6,1,0,false))return;if(!AC)return;const t=AC.currentTime;noiseBurst(t,.06,'bandpass',1800,3,.15);noiseBurst(t+.05,.05,'bandpass',900,3,.1);}
 
@@ -3413,7 +3442,7 @@ const input={keys:{},lmb:false,rmb:false,locked:false,mx:.5,my:.5};
 const BOT_WEAPONS=['arming','longsword','axe','mace','spear','arming','longsword'];
 function botLoad(){const armor=[];if(Math.random()<.55)armor.push(pick(['kettle','nasal','kettle','bascinet']));if(Math.random()<.3)armor.push('mail');if(Math.random()<.15)armor.push('vambraces');if(Math.random()<.12)armor.push('greaves');return {weapon:pick(BOT_WEAPONS),armor};}
 function clearMatch(){
-  physStatic();
+  physStatic();clearDetails();
   for(const f of fighters)f.dispose();fighters.length=0;
   for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;
   for(const it of [...loot])removeLoot(it);
@@ -3722,7 +3751,7 @@ function sim(h){
   } else {
   combatStep(h);
   for(const s of freeSwords)if(s.flying){s.stepFree(h);thrownCheck(s);}
-  sub^=1;if(sub){for(const d of debris)if(!d.wep)d.rag.step(h*2);for(const s of freeSwords)if(!s.flying)s.stepFree(h*2);}
+  sub^=1;if(sub){for(const d of debris)if(!d.wep)d.rag.step(h*2);kickLoose(h*2);for(const s of freeSwords)if(!s.flying)s.stepFree(h*2);}
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
@@ -3762,7 +3791,7 @@ function frame(now){
   for(const fl of flames){const t=now*.001+fl.ph;const fk=.85+Math.sin(t*13)*.07+Math.sin(t*7.3)*.06+Math.random()*.05;fl.f.scale.set(.32*fl.base*fk,.62*fl.base*(.9+fk*.15),1);fl.h.material.opacity=.2;if(fl.L)fl.L.intensity=9*fl.base*fk;
     if(Math.random()<.04*fl.base){const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=fl.x+(Math.random()-.5)*.2;embers.pos[i*3+1]=fl.y+.3;embers.pos[i*3+2]=fl.z+(Math.random()-.5)*.2;embers.vel[i*3]=(Math.random()-.5)*.5;embers.vel[i*3+1]=.8+Math.random();embers.vel[i*3+2]=(Math.random()-.5)*.5;embers.life[i]=1.5+Math.random()*2;}}
   updatePool(embers,dt,.2,.3);
-  for(const f of fighters)updateBurnFx(f,now,dt);
+  for(const f of fighters)updateBurnFx(f,now,dt);detailTick(dt);
   // loot glow
   const pulse=.32+Math.sin(now*.004)*.12;
   for(const it of loot){if(!it.halo)continue;lootPos(it,it.halo.position);it.halo.position.y+=.12;it.halo.material.opacity=it.corpse?pulse*.5:pulse;}
@@ -3816,7 +3845,7 @@ function frame(now){
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
 function updateBurnFx(f,now,dt){
-  bodyBlood(f);
+  bodyBlood(f);fighterDetail(f,dt);
   if(!f.alive&&f.burn>0)f.burn-=dt;
   if(f.burn>0){
     if(!f.fireFx)f.fireFx=FX_BONES.map(()=>{const s=new THREE.Sprite(flameMat);s.renderOrder=7;scene.add(s);return s;});
@@ -3825,6 +3854,157 @@ function updateBurnFx(f,now,dt){
     if(Math.random()<.7){const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=f.chest.x+(Math.random()-.5)*.4;embers.pos[i*3+1]=f.chest.y+(Math.random()-.6)*1.1;embers.pos[i*3+2]=f.chest.z+(Math.random()-.5)*.4;embers.vel[i*3]=(Math.random()-.5)*.5;embers.vel[i*3+1]=1.5+Math.random()*1.5;embers.vel[i*3+2]=(Math.random()-.5)*.5;embers.life[i]=.5+Math.random()*.8;}
   } else if(f.fireFx)f.fireFx.forEach(s=>s.visible=false);
 }
+// ================================================================ small details
+// Faces, breath, sweat, dirt, drying blood, pools, footprints, dust, dents and voices. All of it is looks and sound, worked out
+// every frame on every machine from what the snapshot already carries (hp, stamina, alive, downed, the bones), so nothing extra
+// goes over the network except dents and knocked-off helmets.
+const DIRT_COL={village:[.2,.16,.11],arena:[.46,.38,.27],colosseum:[.5,.42,.3],pit:[.4,.34,.25]};
+const DIRT_U={value:new THREE.Color(.46,.38,.27)};   // one uniform shared by every body's shaders
+const BRUISES=[],FLY=[];
+const SAND=()=>curMap==='arena'||curMap==='colosseum';
+const _fd=V(),_fd2=V(),_fd3=V(),_dm=new THREE.Matrix4(),_dp=V(),_dk=V(),_dv=V(),_dq=new THREE.Quaternion(),_ds=V(1,1,1);
+// ---- dust: soft puffs that swell and fade (falls, running on sand, a body dragged), and motes drifting in the sunlight
+const DUST=(()=>{const n=320,g=new THREE.BufferGeometry(),pos=new Float32Array(n*3).fill(-999),al=new Float32Array(n);g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('aA',new THREE.BufferAttribute(al,1));
+  const m=new THREE.ShaderMaterial({uniforms:{uCol:{value:new THREE.Color(.62,.53,.4)},uMap:{value:TX.glow},uS:{value:600}},transparent:true,depthWrite:false,
+    vertexShader:'attribute float aA;varying float vA;uniform float uS;void main(){vA=aA;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=uS*(.12+.5*(1.-aA))/max(.1,-mv.z);}',
+    fragmentShader:'uniform vec3 uCol;uniform sampler2D uMap;varying float vA;void main(){float a=texture2D(uMap,gl_PointCoord).a*vA*.38;if(a<.004)discard;gl_FragColor=vec4(uCol,a);}'});
+  const p=new THREE.Points(g,m);p.frustumCulled=false;p.renderOrder=3;scene.add(p);return {p,pos,al,vel:new Float32Array(n*3),life:new Float32Array(n),max:new Float32Array(n),n,i:0};})();
+function spawnDust(p,n,sp=.5,up=.3){if(p.distanceToSquared(camera.position)>900)return;const D=DUST;
+  for(let k=0;k<n;k++){const i=D.i;D.i=(i+1)%D.n;D.pos[i*3]=p.x+(Math.random()-.5)*.2;D.pos[i*3+1]=Math.max(p.y,groundY(p.x,p.z,p.y)+.04);D.pos[i*3+2]=p.z+(Math.random()-.5)*.2;
+    const a=Math.random()*6.283,r=sp*(.3+Math.random()*.7);D.vel[i*3]=Math.cos(a)*r;D.vel[i*3+1]=up*(.3+Math.random());D.vel[i*3+2]=Math.sin(a)*r;D.max[i]=D.life[i]=.9+Math.random()*1.3;}}
+const MOTES=(()=>{const n=90,g=new THREE.BufferGeometry(),pos=new Float32Array(n*3);for(let i=0;i<n*3;i++)pos[i]=(Math.random()-.5)*12;g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const m=new THREE.PointsMaterial({color:0xfff1d6,size:.016,sizeAttenuation:true,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false,map:TX.glow});
+  const p=new THREE.Points(g,m);p.frustumCulled=false;scene.add(p);return {p,pos,n};})();
+// ---- footprints and drag marks pressed into the sand
+function softTex(foot){const c=document.createElement('canvas');c.width=32;c.height=64;const x=c.getContext('2d');x.filter='blur(2px)';x.fillStyle='#fff';
+  if(foot){x.beginPath();x.ellipse(16,21,9,14,0,0,7);x.fill();x.beginPath();x.ellipse(16,49,7,8,0,0,7);x.fill();}
+  else{x.beginPath();x.ellipse(16,32,11,26,0,0,7);x.fill();}
+  return new THREE.CanvasTexture(c);}
+function markMesh(n,foot,op){const g=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2).rotateY(Math.PI);
+  const m=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:0x1a120a,alphaMap:softTex(foot),transparent:true,opacity:op,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-3}),n);
+  m.frustumCulled=false;for(let i=0;i<n;i++)m.setMatrixAt(i,_zero);scene.add(m);return {m,n,i:0};}
+const PRINTS=markMesh(600,true,.3),DRAGS=markMesh(260,false,.2);
+function addMark(M,x,z,yaw,sx,sz){const gy=groundY(x,z,.5);if(gy<-.5&&!PIT)return;_dq.setFromAxisAngle(Y_AXIS,yaw);_mx.compose(_dp.set(x,gy+.011+Math.random()*.002,z),_dq,_ds.set(sx,1,sz));M.m.setMatrixAt(M.i,_mx);M.i=(M.i+1)%M.n;M.m.instanceMatrix.needsUpdate=true;}
+// ---- blood pools spreading under the dead and the dying
+const POOL_TEX=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.filter='blur(1.5px)';x.fillStyle='#fff';
+  x.beginPath();for(let i=0;i<=48;i++){const a=i/48*6.283,r=44+7*Math.sin(a*3+1)+5*Math.sin(a*7)+3*Math.sin(a*13);i?x.lineTo(64+Math.cos(a)*r,64+Math.sin(a)*r):x.moveTo(64+Math.cos(a)*r,64+Math.sin(a)*r);}x.fill();
+  for(let i=0;i<7;i++){const a=Math.random()*6.283;x.beginPath();x.arc(64+Math.cos(a)*50,64+Math.sin(a)*50,4+Math.random()*7,0,7);x.fill();}
+  return new THREE.CanvasTexture(c);})();
+const POOL_GEO=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);
+function makePool(x,z,y){const m=new THREE.Mesh(POOL_GEO,std({color:0x3c0404,roughness:.07,metalness:0,envMapIntensity:.7,alphaMap:POOL_TEX,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-5}));
+  m.position.set(x,y,z);m.rotation.y=Math.random()*6.283;m.scale.setScalar(.08);m.renderOrder=1;m.receiveShadow=true;scene.add(m);return m;}
+// ---- blood that falls from a blade or a wound: a drop, nothing sent over the network
+function dripBlood(p){const i=bI;bI=(bI+1)%BLOOD_N;bP[i*3]=p.x;bP[i*3+1]=p.y;bP[i*3+2]=p.z;bV[i*3]=(Math.random()-.5)*.12;bV[i*3+1]=-.2;bV[i*3+2]=(Math.random()-.5)*.12;bL[i]=2.5;bS[i]=.0026+Math.random()*.002;}
+// ---- sounds
+function sGurgle(p,vol=1){if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime,n=4+(Math.random()*5|0);
+  for(let i=0;i<n;i++)noiseBurst(t+i*(.06+Math.random()*.07),.04+Math.random()*.05,'bandpass',200+Math.random()*420,7,v*.55);noiseBurst(t,n*.1,'lowpass',280,.7,v*.22);}
+function sGasp(x){if(!AC)return;const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8;const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=.7;f.frequency.setValueAtTime(700,t);f.frequency.linearRampToValueAtTime(1500,t+.45);
+  const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.3*x,t+.12);g.gain.exponentialRampToValueAtTime(.001,t+1.3);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+1.4);
+  setTimeout(()=>sCheer(x*.6),700);}   // the crowd gasps, then roars
+function clatter(s,p,v){sfx('dropWeapon',p,clamp(v/5,.2,.9),1.05+(Math.random()-.5)*.25);if(v>2.5&&SAND())spawnDust(p,2,.3,.2);}
+// steps: the boards of the pit bridge knock hollow; mail jingles and plate clanks with every step; feet leave prints in the sand
+function stepFx(f,p,vol,run){const a=f.armor;
+  if(a.body){if(a.body.def.id==='mail')sfx('equipMail',p,vol*(run?.5:.32),1.35+Math.random()*.25,0,false);else sfx('equipPlate',p,vol*(run?.3:.18),1.3+Math.random()*.2,.02,false);}
+  else if(a.legs&&Math.random()<.5)sfx('equipPlate',p,vol*.13,1.55,0,false);
+  const wood=!!PIT&&onBridge(f.pos.x,f.pos.z)&&f.pos.y>-.1;
+  const lf=f.bones.LeftFoot,rf=f.bones.RightFoot;
+  if(lf&&rf&&!wood&&SAND()){lf.getWorldPosition(_fd);rf.getWorldPosition(_fd2);const left=_fd.y<_fd2.y,ft=left?_fd:_fd2;addMark(PRINTS,ft.x,ft.z,f.yaw,left?-.1:.1,.25);if(run)spawnDust(ft,2,.35,.22);}
+  if(wood){if(AC){const v=distVol(p)*vol;if(v>.01){const t=AC.currentTime;noiseBurst(t,.06,'bandpass',180+Math.random()*60,3,v*1.7);noiseBurst(t,.035,'bandpass',950,2,v*.3);noiseBurst(t+.004,.09,'lowpass',130,.7,v);}}return true;}
+  return false;}
+// ---- armour: which piece takes a blow, dents hammered into plate, helmets knocked flying
+function armorAt(B,zone){const a=B.armor,mail=!!a.body&&a.body.def.id==='mail';
+  const sl=zone==='head'?'head':zone==='neck'?(a.head?'head':'body'):zone==='torso'?'body':zone.startsWith('arm')?(a.arms?'arms':'body'):(a.legs?'legs':'body');
+  const p=a[sl];if(!p)return null;if(sl==='body'&&zone!=='torso'&&!mail)return null;return {slot:sl,mail:p.def.id==='mail'};}
+function dentArmor(B,slot,P,dir,depth){const a=B.armor[slot];if(!a||depth<.003)return;if(NET.mode==='host')netEv(['D',B.id,slot,r3v(P),r3v(dir),r3(depth)]);
+  const R=.04+depth*2.2;
+  for(const g of a.groups)g.traverse(m=>{if(!m.isMesh||!m.geometry||!m.geometry.attributes.position)return;
+    m.updateWorldMatrix(true,false);const sc=m.matrixWorld.getMaxScaleOnAxis();_dm.copy(m.matrixWorld).invert();
+    _dp.copy(P).applyMatrix4(_dm);_dk.copy(dir).transformDirection(_dm);const rl=R/sc,dl=depth/sc;   // the blow, in the piece's own frame
+    if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();const bs=m.geometry.boundingSphere;if(bs.center.distanceTo(_dp)>bs.radius+rl)return;
+    let any=false;const pa0=m.geometry.attributes.position;for(let i=0;i<pa0.count;i++){_dv.fromBufferAttribute(pa0,i);if(_dv.distanceToSquared(_dp)<rl*rl){any=true;break;}}if(!any)return;
+    if(!m.userData.ownGeo){m.geometry=m.geometry.clone();m.userData.ownGeo=true;}   // pieces share geometry until the first dent
+    const pa=m.geometry.attributes.position;
+    for(let i=0;i<pa.count;i++){_dv.fromBufferAttribute(pa,i);const d2=_dv.distanceToSquared(_dp);if(d2>rl*rl)continue;const k=1-d2/(rl*rl);_dv.addScaledVector(_dk,dl*k*k);pa.setXYZ(i,_dv.x,_dv.y,_dv.z);}
+    pa.needsUpdate=true;m.geometry.computeVertexNormals();});}
+function knockHelmet(B,dir,speed){const def=B.unequip('head');if(!def)return;const p=B.bones.Head.getWorldPosition(V());const v=V(dir.x*speed*.32,1.5+speed*.1,dir.z*speed*.32);
+  sClank(p,1);spawnSparks(p,6,dir);if(NET.mode==='host')netEv(['H',def.id,r3v(p),r3v(v)]);helmetFly(def.id,p,v,def);
+  if(B.alive&&!B.ragdoll)B.stagger=Math.max(B.stagger||0,.4);}
+function helmetFly(id,p,v,def){const d=ARMOR[id];if(!d)return;const g=armorPreview(d);g.position.copy(p);scene.add(g);
+  FLY.push({g,v:v.clone(),w:V((Math.random()-.5)*14,(Math.random()-.5)*10,(Math.random()-.5)*14),def,t:0,b:0});}
+// a walking foot shoves a weapon lying in its way
+function kickLoose(h){if(!freeSwords.length)return;
+  for(const f of fighters){if(!f.alive||f.ragdoll)continue;const vx=f.vel.x,vz=f.vel.z,sp=Math.hypot(vx,vz);if(sp<.7)continue;
+    for(const s of freeSwords){if(s.flying||s.planted||s.rb||s.stuck||s.owner)continue;
+      for(const [p,q] of [[s.H,s.Hp],[s.T,s.Tp]]){const dx=p.x-f.pos.x,dz=p.z-f.pos.z;if(dx*dx+dz*dz>.09||p.y>groundY(p.x,p.z,p.y)+.15)continue;
+        const cur=((p.x-q.x)*vx+(p.z-q.z)*vz)/(h*sp);if(cur>sp*.8)continue;
+        q.x-=vx*h*.5;q.z-=vz*h*.5;q.y-=.6*h;s.age=0;if(simTime>(s.kT||0)){s.kT=simTime+.45;sfx('dropWeapon',p,.3,1.3);}}}}}
+// ---- per fighter, every frame
+const TWITCH=['LeftHand','RightHand','LeftForeArm','RightForeArm','LeftFoot','RightFoot','LeftLeg','RightLeg','Head'];
+function fighterDetail(f,dt){
+  if(!f.bones||!f.bones.Hips)return;
+  const U=f.mats&&f.mats.bloodU,host=NET.mode!=='client',hp=f.hp,fat=clamp(1-f.stamina/70,0,1);
+  const dh=(f._hp0??hp)-hp;f._hp0=hp;if(dh>.5)f._pain=Math.min(1,(f._pain||0)+.35+dh/25);f._pain=Math.max(0,(f._pain||0)-dt*(f.alive?.45:1.2));
+  if(f._wasAlive&&!f.alive){f._gurT=simTime+.35+Math.random()*.4;f._downT=simTime;}f._wasAlive=f.alive;
+  const headOff=f.bones.Head&&f.bones.Head.userData.severed;
+  // the face: blinks, winces when hurt, grimaces when badly hurt or spent, gasps for air; the dead's eyes sag shut and the jaw falls
+  if(f._face===undefined){f._face=null;for(const m of f.skins||[])if(m.morphTargetDictionary&&m.morphTargetDictionary.blink!=null){f._face=m;break;}}
+  if(f._face){const I=f._face.morphTargetInfluences,D=f._face.morphTargetDictionary;
+    if(f.alive){f._blinkT=(f._blinkT??Math.random()*4)-dt;if(f._blinkT<0){f._blinkT=2+Math.random()*4.5*(1-fat*.5);f._blk=.17;}   // blinking more when winded
+      let blink=0;if(f._blk>0){f._blk-=dt;blink=Math.sin(clamp(1-f._blk/.17,0,1)*Math.PI);}
+      const dazed=f.downed||(f.ragdoll&&!f.ragdoll.rise);if(dazed)blink=Math.max(blink,.5);
+      const pain=Math.min(1,f._pain+clamp((60-hp)/60,0,1)*.45+fat*.25),jaw=fat*.3*(.55+.45*Math.sin(f._brP||0))+Math.max(0,f._pain-.45)*.7+(dazed?.25:0);
+      I[D.blink]=blink;I[D.jaw]=lerp(I[D.jaw],Math.min(.8,jaw),1-Math.exp(-8*dt));I[D.pain]=lerp(I[D.pain],pain,1-Math.exp(-10*dt));}
+    else{const t=simTime-(f.deathT||0);I[D.blink]=lerp(I[D.blink],.84,1-Math.exp(-3*dt));I[D.jaw]=lerp(I[D.jaw],.5,1-Math.exp(-1.2*dt));I[D.pain]=lerp(I[D.pain],t<1.5?.6:0,1-Math.exp(-(t<1.5?6:.5)*dt));}}
+  // sweat builds while winded and stays; dirt sticks to whatever touched the ground
+  if(U){if(f.alive)f._sweat=clamp((f._sweat||0)+dt*(fat>.3?.03*fat:-.0015),0,1);U.uSweat.value=f._sweat||0;}
+  f.bones.Hips.getWorldPosition(_fd3);const gy=groundY(_fd3.x,_fd3.z,_fd3.y),onG=_fd3.y-gy<.34;
+  const hvy=(_fd3.y-(f._hy??_fd3.y))/Math.max(dt,1e-3),hvx=Math.hypot(_fd3.x-(f._hx??_fd3.x),_fd3.z-(f._hz??_fd3.z))/Math.max(dt,1e-3);
+  if(onG&&(f._hvy||0)<-2.2&&hvy>-.6){spawnDust(_fd.set(_fd3.x,gy+.05,_fd3.z),12,1,.45);}   // a body slamming down raises a puff
+  f._hvy=hvy;f._hy=_fd3.y;f._hx=_fd3.x;f._hz=_fd3.z;
+  if(onG){f._dirt=Math.min(1,(f._dirt||0)+dt*.35);if(!f._downT)f._downT=simTime;}else if(f.alive&&!f.ragdoll)f._downT=0;
+  if(U)U.uDirt.value=f._dirt||0;
+  if(onG&&hvx>.6&&hvx<6&&SAND()){const d=f._dgP?Math.hypot(_fd3.x-f._dgP.x,_fd3.z-f._dgP.z):1;if(d>.14){if(f._dgP)addMark(DRAGS,(_fd3.x+f._dgP.x)/2,(_fd3.z+f._dgP.z)/2,Math.atan2(_fd3.x-f._dgP.x,_fd3.z-f._dgP.z),.3,d*1.3);(f._dgP||(f._dgP=V())).set(_fd3.x,0,_fd3.z);if(Math.random()<.4)spawnDust(_fd3,1,.2,.15);}}
+  else f._dgP=null;
+  // a pool of blood spreads under the dead and the dying
+  const down=!f.alive||f.downed,bled=(f.bloodSrc?f.bloodSrc.length:0)+(f.sevNames?f.sevNames.length*2:0);
+  if(down&&onG&&!f.pool&&bled>0&&f._downT&&simTime-f._downT>.8&&hvx<.5&&!(PIT&&onBridge(_fd3.x,_fd3.z))){f.pool=makePool(_fd3.x,_fd3.z,gy+.012+.0012*(f.id%5));f.pool.userData={r:.05,max:clamp(.3+.08*bled,.3,.85),t0:simTime};}
+  if(f.pool){const P=f.pool.userData,t=simTime-P.t0,grow=f.alive?.12:(t<45?.055:0);P.r+=(P.max-P.r)*dt*grow;f.pool.scale.setScalar(P.r*2);
+    if(!f.alive&&t>40){const k=clamp((t-40)/70,0,1);f.pool.material.color.setRGB(lerp(.045,.016,k),lerp(.0013,.004,k),lerp(.0013,.003,k));f.pool.material.roughness=lerp(.07,.6,k);}}   // and dries dull and dark
+  // blood dribbles from open wounds as long as the heart pumps
+  if((f.alive&&((f.bleed||0)>.3||f.downed))&&f.bloodSrc&&f.bloodSrc.length&&Math.random()<dt*Math.min(3,.7+(f.bleed||1)*.15)){let b=null;for(const x of f.bloodSrc)if(x.o.parent&&(!b||x.amt>b.amt))b=x;if(b){b.o.localToWorld(_fd.copy(b.c));dripBlood(_fd);}}
+  // the downed press a hand to their worst wound; the freshly dead twitch, then lie still
+  if(host&&f.ragdoll){const R=f.ragdoll;
+    if(f.alive&&f.downed&&f.bloodSrc&&f.bloodSrc.length){if(!f._clW||simTime>f._clW.t||!f._clW.b.o.parent){let b=null;for(const x of f.bloodSrc)if(x.o.parent&&(!b||x.amt>b.amt))b=x;f._clW=b?{b,t:simTime+4}:null;}
+      if(f._clW){const b=f._clW.b;b.o.localToWorld(_fd.copy(b.c));let h=null,bd=1e9;
+        for(const n of ['LeftHand','RightHand']){const p=R.P[n],fa=R.P[n==='LeftHand'?'LeftForeArm':'RightForeArm'];if(!p||!fa)continue;if(fa.distanceToSquared(_fd)<.03||p.distanceToSquared(_fd)<.006)continue;const d=p.distanceToSquared(_fd);if(d<bd){bd=d;h=n;}}
+        if(h){if(!R.clutch||R.clutch.h!==h)R.clutch={h,p:V()};R.clutch.p.copy(_fd);R.sleep=false;}else R.clutch=null;}}
+    else R.clutch=null;
+    if(!f.alive){const t=simTime-(f.deathT||0);if(t>.5&&t<7&&Math.random()<dt*3.2*(1-t/7)){const n=TWITCH[(Math.random()*TWITCH.length)|0],q=R.Q[n];if(q){q.x+=(Math.random()-.5)*.004;q.y-=Math.random()*.003;q.z+=(Math.random()-.5)*.004;R.sleep=false;}}}}
+  // voices: the downed groan and choke, the dying gurgle, the winded pant
+  if(!headOff&&f.bones.Head&&f.pos.distanceToSquared(camera.position)<600){
+    if(f.alive&&f.downed){f._vT=(f._vT??1+Math.random()*2)-dt;if(f._vT<0){f._vT=2.5+Math.random()*3.5;f.bones.Head.getWorldPosition(_fd);
+      if(hp<25&&Math.random()<.5)sGurgle(_fd,.8);else sfx(f.id%2?'humanRoughHurt':'humanHurt',_fd,.26,.72+Math.random()*.08,0,false);}}
+    if(f._gurT&&simTime>f._gurT){f._gurT=0;if(Math.random()<.65){f.bones.Head.getWorldPosition(_fd);sGurgle(_fd,1);}}
+    if(f.alive&&!f.isPlayer&&!f.ragdoll&&fat>.5&&AC){f._bT=(f._bT??0)-dt;if(f._bT<0){f._bT=lerp(1.5,.7,fat)*(.9+Math.random()*.2);f.bones.Head.getWorldPosition(_fd);const v=distVol(_fd)*.07*fat;if(v>.01)noiseBurst(AC.currentTime,.3,'bandpass',950,1.1,v);}}}
+}
+// ---- global, every frame
+function detailTick(dt){
+  {const c=DIRT_COL[curMap]||DIRT_COL.arena;DIRT_U.value.setRGB(c[0],c[1],c[2]);DUST.p.material.uniforms.uCol.value.setRGB(c[0]*1.35,c[1]*1.35,c[2]*1.35);DUST.p.material.uniforms.uS.value=renderer.domElement.height*.75;}
+  for(let i=BRUISES.length-1;i>=0;i--){const b=BRUISES[i],t=simTime-b.t0;b.m.opacity=.25+.75*clamp(t/8,0,1);b.m.color.setScalar(1-.4*clamp(t/25,0,1));if(t>25)BRUISES.splice(i,1);}   // a bruise comes up over seconds and darkens
+  for(let i=FLY.length-1;i>=0;i--){const F=FLY[i],g=F.g;F.t+=dt;F.v.y-=9.8*dt;g.position.addScaledVector(F.v,dt);g.rotation.x+=F.w.x*dt;g.rotation.y+=F.w.y*dt;g.rotation.z+=F.w.z*dt;
+    const gy=groundY(g.position.x,g.position.z,g.position.y)+.07;if(g.position.y<gy){g.position.y=gy;if(F.v.y<-1.2)sfx('hitPlate',g.position,clamp(-F.v.y/6,.2,.7),1.15,0,false);F.v.y*=-.35;F.v.x*=.55;F.v.z*=.55;F.w.multiplyScalar(.45);F.b++;}
+    if(F.t>4||(F.b>0&&F.v.lengthSq()<.15)){scene.remove(g);FLY.splice(i,1);if(F.def)spawnArmorLoot(F.def,g.position.x,g.position.z);}}
+  {const D=DUST;for(let i=0;i<D.n;i++){if(D.life[i]<=0)continue;D.life[i]-=dt;if(D.life[i]<=0){D.pos[i*3+1]=-999;D.al[i]=0;continue;}const k=1-2*dt;D.vel[i*3]*=k;D.vel[i*3+1]=D.vel[i*3+1]*k+.06*dt;D.vel[i*3+2]*=k;
+      D.pos[i*3]+=D.vel[i*3]*dt;D.pos[i*3+1]+=D.vel[i*3+1]*dt;D.pos[i*3+2]+=D.vel[i*3+2]*dt;D.al[i]=D.life[i]/D.max[i];}
+    D.p.geometry.attributes.position.needsUpdate=true;D.p.geometry.attributes.aA.needsUpdate=true;}
+  {const M=MOTES,on=curMap!=='village';M.p.visible=on;if(on){const c=camera.position,t=simTime;for(let i=0;i<M.n;i++){const o=i*3;M.pos[o]+=Math.sin(t*.3+i)*.05*dt;M.pos[o+1]+=(Math.sin(t*.21+i*1.7)*.04-.01)*dt;M.pos[o+2]+=Math.cos(t*.27+i*.6)*.05*dt;
+      for(let a=0;a<3;a++){const ca=a===1?c.y+1:a===0?c.x:c.z,r=a===1?2.5:6;if(M.pos[o+a]>ca+r)M.pos[o+a]-=2*r;else if(M.pos[o+a]<ca-r)M.pos[o+a]+=2*r;}}M.p.geometry.attributes.position.needsUpdate=true;}}
+  // blood runs down a bloodied blade and drips from its lowest end for a while after the hit
+  const drip=s=>{if(!s||(s.blood||0)<.12||s.bloodT==null)return;const age=simTime-s.bloodT;if(age>30||Math.random()>dt*4*s.blood*(1-age/30))return;s.pointAt(s.axis.y<-.2?1:s.axis.y>.5?.35:.8,_fd);if(_fd.distanceToSquared(camera.position)<400)dripBlood(_fd);};
+  for(const f of fighters)drip(f.sword);for(const s of freeSwords)drip(s);
+}
+window.__det={PRINTS,DRAGS,DUST,FLY,BRUISES,dentArmor,knockHelmet};
+function clearDetails(){for(const F of FLY)scene.remove(F.g);FLY.length=0;BRUISES.length=0;for(const M of [PRINTS,DRAGS]){for(let i=0;i<M.n;i++)M.m.setMatrixAt(i,_zero);M.m.instanceMatrix.needsUpdate=true;}DUST.life.fill(0);DUST.al.fill(0);}
 const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
 
 // ================================================================ your fighter
@@ -4094,7 +4274,7 @@ function netSnap(){
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
-    if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20];}
+    if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
     if(f.ragdoll){const P=f.ragdoll.P;o.rg=[];for(const n of RD_NAMES){const q=P[n];if(q)o.rg.push(r3(q.x),r3(q.y),r3(q.z));else o.rg.push(0,-99,0);}}
     S.f.push(o);
@@ -4199,7 +4379,7 @@ function clientFrame(dt){
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
     if(o.w){const W=WEAPONS[o.w[0]];if(W){if(!f.sword||f.sword.def!==W){if(f.sword)f.sword.dispose();f.sword=new Sword(W);}
-        const s=f.sword,w=o.w,qw=q.w&&q.w[0]===w[0]?q.w:w;s.Tp.copy(s.T);if(w[10]>(s.blood||0))s.bloody(w[10]-(s.blood||0));
+        const s=f.sword,w=o.w,qw=q.w&&q.w[0]===w[0]?q.w:w;s.Tp.copy(s.T);if(w[10]>(s.blood||0))s.bloody(w[10]-(s.blood||0));if(w[11]>(s.wear||0))s.worn(w[11]-(s.wear||0));
         s.H.set(lerp(qw[1],w[1],a),lerp(qw[2],w[2],a),lerp(qw[3],w[3],a));s.axis.set(lerp(qw[4],w[4],a),lerp(qw[5],w[5],a),lerp(qw[6],w[6],a)).normalize();s.edge.set(lerp(qw[7],w[7],a),lerp(qw[8],w[8],a),lerp(qw[9],w[9],a));
         s.edge.addScaledVector(s.axis,-s.edge.dot(s.axis)).normalize();s.T.copy(s.H).addScaledVector(s.axis,s.len);s.tipVel.subVectors(s.T,s.Tp).multiplyScalar(1/Math.max(dt,.004));}}
     else{if(f.sword){f.sword.dispose();f.sword=null;}if(o.fs){const fs=o.fs,qf=q.fs||fs;f.fists.R.pos.set(lerp(qf[0],fs[0],a),lerp(qf[1],fs[1],a),lerp(qf[2],fs[2],a));f.fists.L.pos.set(lerp(qf[3],fs[3],a),lerp(qf[4],fs[4],a),lerp(qf[5],fs[5],a));}}
@@ -4230,7 +4410,7 @@ function clientEvents(ev){
     case 'b':spawnBlood(P(e[1]),P(e[2]),e[3],e[4],e[5]);break;
     case 'k':spawnSparks(P(e[1]),e[2],e[3]?P(e[3]):null);break;
     case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'h':sHit(P(e[1]),e[2],e[3]);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
-    case 'C':cheer(e[1]);break;
+    case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5]);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':bridgeCollapse(null);break;
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}

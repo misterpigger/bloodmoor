@@ -64,8 +64,10 @@ for(const B of M.bodies){
   const [p,n,hb]=repose(B.pos,B.nor,B.heads);
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.BufferAttribute(n,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
   g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));g.setIndex(index);
+  if(M.morphs){if(!M._mo){M._mo=[];M._mn={};for(const [k,arr] of Object.entries(M.morphs)){M._mn[k]=M._mo.length;M._mo.push(new THREE.BufferAttribute(new Float32Array(arr),3));}}   // one attribute per expression, shared by all bodies
+    g.morphAttributes.position=M._mo;g.morphTargetsRelative=true;}
   if(M.vmask){const c=new Float32Array(M.vmask);g.setAttribute('color',new THREE.BufferAttribute(c,3));}   // scalp, beard, brow weights (not drawn: the game grows hair shells from them)
-  const m=new THREE.SkinnedMesh(g,skinMat);m.name=B.name;X.scene.add(m);m.bind(skel,new THREE.Matrix4());
+  const m=new THREE.SkinnedMesh(g,skinMat);m.name=B.name;if(M._mn){m.morphTargetDictionary={...M._mn};m.morphTargetInfluences=new Array(M._mo.length).fill(0);}X.scene.add(m);m.bind(skel,new THREE.Matrix4());
   // eyes ride the head bone; shift them with the head the same way
   const E=new Float32Array(B.eyes);const hk='Head';for(let i=0;i<E.length;i+=3){_v.set(E[i],E[i+1],E[i+2]).sub(hb[hk]).applyQuaternion(delta[hk]).add(head2[hk]);E[i]=_v.x;E[i+1]=_v.y;E[i+2]=_v.z;}
   const ge=new THREE.BufferGeometry();ge.setAttribute('position',new THREE.BufferAttribute(E,3));ge.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(M.eyes.uv),2));ge.setIndex(M.eyes.index);ge.computeVertexNormals();
