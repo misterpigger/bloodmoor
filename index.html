@@ -85,7 +85,7 @@ body.sim #banner{top:5%;animation:fadeq 3s ease-out forwards}body.sim #banner b{
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
 body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
-body.sim #vitals{opacity:0;transition:opacity .25s}body.sim.showvit #vitals{opacity:1}
+#vitals{opacity:0;transition:opacity .25s}body.showvit #vitals{opacity:1}
 .note{font-size:24px!important;animation:fadeq 2.4s ease-out forwards!important;text-shadow:0 2px 6px rgba(0,0,0,.9)}
 @keyframes fadeq{0%{opacity:0}10%{opacity:.95}75%{opacity:.95}100%{opacity:0}}
 #minimap{position:absolute;left:22px;top:22px;width:170px;height:170px;border-radius:50%;box-shadow:0 0 0 2px rgba(236,220,184,.25),0 6px 24px rgba(0,0,0,.6)}
@@ -178,7 +178,7 @@ body.sim #vitals{opacity:0;transition:opacity .25s}body.sim.showvit #vitals{opac
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small" id="buildTag" style="opacity:.6"></p>
-    <p class="small">Wild swinging burns stamina, turns your blade flat and glances off armor. Wind up, keep the edge true, and parry to leave them open.</p>
+    <p class="small">There are no bars: hold Tab to look over your wounds. You hear yourself breathe hard when you're winded or losing blood; tired arms drop the guard and swing weaker. Out of the fight, flesh wounds close; what's cut off stays off. Wild swinging burns your wind, turns your blade flat and glances off armor. Wind up, keep the edge true, and parry to leave them open.</p>
     <div class="maps" role="radiogroup" aria-label="Mode">
       <button class="map mode" data-mode="br" role="radio"><b>Battle royale</b><span>Everyone for themselves, ring of fire</span></button>
       <button class="map mode" data-mode="duel" role="radio"><b>Duel</b><span>1v1, best of three, fresh kit each round</span></button>
@@ -241,8 +241,8 @@ body.sim #vitals{opacity:0;transition:opacity .25s}body.sim.showvit #vitals{opac
     <div class="bars">
       <div class="barlab"><span>Blood</span><span id="hpnum">100</span></div>
       <div class="bar" id="hp"><i></i></div>
-      <div class="barlab"><span>Stamina</span><span id="stnum">100</span></div>
-      <div class="bar" id="stam"><i></i></div>
+      <div class="barlab" style="display:none"><span>Stamina</span><span id="stnum">100</span></div>
+      <div class="bar" id="stam" style="display:none"><i></i></div>
     </div>
   </div>
   <div id="grip">
@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=55;
+const BUILD=56;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1125,6 +1125,12 @@ function playStep(T,st,t,sd){
 }
 function setMusic(on){MUS.on=on;if(MUS.gain)MUS.gain.gain.setTargetAtTime(on?MUS.vol:0,AC.currentTime,.3);try{localStorage.setItem('bloodmoor-music',on?'on':'off');}catch(e){}}
 function distVol(p){if(!p)return 1;return 1/(1+Math.pow(camera.position.distanceTo(p)*.18,1.3));}
+// you hear yourself breathe hard when winded or bleeding: in and out, faster and louder the worse it gets
+let breathT=0,breathIn=true;
+function breathStep(dt){if(!AC||!player||!player.alive||state!=='playing')return;const fat=clamp(1-player.stamina/80,0,1),hurt=clamp((70-player.hp)/70,0,1),k=Math.max(fat,hurt*.7);
+  breathT-=dt;if(k<.25||breathT>0)return;const per=lerp(1.5,.55,k);breathT=per*(breathIn?.45:.55)*(.9+Math.random()*.2);const t=AC.currentTime,v=.05+.13*k;
+  if(breathIn)noiseBurst(t,per*.4,'bandpass',1500+400*k,1.2,v*.7);else{noiseBurst(t,per*.5,'bandpass',900+300*k,1.1,v);noiseBurst(t,per*.25,'lowpass',380,.7,v*.6);}
+  breathIn=!breathIn;}
 function noiseBurst(t0,dur,type,freq,q,vol){const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8+Math.random()*.4;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const g=AC.createGain();g.gain.setValueAtTime(vol,t0);g.gain.exponentialRampToValueAtTime(.001,t0+dur);s.connect(f);f.connect(g);g.connect(master);s.start(t0,Math.random());s.stop(t0+dur+.05);}
 function sClang(p,power=1){netEv(['c',r3v(p),power]);if(sfx(power>.55?'clash':'block',p,.75*clamp(power+.3,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1.2)*.5;if(v<.01)return;const t=AC.currentTime,base=650+Math.random()*500;
   [1,2.41,3.93,5.82,8.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='sine';o.frequency.value=base*r*(1+(Math.random()-.5)*.01);const g=AC.createGain();g.gain.setValueAtTime(v/(1+i*.7),t);g.gain.exponentialRampToValueAtTime(.0005,t+.9/(1+i*.35));o.connect(g);g.connect(master);o.start(t);o.stop(t+1);});
@@ -2149,6 +2155,7 @@ class Fighter{
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz);
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
+    {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
     const slide=Hd.slide*clamp((cz-.46)/.16,0,1);
     out.addScaledVector(f,slide);
     // a spear is held low with the back hand by the hip and the shaft running forward past the front hand; a thrust drives the back hand out
@@ -2248,7 +2255,11 @@ class Fighter{
     if(ts>6.5)this.useStamina((ts-6.5)*.55*w*h);
     if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.6*w);this.sword.swings=0;}
     if(this.commit&&ts>3)this.useStamina(1.5*h);
-    if(this.staminaDelay<=0)this.stamina=Math.min(100,this.stamina+(this.crouch?32:24)*h);
+    // as in Half Sword there's no bar: you feel it. Blood loss lowers how much wind you have and how fast it comes back,
+    // and you only really get it back standing still
+    {const cap=35+65*clamp(this.hp/100,0,1),mv=Math.hypot(this.vel.x,this.vel.z);
+      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?30:22)*(.45+.55*clamp(this.hp/100,0,1))*(mv>3?.25:mv>.8?.7:1)*h);
+      if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
     if(legs&&onGround){
       const stF=.55+.45*clamp(this.stamina/100,0,1),K=60*stF*(this.crouch?1.4:1)*((this.stanceAmt||0)>.1?1.15:1);
@@ -3673,6 +3684,7 @@ function updateHUD(dt){
       if(it){let t;if(it.kind==='weapon')t=(player.armed()?'Swap for ':'Take ')+it.def.name;else{const cur=player.armor[it.def.slot];t=`${it.corpse?'Strip':'Wear'} ${it.def.name} · ${SLOT_NAME[it.def.slot].toLowerCase()} ${Math.round(it.def.prot*100)}%`+(cur?` (now ${Math.round(cur.def.prot*100)}%)`:'');}
         hud.ptext.textContent=t;hud.prompt.style.setProperty('--tier',TIER_CSS[it.def.tier]);}}
   }
+  breathStep(dt);
   hurtV=Math.max(0,hurtV-dt*.8);{const lost=player&&player.alive?clamp((80-player.hp)/80,0,1):0;grade.uniforms.uHurt.value=hurtV+lost*(.45+Math.sin(simTime*(4+lost*3))*.08*lost);if(player&&player.alive&&!END)grade.uniforms.uDesat.value=lost*.55;}
   grade.uniforms.uZone.value=player&&player.burn>0&&player.alive?(player.outside?1:.55):0;
   if(player){const b=player.burn>0&&player.alive;if(b&&!wasBurning)note('You are on fire','red');wasBurning=b;}
