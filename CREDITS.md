@@ -70,6 +70,13 @@ Photo-scanned surfaces and the daylight sky are from [Poly Haven](https://polyha
 - Stone walls: [Castle Wall Slates](https://polyhaven.com/a/castle_wall_slates)
 - Sky: [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky)
 
+Gear materials (since Build 58), released under **CC0 1.0**, fetched by `tools/fetch_cc0_2.py` (on the `cc0-fetch` branch) and resized to 512 px and repacked:
+- Brushed steel roughness (`steel_r.jpg`): [ambientCG Metal009](https://ambientcg.com/view?id=Metal009)
+- Riveted mail (`mail_d.jpg`, `mail_orm.jpg` with opacity, roughness and metalness): [ambientCG Chainmail004](https://ambientcg.com/view?id=Chainmail004)
+- Linen weave (`cloth_d.jpg`, `cloth_n.jpg`): [ambientCG Fabric062](https://ambientcg.com/view?id=Fabric062)
+- Wood for hafts (`wood2_d.jpg`, `wood2_n.jpg`): [ambientCG Wood049](https://ambientcg.com/view?id=Wood049)
+- Leather for grips and belts (`leather_d.jpg`, `leather_n.jpg`): [Poly Haven Brown Leather](https://polyhaven.com/a/brown_leather)
+
 ## Code libraries
 - [three.js](https://threejs.org) (MIT)
 - [Rapier](https://rapier.rs) physics, `@dimforge/rapier3d-compat` (Apache-2.0), only loaded for the Rigid body engine
