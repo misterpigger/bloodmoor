@@ -292,7 +292,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=54;
+const BUILD=55;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1270,7 +1270,18 @@ function hsCloth(body){
     const loose=y<1.25&&ax<.24?.006+.018*clamp((1.18-y)/.3,0,1):.002;return .006+loose+wr(v);});   // baggy at the waist and hem, closer at the shoulders
   const braies=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.6&&pos.getY(v)<1.12,v=>.006+wr(v)*.6);
   const hose=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.07&&pos.getY(v)<1.12,v=>.0035+wr(v)*.3);
-  return HSC={shirt,braies,hose};}
+  // a belt round the waist, over the shirt: a band of the body at the hips' height, pushed out past the cloth
+  const hy=new THREE.Matrix4().copy(body.skeleton.boneInverses[bi.Hips]).invert().elements[13];
+  const belt=build(v=>{const y=pos.getY(v);return y>hy+.005&&y<hy+.05&&Math.abs(pos.getX(v))<.24&&wsum(v,torso)>.6;},v=>.034+.0015*Math.sin(pos.getX(v)*90));
+  return HSC={shirt,braies,hose,belt};}
+// cloth folds: drape lines drawn from the bind pose (vertical runs on the body, rings at the elbows and knees, puckering at the
+// belt), turned into lighting with screen-space derivatives so no extra texture is needed
+function clothFolds(m,amt){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+    { vec3 b=vBind;float fa=sin(b.x*38.+sin(b.y*7.+b.z*9.)*2.6)*.5+.5,fb=sin(b.y*55.+sin(b.x*21.)*3.)*.5+.5,fc=sin((b.x+b.z)*90.+b.y*30.)*.5+.5;
+      float hgt=(pow(fa,3.)*.9+pow(fb,4.)*.5*smoothstep(.3,.9,abs(b.x)*3.)+fc*.12)*${amt.toFixed(3)};
+      vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
+      vec3 grd=sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2);normal=normalize(abs(det)*normal-grd); }`);};}
 function dressHS(model,look,pal,mats){
   let body=null;model.traverse(m=>{if(m.isSkinnedMesh&&m.name==='Beta_Surface')body=m;});
   const tone=LOOK.skin[look.sk]||LOOK.skin[1];const skin=std({color:new THREE.Color().setRGB(.83*tone[0],.56*tone[1],.43*tone[2]),roughness:.62});tintMaterial(skin,2,pal,mats);
@@ -1286,8 +1297,51 @@ function dressHS(model,look,pal,mats){
 const MHC=[];   // cloth geometry per body
 let MHT=null;
 function mhTex(){if(MHT)return MHT;const L=new THREE.TextureLoader(),t=(u,srgb)=>{const x=L.load(u);if(srgb)x.colorSpace=THREE.SRGBColorSpace;x.anisotropy=MAXANI;return x;};
-  return MHT={d:t('assets/tex/skin_d.jpg',1),n:t('assets/tex/skin_n.jpg'),m:t('assets/tex/skin_m.jpg'),eye:t('assets/tex/eye_d.png',1)};}
+  return MHT={d:t('assets/tex/skin_d.jpg',1),n:t('assets/tex/skin_n.jpg'),m:t('assets/tex/skin_m.png'),eye:t('assets/tex/eye_d.png',1)};}
 const MH_BODIES=['MH_Body_A','MH_Body_B','MH_Body_C','MH_Body_D'];
+// a 256² tiling micro-normal (pores and fine crosshatched wrinkles), repeated ~40x over the body uv on top of the baked normal map
+let MHDET=null;
+function mhDetail(){if(MHDET)return MHDET;const W=256,H=new Float32Array(W*W);let sd=17;const r=()=>{sd=(sd*16807)%2147483647;return sd/2147483647;};
+  for(let i=0;i<900;i++){const cx=r()*W,cy=r()*W,rr=.8+r()*1.6,dp=.5+r()*.5;for(let y=-3;y<=3;y++)for(let x=-3;x<=3;x++){const d=Math.hypot(x,y)/rr;if(d<1){const X=((cx+x)|0+W)%W,Y=((cy+y)|0+W)%W;H[Y*W+X]-=dp*(1-d*d);}}}   // pores
+  for(let k=0;k<2;k++){const a=k?.6:-.7;for(let y=0;y<W;y++)for(let x=0;x<W;x++){const u=(x*Math.cos(a)+y*Math.sin(a))*6.283/W*9;H[y*W+x]+=.22*Math.pow(Math.abs(Math.sin(u+Math.sin(y*.05+k)*2)),6);}}   // crosshatch
+  const c=document.createElement('canvas');c.width=c.height=W;const g=c.getContext('2d'),im=g.createImageData(W,W);
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){const dx=H[y*W+(x+1)%W]-H[y*W+(x+W-1)%W],dy=H[((y+1)%W)*W+x]-H[((y+W-1)%W)*W+x];let nx=-dx*1.2,ny=dy*1.2,nz=1;const l=Math.hypot(nx,ny,nz);const i=(y*W+x)*4;im.data[i]=(nx/l*.5+.5)*255;im.data[i+1]=(ny/l*.5+.5)*255;im.data[i+2]=(nz/l*.5+.5)*255;im.data[i+3]=255;}
+  g.putImageData(im,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;return MHDET=t;}
+function sh_detail(m){const pre=m.onBeforeCompile,U={uDet:{value:mhDetail()}};m.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,U);
+  sh.fragmentShader='uniform sampler2D uDet;\n'+sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+    { vec3 dn=texture2D(uDet,vNormalMapUv*42.).xyz*2.-1.;normal=normalize(normal+tbn*vec3(dn.xy*.35,0.)); }`);};}
+// ---- hair that stands off the skin: stacked shells over the scalp, beard and brows (from per-vertex weights baked into the body),
+// each shell a little further out and thinner, cut into strands in the shader, so short hair has real volume and catches light
+const HAIR_STYLE=[null,{len:.004,n:4},{len:.009,n:6},{len:.017,n:8}];
+const HAIRGEO=new Map();
+function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.len:0)+'|'+beard+'|'+brows;if(HAIRGEO.has(k))return HAIRGEO.get(k);
+  const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
+  if(!C){HAIRGEO.set(k,null);return null;}
+  const wOf=v=>{const sc=style?C.getX(v):0,bd=beard?C.getY(v):0,br=C.getZ(v);return [sc,bd,br];};
+  const lenOf=v=>{const [sc,bd,br]=wOf(v);return Math.max(sc*(style?style.len:0),bd*(beard?.007:0),brows?br*.004:0);};
+  const tris=[];for(let i=0;i<I.count;i+=3){const a=I.getX(i),b=I.getX(i+1),c=I.getX(i+2);if(lenOf(a)>.0006&&lenOf(b)>.0006&&lenOf(c)>.0006)tris.push(a,b,c);}
+  if(!tris.length){HAIRGEO.set(k,null);return null;}
+  const used=[...new Set(tris)],map=new Map(used.map((v,i)=>[v,i])),nv=used.length,L=Math.max(style?style.n:0,beard?5:0,3);
+  const pos=new Float32Array(nv*L*3),bind=new Float32Array(nv*L*3),bn=new Float32Array(nv*L*3),lay=new Float32Array(nv*L),si=new Uint16Array(nv*L*4),sw=new Float32Array(nv*L*4),idx=[];
+  for(let l=0;l<L;l++){const f=(l+1)/L;
+    for(let j=0;j<nv;j++){const v=used[j],o=l*nv+j,len=lenOf(v),hang=(style&&style.len>.01?f*f*len*.6:0);   // longer hair lies down and back a little
+      pos[o*3]=P.getX(v)+N.getX(v)*len*f;pos[o*3+1]=P.getY(v)+N.getY(v)*len*f-hang;pos[o*3+2]=P.getZ(v)+N.getZ(v)*len*f-hang*.6;
+      bind[o*3]=P.getX(v);bind[o*3+1]=P.getY(v);bind[o*3+2]=P.getZ(v);bn[o*3]=N.getX(v);bn[o*3+1]=N.getY(v);bn[o*3+2]=N.getZ(v);lay[o]=f;
+      for(let q=0;q<4;q++){si[o*4+q]=SI.getComponent(v,q);sw[o*4+q]=SW.getComponent(v,q);}}
+    for(let t=0;t<tris.length;t++)idx.push(l*nv+map.get(tris[t]));}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('aRoot',new THREE.BufferAttribute(bind,3));g.setAttribute('aRootN',new THREE.BufferAttribute(bn,3));g.setAttribute('aLayer',new THREE.BufferAttribute(lay,1));
+  g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));g.setIndex(idx);g.computeVertexNormals();
+  // the normal of each shell vertex is the skin's, so it lights like hair lying on the head
+  const nn=g.attributes.normal;for(let l=0;l<L;l++)for(let j=0;j<nv;j++){const v=used[j],o=l*nv+j;nn.setXYZ(o,N.getX(v),N.getY(v),N.getZ(v));}
+  HAIRGEO.set(k,g);return g;}
+function hairMat(col){const m=std({color:col,roughness:.62,metalness:0,side:THREE.DoubleSide});
+  m.onBeforeCompile=sh=>{sh.vertexShader='attribute vec3 aRoot,aRootN;attribute float aLayer;varying vec3 vRoot,vRootN;varying float vLayer;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvRoot=aRoot;vRootN=aRootN;vLayer=aLayer;');
+    sh.fragmentShader='varying vec3 vRoot,vRootN;varying float vLayer;\nfloat hh(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}\n'+sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
+      { vec3 n=normalize(vRootN);vec3 q=mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*vRoot*2100.;vec3 c=floor(q);vec3 fr=fract(q)-.5-(vec3(hh(c+3.),hh(c+5.),hh(c+9.))-.5)*.5;float r=hh(c),r2=hh(c+7.1);
+        vec3 nq=mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*n;float dist=length(fr-nq*dot(fr,nq));   // distance from a strand standing out along the skin normal
+        float thick=(.52-.3*vLayer)*(.65+.45*r2);if(r<vLayer*.7||dist>thick)discard;   // strands thin out toward the tips; some are short
+        diffuseColor.rgb*=.55+.5*vLayer+.15*(r2-.5); }`);};
+  m.customProgramCacheKey=()=>'bm-hair';return m;}
 function dressMH(model,look,pal,mats){
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
@@ -1300,18 +1354,24 @@ function dressMH(model,look,pal,mats){
     sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol;uniform float uHairAmt,uBeardAmt;\n'+sh.fragmentShader.replace('float bld=0.;',`
       { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
         float g1=fract(sin(dot(floor(vMapUv*3072.),vec2(12.9898,78.233)))*43758.5453),g2=fract(sin(dot(floor(vMapUv*1400.),vec2(39.346,11.135)))*24634.63);
+        vec4 hm4=texture2D(uMHMask,vMapUv);float browA=clamp(hm4.a*(.55+.45*g1)*1.25,0.,1.);
         float hairA=clamp(hm.r*uHairAmt*(.62+.38*g1)*(.85+.3*g2)*1.15,0.,1.),beardA=clamp(hm.g*uBeardAmt*(.4+.6*g1)*1.1,0.,1.);
         diffuseColor.rgb*=1.-hm.b*.3;   // creases sit in shadow
-        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(hairA*.94,beardA*.86)); }
+        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(max(hairA*.94,beardA*.86),browA*.92)); }
       float bld=0.;`);};   // (after the cloth tint, which would recolour anything dark and grey as hose)
+  sh_detail(skin);
   skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
   model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
     if(m===body)m.material=skin;else m.material=std({map:T.eye,roughness:.12,alphaTest:.5});});
   const C=hsCloth(body),o=look.o|0;
-  const cloth=(geo,dyed)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);
+  const cloth=(geo,dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';
     if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}
     const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};
-  if(o>=1)cloth(C.shirt,o===2);cloth(o===2?C.hose:C.braies,true);
+  if(o>=1)cloth(C.shirt,o===2,.0035);cloth(o===2?C.hose:C.braies,true,o===2?.0012:.003);
+  if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';body.parent.add(bm);}
+  {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol);
+    for(const [hg,scalp] of [[HAIR_STYLE[look.h]?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,!!look.bd,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
+      const hm=new THREE.SkinnedMesh(hg,mt);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
   model.userData.mh=true;}
 // strip a fresh model clone down to one look and give it that look's materials
 function dressModel(model,look,pal,mats){
@@ -2133,6 +2193,7 @@ class Fighter{
       return;}
     if(!this.alive)return;
     if(this.bleeds&&this.bleeds.length){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
+    this.heal(h);
     this.stagger=Math.max(0,this.stagger-h);this.clashCd-=h;this.kickCd-=h;this.staminaDelay-=h;
     let wish=_t1.set(0,0,0),run=false;
     if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);
@@ -2339,6 +2400,10 @@ class Fighter{
     const zc=zone.next||zone,toZ=Math.hypot(this.pos.x-zc.c.x,this.pos.z-zc.c.z);
     const needZone=this.outside||toZ>zc.r*.85;
     this.commit=false;this.thrust=false;this.crouch=false;
+    // as in Half Sword: a man with no hands left to fight with, or bleeding out, runs from whoever is after him
+    const beaten=!this.mainArm||(this.hp<22&&this.bleed>.05)||(this.hp<12);
+    if(beaten&&tg&&!this.dummy&&!(RUN&&RUN.mode==='yard')){_v.subVectors(this.pos,tg.pos).setY(0);const d=_v.length()||1;wish.copy(_v).multiplyScalar(1/d);
+      if(d<9){run=this.stamina>8;this.faceDir(wish,h,5);this.ctrlT.x=.05;this.ctrlT.y=-.1;this.ctrlT.z=.3;if(Math.random()<h*.25&&simTime>(this.gruntT||0)){this.gruntT=simTime+2.5;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5);}return run;}}
     if(!this.armed()&&this.mainArm){
       if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
       if(A.loot&&!(tg&&dT0(this,tg)<3.5)){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
@@ -2646,7 +2711,11 @@ class Fighter{
     if(z==='armL'||z==='armR'){tell(this,'Your '+(z==='armL'?'left':'right')+' arm is useless','red');if(by&&by!==this)tell(by,'Their arm hangs useless','gold');
       if((z==='armR'&&this.mainArm==='R')||(z==='armL'&&this.mainArm==='L')){const o=z==='armR'?'armL':'armR';if(NET.mode==='client'){}else if(!this.limbs[o].sev&&!this.limbs[o].dead){this.dropSword();this.mainArm=o==='armL'?'L':'R';}else{this.dropSword();this.mainArm=null;}}}
     else{tell(this,'Your leg gives way','red');if(by&&by!==this)tell(by,'Their leg gives way','gold');if(this.alive&&!this.ragdoll&&NET.mode!=='client')this.knockdown(2.2,V(),this.chest.clone());}}
-  damage(dmg,by,cause){
+  heal(h){if(!this.alive||this.ragdoll||this.downed||NET.mode==='client')return;
+    if(simTime-(this.hurtT??-99)<9||this.bleed>.04)return;
+    this.hp=Math.min(100,this.hp+1.1*h);
+    for(const k in this.limbs){const L=this.limbs[k];if(k==='head'||L.sev||L.dead)continue;const mx=LIMB_HP[k];if(L.hp<mx)L.hp=Math.min(mx,L.hp+.9*h);}}
+  damage(dmg,by,cause){if(dmg>.5)this.hurtT=simTime;
     if(!this.alive)return;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);

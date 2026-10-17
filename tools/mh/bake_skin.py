@@ -4,7 +4,8 @@
   skin_d.jpg  colour variation (multiplied by the fighter's skin tone in the game): blood-flushed cheeks, nose, ears,
               knuckles, elbows and knees, darker creases, lips, nails, nipples, faint veins on the forearms
   skin_n.jpg  tangent-space normal map: pores, fine wrinkles at the knuckles, brow and neck, coarser creases
-  skin_m.jpg  masks: R scalp hair, G beard, B cavity (ambient occlusion-like darkening in creases)
+  skin_m.png  masks: R scalp hair, G beard, B cavity (ambient occlusion-like darkening in creases), A eyebrows
+  (and per-vertex scalp/beard/brow weights written back into mh_bodies.json for the hair shells)
 
   python3 bake_skin.py mh_bodies.json <mpfb>/src/mpfb/data/textures out_dir"""
 import sys, os, json, math
@@ -124,6 +125,20 @@ beard = np.maximum(beard, on_head * smooth(chin_y + .02, chin_y - .01, pos[..., 
 lips = mpfb('mpfb_lips.jpg')
 beard *= 1 - smooth(.1, .5, lips)
 beard *= smooth(.3, .6, fbm(pos, 70, 3, 9) + .2)
+# eyebrows: an arch of hair above each eye, thick at the inner end and thinning outward
+EYE = np.array(B['eyes']).reshape(-1, 3)
+brows = np.zeros((S, S), np.float32)
+for sg in (1, -1):
+    e = EYE[EYE[:, 0] * sg > 0]
+    ec = e.mean(0)
+    er = np.abs(e[:, 0] - ec[0]).max()
+    lat = (pos[..., 0] - ec[0]) * sg                        # outward from the nose
+    t = np.clip((lat + er * 1.2) / (er * 3.0), 0, 1)        # 0 inner end .. 1 outer end
+    arch = ec[1] + er * 1.55 + er * .45 * np.sin(np.clip(t, 0, 1) * math.pi) - er * .4 * t
+    half = er * (.78 - .38 * t)
+    inside = (lat > -er * 1.25) & (lat < er * 1.5) & (pos[..., 2] > ec[2] - er * 1.5) & on_head
+    brows = np.maximum(brows, inside * smooth(half, half * .45, np.abs(pos[..., 1] - arch)) * smooth(-er * 1.25, -er * .9, lat) * (1 - smooth(er * 1.05, er * 1.5, lat)))
+brows *= .6 + .4 * fbm(pos, 160, 2, 51)
 
 # ---------------------------------------------------------------- colour variation (around 1, multiplied by skin tone)
 col = np.ones((S, S, 3), np.float32)
@@ -233,11 +248,16 @@ k = 1.7
 gy, gx = np.gradient(h)
 nm = np.stack([-gx * k, gy * k, np.ones_like(h)], 2)
 nm /= np.linalg.norm(nm, axis=2, keepdims=True)
-masks = np.stack([np.where(cov, scalp, 0), np.where(cov, beard, 0), np.where(cov, cav, 0)], 2)
+masks = np.stack([np.where(cov, scalp, 0), np.where(cov, beard, 0), np.where(cov, cav, 0), np.where(cov, brows, 0)], 2)
 masks = dilate(np.where(cov[..., None], masks, np.nan), 10)
 
 os.makedirs(OUT, exist_ok=True)
 Image.fromarray((np.clip(col / 1.15, 0, 1) * 255).astype(np.uint8)).save(os.path.join(OUT, 'skin_d.jpg'), quality=88)
 Image.fromarray(((nm * .5 + .5) * 255).astype(np.uint8)).save(os.path.join(OUT, 'skin_n.jpg'), quality=82)
-Image.fromarray((np.clip(masks, 0, 1) * 255).astype(np.uint8)).resize((S // 2, S // 2), Image.BILINEAR).save(os.path.join(OUT, 'skin_m.jpg'), quality=90)
-print('baked', S, [os.path.getsize(os.path.join(OUT, f)) for f in ('skin_d.jpg', 'skin_n.jpg', 'skin_m.jpg')])
+Image.fromarray((np.clip(masks, 0, 1) * 255).astype(np.uint8), 'RGBA').resize((S // 2, S // 2), Image.BILINEAR).save(os.path.join(OUT, 'skin_m.png'), optimize=True)
+# the same masks per vertex (scalp, beard, brows), for the hair shells the game grows on the head
+px = np.clip((UV[:, 0] * S).astype(int), 0, S - 1); py = np.clip(((1 - UV[:, 1]) * S).astype(int), 0, S - 1)
+vm = np.stack([scalp[py, px] * cov[py, px], beard[py, px] * cov[py, px], brows[py, px] * cov[py, px]], 1)
+d['vmask'] = np.round(vm, 3).ravel().tolist()
+json.dump(d, open(SRC, 'w'))
+print('baked', S, [os.path.getsize(os.path.join(OUT, f)) for f in ('skin_d.jpg', 'skin_n.jpg', 'skin_m.png')])

@@ -64,6 +64,7 @@ for(const B of M.bodies){
   const [p,n,hb]=repose(B.pos,B.nor,B.heads);
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.BufferAttribute(n,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
   g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));g.setIndex(index);
+  if(M.vmask){const c=new Float32Array(M.vmask);g.setAttribute('color',new THREE.BufferAttribute(c,3));}   // scalp, beard, brow weights (not drawn: the game grows hair shells from them)
   const m=new THREE.SkinnedMesh(g,skinMat);m.name=B.name;X.scene.add(m);m.bind(skel,new THREE.Matrix4());
   // eyes ride the head bone; shift them with the head the same way
   const E=new Float32Array(B.eyes);const hk='Head';for(let i=0;i<E.length;i+=3){_v.set(E[i],E[i+1],E[i+2]).sub(hb[hk]).applyQuaternion(delta[hk]).add(head2[hk]);E[i]=_v.x;E[i+1]=_v.y;E[i+2]=_v.z;}
