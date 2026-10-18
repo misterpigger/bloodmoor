@@ -197,6 +197,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
       <button class="map" data-map="arena" role="radio" aria-checked="false"><b>The Yard</b><span>Midday · walled castle yard, fenced ring · duels, tournament and gauntlet are fought here</span></button>
       <button class="map" data-map="colosseum" role="radio" aria-checked="false"><b>The Arena</b><span>Midday · sand colosseum with a roaring crowd · duels, tournament and gauntlet</span></button>
       <button class="map" data-map="pit" role="radio" aria-checked="false"><b>The Pit</b><span>Midday · walled yard round a deep shaft · knock them in</span></button>
+      <button class="map" data-map="tavern" role="radio" aria-checked="false"><b>The Tavern</b><span>Night · a brawl: everyone starts bare-handed; knives, stools, tankards and bottles</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
@@ -305,7 +306,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=69;
+const BUILD=70;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -525,10 +526,10 @@ const gkey=(i,j)=>i*1000+j;
 function gridInsert(o,x0,x1,z0,z1){for(let i=Math.floor(x0/GRID);i<=Math.floor(x1/GRID);i++)for(let j=Math.floor(z0/GRID);j<=Math.floor(z1/GRID);j++){const k=gkey(i,j);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(o);}}
 function addBox(x0,x1,z0,z1,h=8){const b={t:0,x0,x1,z0,z1,h};boxes.push(b);gridInsert(b,x0-1,x1+1,z0-1,z1+1);return b;}
 function addCircle(x,z,r,h=3){const c={t:1,x,z,r,h};circles.push(c);gridInsert(c,x-r-1,x+r+1,z-r-1,z+r+1);return c;}
-function collide(p,r,useY=false){
+function collide(p,r,useY=false,span=0){
   const cell=grid.get(gkey(Math.floor(p.x/GRID),Math.floor(p.z/GRID)));let hit=false;
   if(cell)for(const o of cell){
-    if(useY&&p.y>o.h)continue;
+    if(useY&&(p.y>o.h||(o.y0&&p.y+span<o.y0)))continue;
     if(o.t===0){if(p.x<o.x0-r||p.x>o.x1+r||p.z<o.z0-r||p.z>o.z1+r)continue;
       const cx=clamp(p.x,o.x0,o.x1),cz=clamp(p.z,o.z0,o.z1);const dx=p.x-cx,dz=p.z-cz,d2=dx*dx+dz*dz;
       if(d2>1e-10){if(d2<r*r){const d=Math.sqrt(d2);p.x=cx+dx/d*r;p.z=cz+dz/d*r;hit=true;}}
@@ -763,6 +764,62 @@ function villageVisual(dt){for(const H of HOUSES){
         for(let k=0;k<4;k++)houseFlame(H,houseLocal(H,(Math.random()-.5)*H.W*.6,.5,(Math.random()-.5)*H.D*.6),1+Math.random()*.6);   // embers still burning in the heap
         for(const b of H.beams){b.m.visible=true;b.laid=true;gridInsert(b.box,b.box.x0-1,b.box.x1+1,b.box.z0-1,b.box.z1+1);for(let k=0;k<2;k++){const t=(k+.5)/2-.5;houseFlame({fx:b.fx},V(b.c.x+Math.sin(b.ang)*t*b.L*.8,.25,b.c.z+Math.cos(b.ang)*t*b.L*.8),.8+Math.random()*.4);}spawnDust(b.c,6,1,.4);}}}
     if(H.beams)for(const b of H.beams)if(b.laid&&b.burn>0){b.burn-=dt;if(b.burn<=0)dropFlames(b.fx);}}}
+// ---- the tavern: a timbered hall with a bar, a hearth, tables and benches you can stand on, and a gallery up a stair whose
+// rail gives way when a body is driven through it. A brawl: everyone starts bare-handed and fights with what's lying about
+const TAV={rails:[],spots:[]};
+function buildTavern(){const W=9.6,D=6.6,Hc=4.8;TAV.rails=[];TAV.spots=[];
+  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(-Math.PI/2);scaleUV(g,W,D);const m=new THREE.Mesh(g,MATS.woodLight);m.receiveShadow=true;world.add(m);}
+  addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,D,Math.PI));addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,-D));addGeo('plaster1',wallPlane(2*D,Hc),T(W,Hc/2,0,-Math.PI/2));addGeo('plaster1',wallPlane(2*D,Hc),T(-W,Hc/2,0,Math.PI/2));
+  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(Math.PI/2);scaleUV(g,W/2,D/2);addGeo('plaster0',g,T(0,Hc,0));}
+  for(let x=-W+1;x<W;x+=2.2)addGeo('beam',boxUV(.22,.28,2*D,1),T(x,Hc-.14,0));for(const z of [-D+.1,D-.1])addGeo('beam',boxUV(2*W,.25,.2,1),T(0,Hc-.12,z));
+  for(let x=-W+.1;x<=W;x+=3.2)for(const z of [-D+.06,D-.06])addGeo('beam',boxUV(.2,Hc,.12,1),T(x,Hc/2,z));
+  addGeo('stone',boxUV(2*W,.5,.1,1),T(0,.25,-D+.05));addGeo('stone',boxUV(2*W,.5,.1,1),T(0,.25,D-.05));
+  addBox(-W-1,W+1,D,D+1,Hc);addBox(-W-1,W+1,-D-1,-D,Hc);addBox(W,W+1,-D,D,Hc);addBox(-W-1,-W,-D,D,Hc);
+  // the door (shut) and dark windows on the south wall
+  addGeo('wood',boxUV(1.5,2.3,.12,1),T(0,1.15,-D+.07));for(const y of [.5,1.8])addGeo('iron',boxUV(1.55,.08,.14,1),T(0,y,-D+.08));
+  for(const x of [-6,-3.2,3.2,6]){addGeo('winDark',new THREE.BoxGeometry(.9,1.1,.06),T(x,2,-D+.04));addGeo('beam',boxUV(1.1,.1,.14,1),T(x,1.4,-D+.08));}
+  // the hearth on the west wall
+  addGeo('stone',boxUV(.9,1.4,2.6,1.5),T(-W+.45,.7,-2.6));addGeo('stone',boxUV(.7,3.4,1.8,1.5),T(-W+.35,3.1,-2.6));addGeo('dirt',boxUV(.5,.05,1.6,1),T(-W+.7,.42,-2.6));
+  addBox(-W,-W+.9,-3.9,-1.3,1.4);addFlame(-W+.62,.45,-2.6,1.7,true);addFlame(-W+.62,.45,-2.2,1.1,false);addFlame(-W+.62,.45,-3,1.1,false);
+  TAV.spots.push(['poker',-W+1.25,0,-1.1]);
+  // the bar along the east wall, bottles on the shelf behind it, barrels at its end
+  const bx=W-1.6;addGeo('wood',boxUV(.7,1.1,7,1.5),T(bx,.55,-.3));addGeo('woodLight',boxUV(.85,.06,7.2,1.5),T(bx,1.13,-.3));addBox(bx-.42,bx+.42,-3.9,3.3,1.05);FLOORS.push({x0:bx-.42,x1:bx+.42,z0:-3.9,z1:3.3,h:1.16});
+  addGeo('wood',boxUV(.35,.05,6,1),T(W-.2,1.6,-.3));addGeo('wood',boxUV(.35,.05,6,1),T(W-.2,2.2,-.3));
+  for(let z=-3;z<2.5;z+=.32){addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,1.76,z));if(Math.random()<.6)addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,2.36,z+.16));}
+  barrel(W-.6,4.2);barrel(W-.6,5.0);barrel(W-1.4,5.4);
+  for(const z of [-3.2,-1.6,0,1.6,2.8])TAV.spots.push([z<-1?'knife':z>2?'cleaver':z===0?'bottle':'mug',bx,1.17,z]);
+  // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both
+  for(const [tx,tz] of [[-4.6,-3.2],[-4.6,.6],[0,-3.2],[0,.6],[3.6,-1.4]]){addGeo('wood',boxUV(2.2,.08,.95,1),T(tx,.76,tz));for(const sx of [-.95,.95])for(const sz of [-.35,.35])addGeo('wood',boxUV(.09,.72,.09,1),T(tx+sx,.36,tz+sz));
+    addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);FLOORS.push({x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8});
+    for(const sz of [-.85,.85]){addGeo('wood',boxUV(2.1,.07,.32,1),T(tx,.41,tz+sz));for(const sx of [-.85,.85])addGeo('wood',boxUV(.07,.42,.24,1),T(tx+sx,.21,tz+sz));FLOORS.push({x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44});}
+    addFlame(tx+.3,.8,tz,.22,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
+  // the gallery along the north wall, 2.6 m up, with a stair up the west wall and a rail along its edge
+  const gh=2.6,gz0=D-2.4;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
+  addGeo('woodLight',boxUV(2*W-1.2,.12,2.4,1.5),T(.6,gh-.06,gz0+1.2));for(let x=-W+1.6;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.4,1),T(x,gh-.2,gz0+1.2));
+  for(const x of [-W+1.4,-3.6,0,3.6,W-.3]){addGeo('beam',boxUV(.2,gh,.2,1),T(x,gh/2,gz0+.1));addCircle(x,gz0+.1,.14,gh-.15);}
+  const sz0=-.9;FLOORS.push({x0:-W,x1:-W+1.2,z0:sz0,z1:gz0+.4,ramp:'z',a0:sz0,a1:gz0,h0:0,h1:gh});
+  for(let i=0;i<10;i++){const z=sz0+(i+.5)*(gz0-sz0)/10;addGeo('woodLight',boxUV(1.15,.06,(gz0-sz0)/10+.02,1),T(-W+.6,(i+1)/10*gh-.03,z));}
+  addGeo('beam',boxUV(.12,.12,Math.hypot(gz0-sz0,gh)+.2,1),T(-W+1.2,gh/2+.55,(sz0+gz0)/2,Math.atan2(gh,gz0-sz0)));addBox(-W+1.2,-W+1.35,sz0,gz0,gh+1.1);
+  for(let x=-W+1.3;x<W-.2;x+=1.9){const x1=Math.min(W-.2,x+1.9),g=new THREE.Group();g.position.set((x+x1)/2,gh,gz0);
+    for(const y of [.45,1])g.add(Object.assign(new THREE.Mesh(boxUV(x1-x,.08,.06,1),MATS.wood),{castShadow:true}));g.children[0].position.y=.45;g.children[1].position.y=1;
+    for(const px of [-(x1-x)/2,(x1-x)/2]){const m=new THREE.Mesh(boxUV(.07,1.05,.07,1),MATS.wood);m.position.set(px,.52,0);m.castShadow=true;g.add(m);}world.add(g);
+    const box=addBox(x,x1,gz0-.06,gz0+.06,gh+1.1);box.y0=gh-.2;TAV.rails.push({g,box,x0:x,x1,z:gz0,broken:false});}
+  TAV.spots.push(['bottle',2,gh+.05,D-.6],['stool',-4,gh,D-.8],['knife',5.5,gh+.05,D-.5]);
+  // light: lanterns on the walls and over the bar
+  for(const [x,z] of [[-W+.3,2],[W-.3,-4.4],[-2,-D+.3],[4,-D+.3]])addFlame(x,2.4,z,.8,true);addFlame(bx,2.7,0,.7,true);
+  flushBatch();}
+function tavernLoot(){for(const [id,x,y,z] of TAV.spots){const def=WEAPONS[id];if(!def)continue;const s=new Sword(def);const a=Math.random()*6.28,d=V(Math.cos(a),0,Math.sin(a));
+  s.reset(V(x-d.x*def.len*.4,y+.04,z-d.z*def.len*.4),d);s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}
+// a body driven into the gallery rail breaks it and goes over
+function tavernStep(h){if(!TAV.rails.length||curMap!=='tavern'||NET.mode==='client')return;
+  for(const R of TAV.rails){if(R.broken)continue;
+    for(const f of fighters){if(!f.alive&&!f.ragdoll)continue;let hit=false;
+      if(f.ragdoll){const P=f.ragdoll.P.Hips,Q=f.ragdoll.Q.Hips;if(P&&Q&&P.y>2.2&&P.x>R.x0-.1&&P.x<R.x1+.1&&Math.abs(P.z-R.z)<.35&&(Q.z-P.z)/h>1.4)hit=true;}
+      else if(f.pos.y>2.2&&f.pos.x>R.x0-.1&&f.pos.x<R.x1+.1&&Math.abs(f.pos.z-R.z)<.5&&-f.vel.z>2.6)hit=true;
+      if(hit){railBreak(TAV.rails.indexOf(R));if(!f.ragdoll&&f.alive){f.vel.z=Math.min(f.vel.z,-2.5);f.knockdown(2,V(0,.4,-3.6),f.chest);tell(f,'Through the rail!','red');}break;}}}}
+function railBreak(i,net=true){const R=TAV.rails[i];if(!R||R.broken)return;R.broken=true;mapDirty=true;world.remove(R.g);gridRemove(R.box);if(NET.mode==='host'&&net)netEv(['TR',i]);
+  const P=V((R.x0+R.x1)/2,2.9,R.z);sThud(P,1.2);sfx('crush',P,.9,.9,0,false);sfx('dropWeapon',P,.8,.8,.05,false);
+  if(NET.mode!=='client')for(const id of ['board','plank']){const s2=new Sword(WEAPONS[id]);s2.reset(P.clone().add(V((Math.random()-.5)*1.2,0,-.2)),V(Math.random()-.5,.2,-.3).normalize());s2.edge.set(0,1,0);s2.free=true;s2.age=0;s2.Hp.copy(s2.H).add(V(0,0,.02));s2.Tp.copy(s2.T).add(V(0,0,.02));if(s2.rb){s2.physPose();s2.setGroup(GR_LOOSE);}freeSwords.push(s2);loot.push({kind:'weapon',def:s2.def,sword:s2,halo:null});}}
 function well(x,z){
   addGeo('stone',new THREE.CylinderGeometry(1.1,1.15,.9,18,1,true),T(x,.45,z));
   addGeo('stone',new THREE.TorusGeometry(1.1,.12,6,18),T(x,.9,z,0,Math.PI/2));
@@ -1112,11 +1169,14 @@ const LIGHTS={
   day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x9a8466,hi:.95,sun:0xffe2b6,si:3.4,dir:[.5,.62,-.6],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
+LIGHTS.tavern={fog:0x0d0906,dens:.035,top:0x0d0906,mid:0x0d0906,hor:0x0d0906,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x8a6440,hg:0x1c130c,hi:.42,sun:0xffb070,si:.18,dir:[.3,.9,.2],moon:false,exp:1.55,cool:.15,halo:.3,shR:12,shMap:2048,
+  env:[[0,'#120c08'],[.45,'#3a2616'],[.5,'#6a4424'],[.55,'#24170e'],[1,'#0c0805']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
   arena:{entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
   colosseum:{entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  tavern:{entry:{x:0,z:-5.6,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:9.6,arena:0,zoneR:30,spawn:[1.2,5.5],spacing:2.4,lootR:7,loot:0,fighters:8,light:'tavern',brawl:true},
   pit:{entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
@@ -1689,6 +1749,14 @@ const WEAPONS={
   plank:{id:'plank',name:'Plank',kind:'blunt',improv:1,len:1.3,grip2:-.2,weight:1.05,cut:.5,thrust:.1,sever:0,pen:.08,hitFrom:.45,tier:0,make:()=>improvMesh('plank'),parts:[['box',[.075,.62,.018],[0,.62,0],2.2]]},
   board:{id:'board',name:'Board',kind:'blunt',improv:1,len:.8,grip2:-.1,weight:.7,cut:.4,thrust:.1,sever:0,pen:.05,hitFrom:.4,tier:0,make:()=>improvMesh('board'),parts:[['box',[.07,.38,.012],[0,.4,0],1.1]]},
   stave:{id:'stave',name:'Barrel stave',kind:'blunt',improv:1,len:.88,grip2:-.1,weight:.55,cut:.35,thrust:.1,sever:0,pen:.04,hitFrom:.4,tier:0,make:()=>improvMesh('stave'),parts:[['box',[.04,.42,.012],[0,.44,0],.8]]},
+  // the tavern: whatever is on the tables and behind the bar
+  knife:{id:'knife',name:'Kitchen knife',kind:'blade',improv:1,len:.3,grip2:0,weight:.3,cut:.75,thrust:1.0,sever:0,pen:.25,hitFrom:.35,tier:1,make:()=>tavMesh('knife'),parts:[['box',[.014,.1,.003],[0,.19,0],.12],['cap',[.05,.012],[0,.03,0],.1]]},
+  cleaver:{id:'cleaver',name:'Cleaver',kind:'axe',improv:1,len:.36,grip2:0,weight:.75,cut:1.0,thrust:.2,sever:.4,pen:.35,hitFrom:.45,tier:1,make:()=>tavMesh('cleaver'),parts:[['cap',[.07,.014],[0,.05,0],.15],['box',[.05,.08,.004],[.03,.27,0],.5]]},
+  mug:{id:'mug',name:'Tankard',kind:'blunt',improv:1,len:.2,grip2:0,weight:.6,cut:.5,thrust:0,sever:0,pen:.2,hitFrom:.3,tier:1,make:()=>tavMesh('mug'),parts:[['ball',[.06],[0,.12,0],.5]]},
+  bottle:{id:'bottle',name:'Bottle',kind:'blunt',improv:1,len:.3,grip2:0,weight:.5,cut:.45,thrust:0,sever:0,pen:.15,hitFrom:.4,tier:1,make:()=>tavMesh('bottle'),parts:[['cap',[.06,.014],[0,.06,0],.1],['ball',[.045],[0,.22,0],.4]]},
+  brokenBottle:{id:'brokenBottle',name:'Broken bottle',kind:'blade',improv:1,len:.2,grip2:0,weight:.25,cut:.6,thrust:.85,sever:0,pen:.2,hitFrom:.45,tier:1,make:()=>tavMesh('broken'),parts:[['cap',[.06,.014],[0,.06,0],.1],['ball',[.04],[0,.16,0],.15]]},
+  stool:{id:'stool',name:'Stool',kind:'blunt',improv:1,len:.62,grip2:0,weight:2.0,cut:.75,thrust:.1,sever:0,pen:.3,hitFrom:.6,tier:1,make:()=>tavMesh('stool'),parts:[['cap',[.25,.02],[0,.28,0],.4],['box',[.17,.03,.17],[0,.6,0],1.4]]},
+  poker:{id:'poker',name:'Fire poker',kind:'blunt',improv:1,len:.85,grip2:0,weight:.9,cut:.6,thrust:.6,sever:0,pen:.5,hitFrom:.5,tier:1,make:()=>tavMesh('poker'),parts:[['cap',[.4,.012],[0,.42,0],.8]]},
   spear:{id:'spear',name:'Spear',kind:'spear',len:1.84,grip2:.48,weight:1.15,cut:.4,thrust:1.6,sever:.2,pen:.5,hitFrom:.25,tier:2,make:makeSpear},
 };
 
@@ -1720,9 +1788,10 @@ const HANDLING={
   spear:     {effort:1.0724,grip:[520,950], gripDamp:.8, accel:[220,420],wrist:[286.96,556.52],tipDamp:[.75,.3], sag:.3,  edgeTurn:.08,guardY:-.4, slide:.55,swingOut:.45,swingUp:.18},
   fists:     {effort:.9220,grip:[1040,1900],gripDamp:.8, accel:[220,420],wrist:[388.24,752.94],tipDamp:[.75,.3], sag:.3,  edgeTurn:.08,guardY:-.22,slide:0,swingOut:.45,swingUp:.18},
 };
+Object.assign(HANDLING,{knife:HANDLING.arming,brokenBottle:HANDLING.arming,cleaver:HANDLING.axe,mug:HANDLING.mace,bottle:HANDLING.mace,stool:HANDLING.mace,poker:HANDLING.mace});   // the tavern's odds and ends handle like their nearest weapon
 const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 // mass felt at the hand, kg: the weapon's weight, more for a head-heavy one (an axe or mace head is far out on the haft)
-const WMASS={arming:1.15,longsword:1.6,greatsword:3.2,axe:2.4,mace:2.2,spear:2.0,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
+const WMASS={knife:.45,brokenBottle:.4,cleaver:.9,mug:.7,bottle:.6,stool:2.3,poker:1.0,arming:1.15,longsword:1.6,greatsword:3.2,axe:2.4,mace:2.2,spear:2.0,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
 // armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
 const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]},
@@ -2044,6 +2113,21 @@ const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe
 const _a=V(),_v=V(),_g=V(),_e=V(),_z=V(),_sm=new THREE.Matrix4();
 // ================================================================ improvised weapons and breakable things
 const skinMat=std({color:0xbd8b6c,roughness:.62});
+// tavern odds and ends, gripped at the origin, reaching up +y
+const glassMat=std({color:0x2c5a2a,roughness:.15,metalness:.1,transparent:true,opacity:.8}),pewterMat=std({color:0x8a8a86,metalness:.75,roughness:.4});
+function tavMesh(k){const g=new THREE.Group();scene.add(g);const add=(geo,m,x,y,z,rx=0,rz=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.rotation.set(rx,0,rz);o.castShadow=true;g.add(o);return o;};
+  if(k==='knife'){add(new THREE.BoxGeometry(.022,.11,.02),MATS.beam,0,.03,0);add(new THREE.BoxGeometry(.028,.2,.003),steelMat,.004,.19,0);}
+  else if(k==='cleaver'){add(new THREE.BoxGeometry(.024,.14,.022),MATS.beam,0,.05,0);add(new THREE.BoxGeometry(.1,.17,.004),steelMat,.03,.27,0);}
+  else if(k==='mug'){add(new THREE.CylinderGeometry(.055,.06,.14,12),pewterMat,.06,.1,0,0,Math.PI/2);add(new THREE.TorusGeometry(.04,.009,5,10),pewterMat,0,.04,0);}
+  else if(k==='bottle'){add(new THREE.CylinderGeometry(.013,.016,.1,8),glassMat,0,.05,0);add(new THREE.CylinderGeometry(.04,.042,.18,10),glassMat,0,.2,0);}
+  else if(k==='broken'){add(new THREE.CylinderGeometry(.013,.016,.1,8),glassMat,0,.05,0);add(new THREE.ConeGeometry(.035,.12,6,1,true),glassMat,0,.15,0);}
+  else if(k==='stool'){add(new THREE.CylinderGeometry(.02,.022,.6,6),MATS.woodLight,0,.3,0);add(new THREE.CylinderGeometry(.18,.18,.04,12),MATS.woodLight,0,.62,0);
+    for(const a of [2.1,4.2]){const l=add(new THREE.CylinderGeometry(.02,.022,.6,6),MATS.woodLight,Math.cos(a)*.12,.32,Math.sin(a)*.12);l.rotation.set(Math.sin(a)*.25,0,-Math.cos(a)*.25);}}
+  else if(k==='poker'){add(new THREE.CylinderGeometry(.009,.009,.82,6),MATS.iron,0,.41,0);add(new THREE.BoxGeometry(.06,.012,.012),MATS.iron,.03,.8,0);add(new THREE.TorusGeometry(.03,.006,4,8),MATS.iron,0,-.02,0);}
+  return g;}
+// a bottle that lands a blow breaks in your hand, and you're left holding a jagged neck
+function breakBottle(A,P){const s=A.sword;if(!s||s.def.id!=='bottle')return;sfx('clash',P,.55,2.3,0);sfx('block',P,.4,2,.02);spawnSparks(P,10,null);
+  const ht=A.handTarget(V()),gd=A.guideDir(ht,V());s.dispose();const n=new Sword(WEAPONS.brokenBottle);n.owner=A;A.sword=n;if(n.rb)n.setGroup(GR_HELD);n.reset(ht,gd);}
 function improvMesh(k){const g=new THREE.Group();scene.add(g);const add=(geo,m,x,y,z,rx=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.rotation.x=rx;o.castShadow=true;g.add(o);return o;};
   const cut=(r,y)=>{const d=new THREE.Mesh(fleshGeo,fleshMat);d.scale.setScalar(r);d.position.y=y;d.rotation.x=-Math.PI/2;g.add(d);};
   if(k==='leg'){add(new THREE.CylinderGeometry(.075,.05,.88,12),skinMat,0,.47,0);add(new THREE.BoxGeometry(.09,.07,.22),skinMat,0,-.02,.07);cut(.074,.915);}
@@ -2617,7 +2701,7 @@ class Fighter{
     
     if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);}
     else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
-    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
+    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true,1.7);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.fwd(_f);this.kickRun=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z);this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
@@ -2809,7 +2893,8 @@ class Fighter{
       if(d<9){run=this.stamina>8;this.faceDir(wish,h,5);this.ctrlT.x=.05;this.ctrlT.y=-.1;this.ctrlT.z=.3;if(Math.random()<h*.25&&simTime>(this.gruntT||0)){this.gruntT=simTime+2.5;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5);}return run;}}
     if(!this.armed()&&this.mainArm){
       if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
-      if(A.loot&&!(tg&&dT0(this,tg)<3.5)){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
+      const lpd=A.loot?Math.hypot(lootPos(A.loot,_t2).x-this.pos.x,_t2.z-this.pos.z):99;
+      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!(tg&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
     }
     if(!this.sword&&this.mainArm&&tg&&!(needZone&&dT0(this,tg)>3)){
       _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();this.faceDir(_v,h,8);this.right(_r);
@@ -3323,7 +3408,7 @@ function pickUp(f,it){
   if(f.isPlayer)note(it.def.name,'sm');
 }
 function lootValue(f,it){
-  if(it.kind==='weapon'){const cur=f.sword?f.sword.def.tier:0;return it.def.tier-cur;}
+  if(it.kind==='weapon'){if(!f.sword)return Math.max(.8,it.def.tier+.5);const cur=f.sword.def.tier;return it.def.tier-cur;}   // bare-handed, anything is worth picking up
   const a=f.armor[it.def.slot];return (it.def.prot-(a?a.def.prot:0))*10;
 }
 function bestLootFor(f,radius){let best=null,bs=0;for(const it of loot){if(!canTake(f,it))continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(d>radius)continue;const v=lootValue(f,it);if(v<=.4)continue;const s=v*6-d*.3;if(s>bs){bs=s;best=it;}}return best;}
@@ -3544,7 +3629,7 @@ function resolveHit(A,B,cap,t,P,pv){
   _e.copy(dir).addScaledVector(s.axis,-dir.dot(s.axis));const perp=_e.length();if(perp>1e-4)_e.multiplyScalar(1/perp);
   const align=Math.abs(_e.dot(s.edge));
   let mode;
-  if(W.kind==='fist')mode='blunt';
+  if(W.kind==='fist'||W.id==='mug'||W.id==='stool'||W.id==='bottle')mode=W.thrust>.5&&isThrust?'thrust':'blunt';
   else if(isThrust)mode='thrust';
   else if(along>.7)mode='poke';
   else if(t<W.hitFrom)mode='haft';
@@ -3631,6 +3716,7 @@ function resolveHit(A,B,cap,t,P,pv){
     if(!B.ragdoll&&(heavy>16&&(cap.zone==='head'||B.stamina<15)&&Math.random()<.6||(cap.zone==='legL'||cap.zone==='legR')&&heavy>13&&Math.random()<.35||W.kind==='fist'&&cap.zone==='head'&&speed>5&&(B.stamina<30||Math.random()<.12))){B.knockdown(rand(1.3,2.3),imp,P);tell(A,'Knocked down','gold');}
     if(!B.isPlayer)B.ai.phase='guard';
   }
+  if(W.id==='bottle'&&!glance&&speed>3.5)breakBottle(A,P);
   if(phys){ // the solver already stopped or deflected the weapon; a clean sever lets the blade carry on through
     if(sev){s.rb.setLinvel(_v.copy(s.v0).multiplyScalar(.8),true);s.rb.setAngvel(_e.copy(s.w0).multiplyScalar(.8),true);A.passT.set(B.id,simTime+.15);}
     else if(glance||mode==='flat'||mode==='haft')A.stagger=Math.max(A.stagger,.12);
@@ -3945,7 +4031,8 @@ function spawnMatch(withPlayer){
   player=withPlayer?fighters[0]:null;
   if(player){player.yaw=Math.atan2(-player.pos.x,-player.pos.z);player.pitch=-.05;}
   for(const f of fighters)f.ai.retarget=0;
-  spawnMapLoot(withPlayer?M.loot:8);crowdU.uCheer.value=withPlayer?.8:0;
+  if(M.brawl){for(const f of fighters){if(f.sword){f.sword.dispose();f.sword=null;}for(const sl of ARMOR_SLOTS)if(f.armor[sl])f.unequip(sl);f.giveFists();}zone.off=true;MODEHUD=['Tavern brawl','Last one standing'];tavernLoot();}   // a brawl: bare hands and whatever is lying about
+  else spawnMapLoot(withPlayer?M.loot:8);crowdU.uCheer.value=withPlayer?.8:0;
 }
 function onKill(killer,victim,cause){
   cheer(victim.isPlayer?.5:.7);
@@ -4268,7 +4355,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
-  villageStep(h);
+  villageStep(h);tavernStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 // bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
@@ -4610,13 +4697,14 @@ function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>
 const MO=()=>curMap==='pit'?-6.5:0;
 function spawnEntrant(en,x,z,kit,skill){
   if(PIT){let dx=x-PIT.x,dz=z-PIT.z,d=Math.hypot(dx,dz);const m=PIT.r+2;if(d<m){if(d<1e-3){dx=0;dz=-1;d=1;}x=PIT.x+dx/d*m;z=PIT.z+dz/d*m;}}   // the Pit: start clear of the edge
+  if(MAPS[curMap].brawl)kit=['fists',[]];
   const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look});
   if(kit[0]==='fists'){f.sword.dispose();f.sword=null;f.giveFists();}
   if(en.ctl&&en.ctl!=='me'){f.remote=en.ctl;en.ctl.f=f;}
   if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
   f.yaw=Math.atan2(-x,-z);f.entrant=en;f.ai.retarget=0;fighters.push(f);if(isMe){player=f;f.pitch=-.05;}return f;
 }
-function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;}
+function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;if(MAPS[curMap].brawl)tavernLoot();}
 function endRun(winners,title,line,cause){
   const meWon=winners.some(e=>e.ctl==='me');
   END={title:meWon?'Victory':title,line,cause:meWon?cause:(cause||'')};state=meWon?'won':'dead';deathT=performance.now();
@@ -4980,7 +5068,7 @@ function clientEvents(ev){
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
-    case 'SF':scafCollapse(e[1],e[2],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
+    case 'SF':scafCollapse(e[1],e[2],false);break;case 'TR':railBreak(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
     case 'ck':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
@@ -5026,6 +5114,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
