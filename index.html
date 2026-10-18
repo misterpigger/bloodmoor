@@ -303,7 +303,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=65;
+const BUILD=66;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -970,43 +970,43 @@ function buildYard(){
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
 }
-// the crowd: seated people (body, head and hair, arms that go up when they cheer), each in their own clothes and skin, heads turning
-// to follow the fight; built as one instanced mesh with the motion in the vertex shader
+// the crowd: seated people (body, head, hair or hood, arms that go up when they cheer), each in their own clothes and skin.
+// Kept cheap: about 170 triangles a person, flat (Lambert) shading, no shadows, and split into sectors so the stands behind
+// the camera aren't drawn at all
 function crowdFigure(){const parts=[];
   const add=(g,part,arm=0)=>{g=g.index?g.toNonIndexed():g;const n=g.attributes.position.count;g.setAttribute('aPart',new THREE.Float32BufferAttribute(new Array(n).fill(part),1));g.setAttribute('aArm',new THREE.Float32BufferAttribute(new Array(n).fill(arm),1));g.deleteAttribute('uv');parts.push(g);};
-  const box=(w,h,d,x,y,z,rx=0)=>{const g=new THREE.BoxGeometry(w,h,d);g.rotateX(rx);g.translate(x,y,z);return g;};
-  add(new THREE.LatheGeometry([[.13,0],[.15,.12],[.18,.4],[.19,.5],[.12,.56],[0,.58]].map(([x,y])=>new THREE.Vector2(x,y)),7).scale(1,1,.68).translate(0,.44,0),0);   // torso
-  for(const sx of [-1,1]){add(box(.13,.12,.42,sx*.09,.46,.17),0);add(box(.11,.42,.12,sx*.09,.23,.38),0);add(box(.11,.07,.2,sx*.09,.03,.44),3);   // thighs, shins, shoes
-    add(box(.09,.3,.1,sx*.215,.82,0),0,sx);add(box(.08,.08,.28,sx*.22,.66,.12),0,sx);add(box(.07,.07,.08,sx*.22,.66,.28),1,sx);}   // upper arms, forearms, hands
-  add(new THREE.CylinderGeometry(.045,.05,.08,6).translate(0,1.04,0),1);
-  add(new THREE.SphereGeometry(.105,7,5).scale(.9,1.05,1).translate(0,1.16,.01),1);   // head
-  add(new THREE.SphereGeometry(.112,7,3,0,Math.PI*2,0,Math.PI*.55).scale(.92,1.05,1.02).translate(0,1.17,-.005),2);   // hair or a hood
+  const box=(w,h,d,x,y,z)=>new THREE.BoxGeometry(w,h,d).translate(x,y,z);
+  add(new THREE.CylinderGeometry(.13,.17,.54,6,1).scale(1,1,.68).translate(0,.71,0),0);   // torso
+  for(const sx of [-1,1]){add(box(.13,.12,.42,sx*.09,.46,.17),0);add(box(.11,.46,.12,sx*.09,.21,.38),3);   // thighs, shins and shoes
+    add(box(.09,.3,.1,sx*.215,.82,0),0,sx);add(box(.08,.08,.34,sx*.22,.66,.15),1,sx);}   // upper arms, forearms (bare)
+  add(new THREE.SphereGeometry(.105,6,4).scale(.9,1.1,1).translate(0,1.12,.01),1);   // head and neck
+  add(new THREE.SphereGeometry(.112,6,2,0,Math.PI*2,0,Math.PI*.55).scale(.92,1.05,1.02).translate(0,1.14,-.005),2);   // hair or a hood
   return mergeGeometries(parts);}
 function buildCrowd(r0,y0,dr,dy,tiers){
   const geo=crowdFigure();
-  const mat=std({roughness:.95});
+  const mat=new THREE.MeshLambertMaterial({color:new THREE.Color(1.75,1.7,1.6)});   // brighter than 1: flat shading gets no sky light, which the old material did
   mat.onBeforeCompile=sh=>{Object.assign(sh.uniforms,crowdU);
-    sh.vertexShader='uniform float uTime,uCheer;uniform vec3 uFocus;attribute float aPart,aArm,aPh;attribute vec3 aSkin,aHair;varying vec3 vSkin,vHair;varying float vPart;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+    sh.vertexShader='uniform float uTime,uCheer;attribute float aPart,aArm,aPh;attribute vec3 aSkin,aHair;varying vec3 vSkin,vHair;varying float vPart;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       vSkin=aSkin;vHair=aHair;vPart=aPart;
-      float ex=clamp(uCheer*(.6+.8*fract(aPh*7.13)),0.,1.3),bob=max(0.,sin(uTime*(2.2+ex*5.)+aPh*6.283));
-      if(aArm!=0.){float up=ex*(1.9+.6*sin(uTime*7.+aPh*9.))*step(.35,fract(aPh*3.7)) ;vec3 sp=vec3(aArm*.215,.97,0.);vec3 d=transformed-sp;float c=cos(-up),s=sin(-up);transformed=sp+vec3(d.x,d.y*c-d.z*s,d.y*s+d.z*c);}   // arms thrown up
-      transformed.y+=bob*(.015+ex*.12);
-      { vec4 ip=instanceMatrix*vec4(0.,0.,0.,1.);vec3 fz=normalize((instanceMatrix*vec4(0.,0.,1.,0.)).xyz);vec2 to=normalize(uFocus.xz-ip.xz+1e-4);
-        float ang=clamp(atan(fz.x*to.y-fz.z*to.x,fz.x*to.x+fz.z*to.y),-.9,.9)+sin(uTime*.4+aPh*20.)*.15;   // watching the fight
-        float w=position.y>1.02?1.:(position.y>.5?.35:0.);float c=cos(-ang*w),s=sin(-ang*w);transformed.xz=vec2(transformed.x*c-transformed.z*s,transformed.x*s+transformed.z*c); }`);
-    sh.fragmentShader='varying vec3 vSkin,vHair;varying float vPart;\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nif(vPart>.5&&vPart<1.5)diffuseColor.rgb=vSkin;else if(vPart>1.5)diffuseColor.rgb=vHair;');};
-  mat.customProgramCacheKey=()=>'crowd2';
-  const spots=[];for(let i=0;i<tiers;i++){const rr=r0+i*dr+dr*.55,y=y0+(i+1)*dy,n=Math.floor(6.283*rr/.58);for(let k=0;k<n;k++){if(Math.random()<.4)continue;const a=k/n*6.283+(Math.random()-.5)*.012;spots.push([rr,y,a]);}}
+      float ex=clamp(uCheer*(.6+.8*fract(aPh*7.13)),0.,1.3);
+      if(aArm!=0.&&ex>.05){float up=ex*1.9*step(.35,fract(aPh*3.7));vec3 sp=vec3(aArm*.215,.97,0.);vec3 d=transformed-sp;float c=cos(-up),s=sin(-up);transformed=sp+vec3(d.x,d.y*c-d.z*s,d.y*s+d.z*c);}   // arms thrown up
+      transformed.y+=max(0.,sin(uTime*(2.2+ex*5.)+aPh*6.283))*(.012+ex*.1);`);
+    sh.fragmentShader='varying vec3 vSkin,vHair;varying float vPart;\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nif(vPart>.5&&vPart<1.5)diffuseColor.rgb=vSkin;else if(vPart>1.5&&vPart<2.5)diffuseColor.rgb=vHair;else if(vPart>2.5)diffuseColor.rgb*=.45;');};
+  mat.customProgramCacheKey=()=>'crowd3';
+  const SEC=10,spots=Array.from({length:SEC},()=>[]);
+  for(let i=0;i<tiers;i++){const rr=r0+i*dr+dr*.55,y=y0+(i+1)*dy,n=Math.floor(6.283*rr/.6);for(let k=0;k<n;k++){if(Math.random()<.32)continue;const a=k/n*6.283+(Math.random()-.5)*.012;spots[Math.min(SEC-1,Math.floor(k/n*SEC))].push([rr,y,a]);}}
   const cols=[0x6a2a20,0x2f4a6a,0x6a5a3a,0x4a5a2a,0x8a7a5a,0x5a3a4a,0xb0a080,0x3a3a3a,0x8a4a2a,0x6a6a6a,0xc8b898,0x4a3020];
-  const N=spots.length,skin=new Float32Array(N*3),hair=new Float32Array(N*3),ph=new Float32Array(N);
-  crowd=new THREE.InstancedMesh(geo,mat,N);const mm=new THREE.Matrix4(),c=new THREE.Color();
-  spots.forEach(([rr,y,a],i)=>{mm.compose(V(Math.cos(a)*rr,y+.02,Math.sin(a)*rr),_qq.setFromAxisAngle(Y_AXIS,faceIn(a)+(Math.random()-.5)*.3),V(1,.92+Math.random()*.16,1));crowd.setMatrixAt(i,mm);
-    c.setHex(pick(cols)).multiplyScalar(.65+Math.random()*.5);{const l=c.r*.3+c.g*.59+c.b*.11;c.r+=(l-c.r)*.4;c.g+=(l-c.g)*.4;c.b+=(l-c.b)*.4;}crowd.setColorAt(i,c);   // undyed, sun-faded clothes: the stands read as a crowd, not confetti
-    const t=LOOK.skin[(Math.random()*LOOK.skin.length)|0]||[1,1,1];skin.set([.62*t[0],.42*t[1],.32*t[2]],i*3);
-    const hood=Math.random()<.3;if(hood){c.setHex(pick(cols)).multiplyScalar(.6);hair.set([c.r,c.g,c.b],i*3);}else{const h=LOOK.hairCol[(Math.random()*LOOK.hairCol.length)|0]||[.2,.15,.1];hair.set([h[0]*.4,h[1]*.35,h[2]*.32],i*3);}
-    ph[i]=Math.random();});
-  geo.setAttribute('aSkin',new THREE.InstancedBufferAttribute(skin,3));geo.setAttribute('aHair',new THREE.InstancedBufferAttribute(hair,3));geo.setAttribute('aPh',new THREE.InstancedBufferAttribute(ph,1));
-  crowd.receiveShadow=true;crowd.frustumCulled=false;world.add(crowd);
+  const mm=new THREE.Matrix4(),c=new THREE.Color();crowd=new THREE.Group();
+  for(const list of spots){const N=list.length;if(!N)continue;const g=geo.clone(),skin=new Float32Array(N*3),hair=new Float32Array(N*3),ph=new Float32Array(N);
+    const im=new THREE.InstancedMesh(g,mat,N);
+    list.forEach(([rr,y,a],i)=>{mm.compose(V(Math.cos(a)*rr,y+.02,Math.sin(a)*rr),_qq.setFromAxisAngle(Y_AXIS,faceIn(a)+(Math.random()-.5)*.3),V(1,.92+Math.random()*.16,1));im.setMatrixAt(i,mm);
+      c.setHex(pick(cols)).multiplyScalar(.65+Math.random()*.5);{const l=c.r*.3+c.g*.59+c.b*.11;c.r+=(l-c.r)*.4;c.g+=(l-c.g)*.4;c.b+=(l-c.b)*.4;}im.setColorAt(i,c);   // undyed, sun-faded clothes
+      const t=LOOK.skin[(Math.random()*LOOK.skin.length)|0]||[1,1,1];skin.set([.62*t[0],.42*t[1],.32*t[2]],i*3);
+      if(Math.random()<.3){c.setHex(pick(cols)).multiplyScalar(.6);hair.set([c.r,c.g,c.b],i*3);}else{const h=LOOK.hairCol[(Math.random()*LOOK.hairCol.length)|0]||[.2,.15,.1];hair.set([h[0]*.4,h[1]*.35,h[2]*.32],i*3);}
+      ph[i]=Math.random();});
+    g.setAttribute('aSkin',new THREE.InstancedBufferAttribute(skin,3));g.setAttribute('aHair',new THREE.InstancedBufferAttribute(hair,3));g.setAttribute('aPh',new THREE.InstancedBufferAttribute(ph,1));
+    im.computeBoundingSphere();if(im.boundingSphere)im.boundingSphere.radius+=1.5;im.frustumCulled=true;crowd.add(im);}
+  world.add(crowd);
   // the benches they sit on: a plank ledge along every tier
   for(let i=0;i<tiers;i++){const rr=r0+i*dr+dr*.55,y=y0+(i+1)*dy;const g=new THREE.CylinderGeometry(rr+.05,rr+.05,.06,120,1,true);g.translate(0,y+.42,0);addGeo('woodLight',scaleUV(g,rr*6.283/2,.1),T(0,0,0));
     const t=new THREE.RingGeometry(rr-.33,rr+.05,120,1);t.rotateX(-Math.PI/2);t.translate(0,y+.45,0);addGeo('woodLight',scaleUV(t,4,40),T(0,0,0));}
@@ -1078,28 +1078,33 @@ function updatePool(P,dt,grav,drag){for(let i=0;i<P.n;i++){if(P.life[i]<=0)conti
 const spurts=[];
 
 // ================================================================ audio (synthesized)
-let AC=null,master=null,noiseBuf=null,swooshGain=null,swooshFilt=null,fireGain=null,crowdGain=null;
+let AC=null,master=null,noiseBuf=null,swooshGain=null,swooshFilt=null,fireGain=null,crowdGain=null,torchGain=null,cricketGain=null;const AMB={};
 function initAudio(){
   if(AC){AC.resume();loadSfx();loadMusic();return;}
   try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
   master=AC.createGain();master.gain.value=.8;master.connect(AC.destination);
-  noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-  const wind=AC.createBufferSource();wind.buffer=noiseBuf;wind.loop=true;const wf=AC.createBiquadFilter();wf.type='lowpass';wf.frequency.value=380;const wg=AC.createGain();wg.gain.value=.07;
-  const lfo=AC.createOscillator();lfo.frequency.value=.08;const lg=AC.createGain();lg.gain.value=.04;lfo.connect(lg);lg.connect(wg.gain);lfo.start();
-  wind.connect(wf);wf.connect(wg);wg.connect(master);wind.start();
-  {const fs=AC.createBufferSource();fs.buffer=noiseBuf;fs.loop=true;fs.playbackRate.value=.6;const ff=AC.createBiquadFilter();ff.type='bandpass';ff.frequency.value=900;ff.Q.value=.6;const fr=AC.createBiquadFilter();fr.type='lowpass';fr.frequency.value=2400;fireGain=AC.createGain();fireGain.gain.value=0;
-   const lfo=AC.createOscillator();lfo.type='square';lfo.frequency.value=13;const lg=AC.createGain();lg.gain.value=.4;const crack=AC.createGain();crack.gain.value=.6;lfo.connect(lg);lg.connect(crack.gain);lfo.start();
-   fs.connect(ff);ff.connect(fr);fr.connect(crack);crack.connect(fireGain);fireGain.connect(master);fs.start();fireSynth=crack;}
-  {const cs=AC.createBufferSource();cs.buffer=noiseBuf;cs.loop=true;cs.playbackRate.value=.5;const cf=AC.createBiquadFilter();cf.type='bandpass';cf.frequency.value=520;cf.Q.value=.5;crowdGain=AC.createGain();crowdGain.gain.value=0;cs.connect(cf);cf.connect(crowdGain);crowdGain.connect(master);cs.start();}
+  noiseBuf=AC.createBuffer(1,AC.sampleRate*6,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;   // long enough that a looped hiss never audibly repeats
+  // wind: soft brown noise, slowly swelling (a short white-noise loop used to repeat and pulse)
+  {const wb=AC.createBuffer(1,AC.sampleRate*12,AC.sampleRate),w=wb.getChannelData(0);let b=0;for(let i=0;i<w.length;i++){b=(b+.02*(Math.random()*2-1))/1.02;w[i]=b*3.5;}
+   const n=AC.sampleRate;for(let i=0;i<n;i++){const k=i/n;w[i]=w[i]*k+w[w.length-n+i]*(1-k);}   // crossfade the ends so the loop is seamless
+   const wind=AC.createBufferSource();wind.buffer=wb;wind.loop=true;wind.loopStart=1;wind.loopEnd=12;const wf=AC.createBiquadFilter();wf.type='lowpass';wf.frequency.value=420;const wg=AC.createGain();wg.gain.value=.05;
+   const lfo=AC.createOscillator();lfo.frequency.value=.05;const lg=AC.createGain();lg.gain.value=.025;lfo.connect(lg);lg.connect(wg.gain);lfo.start();
+   wind.connect(wf);wf.connect(wg);wg.connect(master);wind.start(0,1);}
+  // recorded ambience loops (CC0, see CREDITS.md): the ring of fire, torches and braziers, the arena crowd, crickets at dusk
+  fireGain=AC.createGain();fireGain.gain.value=0;fireGain.connect(master);torchGain=AC.createGain();torchGain.gain.value=0;torchGain.connect(master);
+  crowdGain=AC.createGain();crowdGain.gain.value=0;crowdGain.connect(master);cricketGain=AC.createGain();cricketGain.gain.value=0;cricketGain.connect(master);
+  const loop=(name,dest,rate=1)=>fetch('sfx/amb-'+name+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{AMB[name]=buf;const src=AC.createBufferSource();src.buffer=buf;src.loop=true;src.playbackRate.value=rate;src.connect(dest);src.start(0,Math.random()*buf.duration);return buf;}).catch(()=>{});
+  loop('fire',fireGain).then(()=>{if(AMB.fire){const s2=AC.createBufferSource();s2.buffer=AMB.fire;s2.loop=true;s2.playbackRate.value=1.08;s2.connect(torchGain);s2.start(0,Math.random()*AMB.fire.duration);}});
+  loop('crowd',crowdGain);loop('crickets',cricketGain);
   loadSfx();loadMusic();
   const sw=AC.createBufferSource();sw.buffer=noiseBuf;sw.loop=true;swooshFilt=AC.createBiquadFilter();swooshFilt.type='bandpass';swooshFilt.Q.value=1.4;swooshFilt.frequency.value=600;swooshGain=AC.createGain();swooshGain.gain.value=0;sw.connect(swooshFilt);swooshFilt.connect(swooshGain);swooshGain.connect(master);sw.start();
 }
 // ---- recorded sounds (CC0, see CREDITS.md): played when loaded, the synth below is the fallback
-const SFX_N={"swingSword":5,"swingCleaver":5,"swingHammer":5,"swingPunch":5,"swingKick":5,"slash":5,"hack":5,"strike":5,"crush":4,"pierce":5,"punch":5,"kick":5,"block":5,"clash":5,"hitMail":5,"hitPlate":5,"hitLeather":4,"fall":3,"fallArmoured":3,"dropWeapon":3,"humanAttack":5,"humanHurt":4,"humanDeath":3,"humanRoughAttack":4,"humanRoughHurt":4,"humanRoughDeath":3,"deathThudSmall":3,"deathThudMid":3,"stepStone":5,"stepDirt":5,"stepSand":5,"fire":4,"crackle":5,"pickup":5,"equipMail":2,"equipPlate":3,"unsheathe":3};
-const SFX={};let sfxLoading=false,fireSynth=null;
+const SFX_N={"swingSword":5,"swingCleaver":5,"swingHammer":5,"swingPunch":5,"swingKick":5,"slash":5,"hack":5,"strike":5,"crush":4,"pierce":5,"punch":5,"kick":5,"block":5,"clash":5,"hitMail":5,"hitPlate":5,"hitLeather":4,"fall":3,"fallArmoured":3,"dropWeapon":3,"humanAttack":5,"humanHurt":4,"humanDeath":3,"humanRoughAttack":4,"humanRoughHurt":4,"humanRoughDeath":3,"deathThudSmall":3,"deathThudMid":3,"stepStone":5,"stepDirt":5,"stepSand":5,"crackle":5,"pickup":5,"equipMail":2,"equipPlate":3,"unsheathe":3};
+const SFX={};let sfxLoading=false;
 function loadSfx(){if(sfxLoading||!AC)return;sfxLoading=true;
   for(const k in SFX_N){SFX[k]=[];for(let i=0;i<SFX_N[k];i++)fetch('sfx/'+k+'-'+i+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{SFX[k].push(buf);
-    if(k==='fire'&&SFX.fire.length===1){const f=AC.createBufferSource();f.buffer=buf;f.loop=true;const g=AC.createGain();g.gain.value=1.6;f.connect(g);g.connect(fireGain);f.start();if(fireSynth)fireSynth.gain.value=.12;}}).catch(()=>{});}}
+    }).catch(()=>{});}}
 const _sd=V(),_sr=V();
 function sfx(k,p,vol=1,rate=1,delay=0,net=true){
   if(net)netEv(['S',k,p?r3v(p):0,r3(vol),r3(rate),delay]);
@@ -2014,6 +2019,7 @@ function propHitTest(){if(!PROPS.length)return;
     for(let i=2;i<=4;i++){const t=s.def.hitFrom+(1-s.def.hitFrom)*i/4;_v.copy(s.H).addScaledVector(s.axis,s.len*t);if(_v.y>.1||!onBridgeAt(G,_v.x,_v.z))continue;if((G.cd.get(s)||0)>simTime)break;G.cd.set(s,simTime+.3);
       const k=s.def.weight*(s.def.kind==='blunt'||s.def.kind==='axe'?.02:.012)*t;grateKick(s.tipVel.x*k,s.tipVel.z*k);sClang(_v,Math.min(1,sp/10));spawnSparks(_v,(4+sp)|0,null);s.Tp.lerp(s.T,.6);break;}}}
 function propVisual(dt){for(const p of PROPS){if(p.jig>0){p.jig-=dt;const a=Math.sin(p.jig*70)*p.jig*.12;p.mesh.rotation.z=a;p.mesh.rotation.x=a*.6;}}}
+const _hbv=V(),_hba=V();
 class Sword{
   constructor(def){this.def=def;this.len=def.len;this.mesh=def.make();this.H=V();this.Hv=V();this.Hp=V();this.T=V();this.Tp=V();this.axis=V(0,1,0);this.edge=V(1,0,0);this.tipVel=V();this.free=false;this.age=0;this.arc=0;this.lastDir=V(1,0,0);this.power=0;this.swings=0;this.flying=false;this.thrower=null;this.Hprev=V();this.stuck=null;this.owner=null;this.rb=null;this.wallCd=0;this.id=swordId++;if(PW)this.physMake();}
   reset(h,dir){if(this.planted){this.planted=false;if(this.rb)this.rb.setBodyType(R.RigidBodyType.Dynamic,true);}this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);if(this.owner){this.owner.right(this.edge);}else this.edge.set(1,0,0);   // edge starts on the holder's right, the same for every fighter whichever way they face
@@ -2132,9 +2138,16 @@ class Sword{
     // A heavy weapon gets going slowly, stops slowly, and a committed swing carries on past where you aimed it
     const Hd=handling(this.def),m=commit?1:0,me=WMASS[this.def.id]??1.5,two=twoH(this.def)?1.35:1;
     const k=Hd.grip[m]/(.5+.32*me),c=2*Math.sqrt(k)*Hd.gripDamp*(m?clamp(1.05-me*.12,.6,1):1);
-    _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c);
+    // the arm hangs off the body: when the body lurches (a shove, a stagger, a collision, a stop) the hand goes with it for free,
+    // and the grip only works against where you aim relative to the body. Without this the hand trailed every lurch and then
+    // sprang back after it (the weapon "rubber-banding"); standing still nothing changes
+    const of0=this.owner;_hbv.set(0,0,0);_hba.set(0,0,0);
+    if(of0&&!this.free){if(this._bp){_hbv.subVectors(of0.pos,this._bp);if(_hbv.lengthSq()<.09){_hbv.multiplyScalar(1/h);if(this._hbvp){_hba.subVectors(_hbv,this._hbvp).multiplyScalar(1/h);if(_hba.lengthSq()>8100)_hba.setLength(90);}}else _hbv.set(0,0,0);}
+      (this._bp||(this._bp=V())).copy(of0.pos);(this._hbvp||(this._hbvp=V())).copy(_hbv);}
+    _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c).addScaledVector(_hbv,c);
     const kn=this.knockT>0?.18:1;if(this.knockT>0)this.knockT-=h;   // knocked out of line: the grip takes a moment to recover
     const maxA=(m?200:130)*two/(.7+me)*strength*kn;if(_a.lengthSq()>maxA*maxA)_a.setLength(maxA);
+    _a.add(_hba);
     this.Hv.addScaledVector(_a,h);this.H.addScaledVector(this.Hv,h);
     // the wrist steers the blade onto its line; the head lags and carries through by tipDamp
     const gk=Hd.wrist[m]*(this.knockT>0&&this.def.kind==='spear'?.12:1),tw=Math.sqrt(gk);   // a beaten-aside shaft swings on before the hands can master it
@@ -2407,7 +2420,7 @@ class Fighter{
     else this.jabLift=0;
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz);
-    out.x+=this.vel.x*.062;out.z+=this.vel.z*.062;   // the arms carry the weapon along with the body on the move, instead of trailing it behind
+    if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
     const slide=Hd.slide*clamp((cz-.46)/.16,0,1);
@@ -3361,7 +3374,7 @@ function bladeContact(s,B){
 function resolveHit(A,B,cap,t,P,pv){
   if(simTime<CD_END)return;
   const s=A.sword,W=s.def,phys=!!pv;if(phys)_va.copy(pv);else s.velAt(t,_va);_rel.subVectors(_va,B.vel);const speed=_rel.length();
-  if(speed<2.2){if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0,soft:0};S.soft=(S.soft||0)+1;}if(!phys){s.Tp.lerp(s.T,.6);s.Hv.multiplyScalar(.6);}return;}   // a resting touch is not a blow, and doesn't use up the next one
+  if(speed<2.2){if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0,soft:0};S.soft=(S.soft||0)+1;}if(!phys){s.Tp.lerp(s.T,.3);_hv.subVectors(B.chest,s.H);const l=_hv.length(),vn=l>1e-4?s.Hv.dot(_hv)/l:0;if(vn>0)s.Hv.addScaledVector(_hv,-vn*.5/l);}return;}   // a resting touch is not a blow, and doesn't use up the next one; it only checks the push into the body (it used to brake the hand outright every step, so a weapon resting on someone froze in place and then sprang back)
   A.hitCd.set(B.id,simTime+.3);
   const dir=_rel.clone().normalize();
   const along=Math.abs(dir.dot(s.axis));
@@ -3682,7 +3695,7 @@ function kickStep(dt){const k=240,c=2*Math.sqrt(k)*.42;for(const a of ['p','y','
 function sThud(p,power=1){netEv(['t',r3v(p),power]);if(sfx(power>.8?'crush':power>.45?'strike':'punch',p,.9*clamp(power+.2,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.8;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,.1,'lowpass',500,.7,v);const o=AC.createOscillator();o.frequency.setValueAtTime(90,t);o.frequency.exponentialRampToValueAtTime(32,t+.14);const g=AC.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.16);o.connect(g);g.connect(master);o.start(t);o.stop(t+.18);}
 function sClank(p,power=1){netEv(['n',r3v(p),power]);if(sfx(Math.random()<.5?'hitPlate':'hitMail',p,.8*clamp(power+.3,.4,1.2),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1)*.35;if(v<.01)return;const t=AC.currentTime,base=380+Math.random()*200;[1,2.7,4.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=base*r;const g=AC.createGain();g.gain.setValueAtTime(v/(1+i),t);g.gain.exponentialRampToValueAtTime(.0005,t+.18/(1+i*.3));o.connect(g);g.connect(master);o.start(t);o.stop(t+.25);});noiseBurst(t,.05,'bandpass',2200,1,v*.6);}
 function sStep(p,vol,run,f){if(f&&stepFx(f,p,vol,run))return;if(sfx(curMap==='arena'||curMap==='colosseum'?'stepSand':'stepStone',p,vol*1.5,run?1.06:1,0,false))return;if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,run?.07:.05,'lowpass',run?650:480,.9,v);noiseBurst(t+.01,.03,'bandpass',2600,2,v*.18);}
-function sCheer(x){if(!AC)return;const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.7;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=900;f.Q.value=.4;const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.32*x,t+.35);g.gain.exponentialRampToValueAtTime(.001,t+2.4);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+2.5);}
+function sCheer(x){if(!AC)return;if(AMB.crowd)return crowdBurst(x,.35,2.6,1.05,350);const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.7;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=900;f.Q.value=.4;const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.32*x,t+.35);g.gain.exponentialRampToValueAtTime(.001,t+2.4);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+2.5);}
 function sPickup(){if(sfx('pickup',null,.6,1,0,false))return;if(!AC)return;const t=AC.currentTime;noiseBurst(t,.06,'bandpass',1800,3,.15);noiseBurst(t+.05,.05,'bandpass',900,3,.1);}
 
 // ================================================================ zone
@@ -3800,6 +3813,15 @@ function note(text,cls=''){if(cls!=='red'||!SIM_NOTE(text))return;const n=docume
 // the only notes left are what your own body tells you
 const SIM_NOTE=t=>/arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside/i.test(t);
 let hurtV=0;function hudHurt(d){hurtV=Math.min(1,hurtV+d/40);}
+// a swell of the real crowd recording: the stands roar (or draw breath) and settle back into their murmur
+function crowdBurst(x,att,dec,rate,hp,lp){const t=AC.currentTime,b=AMB.crowd,src=AC.createBufferSource();src.buffer=b;src.playbackRate.value=rate*(.97+Math.random()*.06);
+  let n=src;if(hp){const f=AC.createBiquadFilter();f.type='highpass';f.frequency.value=hp;n.connect(f);n=f;}if(lp){const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=lp;n.connect(f);n=f;}
+  const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(Math.min(1.2,.9*x),t+att);g.gain.exponentialRampToValueAtTime(.0001,t+att+dec);n.connect(g);g.connect(master);
+  src.start(t,Math.random()*(b.duration-4));src.stop(t+att+dec+.1);}
+// ambience by place: torches and braziers crackle as you pass them, crickets in the village at dusk
+function ambTick(){if(!AC||!torchGain)return;const cp=camera.position;let dm=1e9;for(const F of flames){const dx=F.x-cp.x,dz=F.z-cp.z,d=dx*dx+dz*dz;if(d<dm)dm=d;}dm=Math.sqrt(dm);
+  torchGain.gain.value=lerp(torchGain.gain.value,state==='loading'?0:Math.pow(clamp(1-dm/10,0,1),2)*.55,.08);
+  cricketGain.gain.value=lerp(cricketGain.gain.value,curMap==='village'&&state!=='loading'?.16:0,.03);}
 function toast(t){const d=el('toast');if(!d)return;d.textContent=t;d.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>d.classList.remove('on'),1400);}
 
 function playerInput(f,wish,h){
@@ -4062,6 +4084,7 @@ function sim(h){
       // bodies collide: closing speed is shared out, and running into someone knocks both off balance (the one who was standing more)
       const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0),mb=1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0),ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
         a.vel.x-=nx*ja;a.vel.z-=nz*ja;b.vel.x+=nx*jb;b.vel.z+=nz*jb;if(-vn>1.6){_v.set(nx,0,nz);b.shove(_v,jb*.7);_v.negate();a.shove(_v,ja*.45);if(-vn>2.6)sThud(a.chest,.4);}}}}}
+  if((bodyPhase^=1)===1)bodyPress();
   if(PW){if(physTick){const h=PH_H;
     for(const f of fighters)if(f.pb)f.physParts(h);
     for(const s of freeSwords)if(s.rb)s.physFree(h);
@@ -4079,6 +4102,25 @@ function sim(h){
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
+}
+// bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
+// and the fallen pile up on one another instead of sinking through. (Purely positional nudges on the loose ragdoll bodies.)
+let bodyPhase=0;
+function bodyPress(){
+  const rags=[];for(const f of fighters)if(f.ragdoll&&f.ragdoll.P.Hips)rags.push(f);if(!rags.length)return;
+  const held=new Set();for(const f of fighters)if(f.fists)for(const sd of ['R','L']){const G=f.fists[sd]&&f.fists[sd].grab;if(G&&G.k==='r')held.add(G.R);}
+  for(const F of rags){const R=F.ragdoll,hp=R.P.Hips;if(held.has(R))continue;let woke=false;
+    for(const S of fighters){if(S===F||!S.alive||S.ragdoll)continue;const ox=hp.x-S.pos.x,oz=hp.z-S.pos.z;if(ox*ox+oz*oz>2.6)continue;
+      const top=S.pos.y+.75;
+      for(const n of R.names){const p=R.P[n];if(p.y>top)continue;const r=.22+(RD_R[n]||.055),dx=p.x-S.pos.x,dz=p.z-S.pos.z,d2=dx*dx+dz*dz;if(d2>=r*r)continue;
+        const d=Math.sqrt(d2)||1e-4,k=(r-d)*.5/d,q=R.Q[n];p.x+=dx*k;p.z+=dz*k;q.x+=dx*k*.6;q.z+=dz*k*.6;woke=true;}
+      if(woke){S.vel.x*=.985;S.vel.z*=.985;}}   // stepping through a body slows you a little
+    if(woke){R.sleep=false;R.age=Math.min(R.age,3.5);}}
+  for(let i=0;i<rags.length;i++)for(let j=i+1;j<rags.length;j++){const A=rags[i].ragdoll,B=rags[j].ragdoll;if(A.P.Hips.distanceToSquared(B.P.Hips)>3.2)continue;let hit=false;
+    for(const a of A.names){const pa=A.P[a],ra=RD_R[a]||.055;for(const b of B.names){const pb=B.P[b],rb=RD_R[b]||.055,dx=pb.x-pa.x,dy=pb.y-pa.y,dz=pb.z-pa.z,d2=dx*dx+dy*dy+dz*dz,r=ra+rb;if(d2>=r*r)continue;
+      const d=Math.sqrt(d2)||1e-4,k=(r-d)*.5/d;pa.x-=dx*k;pa.y-=dy*k;pa.z-=dz*k;pb.x+=dx*k;pb.y+=dy*k;pb.z+=dz*k;
+      if(A.sleep){const q=A.Q[a];q.x-=dx*k;q.y-=dy*k;q.z-=dz*k;}if(B.sleep){const q=B.Q[b];q.x+=dx*k;q.y+=dy*k;q.z+=dz*k;}if(r-d>.015)hit=true;}}   // (a body at rest is moved without being set in motion; only a real overlap wakes it)
+    if(hit){if(A.sleep&&!held.has(A)){A.sleep=false;A.age=Math.min(A.age,3.5);}if(B.sleep&&!held.has(B)){B.sleep=false;B.age=Math.min(B.age,3.5);}}}
 }
 function logic(dt){
   if(NET.mode==='client'){clientFrame(dt);return;}
@@ -4155,16 +4197,17 @@ function frame(now){
     zoneMesh.position.set(zone.c.x,0,zone.c.z);fireMesh.scale.set(zone.r,1,zone.r);smokeMesh.scale.set(zone.r,1,zone.r);
     const rep=Math.max(14,Math.round(zone.r*6.283/2.4));fireMat.uniforms.uRep.value=rep;smokeMat.uniforms.uRep.value=Math.max(6,rep*.18);
     scorch.position.x=zone.c.x;scorch.position.z=zone.c.z;scorchMat.uniforms.uC.value.set(zone.c.x,zone.c.z);scorchMat.uniforms.uR.value=zone.r;
-    fireMat.uniforms.uTime.value=smokeMat.uniforms.uTime.value=scorchMat.uniforms.uTime.value=now*.001;crowdU.uTime.value=now*.001;if(player)crowdU.uFocus.value.lerp(SPEC.on&&SPEC.f?SPEC.f.pos:player.pos,.03);crowdU.uCheer.value=Math.max(0,crowdU.uCheer.value-dt*.35);if(crowdGain)crowdGain.gain.value=curMap==='colosseum'&&state!=='loading'?.05+crowdU.uCheer.value*.06:0;
+    fireMat.uniforms.uTime.value=smokeMat.uniforms.uTime.value=scorchMat.uniforms.uTime.value=now*.001;crowdU.uTime.value=now*.001;crowdU.uCheer.value=Math.max(0,crowdU.uCheer.value-dt*.35);if(crowdGain){const want=curMap==='colosseum'&&state!=='loading'?.2+Math.min(1,crowdU.uCheer.value)*.35:0;crowdGain.gain.value=lerp(crowdGain.gain.value,want,.05);}
     _v.set(camera.position.x-zone.c.x,0,camera.position.z-zone.c.z);if(_v.lengthSq()<1e-4)_v.set(1,0,0);_v.normalize();
     const ex=zone.c.x+_v.x*zone.r,ez=zone.c.z+_v.z*zone.r,ed=Math.hypot(camera.position.x-ex,camera.position.z-ez);
     fireLight.position.set(ex,2.6,ez);fireLight.intensity=on&&ed<40?11*(1-ed/40)*(.85+Math.random()*.3):0;
     if(on&&ed<34)for(let k=0;k<3;k++){const a=Math.atan2(_v.z,_v.x)+(Math.random()-.5)*14/Math.max(zone.r,4);const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=zone.c.x+Math.cos(a)*zone.r;embers.pos[i*3+1]=.3+Math.random()*2.5;embers.pos[i*3+2]=zone.c.z+Math.sin(a)*zone.r;embers.vel[i*3]=(Math.random()-.5)*1.5;embers.vel[i*3+1]=1.5+Math.random()*2.5;embers.vel[i*3+2]=(Math.random()-.5)*1.5;embers.life[i]=1+Math.random()*2;}
-    if(fireGain)fireGain.gain.value=lerp(fireGain.gain.value,on?clamp(1-ed/32,0,1)*.32:0,.1);
+    if(fireGain)fireGain.gain.value=lerp(fireGain.gain.value,on?Math.pow(clamp(1-ed/32,0,1),1.5)*.75:0,.1);
     for(const f of fighters)if(f.alive&&f.outside&&Math.random()<.6){const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=f.chest.x+(Math.random()-.5)*.5;embers.pos[i*3+1]=f.chest.y+(Math.random()-.7)*1.2;embers.pos[i*3+2]=f.chest.z+(Math.random()-.5)*.5;embers.vel[i*3]=(Math.random()-.5)*.6;embers.vel[i*3+1]=1+Math.random()*1.5;embers.vel[i*3+2]=(Math.random()-.5)*.6;embers.life[i]=.6+Math.random();}
   }
   grade.uniforms.uTime.value=now*.001;grassTime.value=now*.001;
-  if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-3.5)/11,0,1)*.14,.3);swooshFilt.frequency.value=Math.min(6000,280+ts*95/Math.sqrt(player.sword.def.weight));}else if(swooshGain)swooshGain.gain.value*=.9;
+  ambTick();
+  if(swooshGain&&player&&player.sword&&player.alive){const ts=player.sword.tipVel.length();swooshGain.gain.value=lerp(swooshGain.gain.value,clamp((ts-6.5)/12,0,1)*.11,.3);swooshFilt.frequency.value=Math.min(6000,280+ts*95/Math.sqrt(player.sword.def.weight));}else if(swooshGain)swooshGain.gain.value*=.9;
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
   updateHUD(dt);renderPreview(dt);musicTick();
   {const show=state==='playing'&&!input.locked&&!paused&&!!player&&player.alive;const lh=el('lockhint');if(lh.classList.contains('hide')===show)lh.classList.toggle('hide',!show);}
@@ -4226,7 +4269,7 @@ function dripBlood(p){const i=bI;bI=(bI+1)%BLOOD_N;bP[i*3]=p.x;bP[i*3+1]=p.y;bP[
 // ---- sounds
 function sGurgle(p,vol=1){if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime,n=4+(Math.random()*5|0);
   for(let i=0;i<n;i++)noiseBurst(t+i*(.06+Math.random()*.07),.04+Math.random()*.05,'bandpass',200+Math.random()*420,7,v*.55);noiseBurst(t,n*.1,'lowpass',280,.7,v*.22);}
-function sGasp(x){if(!AC)return;const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8;const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=.7;f.frequency.setValueAtTime(700,t);f.frequency.linearRampToValueAtTime(1500,t+.45);
+function sGasp(x){if(!AC)return;if(AMB.crowd){crowdBurst(x*.8,.08,1.1,.92,0,1800);setTimeout(()=>sCheer(x*.6),700);return;}const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8;const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=.7;f.frequency.setValueAtTime(700,t);f.frequency.linearRampToValueAtTime(1500,t+.45);
   const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.3*x,t+.12);g.gain.exponentialRampToValueAtTime(.001,t+1.3);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+1.4);
   setTimeout(()=>sCheer(x*.6),700);}   // the crowd gasps, then roars
 function clatter(s,p,v){sfx('dropWeapon',p,clamp(v/5,.2,.9),1.05+(Math.random()-.5)*.25);if(v>2.5&&SAND())spawnDust(p,2,.3,.2);}
@@ -4604,7 +4647,7 @@ function remoteInput(f,wish,h){
 const ARMOR_SLOTS=['head','body','arms','legs'];
 function netSnap(){
   const z=zone;
-  const S={t:'s',gr:PIT&&PIT.grate?[r3(PIT.grate.C.x),r3(PIT.grate.C.y),r3(PIT.grate.C.z),r3(PIT.grate.phi),PIT.grate.mode==='rest'?0:1]:0,cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
+  const S={t:'s',ht:Math.round(simTime*1000)/1000,gr:PIT&&PIT.grate?[r3(PIT.grate.C.x),r3(PIT.grate.C.y),r3(PIT.grate.C.z),r3(PIT.grate.phi),PIT.grate.mode==='rest'?0:1]:0,cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
@@ -4666,7 +4709,12 @@ function clientData(d){
   if(!d||typeof d!=='object')return;
   if(d.t==='s'){if(!NET.puppets.size)return;const now=performance.now();
     if(NET.cur){const a=clamp((now-NET.curAt)/NET.gap,0,1),ex=clamp(now-NET.curAt-NET.gap,0,60)/1000;NET.prev=NET.prev?snapAt(NET.prev,NET.cur,a,ex):NET.cur;const iv=clamp(now-NET.curAt,16,200);NET.gap=lerp(NET.gap||iv,iv,.15);}else{NET.prev=null;NET.gap=50;}
-    NET.cur=d;NET.curAt=now;NET.fresh=true;if(d.e&&d.e.length)clientEvents(d.e);}
+    NET.cur=d;NET.curAt=now;NET.fresh=true;
+    if(d.e&&d.e.length){if(typeof d.ht==='number'&&NET.rt!=null)(NET.evq||(NET.evq=[])).push({ht:d.ht,e:d.e});else clientEvents(d.e);}   // sounds and blood play when the blow is drawn, not when the packet lands
+    if(typeof d.ht==='number'){const B=NET.buf||(NET.buf=[]),L=B[B.length-1];
+      if(L&&d.ht<=L.ht){if(d.ht<L.ht-1)B.length=0;else return;}   // out of order (drop it) or a new round's clock (start over)
+      if(L){const di=d.ht-L.ht,ai=(now-NET.bufAt)/1000;NET.ivl=lerp(NET.ivl||di,di,.1);NET.jit=lerp(NET.jit||0,Math.abs(ai-di),.1);}
+      NET.bufAt=now;B.push(d);while(B.length>20)B.shift();}}
   else if(d.t==='start')clientStart(d);
   else if(d.t==='add')clientAdd(d);
   else if(d.t==='end'){END={title:d.title,line:d.line,cause:d.cause};state=d.won?'won':'dead';deathT=performance.now();}
@@ -4683,7 +4731,7 @@ function clientStart(d){
   for(const it of [...loot]){removeLoot(it);if(it.sword)it.sword.dispose();}freeSwords.length=0;spurts.length=0;NET.lootMap.clear();
   for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;
   zoneReset();score=0;document.getElementById('feed').innerHTML='';
-  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');
+  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.buf=[];NET.rt=null;NET.evq=[];NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');
   for(const r of d.roster){const me=r.i===d.you;const pal=Array.isArray(r.p)?r.p:PALETTES[0];
     const f=new Fighter(String(r.n).slice(0,16),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;
     for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?.12:-.12,y:.25,z:.27};}
@@ -4701,11 +4749,22 @@ function clientFrame(dt){
   simTime+=dt;   // local clock for effects (spurts, clutching) on a friend's screen
   const S=NET.cur;if(!S)return;
   if(S.gr&&PIT&&PIT.grate){const G=PIT.grate;G.C.set(S.gr[0],S.gr[1],S.gr[2]);G.phi=S.gr[3];G.mode=S.gr[4]?'moved':'rest';G.x=G.C.x-PIT.x;G.z=G.C.z-PIT.z;}const P=NET.prev||S;
-  const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1),ex=clamp(performance.now()-NET.curAt-NET.gap,0,60)/1000;
+  const a=clamp((performance.now()-NET.curAt)/NET.gap,0,1),ex=clamp(performance.now()-NET.curAt-NET.gap,0,60)/1000,aCur=a,exCur=ex;
   if(S.cd!=null)countdownTick(S.cd);
   zone.c.set(S.z[0],0,S.z[1]);zone.r=lerp(P.z[2],S.z[2],a);zone.phase=S.z[3];zone.state=S.z[4]?'shrink':'wait';zone.t=S.z[5];zone.next=S.z[6]?{c:V(S.z[6][0],0,S.z[6][1]),r:S.z[6][2]}:null;zone.dps=S.z[7];zone.off=!!S.z[8];if(S.mh)MODEHUD=S.mh;
   const pm=new Map();for(const o of P.f)pm.set(o.i,o);
-  for(const o of S.f){const f=NET.puppets.get(o.i);if(!f)continue;const q=pm.get(o.i)||o;
+  // everyone but you is drawn from a short buffer: about two snapshot gaps in the past, always between two real snapshots,
+  // so uneven packet arrival no longer makes fast weapons stall, lurch and spring back. Your own fighter stays on the newest data
+  let m0=null,m1=null,ab=0,exB=0;
+  {const B=NET.buf;if(B&&B.length>=2){const newest=B[B.length-1].ht,D=clamp((NET.ivl||.05)*1.7+(NET.jit||0)*2.5,.07,.24),want=newest-D;
+    if(NET.rt==null||Math.abs(NET.rt-want)>.35)NET.rt=want;else NET.rt+=dt*clamp(1+(want-NET.rt)*2,.9,1.1);   // the clock runs at real speed, nudged at most 10% toward the target delay
+    let i=B.length-2;while(i>0&&B[i].ht>NET.rt)i--;const b0=B[i],b1=B[i+1];ab=(NET.rt-b0.ht)/Math.max(1e-3,b1.ht-b0.ht);
+    if(ab>1){exB=Math.min(.06,NET.rt-b1.ht);ab=1;}else if(ab<0)ab=0;
+    m0=new Map();for(const o of b0.f)m0.set(o.i,o);m1=new Map();for(const o of b1.f)m1.set(o.i,o);}
+   const Q=NET.evq;if(Q)while(Q.length&&(NET.rt==null||Q[0].ht<=NET.rt+.001||Q[0].ht<Q[Q.length-1].ht-.5))clientEvents(Q.shift().e);}
+  for(const o0 of S.f){const f=NET.puppets.get(o0.i);if(!f)continue;
+    let o=o0,q=pm.get(o0.i)||o0,a=aCur,ex=exCur;
+    if(m0&&f!==player){const x0=m0.get(o0.i),x1=m1.get(o0.i);if(x0&&x1&&!!x1.a===!!o0.a&&!!x1.rg===!!o0.rg){q=x0;o={...o0,p:x1.p,y:x1.y,v:x1.v,w:x1.w&&o0.w&&x1.w[0]===o0.w[0]?x1.w:o0.w,fs:x1.fs||o0.fs,rg:x1.rg||o0.rg};a=ab;ex=exB;}}
     f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);if(ex&&o.a&&!o.rg){f.pos.x+=o.v[0]*ex;f.pos.z+=o.v[1]*ex;}   // a late packet: keep walking briefly instead of stopping dead
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
     if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;
@@ -4794,10 +4853,10 @@ loadFighters(async g=>{
 },err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
-window.__clientData=clientData;window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
+window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
