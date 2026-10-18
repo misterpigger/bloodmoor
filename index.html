@@ -146,6 +146,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
 @keyframes blink{50%{opacity:.35}}
 #prompt{position:absolute;left:50%;top:72%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:7px 14px 8px;background:rgba(7,8,12,.62);border-left:3px solid var(--tier,#ecdcb8);font-size:16px;color:var(--parch);white-space:nowrap}
 #prompt kbd{font-size:13px}
+#blind{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 45%,rgba(60,0,0,0) 18%,rgba(70,4,2,.75) 55%,rgba(20,0,0,.97) 85%);transition:opacity .3s}
 #toast{position:absolute;left:50%;bottom:12%;transform:translateX(-50%);padding:6px 16px;background:rgba(7,8,12,.62);border:1px solid rgba(236,220,184,.2);font-size:15px;letter-spacing:.06em;color:var(--parch);opacity:0;transition:opacity .25s;pointer-events:none}#toast.on{opacity:1}
 
 .overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:rgba(7,8,12,.55);text-align:center}
@@ -262,6 +263,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
   </div>
   <div id="prompt" class="hide"><kbd>E</kbd><span id="ptext"></span></div>
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="blind"></div>
 </div>
 
 <div id="pause" class="overlay hide"><div class="box"><h2>Paused</h2><p>The fight is frozen until you come back</p>
@@ -303,7 +305,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=67;
+const BUILD=68;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2447,7 +2449,7 @@ class Fighter{
     const slide=Hd.slide*clamp((cz-.46)/.16,0,1);
     out.addScaledVector(f,slide);
     // a spear is held low with the back hand by the hip and the shaft running forward past the front hand; a thrust drives the back hand out
-    if(this.sword&&this.sword.def.kind==='spear'){const sg=this.mainArm==='L'?-1:1;out.copy(this.chest).addScaledVector(_r,this.ctrl.x*.35-.03*sg).addScaledVector(u,this.ctrl.y*.45-.14).addScaledVector(f,.02+Math.max(0,cz-.42)*1.5+slide*.6);}
+    if(this.sword&&this.sword.def.kind==='spear'){const sg=this.mainArm==='L'?-1:1;out.copy(this.chest).addScaledVector(_r,Math.max(.15,.21+this.ctrl.x*sg*.3)*sg).addScaledVector(u,this.ctrl.y*.4-.3).addScaledVector(f,.1+Math.max(0,cz-.42)*1.5+slide*.6);}   // the back hand at the hip on its own side, so the shaft runs past the body (and its butt out behind the hip), not through the chest
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
     // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
@@ -2507,11 +2509,12 @@ class Fighter{
       if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     const onGround=this.pos.y<=.001&&this.fallT==null;
     run=run&&!exhausted&&!this.crouch&&onGround;
-    const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45)run=false;
+    const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45||(this.gut||0)>=1)run=false;   // an opened belly: no running
+    if(this.heartT&&simTime>this.heartT){this.heartT=0;if(this.alive&&!this.downed&&NET.mode!=='client'){this.goDown(this.lastHitBy);return;}}   // the heart gives out: down in a second or two
     const drag=this.dragT>simTime;if(drag)run=false;
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
-    let spd=(drag?.5:1)*(1-.55*legF)*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
+    let spd=(drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(9*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -2529,7 +2532,7 @@ class Fighter{
     else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;if(this.pos.y<=0){this.pos.y=0;this.vy=0;}}
     this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
-    if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
+    if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.fwd(_f);this.kickRun=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z);this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
     // a throw: Q held winds the weapon back over the shoulder; letting go drives the arm through and the weapon leaves that hand
     if(this.throwReq){this.throwReq=false;if(this.sword&&this.mainArm&&this.throwT<0)this.throwT=0;}
@@ -2545,8 +2548,9 @@ class Fighter{
     if(this.commit&&ts>3)this.useStamina(1.5*h);
     // as in Half Sword there's no bar: you feel it. Blood loss lowers how much wind you have and how fast it comes back,
     // and you only really get it back standing still
-    {const cap=35+65*clamp(this.hp/100,0,1),mv=Math.hypot(this.vel.x,this.vel.z);
-      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?30:22)*(.45+.55*clamp(this.hp/100,0,1))*(mv>3?.25:mv>.8?.7:1)*h);
+    {const lu=this.lung||0,cap=(35+65*clamp(this.hp/100,0,1))*(1-.4*lu),mv=Math.hypot(this.vel.x,this.vel.z);   // a pierced lung: less wind, and it comes back slowly
+      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?30:22)*(.45+.55*clamp(this.hp/100,0,1))*(mv>3?.25:mv>.8?.7:1)*(1-.5*lu)*h);
+      if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2);}   // coughing blood
       if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
     if(legs&&onGround){
@@ -2561,6 +2565,9 @@ class Fighter{
       if(HYBRID&&m2>.3&&stum>1.5){this.fwd(_f);if((this.bal.x*_f.x+this.bal.z*_f.z)<-.75*m2&&Math.random()<h*3)m2=.5;}   // driven backwards hard, the heels catch and you go down
       if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar(2.4/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
+    if(!this.isPlayer&&!this.remote&&(this.blindT>simTime||this.blindOff)){const bo=this.blindOff||(this.blindOff=V()),pa=this.blindPrev||(this.blindPrev=V());   // blinded: their aim wanders
+      if(this.blindT>simTime){if(Math.random()<h*3)bo.set(rand(-.35,.35),rand(-.3,.3),rand(-.1,.1));}else bo.set(0,0,0);
+      this.ctrlT.x+=bo.x-pa.x;this.ctrlT.y+=bo.y-pa.y;this.ctrlT.z+=bo.z-pa.z;pa.copy(bo);if(!(this.blindT>simTime))this.blindOff=null,this.blindPrev=null;}
     if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
     if(!this.sword&&this.mainArm)this.stepFists(h);
     if(this.sword&&this.mainArm){
@@ -2575,9 +2582,18 @@ class Fighter{
     this.fwd(_f);
     for(const o of fighters){
       if(o===this||!o.alive||o.ragdoll)continue;_v.subVectors(o.pos,this.pos).setY(0);const d=_v.length();if(d>1.45||d<.01)continue;if(_v.dot(_f)/d<.5)continue;
-      this.kickHit=true;o.vel.addScaledVector(_f,4.5);o.shove(_f,3.4);o.stagger=Math.max(o.stagger,.85);o.useStamina(24);if(o.sword)swordShove(o.sword,_f,3.5);
-      if(o.kickT>=0)o.kickT=-1;sfx('kick',o.chest,1);o.addFlinch(_f,.35);
-      if(o.stamina<18){o.knockdown(rand(1.4,2.2),_v.copy(_f).multiplyScalar(3.5).setY(.6),o.chest);tell(this,'Knocked down','gold');}
+      // a kick is a shove with the leg: it staggers and pushes them back a step or two. It takes them off their feet only when
+      // something is already working for it: a running kick, a man already off balance or leaning into it, mid-swing, spent,
+      // or kicked from the side or behind where his own legs trip him (it used to launch everyone it touched)
+      this.kickHit=true;
+      const run=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z,this.kickRun||0),into=Math.max(0,-(o.vel.x*_f.x+o.vel.z*_f.z)),pw=1+run*.35+into*.25;
+      o.fwd(_r);const facing=-(_r.x*_f.x+_r.z*_f.z);   // 1: kicked square in the chest; 0: from the side; -1: from behind
+      const bm=Math.hypot(o.bal.x,o.bal.z),lean=bm>1e-3?Math.max(0,(o.bal.x*_f.x+o.bal.z*_f.z)/bm)*bm:0;
+      const busy=o.commit||(!o.isPlayer&&!o.remote&&o.ai.phase==='strike')||o.kickT>=0||(o.sword&&o.sword.power>.5);
+      o.vel.addScaledVector(_f,Math.min(4.2,1.5+run*.55+into*.4));o.shove(_f,Math.min(3,1.1*pw));o.stagger=Math.max(o.stagger,.55+.1*pw);o.useStamina(16+6*pw);if(o.sword)swordShove(o.sword,_f,2.4*pw);
+      if(o.kickT>=0)o.kickT=-1;sfx('kick',o.chest,Math.min(1.2,.7+.2*pw));o.addFlinch(_f,.28+.06*pw);
+      const topple=(o.stamina<12?.9:0)+lean*3+(busy?.4:0)+(facing<.3?(.3-facing)*.7:0)+Math.max(0,run-2)*.25+(o.crouch?-.2:0)+(Math.max(o.limbF('legL'),o.limbF('legR'))>.4?.2:0);
+      if(Math.random()<topple){o.knockdown(rand(1.1,1.9),_v.copy(_f).multiplyScalar(1.6+run*.4).setY(.4),o.chest);tell(this,'Knocked down','gold');}
       if(this.isPlayer){note('Kicked','sm');shake(.25);}if(o.isPlayer){hudHurt(10);shake(.7);}
       if(!o.isPlayer){o.ai.phase='guard';o.ai.block=0;}
       break;
@@ -3393,8 +3409,45 @@ function bladeContact(s,B){
       moved=true;break;}}
   if(moved){s.constrain(H);if(J>.4&&B.alive&&!B.ragdoll&&O){_hv.copy(_cn).negate();B.shove(_hv,Math.min(1.2,J*s.def.weight*.05));}}
 }
+const _ov=V(),_ow=V(),_ox=V(),_oz=V();
+// organs: where in the body a point or an edge goes in decides what it does, not just how hard it landed. Worked out in the
+// struck body's own frame (forward, right, along the spine). Each needs a real wound (after armour): a graze does nothing extra
+function organAt(B,cap,P,mode,dmg){
+  const stab=mode==='thrust'||mode==='poke',cut=mode==='cut';B.fwd(_oz);B.right(_ox);
+  _ov.subVectors(cap.b,cap.a);const L2=_ov.lengthSq()||1e-6,u=clamp(_ow.subVectors(P,cap.a).dot(_ov)/L2,0,1);_ow.copy(cap.a).addScaledVector(_ov,u);_ow.subVectors(P,_ow);
+  const lx=_ow.dot(_ox),lz=_ow.dot(_oz),front=lz>.02,back=lz<-.04;   // lx > 0: their right; heart is on their left
+  if(cap.zone==='head'){if(!front)return mode==='blunt'&&dmg>14?{name:'skull',mul:1.15,add:0,daze:1}:null;
+    if(mode==='thrust'&&dmg>5)return {name:'eye',mul:1.4,add:4,blind:6,daze:1,cause:'stabbed through the eye'};   // a real thrust; a glancing poke is only a scratch
+    if(cut&&dmg>5)return {name:'face',mul:1.25,add:2,blind:3+dmg/12};
+    if(mode==='blunt'&&dmg>8)return {name:'face',mul:1.25,add:0,blind:1.5,daze:1};return null;}
+  if(cap.zone==='neck'){if(back&&(stab&&dmg>14||dmg>32))return {name:'spine',mul:1.1,add:6,spine:1,cause:'broke their neck'};return null;}
+  if(cap.zone!=='torso')return null;
+  if(cap.ba==='Spine2'){   // chest
+    if(front&&stab&&dmg>=9&&lx<.03&&lx>-.12&&u<.8)return {name:'heart',mul:1,add:20,heart:1,cause:'stabbed through the heart'};
+    if((stab&&dmg>=9)||(cut&&dmg>=30))return back&&Math.abs(lx)<.04&&!stab?{name:'spine',mul:1,add:6,spine:1}:{name:'lung',mul:1,add:6,lung:.6};
+    if(back&&Math.abs(lx)<.05&&dmg>=34)return {name:'spine',mul:1,add:6,spine:1};return null;}
+  // belly and lower back
+  if(front&&cut&&dmg>=16)return {name:'belly',mul:1,add:10,belly:1,cause:'gutted'};
+  if(front&&stab&&dmg>=8)return {name:'gut',mul:1,add:6,gut:.5};
+  if(back&&stab&&dmg>=8)return {name:'kidney',mul:1,add:8,kidney:1};
+  if(back&&Math.abs(lx)<.05&&dmg>=34)return {name:'spine',mul:1,add:6,spine:1};
+  return null;}
+function organHurt(A,B,o,dmg,dir,P){
+  const bad=t=>tell(B,t,'red'),good=t=>tell(A,t,'gold');
+  if(o.heart){B.addBleed(14,25);B.heartT=simTime+rand(.8,1.6);B.startClutch('chest',40);bad('Your heart is pierced');good('Through the heart');}
+  if(o.lung){B.lung=Math.min(1,(B.lung||0)+o.lung);B.addBleed(.7+dmg*.02,45);B.useStamina(20);bad('You can\'t get your breath');}
+  if(o.belly){B.gut=1;B.addBleed(2.4+dmg*.04,35);B.startClutch('belly',dmg*1.6);B.useStamina(25);B.stagger=Math.max(B.stagger,.6);bad('Your belly is laid open');good('Gutted');}
+  if(o.gut){B.gut=Math.max(B.gut||0,o.gut);B.addBleed(1+dmg*.02,60);bad('Stabbed in the gut');}
+  if(o.kidney){B.addBleed(2.6,25);B.stagger=Math.max(B.stagger,.5);bad('Stabbed in the back');}
+  if(o.spine&&!B.ragdoll){B.knockdown(3.5,dir.clone().multiplyScalar(1.2),P);for(const k of ['legL','legR'])B.limbs[k].hp*=.3;bad('Your legs won\'t answer');good('Down and not getting up fast');}
+  if(o.blind){B.blindT=Math.max(B.blindT||0,simTime+o.blind);if(B.remote)netEv(['bl',B.id,r3(o.blind)]);if(o.name==='eye')bad('Your eye!');else bad('Blood in your eyes');B.addBleed(.4+dmg*.01,15);}
+  if(o.daze&&B.alive&&!B.ragdoll&&B.bodyHit)B.bodyHit('Head',dir,4,.45);}
 function resolveHit(A,B,cap,t,P,pv){
   if(simTime<CD_END)return;
+  // the neck runs from the base (Neck bone) up to the jaw, about a quarter of the way up the head; on these bodies the Head
+  // bone sits almost at the base, so the head and chest capsules used to swallow every blow to the neck (no beheadings)
+  if(cap.zone==='head'||cap.zone==='torso'){const nc=B.caps[1],hc=B.caps[0];if(nc&&nc.on&&hc){_ox.copy(hc.a).lerp(hc.b,.27);_ov.subVectors(_ox,nc.a);const L2=_ov.lengthSq()||1e-6,u=_ow.subVectors(P,nc.a).dot(_ov)/L2;
+    if(u>.08&&u<1){_ow.copy(nc.a).addScaledVector(_ov,u);if(P.distanceTo(_ow)<.2)cap=nc;}}}   // (the blade is caught at the edge of the big capsules, a hand's breadth out, already level with the neck: that swing is going through it)
   const s=A.sword,W=s.def,phys=!!pv;if(phys)_va.copy(pv);else s.velAt(t,_va);_rel.subVectors(_va,B.vel);const speed=_rel.length();
   if(speed<2.2){if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0,soft:0};S.soft=(S.soft||0)+1;}if(!phys){s.Tp.lerp(s.T,.3);_hv.subVectors(B.chest,s.H);const l=_hv.length(),vn=l>1e-4?s.Hv.dot(_hv)/l:0;if(vn>0)s.Hv.addScaledVector(_hv,-vn*.5/l);}return;}   // a resting touch is not a blow, and doesn't use up the next one; it only checks the push into the body (it used to brake the hand outright every step, so a weapon resting on someone froze in place and then sprang back)
   A.hitCd.set(B.id,simTime+.3);
@@ -3425,11 +3478,12 @@ function resolveHit(A,B,cap,t,P,pv){
   let dmg=Math.min(base*armorF,mode==='thrust'||mode==='poke'?50:80);   // a single thrust can't fell a fighter outright
   if(window.__stats){const S=window.__stats[W.id]??={hits:0,dmg:0,modes:{},zones:{},speed:0,glance:0};S.hits++;S.dmg+=dmg;S.modes[mode]=(S.modes[mode]||0)+1;S.zones[cap.zone]=(S.zones[cap.zone]||0)+1;S.speed+=speed;}
   const glance=prot>.2&&(mode==='cut'||mode==='thrust')&&armorF<.8&&dmg<12;
-  yardHit(A,W.name,mode,cap.zone,dmg,speed,glance,prot);
+  const organ=glance||B.dummy?null:organAt(B,cap,P,mode,dmg);if(organ)dmg=Math.min(dmg*organ.mul+organ.add,mode==='thrust'||mode==='poke'?60:85);
+  yardHit(A,W.name,mode,organ?organ.name:cap.zone,dmg,speed,glance,prot);
   let sev=null;
   if(mode==='cut'&&W.sever>0&&cap.sever&&!glance){
     const need=7+prot*7*(1-pen)-(W.sever-1)*3+(1-Math.min(arcF,1))*4;
-    if(cap.zone==='neck'){if(speed>need+1&&Math.random()<.35+(speed-need-1)/3)sev='Head';}
+    if(cap.zone==='neck'){if(speed>need+1&&Math.random()<.5+(speed-need-1)/3)sev='Head';}
     else if(cap.zone!=='head'&&cap.zone!=='torso'){const L=B.limbs[cap.zone];L.hp-=dmg;if(speed>need+2.5||(L.hp<=0&&speed>need-1.5)||(speed>need&&Math.random()<(speed-need)/3))sev=cap.sever;}
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
   if(B.noSever)sev=null;
@@ -3457,7 +3511,8 @@ function resolveHit(A,B,cap,t,P,pv){
     else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive)B.damage(body,A,'dismembered');}
   } else {
     if(!glance&&dmg>4){addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');if(mode!=='flat'&&mode!=='haft'&&B.prot(cap.zone)<.5)s.bloody(Math.min(.5,dmg/55));}
-    B.damage(body,A,W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
+    B.damage(organ?dmg:body,A,organ&&organ.cause?organ.cause:W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
+    if(organ&&B.alive)organHurt(A,B,organ,dmg,dir,P);
     if(B.alive&&!glance&&dmg>4){   // where it landed decides what it does: the wound bleeds, a limb loses its use, a hand goes to the hurt
       if(B.limbs[cap.zone]&&cap.zone!=='head')B.injureLimb(cap.zone,A);
       const art=cap.zone==='neck',stab=mode==='thrust'||mode==='poke';
@@ -3833,7 +3888,7 @@ function tell(f,text,cls){if(!f)return;if(f.isPlayer)note(text,cls);else if(f.re
 let hmT=null;function hitMarker(kill){return;const c=document.getElementById('cross');c.classList.remove('hit','kill');void c.offsetWidth;c.classList.add(kill?'kill':'hit');clearTimeout(hmT);hmT=setTimeout(()=>c.classList.remove('hit','kill'),kill?420:160);}
 function note(text,cls=''){if(cls!=='red'||!SIM_NOTE(text))return;const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
 // the only notes left are what your own body tells you
-const SIM_NOTE=t=>/arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside/i.test(t);
+const SIM_NOTE=t=>/arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside|heart|breath|belly|gut|eye|back|legs won/i.test(t);
 let hurtV=0;function hudHurt(d){hurtV=Math.min(1,hurtV+d/40);}
 // a swell of the real crowd recording: the stands roar (or draw breath) and settle back into their murmur
 function crowdBurst(x,att,dec,rate,hp,lp){const t=AC.currentTime,b=AMB.crowd,src=AC.createBufferSource();src.buffer=b;src.playbackRate.value=rate*(.97+Math.random()*.06);
@@ -4061,6 +4116,7 @@ function updateHUD(dt){
         hud.ptext.textContent=t;hud.prompt.style.setProperty('--tier',TIER_CSS[it.def.tier]);}}
   }
   breathStep(dt);
+  {const b=el('blind'),k=player&&player.alive&&player.blindT>simTime?clamp((player.blindT-simTime)/2.5,0,1):0;const o=String(Math.round(k*100)/100);if(b.style.opacity!==o)b.style.opacity=o;}   // blood in your eyes: the edges go dark red until you blink it clear
   hurtV=Math.max(0,hurtV-dt*.8);{const lost=player&&player.alive?clamp((80-player.hp)/80,0,1):0;grade.uniforms.uHurt.value=hurtV+lost*(.45+Math.sin(simTime*(4+lost*3))*.08*lost);if(player&&player.alive&&!END)grade.uniforms.uDesat.value=lost*.55;}
   grade.uniforms.uZone.value=player&&player.burn>0&&player.alive?(player.outside?1:.55):0;
   if(player){const b=player.burn>0&&player.alive;if(b&&!wasBurning)note('You are on fire','red');wasBurning=b;}
@@ -4833,6 +4889,7 @@ function clientEvents(ev){
     case 'q':{const f=NET.puppets.get(e[1]);if(f){f.clutchP=e[2];f.clutchT=simTime+e[3];}break;}
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
+    case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
     case 'q':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
