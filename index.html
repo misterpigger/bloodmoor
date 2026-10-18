@@ -198,6 +198,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
       <button class="map eng" data-eng="physics" role="radio" aria-checked="false"><b>Rigid body</b><span>Real weight, solid blades and limbs</span></button>
     </div>
+    <div class="maps" style="margin-top:10px"><button class="map" id="hybridBtn" aria-pressed="false"><b>Stumbles: off</b><span>Test: catch-up steps and stumbles when knocked off balance</span></button></div>
     <div class="mp">
       <div class="mprow"><button class="map" id="hostBtn"><b>Host for friends</b><span>Get a room code to share</span></button>
         <div class="join"><input id="joinCode" maxlength="5" placeholder="CODE" aria-label="Room code" spellcheck="false" autocomplete="off"><button id="joinBtn">Join</button></div></div>
@@ -295,7 +296,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=61;
+const BUILD=62;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2238,7 +2239,7 @@ function clearWounds(B){if(B.bloodSrc)B.bloodSrc.length=0;for(const o of B.wound
 let GLTF=null;
 const fighters=[],debris=[],freeSwords=[],loot=[];
 // extra leg clips from fighters.json (retargeted by tools/anim-retarget.mjs), sampled by hand and blended over the mixer's pose
-const GAIT_ON=/[?&]physgait/.test(location.search);   // the stepping gait (Build 60) is off: the player preferred the walk cycle; ?physgait tries it
+const GAIT_ON=/[?&]physgait/.test(location.search);let HYBRID=/[?&]hybrid/.test(location.search)||(()=>{try{return localStorage.getItem('bloodmoor-hybrid')==='1';}catch(e){return false;}})();   // hybrid: the walk cycle, but real catch-up steps and stumbles when knocked off balance   // the stepping gait (Build 60) is off: the player preferred the walk cycle; ?physgait tries it
 const GUARD={};function initGuard(){for(const nm of ['guard','crouchwalk']){const c=GLTF.animations.find(a=>a.name===nm);if(!c)continue;
   GUARD[nm]={d:c.duration,tracks:c.tracks.filter(t=>t.name.endsWith('.quaternion')).map(t=>({bone:t.name.split('.')[0].replace('mixamorig','').replace(':',''),ip:t.createInterpolant()}))};}}
 const PALETTES=[['#7a1d18','#c9a227','#2a2420',1],['#1d3768','#d8d0bc','#24262b',1],['#2f5130','#e0c060','#2b2a22',0],['#5a3a6a','#c8c0b0','#26222a',1],['#8a6a3a','#3a2a1a','#3a2e22',0],['#2a2a2a','#a02020','#1e1e1e',1],['#b8ad98','#7a1f1f','#3a3028',1],['#3a5a7a','#e8e0d0','#2a2e34',0],['#6a2a1a','#1a1a1a','#2a1e1a',1],['#c8a060','#5a2a1a','#30261c',1],['#40506a','#b03030','#22262c',1],['#556b2f','#2b2b2b','#262a1e',0]];
@@ -2451,8 +2452,8 @@ class Fighter{
     const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
-    const vx0=this.vel.x,vz0=this.vel.z;
-    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=onGround?(stum>0?20:run?4.5:7):1.6;   // a body takes a moment to get going and to stop
+    const vx0=this.vel.x,vz0=this.vel.z;if(HYBRID&&(stum>0||bm>.11))this.distT=simTime;
+    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=(onGround?(stum>0?20:run?4.5:7):1.6)/(HYBRID&&stum<=0?1+armN*.09:1);   // (hybrid: armour is weight to get moving and to stop)   // a body takes a moment to get going and to stop
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
     if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
     if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
@@ -2490,7 +2491,8 @@ class Fighter{
       this.balV.x+=(-K*sat*this.bal.x-C*this.balV.x)*h;this.balV.z+=(-K*sat*this.bal.z-C*this.balV.z)*h;
       this.bal.x+=this.balV.x*h;this.bal.z+=this.balV.z*h;
       if(stum>0)this.stagger=Math.max(this.stagger,.12);
-      const m2=Math.hypot(this.bal.x,this.bal.z);
+      let m2=Math.hypot(this.bal.x,this.bal.z);
+      if(HYBRID&&m2>.3&&stum>1.5){this.fwd(_f);if((this.bal.x*_f.x+this.bal.z*_f.z)<-.75*m2&&Math.random()<h*3)m2=.5;}   // driven backwards hard, the heels catch and you go down
       if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar(2.4/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
     if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
@@ -2720,7 +2722,7 @@ class Fighter{
   }
   faceDir(d,h,rate){const want=Math.atan2(d.x,d.z);this.yaw+=clamp(wrapA(want-this.yaw),-rate*h,rate*h);}
   gaitStep(dt,feet,sp){const B=this.bones,G=this.gait||(this.gait={t:0}),v=this.vel,GW=this.gaitW;G.t+=dt;
-    const Ts=clamp(.42-sp*.05,.21,.42),dbl=clamp(.1-sp*.03,0,.1),ld=sp>2.6?.42:.5;   // a step's swing time, and how long both feet share the weight first
+    const Ts=HYBRID?clamp(.36-sp*.025,.27,.36):clamp(.42-sp*.05,.21,.42),dbl=clamp(.1-sp*.03,0,.1),ld=sp>2.6?.42:.5;   // a step's swing time, and how long both feet share the weight first
     this.fwd(_f);this.right(_r);const sw=(this.stillAmt||0)*(this.stanceAmt||0)/.4,leadS=this.mainArm==='L'?'Right':'Left';
     const hurt=Math.max(this.limbF('legL'),this.limbF('legR')),bx=this.bal.x*1.6,bz=this.bal.z*1.6;
     const home=(s,ahead,out)=>{const side=s==='Right'?1:-1,lat=.1+.06*sw,stg=(s===leadS?.15:-.11)*sw;
@@ -2728,7 +2730,7 @@ class Fighter{
     const sides=['Left','Right'].filter(s=>feet[s]);
     for(const s of sides)if(!G[s]){G[s]={at:feet[s].clone(),from:V(),to:V(),t:1,dur:Ts,land:-1,lift:0};}
     const swing=sides.find(s=>G[s].t<1);
-    if(!swing){let worst=null,we=0;for(const s of sides){home(s,0,_t2);const e=Math.hypot(_t2.x-G[s].at.x,_t2.z-G[s].at.z)*(s===this._lastStep?.85:1);if(e>we){we=e;worst=s;}}
+    if(!swing&&(!HYBRID||GAIT_ON||simTime-(this.distT??-9)<.35)){let worst=null,we=0;for(const s of sides){home(s,0,_t2);const e=Math.hypot(_t2.x-G[s].at.x,_t2.z-G[s].at.z)*(s===this._lastStep?.85:1);if(e>we){we=e;worst=s;}}
       const o=sides.find(s=>s!==worst),ready=!o||G.t-G[o].land>dbl||we>.45;
       if(worst&&ready&&we>.07+.03*(1-Math.min(1,sp))){const g=G[worst];g.from.copy(g.at);g.t=0;g.dur=Ts*(we>.5?.72:1)*(1+hurt*.5);this._lastStep=worst;}}
     else if(sides.length===2){const o=sides.find(s=>s!==swing);home(o,0,_t2);if(Math.hypot(_t2.x-G[o].at.x,_t2.z-G[o].at.z)>.75){const g=G[o];g.from.copy(g.at);g.t=.15;g.dur=Ts*.7;}}   // shoved hard: both feet scramble
@@ -2830,7 +2832,9 @@ class Fighter{
     // the physical gait: the body is a weight carried on two legs, and a foot steps out to wherever it must land to keep that weight over
     // the feet (where the body will be, a half stride ahead, pushed further by a blow). Walking, running, turning and stumbling all come
     // out of that one rule, instead of a looped walk cycle
-    const gaitOK=GAIT_ON&&this.alive&&!this.ragdoll&&!airborne&&kk<=0&&this.slideT<=0&&this.fallT==null;this.gaitW=lerp(this.gaitW||0,gaitOK?1:0,1-Math.exp(-(gaitOK?5:16)*dt));
+    const disturbed=HYBRID&&simTime-(this.distT??-9)<.35||(HYBRID&&this.gait&&['Left','Right'].some(s=>this.gait[s]&&this.gait[s].t<1));
+    if(HYBRID&&(this.gaitW||0)<.02&&!disturbed)this.gait=null;   // start fresh from wherever the walk cycle left the feet
+    const gaitOK=(GAIT_ON||disturbed)&&this.alive&&!this.ragdoll&&!airborne&&kk<=0&&this.slideT<=0&&this.fallT==null;this.gaitW=lerp(this.gaitW||0,gaitOK?1:0,1-Math.exp(-(gaitOK?(HYBRID?14:5):(HYBRID?4:16))*dt));
     if(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
@@ -3861,6 +3865,8 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
+function showHybrid(){const b=document.getElementById('hybridBtn');b.querySelector('b').textContent='Stumbles: '+(HYBRID?'on':'off');b.setAttribute('aria-pressed',HYBRID?'true':'false');b.classList.toggle('on',HYBRID);}
+document.getElementById('hybridBtn').addEventListener('click',()=>{HYBRID=!HYBRID;try{localStorage.setItem('bloodmoor-hybrid',HYBRID?'1':'0');}catch(e){}showHybrid();});showHybrid();
 function startGame(){document.body.classList.toggle('sim',MODE!=='br');
   if(NET.mode==='client')return;
   flushMapSwitch();
