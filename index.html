@@ -307,7 +307,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=71;
+const BUILD=72;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -771,46 +771,49 @@ function villageVisual(dt){for(const H of HOUSES){
 // ---- the tavern: a timbered hall with a bar, a hearth, tables and benches you can stand on, and a gallery up a stair whose
 // rail gives way when a body is driven through it. A brawl: everyone starts bare-handed and fights with what's lying about
 const TAV={rails:[],spots:[]};
-function buildTavern(){const W=9.6,D=6.6,Hc=4.8;TAV.rails=[];TAV.spots=[];
+function buildTavern(){const W=13,D=9,Hc=5.2;TAV.rails=[];TAV.spots=[];
   {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(-Math.PI/2);scaleUV(g,W,D);const m=new THREE.Mesh(g,MATS.woodLight);m.receiveShadow=true;world.add(m);}
   addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,D,Math.PI));addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,-D));addGeo('plaster1',wallPlane(2*D,Hc),T(W,Hc/2,0,-Math.PI/2));addGeo('plaster1',wallPlane(2*D,Hc),T(-W,Hc/2,0,Math.PI/2));
   {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(Math.PI/2);scaleUV(g,W/2,D/2);addGeo('plaster0',g,T(0,Hc,0));}
-  for(let x=-W+1;x<W;x+=2.2)addGeo('beam',boxUV(.22,.28,2*D,1),T(x,Hc-.14,0));for(const z of [-D+.1,D-.1])addGeo('beam',boxUV(2*W,.25,.2,1),T(0,Hc-.12,z));
-  for(let x=-W+.1;x<=W;x+=3.2)for(const z of [-D+.06,D-.06])addGeo('beam',boxUV(.2,Hc,.12,1),T(x,Hc/2,z));
+  for(let x=-W+1;x<W;x+=2.4)addGeo('beam',boxUV(.24,.3,2*D,1),T(x,Hc-.15,0));for(const z of [-D+.1,D-.1])addGeo('beam',boxUV(2*W,.26,.2,1),T(0,Hc-.13,z));
+  for(let x=-W+.1;x<=W;x+=3.25)for(const z of [-D+.06,D-.06])addGeo('beam',boxUV(.2,Hc,.12,1),T(x,Hc/2,z));
+  for(let z=-D+.1;z<=D;z+=3)for(const x of [-W+.06,W-.06])addGeo('beam',boxUV(.12,Hc,.2,1),T(x,Hc/2,z));
   addGeo('stone',boxUV(2*W,.5,.1,1),T(0,.25,-D+.05));addGeo('stone',boxUV(2*W,.5,.1,1),T(0,.25,D-.05));
   addBox(-W-1,W+1,D,D+1,Hc);addBox(-W-1,W+1,-D-1,-D,Hc);addBox(W,W+1,-D,D,Hc);addBox(-W-1,-W,-D,D,Hc);
-  // the door (shut) and dark windows on the south wall
-  addGeo('wood',boxUV(1.5,2.3,.12,1),T(0,1.15,-D+.07));for(const y of [.5,1.8])addGeo('iron',boxUV(1.55,.08,.14,1),T(0,y,-D+.08));
-  for(const x of [-6,-3.2,3.2,6]){addGeo('winDark',new THREE.BoxGeometry(.9,1.1,.06),T(x,2,-D+.04));addGeo('beam',boxUV(1.1,.1,.14,1),T(x,1.4,-D+.08));}
-  // the hearth on the west wall
-  addGeo('stone',boxUV(.9,1.4,2.6,1.5),T(-W+.45,.7,-2.6));addGeo('stone',boxUV(.7,3.4,1.8,1.5),T(-W+.35,3.1,-2.6));addGeo('dirt',boxUV(.5,.05,1.6,1),T(-W+.7,.42,-2.6));
-  addBox(-W,-W+.9,-3.9,-1.3,1.4);addFlame(-W+.62,.45,-2.6,1.7,true);addFlame(-W+.62,.45,-2.2,1.1,false);addFlame(-W+.62,.45,-3,1.1,false);
-  TAV.spots.push(['poker',-W+1.25,0,-1.1]);
+  // the door (shut) and windows on the south wall, with a little evening light still in them
+  addGeo('wood',boxUV(1.6,2.4,.12,1),T(0,1.2,-D+.07));for(const y of [.5,1.9])addGeo('iron',boxUV(1.65,.08,.14,1),T(0,y,-D+.08));
+  for(const x of [-9,-5,5,9]){addGeo('glassLit',new THREE.BoxGeometry(1,1.2,.06),T(x,2.1,-D+.04));addGeo('beam',boxUV(1.2,.1,.14,1),T(x,1.45,-D+.08));}
+  // the hearth on the west wall, well clear of the stair
+  const hz=-5.2;addGeo('stone',boxUV(.95,1.4,2.8,1.5),T(-W+.48,.7,hz));addGeo('stone',boxUV(.75,Hc-1.4,1.9,1.5),T(-W+.38,1.4+(Hc-1.4)/2,hz));addGeo('dirt',boxUV(.5,.05,1.7,1),T(-W+.72,.42,hz));
+  addBox(-W,-W+.95,hz-1.4,hz+1.4,1.4);addFlame(-W+.65,.45,hz,1.8,true);addFlame(-W+.65,.45,hz+.45,1.1,false);addFlame(-W+.65,.45,hz-.45,1.1,false);
+  TAV.spots.push(['poker',-W+1.3,0,hz+1.8]);
   // the bar along the east wall, bottles on the shelf behind it, barrels at its end
-  const bx=W-1.6;addGeo('wood',boxUV(.7,1.1,7,1.5),T(bx,.55,-.3));addGeo('woodLight',boxUV(.85,.06,7.2,1.5),T(bx,1.13,-.3));addBox(bx-.42,bx+.42,-3.9,3.3,1.05);FLOORS.push({x0:bx-.42,x1:bx+.42,z0:-3.9,z1:3.3,h:1.16});
-  addGeo('wood',boxUV(.35,.05,6,1),T(W-.2,1.6,-.3));addGeo('wood',boxUV(.35,.05,6,1),T(W-.2,2.2,-.3));
-  for(let z=-3;z<2.5;z+=.32){addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,1.76,z));if(Math.random()<.6)addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,2.36,z+.16));}
-  barrel(W-.6,4.2);barrel(W-.6,5.0);barrel(W-1.4,5.4);
-  for(const z of [-3.2,-1.6,0,1.6,2.8])TAV.spots.push([z<-1?'knife':z>2?'cleaver':z===0?'bottle':'mug',bx,1.17,z]);
-  // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both
-  for(const [tx,tz] of [[-4.6,-3.2],[-4.6,.6],[0,-3.2],[0,.6],[3.6,-1.4]]){addGeo('wood',boxUV(2.2,.08,.95,1),T(tx,.76,tz));for(const sx of [-.95,.95])for(const sz of [-.35,.35])addGeo('wood',boxUV(.09,.72,.09,1),T(tx+sx,.36,tz+sz));
+  const bx=W-1.7;addGeo('wood',boxUV(.75,1.1,9.5,1.5),T(bx,.55,-1.2));addGeo('woodLight',boxUV(.9,.06,9.7,1.5),T(bx,1.13,-1.2));addBox(bx-.45,bx+.45,-6,3.6,1.05);FLOORS.push({x0:bx-.45,x1:bx+.45,z0:-6,z1:3.6,h:1.16});
+  addGeo('wood',boxUV(.35,.05,8.5,1),T(W-.2,1.6,-1.2));addGeo('wood',boxUV(.35,.05,8.5,1),T(W-.2,2.2,-1.2));
+  for(let z=-5.2;z<2.8;z+=.32){addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,1.76,z));if(Math.random()<.6)addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,2.36,z+.16));}
+  barrel(W-.6,5);barrel(W-.6,5.8);barrel(W-1.4,6.1);barrel(W-.7,-7.6);barrel(W-1.5,-7.9);
+  for(const z of [-5.4,-4,-2.4,-1,.6,2.4])TAV.spots.push([z<-4.5?'knife':z>2?'cleaver':z===-1?'bottle':z===.6?'knife':'mug',bx,1.17,z]);
+  // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both. Open floor in the middle
+  for(const [tx,tz] of [[-8,-6],[-8,1.2],[-3.6,-6],[3.6,-6],[-3.6,3.4],[3.6,3.4],[7.4,-2]]){addGeo('wood',boxUV(2.2,.08,.95,1),T(tx,.76,tz));for(const sx of [-.95,.95])for(const sz of [-.35,.35])addGeo('wood',boxUV(.09,.72,.09,1),T(tx+sx,.36,tz+sz));
     addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);FLOORS.push({x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8});
     for(const sz of [-.85,.85]){addGeo('wood',boxUV(2.1,.07,.32,1),T(tx,.41,tz+sz));for(const sx of [-.85,.85])addGeo('wood',boxUV(.07,.42,.24,1),T(tx+sx,.21,tz+sz));FLOORS.push({x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44});}
-    addFlame(tx+.3,.8,tz,.22,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
-  // the gallery along the north wall, 2.6 m up, with a stair up the west wall and a rail along its edge
-  const gh=2.6,gz0=D-2.4;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
-  addGeo('woodLight',boxUV(2*W-1.2,.12,2.4,1.5),T(.6,gh-.06,gz0+1.2));for(let x=-W+1.6;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.4,1),T(x,gh-.2,gz0+1.2));
-  for(const x of [-W+1.4,-3.6,0,3.6,W-.3]){addGeo('beam',boxUV(.2,gh,.2,1),T(x,gh/2,gz0+.1));addCircle(x,gz0+.1,.14,gh-.15);}
-  const sz0=-.9;FLOORS.push({x0:-W,x1:-W+1.2,z0:sz0,z1:gz0+.4,ramp:'z',a0:sz0,a1:gz0,h0:0,h1:gh});
-  for(let i=0;i<10;i++){const z=sz0+(i+.5)*(gz0-sz0)/10;addGeo('woodLight',boxUV(1.15,.06,(gz0-sz0)/10+.02,1),T(-W+.6,(i+1)/10*gh-.03,z));}
-  addGeo('beam',boxUV(.12,.12,Math.hypot(gz0-sz0,gh)+.2,1),T(-W+1.2,gh/2+.55,(sz0+gz0)/2,Math.atan2(gh,gz0-sz0)));addBox(-W+1.2,-W+1.35,sz0,gz0,gh+1.1);
-  for(let x=-W+1.3;x<W-.2;x+=1.9){const x1=Math.min(W-.2,x+1.9),g=new THREE.Group();g.position.set((x+x1)/2,gh,gz0);
-    for(const y of [.45,1])g.add(Object.assign(new THREE.Mesh(boxUV(x1-x,.08,.06,1),MATS.wood),{castShadow:true}));g.children[0].position.y=.45;g.children[1].position.y=1;
+    addFlame(tx+.3,.8,tz,.24,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
+  // the gallery along the north wall, 2.6 m up, with a long easy stair up the west wall and a rail along its edge
+  const gh=2.6,gz0=D-2.6;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
+  addGeo('woodLight',boxUV(2*W,.12,2.6,1.5),T(0,gh-.06,gz0+1.3));for(let x=-W+.4;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.6,1),T(x,gh-.2,gz0+1.3));
+  for(const x of [-W+1.45,-6.5,-2,2,6.5,W-.3]){addGeo('beam',boxUV(.2,gh,.2,1),T(x,gh/2,gz0+.1));addCircle(x,gz0+.1,.14,gh-.15);}
+  const sz0=-1.6,sw=1.3;FLOORS.push({x0:-W,x1:-W+sw,z0:sz0,z1:gz0+.4,ramp:'z',a0:sz0,a1:gz0,h0:0,h1:gh});
+  for(let i=0;i<14;i++){const z=sz0+(i+.5)*(gz0-sz0)/14;addGeo('woodLight',boxUV(sw-.05,.06,(gz0-sz0)/14+.02,1),T(-W+sw/2,(i+1)/14*gh-.03,z));}
+  addGeo('beam',boxUV(.12,.12,Math.hypot(gz0-sz0,gh)+.2,1),T(-W+sw,gh/2+.55,(sz0+gz0)/2,Math.atan2(gh,gz0-sz0)));
+  addBox(-W+sw,-W+sw+.15,sz0+2.2,gz0,gh+1.1);   // the stair's rail: the bottom of the stair is open, so you can step off it either way
+  for(let x=-W+sw+.1;x<W-.2;x+=1.9){const x1=Math.min(W-.2,x+1.9),g=new THREE.Group();g.position.set((x+x1)/2,gh,gz0);
+    for(const y of [.45,1]){const m=new THREE.Mesh(boxUV(x1-x,.08,.06,1),MATS.wood);m.position.y=y;m.castShadow=true;g.add(m);}
     for(const px of [-(x1-x)/2,(x1-x)/2]){const m=new THREE.Mesh(boxUV(.07,1.05,.07,1),MATS.wood);m.position.set(px,.52,0);m.castShadow=true;g.add(m);}world.add(g);
     const box=addBox(x,x1,gz0-.06,gz0+.06,gh+1.1);box.y0=gh-.2;TAV.rails.push({g,box,x0:x,x1,z:gz0,broken:false});}
-  TAV.spots.push(['bottle',2,gh+.05,D-.6],['stool',-4,gh,D-.8],['knife',5.5,gh+.05,D-.5]);
-  // light: lanterns on the walls and over the bar
-  for(const [x,z] of [[-W+.3,2],[W-.3,-4.4],[-2,-D+.3],[4,-D+.3]])addFlame(x,2.4,z,.8,true);addFlame(bx,2.7,0,.7,true);
+  TAV.spots.push(['bottle',2,gh+.05,D-.7],['stool',-5,gh,D-.9],['knife',7,gh+.05,D-.6],['mug',-1,gh+.05,D-.6]);
+  // plenty of light: the hearth, lanterns all round the walls, over the bar and along the gallery
+  for(const [x,z] of [[-W+.3,-1],[-W+.3,3.5],[W-.3,-6.5],[-7,-D+.3],[0,-D+.3],[7,-D+.3],[-6,D-.3],[0,D-.3],[6,D-.3]])addFlame(x,z>D-1?gh+1.6:2.6,z,.85,true);
+  addFlame(bx,2.8,-3.5,.75,true);addFlame(bx,2.8,1.5,.75,true);
   flushBatch();}
 function tavernLoot(){for(const [id,x,y,z] of TAV.spots){const def=WEAPONS[id];if(!def)continue;const s=new Sword(def);const a=Math.random()*6.28,d=V(Math.cos(a),0,Math.sin(a));
   s.reset(V(x-d.x*def.len*.4,y+.04,z-d.z*def.len*.4),d);s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}
@@ -831,20 +834,20 @@ const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.mer
   vertexShader:`uniform float uTime;varying vec3 vN;varying vec3 vW;varying float vH;
     #include <fog_pars_vertex>
     void main(){vec3 p=position;float t=uTime;
-      float h=.22*sin(p.x*.21+t*.9)+.16*sin(p.z*.27+p.x*.08-t*1.1)+.07*sin((p.x+p.z)*.63+t*1.7);
-      float dx=.22*.21*cos(p.x*.21+t*.9)+.16*.08*cos(p.z*.27+p.x*.08-t*1.1)+.07*.63*cos((p.x+p.z)*.63+t*1.7),dz=.16*.27*cos(p.z*.27+p.x*.08-t*1.1)+.07*.63*cos((p.x+p.z)*.63+t*1.7);
+      float h=.62*sin(p.x*.11+t*.7)+.42*sin(p.z*.15+p.x*.05-t*.85)+.14*sin((p.x+p.z)*.41+t*1.5);
+      float dx=.62*.11*cos(p.x*.11+t*.7)+.42*.05*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5),dz=.42*.15*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5);
       p.y+=h;vH=h;vN=normalize((modelMatrix*vec4(-dx,1.,-dz,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
     }`,
   fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;varying vec3 vN;varying vec3 vW;varying float vH;
     #include <fog_pars_fragment>
     void main(){vec3 n=normalize(vN),v=normalize(cameraPosition-vW);float fr=pow(1.-max(dot(n,v),0.),4.);
-      vec3 c=mix(uDeep,uShal,clamp(vH*1.6+.4,0.,1.));c=mix(c,uSky,fr*.75);c+=vec3(1.)*pow(max(dot(reflect(-uSun,n),v),0.),90.)*.6;
-      c+=vec3(.85)*smoothstep(.3,.42,vH)*.25;   // foam on the crests
+      vec3 c=mix(uDeep,uShal,clamp(vH*.7+.4,0.,1.));c=mix(c,uSky,fr*.75);c+=vec3(1.)*pow(max(dot(reflect(-uSun,n),v),0.),90.)*.6;
+      c+=vec3(.85)*smoothstep(.75,1.05,vH)*.3;   // foam on the crests
       gl_FragColor=vec4(c,1.);
       #include <fog_fragment>
     }`});
-function buildShip(){const SL=11.5,SW=2.55;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(18,26),sea:null,sail:null};
+function buildShip(){const SL=16,SW=3.8;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(12,18),sea:null,sail:null};
   const hullMat=std({map:TX.wood,color:0x5c4332,roughness:.85,side:THREE.DoubleSide}),gunY=.55;
   // hull: planked sides from the gunwale down to the keel, the sheer rising toward prow and stern
   {const N=56,M=8,pos=[],uv=[],idx=[];for(const sd of [1,-1]){const base=pos.length/3;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N,u=x/SL,hw=shipHalfW(x)+.06,sheer=gunY+.55*u*u*u*u;
@@ -856,39 +859,37 @@ function buildShip(){const SL=11.5,SW=2.55;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:
   {const sh=new THREE.Shape();const N=40;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SL+2*SL*i/N;sh.lineTo(x,-shipHalfW(x));}
    const g=new THREE.ShapeGeometry(sh);g.rotateX(Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/1.6,uv.getY(i)/1.6);const m=new THREE.Mesh(g,MATS.woodLight);m.position.y=.004;m.receiveShadow=true;world.add(m);}
   // gunwale rail: low, so a body driven into it can go over the top
-  for(const sd of [1,-1])for(let x=-SL+.45;x<=SL-.45;x+=.32){const z=sd*(shipHalfW(x)-.1);if(Math.abs(z)<.15)continue;addCircle(x,z,.13,.55);}
+  for(const sd of [1,-1])for(let x=-SL+.45;x<=SL-.45;x+=.24){const z=sd*(shipHalfW(x)-.1);if(Math.abs(z)<.15)continue;addCircle(x,z,.14,.55);}
   for(const sx of [1,-1])for(let z=-.6;z<=.6;z+=.3)addCircle(sx*(SL-.35),z,.15,.55);
   for(const sd of [1,-1]){const pts=[];for(let x=-SL+.3;x<=SL-.3;x+=.5)pts.push(V(x,gunY+.55*Math.pow(x/SL,4)+.04,sd*(shipHalfW(x)+.03)));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),60,.06,5),T(0,0,0));}
   // prow and stern posts curling up, a dragon's head at the prow
   for(const sx of [1,-1]){const c=new THREE.CatmullRomCurve3([V(sx*(SL-.4),gunY+.4,0),V(sx*(SL+.6),1.4,0),V(sx*(SL+1.1),2.6,0),V(sx*(SL+.9),3.6,0),V(sx*(SL+.4),4.1,0)]);addGeo('beam',new THREE.TubeGeometry(c,24,.16,7),T(0,0,0));}
   addGeo('beam',new THREE.ConeGeometry(.22,.7,6),T(SL+.15,4.1,0,0,0,Math.PI/2));addGeo('beam',boxUV(.5,.18,.3,1),T(SL+.25,4.25,0));
-  // rowing benches across the deck: a step up, a place to fight from, something to trip over backing away
-  for(let x=-8.8;x<=8.8;x+=1.6){if(Math.abs(x)<.9)continue;const hw=shipHalfW(x)-.12;addGeo('wood',boxUV(.26,.07,2*hw,1),T(x,.4,0));for(const z of [-hw+.1,hw-.1])addGeo('wood',boxUV(.18,.38,.12,1),T(x,.19,z));FLOORS.push({x0:x-.13,x1:x+.13,z0:-hw,z1:hw,h:.43});}
   // mast, yard and a striped sail; stays to prow and stern
-  addGeo('beam',new THREE.CylinderGeometry(.16,.22,9.5,10),T(0,4.75,0));addCircle(0,0,.24,9.5);
-  addGeo('beam',new THREE.CylinderGeometry(.08,.08,6.4,8),T(.2,7.6,0,Math.PI/2));
-  {const g=new THREE.PlaneGeometry(6,4.6,8,6);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);p.setZ(i,.55*(1-(x/3)**2)*(1-((y+2.3)/4.6-.5)**2*1.6));}g.computeVertexNormals();
-   const m=new THREE.Mesh(g,MATS.cloth1);m.position.set(.35,5.25,0);m.rotation.y=Math.PI/2;m.castShadow=true;world.add(m);SHIP.sail=m;}
-  for(const [x,y] of [[SL+.6,1.6],[-SL-.6,1.6]])addGeo('beam',new THREE.CylinderGeometry(.015,.015,Math.hypot(x,9.2-y),4),T(x/2,(9.2+y)/2,0,0,0,Math.atan2(x,9.2-y)));
+  addGeo('beam',new THREE.CylinderGeometry(.2,.28,12.5,10),T(0,6.25,0));addCircle(0,0,.3,12.5);
+  addGeo('beam',new THREE.CylinderGeometry(.1,.1,8.6,8),T(.25,10.2,0,Math.PI/2));
+  {const g=new THREE.PlaneGeometry(8.2,6.4,8,6);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);p.setZ(i,.75*(1-(x/4.1)**2)*(1-((y+3.2)/6.4-.5)**2*1.6));}g.computeVertexNormals();
+   const m=new THREE.Mesh(g,MATS.cloth1);m.position.set(.45,7,0);m.rotation.y=Math.PI/2;m.castShadow=true;world.add(m);SHIP.sail=m;}
+  for(const [x,y] of [[SL+.6,1.6],[-SL-.6,1.6]])addGeo('beam',new THREE.CylinderGeometry(.02,.02,Math.hypot(x,12.2-y),4),T(x/2,(12.2+y)/2,0,0,0,Math.atan2(x,12.2-y)));
   // shields along the sides, oars shipped and resting out over the water
-  const shc=[0x7a1c16,0xd8ccb0,0x1e3560,0xbfa45c];let k=0;for(const sd of [1,-1])for(let x=-8.4;x<=8.4;x+=.85){const z=sd*(shipHalfW(x)+.12),m=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.05,14),std({color:shc[(k++)%4],roughness:.8}));m.position.set(x,.32+.55*Math.pow(x/SL,4),z);m.rotation.x=Math.PI/2;m.castShadow=true;world.add(m);}
-  for(const sd of [1,-1])for(let x=-7.2;x<=7.2;x+=3.2)addGeo('wood',new THREE.CylinderGeometry(.04,.05,4.2,6),T(x+.4,-.3,sd*(shipHalfW(x)+1.6),0,0,sd*1.15));
+  const shc=[0x7a1c16,0xd8ccb0,0x1e3560,0xbfa45c];let k=0;for(const sd of [1,-1])for(let x=-SL+3;x<=SL-3;x+=.85){const z=sd*(shipHalfW(x)+.12),m=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.05,14),std({color:shc[(k++)%4],roughness:.8}));m.position.set(x,.32+.55*Math.pow(x/SL,4),z);m.rotation.x=Math.PI/2;m.castShadow=true;world.add(m);}
+  for(const sd of [1,-1])for(let x=-SL+4;x<=SL-4;x+=3.2)addGeo('wood',new THREE.CylinderGeometry(.05,.06,5,6),T(x+.4,-.4,sd*(shipHalfW(x)+1.9),0,0,sd*1.15));
   // the sea
-  {const g=new THREE.PlaneGeometry(900,900,180,180);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,seaMat);m.position.y=-1.25;m.frustumCulled=false;world.add(m);SHIP.sea=m;}
+  {const g=new THREE.PlaneGeometry(900,900,220,220);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,seaMat);m.position.y=-1.7;m.frustumCulled=false;world.add(m);SHIP.sea=m;}
   DUST.p.material.uniforms.uCol.value.setRGB(.82,.86,.9);   // spray, not sand
   flushBatch();}
 function splash(p){sfx('fall',p,1,.55,0,false);sfx('fallArmoured',p,.5,.5,.06,false);spawnDust(V(p.x,-1,p.z),14,1.6,1.4);}
 function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
-  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(18,28);S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
-    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V(0,0,Math.sign(S.roll)||1);f.shove(d,rand(.5,.9));f.stagger=Math.max(f.stagger,.35);}tell(player,'A swell lifts the ship','sm');}
-  const az=9.8*S.roll*.55;
+  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20);S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
+    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();f.shove(d,rand(.65,1.1)*(f.crouch?.5:1));f.stagger=Math.max(f.stagger,.45);}tell(player,'A swell lifts the ship','sm');}
+  const az=9.8*S.roll*.6;
   for(const f of fighters){
-    if(f.ragdoll){const R=f.ragdoll;for(const n of R.names)R.P[n].z+=az*h*h*.6;R.sleep=false;
+    if(f.ragdoll){const R=f.ragdoll;for(const n of R.names)R.P[n].z+=az*h*h*.3;R.sleep=false;
       const P=R.P.Hips;if(P&&!shipIn(P.x,P.z)&&P.y<-.9&&!f.splashed){f.splashed=true;splash(P);if(f.alive)f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'thrown overboard');}continue;}
-    if(!f.alive)continue;if(f.pos.y>-.05)f.vel.z+=az*h;
+    if(!f.alive)continue;if(f.pos.y>-.05){f.vel.z+=az*h;f.balV.z+=az*h*(f.crouch?.02:.05);}   // the deck tilting under you: you slide and lean toward the low side and have to catch yourself
     if(!shipIn(f.pos.x,f.pos.z)&&f.pos.y<-.5&&!f.splashed){f.splashed=true;splash(f.pos);f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'went over the side');}}}
 function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.swell-dt*.22);
-  S.roll=(.04+.1*S.swell)*Math.sin(S.t*.6)+.012*Math.sin(S.t*1.37);S.pitch=.018*Math.sin(S.t*.41+1)+.03*S.swell*Math.sin(S.t*.9);
+  S.roll=(.075+.13*S.swell)*Math.sin(S.t*.55)+.02*Math.sin(S.t*1.31);S.pitch=.03*Math.sin(S.t*.37+1)+.045*S.swell*Math.sin(S.t*.85);
   if(S.sea){S.sea.rotation.set(S.pitch,0,-S.roll);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(S.pitch,0,-S.roll);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
 function well(x,z){
@@ -1242,15 +1243,15 @@ const LIGHTS={
 };
 LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
   env:[[0,'#4d5d6e'],[.42,'#8a98a6'],[.5,'#b6bcc0'],[.53,'#33454c'],[1,'#1a262c']]};
-LIGHTS.tavern={fog:0x0d0906,dens:.035,top:0x0d0906,mid:0x0d0906,hor:0x0d0906,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x8a6440,hg:0x1c130c,hi:.42,sun:0xffb070,si:.18,dir:[.3,.9,.2],moon:false,exp:1.55,cool:.15,halo:.3,shR:12,shMap:2048,
+LIGHTS.tavern={fog:0x1a120b,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0xb08458,hg:0x3a2818,hi:.85,sun:0xffc890,si:.35,dir:[.3,.9,.2],moon:false,exp:1.85,cool:.15,halo:.3,shR:12,shMap:2048,
   env:[[0,'#120c08'],[.45,'#3a2616'],[.5,'#6a4424'],[.55,'#24170e'],[1,'#0c0805']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
   arena:{entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
   colosseum:{entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
-  tavern:{entry:{x:0,z:-5.6,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:9.6,arena:0,zoneR:30,spawn:[1.2,5.5],spacing:2.4,lootR:7,loot:0,fighters:8,light:'tavern',brawl:true},
-  ship:{entry:{x:-9.6,z:0,dx:1,dz:0},name:'The Longship',build:()=>buildShip(),MAP:40,arena:0,zoneR:30,spawn:[1,8],spacing:2.6,lootR:10,loot:12,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-8.5+17*(i+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?2.4:1.6)]},
+  tavern:{entry:{x:0,z:-8.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:13,arena:0,zoneR:30,spawn:[1.5,6.5],spacing:2.8,lootR:9,ceil:5.2,loot:0,fighters:8,light:'tavern',brawl:true},
+  ship:{entry:{x:-13.5,z:0,dx:1,dz:0},name:'The Longship',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:14,loot:16,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-12+24*(i+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?4:2.6)]},
   pit:{entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
@@ -2722,7 +2723,7 @@ class Fighter{
     out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:pg?.36:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:pg?.36:.5);
     return out.normalize();
   }
-  useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.35);}
+  useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.25);}
   // ---------------- sim step
   step(h){
     if(this.ragdoll){this.ragdoll.step(h);
@@ -2766,7 +2767,7 @@ class Fighter{
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
     let spd=(drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
-    if(run&&wish.lengthSq()>0)this.useStamina(9*h);
+    if(run&&wish.lengthSq()>0)this.useStamina(6.5*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
     const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
@@ -2793,13 +2794,13 @@ class Fighter{
     else if(this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<8?this.lastHitBy:null,'burned alive',null);return;}}
     // stamina: every fast swing costs, heavier weapons cost more
     const ts=this.sword?this.sword.tipVel.length():0,w=this.sword?this.sword.def.weight:1;
-    if(ts>6.5)this.useStamina((ts-6.5)*.55*w*h);
-    if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.6*w);this.sword.swings=0;}
-    if(this.commit&&ts>3)this.useStamina(1.5*h);
+    if(ts>7)this.useStamina((ts-7)*.3*w*h);
+    if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.0*w);this.sword.swings=0;}
+    if(this.commit&&ts>3)this.useStamina(.8*h);
     // as in Half Sword there's no bar: you feel it. Blood loss lowers how much wind you have and how fast it comes back,
     // and you only really get it back standing still
     {const lu=this.lung||0,cap=(35+65*clamp(this.hp/100,0,1))*(1-.4*lu),mv=Math.hypot(this.vel.x,this.vel.z);   // a pierced lung: less wind, and it comes back slowly
-      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?30:22)*(.45+.55*clamp(this.hp/100,0,1))*(mv>3?.25:mv>.8?.7:1)*(1-.5*lu)*h);
+      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?34:27)*(.55+.45*clamp(this.hp/100,0,1))*(mv>3?.45:mv>.8?.85:1)*(1-.5*lu)*h);
       if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2);}   // coughing blood
       if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
@@ -3327,7 +3328,7 @@ class Fighter{
   // blood loss: each wound bleeds at its own rate and clots with its own time constant (an artery hardly clots; a scrape stops quickly)
   get bleed(){let r=0;if(this.bleeds)for(const b of this.bleeds)r+=b[0];return r;}
   set bleed(v){this.bleeds=v>0?[[v,1e9]]:[];}
-  addBleed(rate,tau){if(rate>.01)(this.bleeds||(this.bleeds=[])).push([rate,tau]);}
+  addBleed(rate,tau){rate*=.6;if(rate>.01)(this.bleeds||(this.bleeds=[])).push([rate,tau]);}   // (all bleeding scaled down: people bled out too fast)
   bleedStep(h){const B=this.bleeds;if(!B||!B.length)return 0;let r=0;for(let i=B.length-1;i>=0;i--){const b=B[i];r+=b[0];b[0]*=1-h/b[1];if(b[0]<.01)B.splice(i,1);}return r*h;}
   // what an injury to one part does to the fighter: legs limp and give out, an arm goes weak and then useless
   limbF(z){const L=this.limbs[z];return L.sev||L.dead?1:clamp(1-L.hp/LIMB_HP[z],0,1);}
@@ -3994,11 +3995,18 @@ function aimPoint(out){
 const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
 // nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
 const _cs=V(),_cd=V();let camPull=1;
+function camBlocked(x,y,z,ceil){if(ceil&&y>ceil-.22)return true;
+  const cell=grid.get(gkey(Math.floor(x/GRID),Math.floor(z/GRID)));if(cell)for(const o of cell){if(o.t!==0)continue;if(x>o.x0-.15&&x<o.x1+.15&&z>o.z0-.15&&z<o.z1+.15&&y<o.h+.12&&y>(o.y0||0)-.12)return true;}
+  for(const F of FLOORS){if(F.ramp||F.down||F.h<1.5)continue;if(x>F.x0-.1&&x<F.x1+.1&&z>F.z0-.1&&z<F.z1+.1&&Math.abs(y-F.h)<.2)return true;}
+  return false;}
 function camClear(a,b,dt){_cd.subVectors(b,a);const L=_cd.length();if(L<1e-4)return;_cd.multiplyScalar(1/L);let t=L;
   const hit=(c,r)=>{_cs.subVectors(c,a);const along=_cs.dot(_cd);if(along<0||along>t+r)return;const d2=_cs.lengthSq()-along*along,rr=r*r;if(d2>=rr)return;const e=along-Math.sqrt(rr-d2);t=Math.max(.35,Math.min(t,e));};
   for(const f of fighters){if(f===player||f.pos.distanceToSquared(a)>36)continue;
     if(f.ragdoll){const P=f.ragdoll.P;for(const n of ['Hips','Spine2','Head','LeftLeg','RightLeg','LeftForeArm','RightForeArm'])if(P[n])hit(P[n],n==='Head'?.24:.3);}
     else{hit(f.headPos,.42);hit(f.chest,.46);_cs.set(f.pos.x,f.pos.y+.95,f.pos.z);hit(_cs.clone(),.4);}}   // generous: a body grazing the lens fills the screen as surely as one it passes through
+  // walls, a floor overhead (the tavern's gallery) and a ceiling: the camera stays on your side of them instead of looking
+  // out through a wall or from inside the woodwork
+  {const ceil=MAPS[curMap].ceil,n=16;for(let i=1;i<=n;i++){const u=i/n*L;if(u>t)break;if(camBlocked(a.x+_cd.x*u,a.y+_cd.y*u,a.z+_cd.z*u,ceil)){t=Math.max(.3,u-L/n-.1);break;}}}
   // down in the shaft, stay inside it
   if(PIT&&a.y<.2){const dx=a.x-PIT.x,dz=a.z-PIT.z;if(Math.hypot(dx,dz)<PIT.r){for(let i=1;i<=12;i++){const u=i/12*t;const x=a.x+_cd.x*u-PIT.x,z=a.z+_cd.z*u-PIT.z,y=a.y+_cd.y*u;if(y<.3&&Math.hypot(x,z)>PIT.r-.3){t=Math.max(.3,u-t/12);break;}}}}
   // pull in at once, ease back out, so a body brushing past doesn't make the view pump
@@ -4320,7 +4328,7 @@ function buildMinimap(){
     for(const s of [-36,36]){g.fillRect(X(s-3.2),X(-39),6.4*k,78*k);g.fillRect(X(-39),X(s-3.2),78*k,6.4*k);}
     g.beginPath();g.arc(X(0),X(0),16*k,0,7);g.fill();}
   else if(SHIP){g.fillStyle='#1d3a44';g.fillRect(0,0,600,600);g.fillStyle='#6a5240';g.beginPath();for(let i=0;i<=40;i++){const x=-SHIP.SL+2*SHIP.SL*i/40;g[i?'lineTo':'moveTo'](X(x),X(shipHalfW(x)));}for(let i=40;i>=0;i--){const x=-SHIP.SL+2*SHIP.SL*i/40;g.lineTo(X(x),X(-shipHalfW(x)));}g.fill();}
-  else if(curMap==='tavern'){g.fillStyle='#5a4430';g.fillRect(X(-9.6),X(-6.6),19.2*k,13.2*k);}
+  else if(curMap==='tavern'){g.fillStyle='#5a4430';g.fillRect(X(-13),X(-9),26*k,18*k);}
   else if(curMap==='arena'){g.fillStyle='#6e6352';g.fillRect(X(-18),X(-18),36*k,36*k);g.fillStyle='#c9b088';g.fillRect(X(-13.5),X(-13.5),27*k,27*k);}
   else{g.fillStyle='#6e6352';g.beginPath();g.arc(X(0),X(0),49*k,0,7);g.fill();g.fillStyle='#c9b088';g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.fill();g.strokeStyle='#3a2e22';g.lineWidth=3;g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.stroke();}
   g.fillStyle='#2a1c14';for(const b of boxes)g.fillRect(X(b.x0),X(b.z0),(b.x1-b.x0)*k,(b.z1-b.z0)*k);
