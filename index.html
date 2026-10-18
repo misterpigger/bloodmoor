@@ -303,7 +303,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=66;
+const BUILD=67;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -926,10 +926,13 @@ function buildPit(){
   addGeo('wood',boxUV(3.2,3.3,.25,1.5),T(0,1.65,W-.05));for(const y of [.8,2.5])addGeo('iron',boxUV(3.3,.12,.32,1),T(0,y,W-.05));
   const fence=(x0,z0,x1,z1)=>{const L=Math.hypot(x1-x0,z1-z0),ry=-Math.atan2(z1-z0,x1-x0),n=Math.max(1,Math.round(L/2.2));
     for(let k=0;k<=n;k++){const t=k/n;addGeo('woodPale',boxUV(.14,1.25,.14,1),T(x0+(x1-x0)*t,.62,z0+(z1-z0)*t));}
-    for(const y of [.45,1.05])addGeo('woodPale',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));};
-  const F=W-1.6;fence(-F,F,-2.4,F);fence(2.4,F,F,F);fence(-F,-F,F,-F);fence(-F,-F,-F,F);fence(F,-F,F,F);
-  for(const [x,z] of [[-W+1.6,-W+1.6],[W-1.6,-W+1.6],[-W+1.6,W-1.6],[W-1.6,W-1.6]])brazier(x,z);
-  barrel(-W+.9,4);barrel(-W+.9,4.8);crate(W-.9,-5);crate(W-.9,-4.1,.7);hay(-6,-W+1);
+    for(const y of [.45,1.05])addGeo('woodPale',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));
+    addBox(Math.min(x0,x1)-.13,Math.max(x0,x1)+.13,Math.min(z0,z1)-.13,Math.max(z0,z1)+.13,2.2);};   // the fence is the edge of the fight: solid, and too high to vault
+  // the ring fence, with a gap at the gate and a fenced chute from the gate to it (the gauntlet's fighters come in that way);
+  // the strip between fence and wall is out of bounds
+  const F=W-1.6;fence(-F,F,-2.4,F);fence(2.4,F,F,F);fence(-F,-F,F,-F);fence(-F,-F,-F,F);fence(F,-F,F,F);fence(-2.4,F,-2.4,W-.05);fence(2.4,F,2.4,W-.05);
+  for(const [x,z] of [[-W+2.7,-W+2.7],[W-2.7,-W+2.7],[-W+2.7,W-2.7],[W-2.7,W-2.7]])brazier(x,z);   // inside the fence, where they can be reached
+  barrel(-W+2.4,4);barrel(-W+2.4,4.8);crate(W-2.4,-5);crate(W-2.4,-4.1,.7);hay(-6,-W+2.4);
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
@@ -2067,6 +2070,15 @@ class Sword{
     const w=this.def.weight,M=this.M;
     const th=f&&f.thrust?PT.thr:1;   // a thrust snaps the arm straight
     const k=(commit?PT.kc:PT.kg)*th/Math.sqrt(w),c=2*Math.sqrt(k)*.85*(f&&f.thrust?.7:1);
+    // the weapon turns with the body: a fast turn carries the whole weapon round with you (pose and momentum rotate about
+    // the body), so it isn't left behind you; contacts are still the solver's
+    let spin=0;if(f&&!this.stuck){if(this._yaw!=null){let dy=f.yaw-this._yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+        if(Math.abs(dy)>1e-5&&Math.abs(dy)<.6){spin=dy/h;const c=Math.cos(dy),sn=Math.sin(dy),px=f.pos.x,pz=f.pos.z,rb=this.rb;
+          const rot=v=>{const x=v.x-px,z=v.z-pz;v.x=px+x*c+z*sn;v.z=pz-x*sn+z*c;},rotv=v=>{const x=v.x,z=v.z;v.x=x*c+z*sn;v.z=-x*sn+z*c;};
+          rot(this.H);rot(this.T);rot(this.com);for(const v of [this.v,this.w,this.Hv,this.tipVel,this.axis,this.edge])rotv(v);
+          _pq.setFromAxisAngle(Y_AXIS,dy);const q=rb.rotation();_pq2.set(q.x,q.y,q.z,q.w).premultiply(_pq);
+          rb.setTranslation({x:this.H.x,y:this.H.y,z:this.H.z},true);rb.setRotation({x:_pq2.x,y:_pq2.y,z:_pq2.z,w:_pq2.w},true);rb.setLinvel(this.v,true);rb.setAngvel(this.w,true);}}
+      this._yaw=f.yaw;}
     _g.copy(f?f.vel:_zero3).sub(this.Hv);
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(_g,c);
     const kn=this.knockT>0?.2:1;if(this.knockT>0)this.knockT-=h;
@@ -2142,6 +2154,14 @@ class Sword{
     // and the grip only works against where you aim relative to the body. Without this the hand trailed every lurch and then
     // sprang back after it (the weapon "rubber-banding"); standing still nothing changes
     const of0=this.owner;_hbv.set(0,0,0);_hba.set(0,0,0);
+    // and it turns with the body: a fast turn swings the whole weapon round with you (it used to be left behind, and past
+    // half a turn the hand took the short way through your back). Hand, head and their momentum all rotate about the body
+    let spin=0;if(of0&&!this.free){if(this._yaw!=null){let dy=of0.yaw-this._yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+        if(Math.abs(dy)>1e-5&&Math.abs(dy)<.6){const c=Math.cos(dy),sn=Math.sin(dy),px=of0.pos.x,pz=of0.pos.z;
+          for(const v of [this.H,this.Hp,this.T,this.Tp]){const x=v.x-px,z=v.z-pz;v.x=px+x*c+z*sn;v.z=pz-x*sn+z*c;}
+          for(const v of [this.Hv,this.edge,this.axis]){const x=v.x,z=v.z;v.x=x*c+v.z*sn;v.z=-x*sn+z*c;}
+          spin=dy/h;}}
+      this._yaw=of0.yaw;}
     if(of0&&!this.free){if(this._bp){_hbv.subVectors(of0.pos,this._bp);if(_hbv.lengthSq()<.09){_hbv.multiplyScalar(1/h);if(this._hbvp){_hba.subVectors(_hbv,this._hbvp).multiplyScalar(1/h);if(_hba.lengthSq()>8100)_hba.setLength(90);}}else _hbv.set(0,0,0);}
       (this._bp||(this._bp=V())).copy(of0.pos);(this._hbvp||(this._hbvp=V())).copy(_hbv);}
     _a.subVectors(target,this.H).multiplyScalar(k).addScaledVector(this.Hv,-c).addScaledVector(_hbv,c);
@@ -2164,6 +2184,7 @@ class Sword{
         const dl=_wl3.length();if(dl>1e-7){_wl3.multiplyScalar(1/dl);_wl1.subVectors(this.T,this.Tp);const vn=_wl1.dot(_wl3);if(vn<0)_wl1.addScaledVector(_wl3,-vn);   // momentum into the limit is absorbed by the wrist
           this.T.copy(this.H).addScaledVector(_wl2,this.len);this.Tp.copy(this.T).sub(_wl1);this.axis.copy(_wl2);this.tipVel.copy(_wl1).multiplyScalar(1/h);
           this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis)).normalize();}}}
+    if(spin){const of1=this.owner;this.tipVel.x+=spin*(this.T.z-of1.pos.z);this.tipVel.z-=spin*(this.T.x-of1.pos.x);}   // turning with the body adds to the blade's speed, as it did when the body dragged it round
     // swing arc: how far the tip has travelled in one committed direction
     const sp=this.tipVel.length();
     if(sp>2.2){_e.copy(this.tipVel).multiplyScalar(1/sp);if(_e.dot(this.lastDir)>.5)this.arc+=sp*h;else{this.arc=sp*h;if(sp>5)this.swings++;}this.lastDir.lerp(_e,.1).normalize();}
@@ -3092,6 +3113,7 @@ class Fighter{
     if(!this.alive)return;this.alive=false;this.deathT=simTime;
     sfx(this.id%2?'humanRoughDeath':'humanDeath',this.headPos,.85);sfx(this.armor.body?'fallArmoured':'fall',this.chest,.8,1,.35);
     if(!by&&this.lastHitBy&&simTime-this.lastHitT<12)by=this.lastHitBy;
+    if(this.ragdoll){const R=this.ragdoll;R.rise=null;R.tone=0;R.reflex=0;R.sleep=false;R.age=Math.min(R.age,1);this.knocked=0;this.rec=null;}   // slain while down or getting up: the muscles let go (a dead body used to finish standing up)
     if(!this.ragdoll){this.makeRagdoll(cause==='beheaded'?null:imp,impP,cause==='beheaded'?.15:imp?.6:1);
       if(cause==='beheaded'){const R=this.ragdoll,y={};for(const n of ['Hips','Spine1','Spine2','Neck','LeftArm','RightArm'])if(R.P[n])y[n]=R.P[n].y;R.hold={t:rand(.55,1),y};R.tone=.3;}}
     this.dropSword();
