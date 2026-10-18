@@ -198,7 +198,6 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
       <button class="map eng" data-eng="physics" role="radio" aria-checked="false"><b>Rigid body</b><span>Real weight, solid blades and limbs</span></button>
     </div>
-    <div class="maps" style="margin-top:10px"><button class="map" id="hybridBtn" aria-pressed="false"><b>Stumbles: off</b><span>Test: catch-up steps and stumbles when knocked off balance</span></button></div>
     <div class="mp">
       <div class="mprow"><button class="map" id="hostBtn"><b>Host for friends</b><span>Get a room code to share</span></button>
         <div class="join"><input id="joinCode" maxlength="5" placeholder="CODE" aria-label="Room code" spellcheck="false" autocomplete="off"><button id="joinBtn">Join</button></div></div>
@@ -215,9 +214,13 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc{display:none}
     <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
     <div class="frow">Hose <div class="sw" data-k="2" role="radiogroup" aria-label="Hose colour"></div></div>
     <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
-    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Peasant</button><button data-v="2" role="radio">Ranger</button></div></div>
+    <div class="frow">Build <div class="seg" data-look="b" role="radiogroup" aria-label="Build"><button data-v="3" role="radio">Lean</button><button data-v="0" role="radio">Athletic</button><button data-v="2" role="radio">Strong</button><button data-v="1" role="radio">Heavy</button></div></div>
+    <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Shirt</button><button data-v="3" role="radio">Tunic</button><button data-v="4" role="radio">Jerkin</button><button data-v="2" role="radio">Gambeson</button></div></div>
+    <div class="frow">Head <div class="seg" data-look="hd" role="radiogroup" aria-label="Head covering"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Coif</button><button data-v="2" role="radio">Hood</button></div></div>
+    <div class="frow">Feet <div class="seg" data-look="ft" role="radiogroup" aria-label="Footwear"><button data-v="0" role="radio">Barefoot</button><button data-v="1" role="radio">Shoes</button><button data-v="2" role="radio">Boots</button></div></div>
     <div class="frow">Hair <div class="seg" data-look="h" role="radiogroup" aria-label="Hair"><button data-v="0" role="radio">Bald</button><button data-v="1" role="radio">Short</button><button data-v="2" role="radio">Parted</button><button data-v="3" role="radio">Long</button></div></div>
-    <div class="frow">Beard <div class="seg" data-look="bd" role="radiogroup" aria-label="Beard"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Beard</button></div></div>
+    <div class="frow">Beard <div class="seg" data-look="bd" role="radiogroup" aria-label="Beard"><button data-v="2" role="radio">Clean</button><button data-v="0" role="radio">Stubble</button><button data-v="1" role="radio">Beard</button><button data-v="3" role="radio">Full</button></div></div>
+    <div class="frow">Marks <div class="seg" data-look="mk" role="radiogroup" aria-label="Face marks"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Scar</button><button data-v="2" role="radio">War paint</button></div></div>
     <div class="frow">Hue <div class="sw" data-look="hc" role="radiogroup" aria-label="Hair colour"></div></div>
     <div class="frow">Skin <div class="sw" data-look="sk" role="radiogroup" aria-label="Skin tone"></div></div>
   </aside>
@@ -296,7 +299,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=62;
+const BUILD=63;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1242,10 +1245,11 @@ function outfitMaterial(pal,dark){
 const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_Parted','Hair_Long'],
   hairCol:[[.16,.13,.11],[.42,.27,.16],[1.05,.86,.55],[.85,.36,.18],[1,1,1]],hairSw:['#2a221d','#5e3d26','#c7a46a','#9a4a26','#b9b5ad'],
   skin:[[1.12,1.06,1.02],[1,1,1],[.74,.6,.5],[.48,.36,.29]],skinSw:['#e8c0a4','#cf9f7e','#9c7458','#654837']};
-const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1};
+const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1,b:0,hd:0,ft:1,mk:0};
 function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Number.isInteger(v)&&v>=0&&v<=max?v:null;
-  const o={o:n(l.o,2),h:n(l.h,3),bd:l.bd?1:0,hc:n(l.hc,4),sk:n(l.sk,3)};return o.o===null||o.h===null||o.hc===null||o.sk===null?null:o;}
-function randomLook(){const r=Math.random();return {o:r<.35?0:r<.75?1:2,h:(Math.random()*4)|0,bd:Math.random()<.45?1:0,hc:Math.random()<.12?4:(Math.random()*4)|0,sk:(Math.random()*4)|0};}
+  const o={o:n(l.o,4),h:n(l.h,3),bd:n(l.bd,3)??(l.bd?1:0),hc:n(l.hc,4),sk:n(l.sk,3),hd:n(l.hd,2)??0,ft:n(l.ft,2)??0,mk:n(l.mk,2)??0};const b=n(l.b,3);if(b!==null)o.b=b;
+  return o.o===null||o.h===null||o.hc===null||o.sk===null?null:o;}
+function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:(q()*4)|0,bd:[0,1,1,2,3][(q()*5)|0],hc:q()<.12?4:(q()*4)|0,sk:(q()*4)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.82?0:q()<.6?1:2};}
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -1375,10 +1379,10 @@ function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.l
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
   if(!C){HAIRGEO.set(k,null);return null;}
   const wOf=v=>{const sc=style?C.getX(v):0,bd=beard?C.getY(v):0,br=C.getZ(v);return [sc,bd,br];};
-  const lenOf=v=>{const [sc,bd,br]=wOf(v);return Math.max(sc*(style?style.len:0),bd*(beard?.007:0),brows?br*.004:0);};
+  const bl=beard===true?.007:(+beard||0);const lenOf=v=>{const [sc,bd,br]=wOf(v);return Math.max(sc*(style?style.len:0),bd*bl,brows?br*.004:0);};
   const tris=[];for(let i=0;i<I.count;i+=3){const a=I.getX(i),b=I.getX(i+1),c=I.getX(i+2);if(lenOf(a)>.0006&&lenOf(b)>.0006&&lenOf(c)>.0006)tris.push(a,b,c);}
   if(!tris.length){HAIRGEO.set(k,null);return null;}
-  const used=[...new Set(tris)],map=new Map(used.map((v,i)=>[v,i])),nv=used.length,L=Math.max(style?style.n:0,beard?5:0,3);
+  const used=[...new Set(tris)],map=new Map(used.map((v,i)=>[v,i])),nv=used.length,L=Math.max(style?style.n:0,bl>.01?7:bl?5:0,3);
   const pos=new Float32Array(nv*L*3),bind=new Float32Array(nv*L*3),bn=new Float32Array(nv*L*3),lay=new Float32Array(nv*L),si=new Uint16Array(nv*L*4),sw=new Float32Array(nv*L*4),idx=[];
   for(let l=0;l<L;l++){const f=(l+1)/L;
     for(let j=0;j<nv;j++){const v=used[j],o=l*nv+j,len=lenOf(v),hang=(style&&style.len>.01?f*f*len*.6:0);   // longer hair lies down and back a little
@@ -1406,15 +1410,20 @@ function dressMH(model,look,pal,mats){
   const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
   const skin=std({map:T.d,normalMap:T.n,normalScale:new THREE.Vector2(.9,.9),color:new THREE.Color().setRGB(.45*tone[0],.275*tone[1],.2*tone[2]),roughness:.5});
   tintMaterial(skin,2,pal,mats);
-  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.7,1,1][look.h]||0},uBeardAmt:{value:look.bd?1:.35}};
+  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.7,1,1][look.h]||0},uBeardAmt:{value:[.35,1,0,1][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()}};
   const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
-    sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol;uniform float uHairAmt,uBeardAmt;\n'+sh.fragmentShader.replace('float bld=0.;',`
+    sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol,uEyeB;uniform float uHairAmt,uBeardAmt,uMark;\n'+sh.fragmentShader.replace('float bld=0.;',`
       { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
         float g1=fract(sin(dot(floor(vMapUv*3072.),vec2(12.9898,78.233)))*43758.5453),g2=fract(sin(dot(floor(vMapUv*1400.),vec2(39.346,11.135)))*24634.63);
         vec4 hm4=texture2D(uMHMask,vMapUv);float browA=clamp(hm4.a*(.55+.45*g1)*1.25,0.,1.);
         float hairA=clamp(hm.r*uHairAmt*(.62+.38*g1)*(.85+.3*g2)*1.15,0.,1.),beardA=clamp(hm.g*uBeardAmt*(.4+.6*g1)*1.1,0.,1.);
         diffuseColor.rgb*=1.-hm.b*.3;   // creases sit in shadow
-        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(max(hairA*.94,beardA*.86),browA*.92)); }
+        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(max(hairA*.94,beardA*.86),browA*.92));
+        if(uMark>.5){vec3 b=vBind-uEyeB;float front=smoothstep(-.07,-.03,b.z);
+          if(uMark<1.5){vec2 a=vec2(.028,.045),c=vec2(.05,-.065),pa=b.xy-a,ba=c-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.),d=length(pa-ba*h);   // an old scar from brow to cheek
+            float sc=smoothstep(.0045,.0015,d)*front;diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.12,.86,.84)+.05,sc);}
+          else{float band=smoothstep(.03,.018,abs(b.y+.003))*smoothstep(.1,.075,abs(b.x))*front*(.75+.25*fract(sin(dot(floor(vBind*900.),vec3(12.9898,78.233,37.719)))*43758.5453));   // woad across the eyes
+            diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.05,.09,.2),band*.9);}} }
       float bld=0.;`);};   // (after the cloth tint, which would recolour anything dark and grey as hose)
   sh_detail(skin);
   skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
@@ -1424,16 +1433,30 @@ function dressMH(model,look,pal,mats){
   const cloth=(geo,dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';
     if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}
     const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};
-  if(o===1)cloth(C.shirt,false,.0035);
+  const M=bodyMarks(body),hy=M.J.Hips.y;HU.uEyeB.value.set(M.hx,M.ey,M.ez);
+  const shell=(key,opt,mt,hair)=>{const g=fitShell(body,key,opt);const sm=new THREE.SkinnedMesh(g,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';if(hair)sm.userData.hair=true;body.parent.add(sm);return sm;};
+  const dyedCloth=(dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}return mt;};
+  const legW=['LeftLeg','RightLeg','LeftFoot','RightFoot'],handW=['LeftHand','RightHand'],headW=['Neck','Head'];
+  if(o===1||o===4)cloth(C.shirt,false,.0035);
+  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.012,smooth:4,rim:.004},dyedCloth(true,.004));   // a knee-length dyed tunic, sleeves to the elbow
+  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.02,smooth:6,rim:.005},lm);}   // a sleeveless leather jerkin over the shirt
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
     const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['LeftHand','RightHand'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.019,smooth:5,rim:.006});
     const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
-  cloth(o===2?C.hose:C.braies,true,o===2?.0012:.003);
+  cloth(o===2||o===3?C.hose:C.braies,true,o===2||o===3?.0012:.003);
+  // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
+  const hd=look.hd|0;
+  if(hd===1)shell('coif',{keep:(v,P,w)=>w(v,['Head'])>.6&&P.getY(v)>M.ey-.07&&!(P.getZ(v)>M.ez-.055&&P.getY(v)<M.ey+.045),off:.009,smooth:10,rim:.003,bones:['Head','Neck'],fallback:'Head'},dyedCloth(false,.002));
+  if(hd===2)shell('hood',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['Head','Neck','Spine2','LeftShoulder','RightShoulder'])>.5&&w(v,['LeftArm','RightArm'])<.25&&y>M.J.Neck.y-.12&&!(P.getZ(v)>M.ez-.07&&y<M.ey+.06&&y>M.ey-.13);},off:.022,smooth:8,rim:.005,bones:['Head','Neck','Spine2'],fallback:'Neck'},dyedCloth(true,.004),true);
+  // footwear: low leather turnshoes, or boots to below the knee
+  const ftw=look.ft|0;
+  if(ftw){const bm2=leatherMat.clone();bm2.color.setHex(ftw===2?0x6a4a36:0x7a5840);
+    shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.011:.007,smooth:5,rim:.003,bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
   if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';body.parent.add(bm);}
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol);
-    for(const [hg,scalp] of [[HAIR_STYLE[look.h]?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,!!look.bd,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
+    for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
       const hm=new THREE.SkinnedMesh(hg,mt);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
   model.userData.mh=true;}
 // strip a fresh model clone down to one look and give it that look's materials
@@ -1818,8 +1841,12 @@ class Ragdoll{
     // flat on his back, a man rolls onto his front before he can get his hands and knees under him
     if(R.rollT){if(!R.rf){R.rf={};for(const n in P)R.rf[n]=P[n].clone();R.ax=V().subVectors(P.Neck||P.Spine2,P.Hips);R.ax.y=0;if(R.ax.lengthSq()<1e-4)R.ax.set(1,0,0);R.ax.normalize();R.rc=P.Hips.clone();}
       const u=clamp(R.t/R.rollT,0,1),e=u*u*(3-2*u),th=R.rollS*Math.PI*e,k=.05*R.str;
-      for(const n in P){const o=R.rf[n];if(!o)continue;_rv.subVectors(o,R.rc).applyAxisAngle(R.ax,th).add(R.rc);_rv.y=Math.max(_rv.y,R.rc.y*.6+.05*Math.sin(Math.PI*e));
-        const p=P[n];p.x+=(_rv.x-p.x)*k;p.y+=(_rv.y-p.y)*k;p.z+=(_rv.z-p.z)*k;}
+      // the whole body turns over together, led by the hips and a knee drawn up and across, so the trunk never corkscrews against the legs
+      const knee=R.rollS>0?'LeftLeg':'RightLeg',lift=Math.sin(Math.PI*e);
+      for(const n in P){const o=R.rf[n];if(!o)continue;const leg=/UpLeg|Leg|Foot|Toe|Hips/.test(n),th2=leg?R.rollS*Math.PI*Math.min(1,e*1.15):th;
+        _rv.subVectors(o,R.rc).applyAxisAngle(R.ax,th2).add(R.rc);_rv.y=Math.max(_rv.y,R.rc.y*.6+.05*lift);
+        if(n===knee){_rv.y+=.22*lift;_rv.addScaledVector(R.ax,.12*lift);}
+        const p=P[n],kk=leg?k*2.2:k*1.5,q=this.Q[n];const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
       if(R.t<R.rollT)return;
       R.rollT=0;R.t=0;R.st=-1;const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()>1e-4)R.f.copy(f.normalize());R.base.set(P.Hips.x,0,P.Hips.z);R.gy=groundY(P.Hips.x,P.Hips.z,P.Hips.y);}
     if(R.fail&&R.t>R.a*.75&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
@@ -2239,7 +2266,7 @@ function clearWounds(B){if(B.bloodSrc)B.bloodSrc.length=0;for(const o of B.wound
 let GLTF=null;
 const fighters=[],debris=[],freeSwords=[],loot=[];
 // extra leg clips from fighters.json (retargeted by tools/anim-retarget.mjs), sampled by hand and blended over the mixer's pose
-const GAIT_ON=/[?&]physgait/.test(location.search);let HYBRID=/[?&]hybrid/.test(location.search)||(()=>{try{return localStorage.getItem('bloodmoor-hybrid')==='1';}catch(e){return false;}})();   // hybrid: the walk cycle, but real catch-up steps and stumbles when knocked off balance   // the stepping gait (Build 60) is off: the player preferred the walk cycle; ?physgait tries it
+const GAIT_ON=/[?&]physgait/.test(location.search);const HYBRID=false;   // hybrid: the walk cycle, but real catch-up steps and stumbles when knocked off balance   // the stepping gait (Build 60) is off: the player preferred the walk cycle; ?physgait tries it
 const GUARD={};function initGuard(){for(const nm of ['guard','crouchwalk']){const c=GLTF.animations.find(a=>a.name===nm);if(!c)continue;
   GUARD[nm]={d:c.duration,tracks:c.tracks.filter(t=>t.name.endsWith('.quaternion')).map(t=>({bone:t.name.split('.')[0].replace('mixamorig','').replace(':',''),ip:t.createInterpolant()}))};}}
 const PALETTES=[['#7a1d18','#c9a227','#2a2420',1],['#1d3768','#d8d0bc','#24262b',1],['#2f5130','#e0c060','#2b2a22',0],['#5a3a6a','#c8c0b0','#26222a',1],['#8a6a3a','#3a2a1a','#3a2e22',0],['#2a2a2a','#a02020','#1e1e1e',1],['#b8ad98','#7a1f1f','#3a3028',1],['#3a5a7a','#e8e0d0','#2a2e34',0],['#6a2a1a','#1a1a1a','#2a1e1a',1],['#c8a060','#5a2a1a','#30261c',1],['#40506a','#b03030','#22262c',1],['#556b2f','#2b2b2b','#262a1e',0]];
@@ -2363,7 +2390,7 @@ class Fighter{
     for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}
     D.drop=Math.min(.75,D.drop+drop);}
   cacheBody(){const B=this.bones;B.Spine2.getWorldPosition(this.chest);B.RightArm.getWorldPosition(this.shR);B.LeftArm.getWorldPosition(this.shL);B.Head.getWorldPosition(this.headPos);}
-  frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cp).addScaledVector(_f,-sp);}
+  frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p),pu=Math.max(p,-.3),cu=Math.cos(pu),su=Math.sin(pu);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cu).addScaledVector(_f,-su);}   // looking down lowers the guard but never tips it back behind the body
   handTarget(out){
     const f=_t2,u=_t3;this.frame(f,u);
     const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
@@ -2376,6 +2403,7 @@ class Fighter{
     else this.jabLift=0;
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz);
+    out.x+=this.vel.x*.062;out.z+=this.vel.z*.062;   // the arms carry the weapon along with the body on the move, instead of trailing it behind
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
     const slide=Hd.slide*clamp((cz-.46)/.16,0,1);
@@ -3865,8 +3893,7 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
-function showHybrid(){const b=document.getElementById('hybridBtn');b.querySelector('b').textContent='Stumbles: '+(HYBRID?'on':'off');b.setAttribute('aria-pressed',HYBRID?'true':'false');b.classList.toggle('on',HYBRID);}
-document.getElementById('hybridBtn').addEventListener('click',()=>{HYBRID=!HYBRID;try{localStorage.setItem('bloodmoor-hybrid',HYBRID?'1':'0');}catch(e){}showHybrid();});showHybrid();
+try{localStorage.removeItem('bloodmoor-hybrid');}catch(e){}
 function startGame(){document.body.classList.toggle('sim',MODE!=='br');
   if(NET.mode==='client')return;
   flushMapSwitch();
@@ -4164,7 +4191,7 @@ function softTex(foot){const c=document.createElement('canvas');c.width=32;c.hei
 function markMesh(n,foot,op){const g=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2).rotateY(Math.PI);
   const m=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:0x1a120a,alphaMap:softTex(foot),transparent:true,opacity:op,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-3}),n);
   m.frustumCulled=false;for(let i=0;i<n;i++)m.setMatrixAt(i,_zero);scene.add(m);return {m,n,i:0};}
-const PRINTS=markMesh(700,true,.5),DRAGS=markMesh(320,false,.38);
+const PRINTS=markMesh(1,true,0),DRAGS=markMesh(1,false,0);PRINTS.m.visible=DRAGS.m.visible=false;   // (footprints and drag marks were dropped in Build 63)
 function addMark(M,x,z,yaw,sx,sz){const gy=groundY(x,z,.5);if(gy<-.5&&!PIT)return;_dq.setFromAxisAngle(Y_AXIS,yaw);_mx.compose(_dp.set(x,gy+.011+Math.random()*.002,z),_dq,_ds.set(sx,1,sz));M.m.setMatrixAt(M.i,_mx);M.i=(M.i+1)%M.n;M.m.instanceMatrix.needsUpdate=true;}
 // ---- blood pools spreading under the dead and the dying
 const POOL_TEX=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.filter='blur(1.5px)';x.fillStyle='#fff';
@@ -4189,7 +4216,7 @@ function stepFx(f,p,vol,run){const a=f.armor;
   else if(a.legs&&Math.random()<.5)sfx('equipPlate',p,vol*.13,1.55,0,false);
   const wood=!!PIT&&onBridge(f.pos.x,f.pos.z)&&f.pos.y>-.1;
   const lf=f.bones.LeftFoot,rf=f.bones.RightFoot;
-  if(lf&&rf&&!wood&&SAND()){lf.getWorldPosition(_fd);rf.getWorldPosition(_fd2);const left=_fd.y<_fd2.y,ft=left?_fd:_fd2;addMark(PRINTS,ft.x,ft.z,f.yaw,left?-.1:.1,.25);spawnDust(ft,run?5:2,run?.45:.25,.25);}
+  if(lf&&rf&&!wood&&SAND()){lf.getWorldPosition(_fd);rf.getWorldPosition(_fd2);const left=_fd.y<_fd2.y,ft=left?_fd:_fd2;spawnDust(ft,run?5:2,run?.45:.25,.25);}
   if(wood){if(AC){const v=distVol(p)*vol;if(v>.01){const t=AC.currentTime;noiseBurst(t,.06,'bandpass',180+Math.random()*60,3,v*1.7);noiseBurst(t,.035,'bandpass',950,2,v*.3);noiseBurst(t+.004,.09,'lowpass',130,.7,v);}}return true;}
   return false;}
 // ---- armour: which piece takes a blow, dents hammered into plate, helmets knocked flying
@@ -4246,7 +4273,7 @@ function fighterDetail(f,dt){
   f._hvy=hvy;f._hy=_fd3.y;f._hx=_fd3.x;f._hz=_fd3.z;
   if(onG){f._dirt=Math.min(1,(f._dirt||0)+dt*.35);if(!f._downT)f._downT=simTime;}else if(f.alive&&!f.ragdoll)f._downT=0;
   if(U)U.uDirt.value=f._dirt||0;
-  if(onG&&hvx>.6&&hvx<6&&SAND()){const d=f._dgP?Math.hypot(_fd3.x-f._dgP.x,_fd3.z-f._dgP.z):1;if(d>.14){if(f._dgP)addMark(DRAGS,(_fd3.x+f._dgP.x)/2,(_fd3.z+f._dgP.z)/2,Math.atan2(_fd3.x-f._dgP.x,_fd3.z-f._dgP.z),.3,d*1.3);(f._dgP||(f._dgP=V())).set(_fd3.x,0,_fd3.z);if(Math.random()<.4)spawnDust(_fd3,1,.2,.15);}}
+  if(onG&&hvx>.6&&hvx<6&&SAND()){const d=f._dgP?Math.hypot(_fd3.x-f._dgP.x,_fd3.z-f._dgP.z):1;if(d>.14){(f._dgP||(f._dgP=V())).set(_fd3.x,0,_fd3.z);if(Math.random()<.4)spawnDust(_fd3,1,.2,.15);}}
   else f._dgP=null;
   // a pool of blood spreads under the dead and the dying
   const down=!f.alive||f.downed,bled=(f.bloodSrc?f.bloodSrc.length:0)+(f.sevNames?f.sevNames.length*2:0);
