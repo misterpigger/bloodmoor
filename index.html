@@ -305,7 +305,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=68;
+const BUILD=69;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -507,7 +507,9 @@ const batch={};
 let world=new THREE.Group();scene.add(world);
 const _m4=new THREE.Matrix4(),_qq=new THREE.Quaternion(),_eu=new THREE.Euler();
 function T(x,y,z,ry=0,rx=0,rz=0,sx=1,sy=1,sz=1){_eu.set(rx,ry,rz,'YXZ');_qq.setFromEuler(_eu);return new THREE.Matrix4().compose(V(x,y,z),_qq,V(sx,sy,sz));}
-function addGeo(key,geo,m){const g=geo.index?geo.toNonIndexed():geo.clone();g.applyMatrix4(m);for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);(batch[key]??=[]).push(g);}
+let GEO_TARGET=null;   // when set, addGeo collects into this object instead (a house that can burn down gets its own meshes)
+function addGeo(key,geo,m){const g=geo.index?geo.toNonIndexed():geo.clone();g.applyMatrix4(m);for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);((GEO_TARGET||batch)[key]??=[]).push(g);}
+function batchGroup(B){const grp=new THREE.Group();for(const k in B){const m=new THREE.Mesh(mergeGeometries(B[k],false),MATS[k]);m.castShadow=!['winLit','glassLit'].includes(k);m.receiveShadow=true;grp.add(m);}return grp;}
 function flushBatch(){for(const k in batch){const merged=mergeGeometries(batch[k],false);const m=new THREE.Mesh(merged,MATS[k]);m.castShadow=!['winLit','glassLit'].includes(k);m.receiveShadow=true;world.add(m);}for(const k in batch)delete batch[k];}
 function wallPlane(w,h,tw=3,th=3){const g=new THREE.PlaneGeometry(w,h);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*w/tw,uv.getY(i)*h/th);return g;}
 function boxUV(w,h,d,t=2){const g=new THREE.BoxGeometry(w,h,d);const uv=g.attributes.uv;const n=g.attributes.normal;for(let i=0;i<uv.count;i++){const ax=Math.abs(n.getX(i)),ay=Math.abs(n.getY(i));let sx,sy;if(ax>.5){sx=d;sy=h;}else if(ay>.5){sx=w;sy=d;}else{sx=w;sy=h;}uv.setXY(i,uv.getX(i)*sx/t,uv.getY(i)*sy/t);}return g;}
@@ -515,6 +517,9 @@ function gableTri(S,rh){const g=new THREE.BufferGeometry();g.setAttribute('posit
 
 // collision
 const boxes=[],circles=[];
+// raised floors you can stand on (the village scaffold): {x0,x1,z0,z1,h} or a ramp {…,ramp:'x'|'z',a0,a1,h0,h1}; down=true when it has fallen
+const FLOORS=[],HOUSES=[];let SCAF=null,mapDirty=false;
+function floorY(x,z,y){let best=0;for(const F of FLOORS){if(F.down||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;const h=F.ramp?lerp(F.h0,F.h1,clamp(((F.ramp==='x'?x:z)-F.a0)/(F.a1-F.a0),0,1)):F.h;if(y>=h-.45&&h>best)best=h;}return best;}
 const GRID=8,grid=new Map();
 const gkey=(i,j)=>i*1000+j;
 function gridInsert(o,x0,x1,z0,z1){for(let i=Math.floor(x0/GRID);i<=Math.floor(x1/GRID);i++)for(let j=Math.floor(z0/GRID);j<=Math.floor(z1/GRID);j++){const k=gkey(i,j);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(o);}}
@@ -596,7 +601,7 @@ function house(x,z,rot,w,d,floors,st){
   }
   // collider
   const s=Math.abs(Math.sin(rot))>.5;const hw=(s?D:W)/2+.05,hd=(s?W:D)/2+.05;
-  addBox(x-hw,x+hw,z-hd,z+hd,h0+rh);
+  return {box:addBox(x-hw,x+hw,z-hd,z+hd,h0+rh),hw,hd,H:h0+rh,rh,W,D};
 }
 
 function tryHouse(cx,cz,rot,w,d,floors){
@@ -605,7 +610,11 @@ function tryHouse(cx,cz,rot,w,d,floors){
   if(Math.abs(cx)+hw>MAP-3||Math.abs(cz)+hd>MAP-3)return false;
   if(overlapsAny(cx-hw-.6,cx+hw+.6,cz-hd-.6,cz+hd+.6))return false;
   const st={stone:srand()<.4,pv:(srand()*3)|0,thatch:srand()<.38,chimney:srand()<.6,door:(srand()-.5)*(w-2.2),torch:srand()<.55,light:srand()<.5};
-  house(cx,cz,rot,w,d,floors,st);return true;
+  // thatched houses in the inner rows can catch fire from the ring and burn down: they get their own meshes so they can fall
+  const burn=st.thatch&&Math.hypot(cx,cz)<48&&HOUSES.length<10;let B=null;if(burn)GEO_TARGET=B={};
+  const fl0=flames.length,hs=house(cx,cz,rot,w,d,floors,st);GEO_TARGET=null;
+  if(burn){const grp=batchGroup(B);world.add(grp);HOUSES.push({grp,x:cx,z:cz,rot,...hs,st:'whole',t:0,fx:[],torch:flames.slice(fl0)});}
+  return true;
 }
 function streetRow(ox,oz,ax,az,px,pz,s0,s1,off){
   let s=s0+srand()*1.5;
@@ -679,6 +688,81 @@ function brazier(x,z){
   addGeo('dirt',new THREE.CylinderGeometry(.38,.38,.05,12),T(x,1.12,z));
   addFlame(x,1.12,z,1.5,true);addCircle(x,z,.45,1.3);
 }
+// the gallows scaffold in the square: a plank deck on six posts with stairs up one end. High ground to fight from, and each post
+// can be hacked through: lose both posts at one end, two on a side, or any three, and the whole deck comes down with whoever is on it
+function scaffold(cx,cz){const W=4.5,D=4,Hh=1.6,x0=cx-W/2,x1=cx+W/2,z0=cz-D/2,z1=cz+D/2;
+  const deck=new THREE.Group();deck.position.set(cx,0,cz);world.add(deck);const mk=(g,m)=>{const o=new THREE.Mesh(g,m);o.castShadow=o.receiveShadow=true;deck.add(o);return o;};
+  for(let i=0;i<Math.round(W/.24);i++){const o=mk(boxUV(.22,.06,D,1),MATS.woodPale);o.position.set(-W/2+.12+i*.24,Hh-.03,(Math.random()-.5)*.03);}
+  for(const z of [-D/2+.1,D/2-.1])mk(boxUV(W,.16,.12,1),MATS.wood).position.set(0,Hh-.14,z);
+  for(const x of [-W/2+.1,W/2-.1])mk(boxUV(.12,.16,D,1),MATS.wood).position.set(x,Hh-.14,0);
+  // the gallows: two uprights, a crossbeam and a rope
+  for(const z of [-1.1,1.1])mk(boxUV(.16,2.7,.16,1),MATS.wood).position.set(W/2-.5,Hh+1.35,z);
+  mk(boxUV(.16,.16,2.6,1),MATS.wood).position.set(W/2-.5,Hh+2.7,0);mk(new THREE.CylinderGeometry(.015,.015,1.1,5),MATS.wood).position.set(W/2-.5,Hh+2.1,0);
+  mk(new THREE.TorusGeometry(.1,.02,5,10),MATS.wood).position.set(W/2-.5,Hh+1.47,0);
+  const F={x0,x1,z0,z1,h:Hh};FLOORS.push(F);const box=addBox(x0,x1,z0,z1,Hh-.3);
+  // stairs up the west end, with rails
+  const sx0=x0-3,st=new THREE.Group();world.add(st);const n=8;for(let i=0;i<n;i++){const o=new THREE.Mesh(boxUV(.38,.05,1.2,1),MATS.woodPale);o.position.set(sx0+(i+.5)*3/n,(i+1)/n*Hh-.03,cz);o.castShadow=o.receiveShadow=true;st.add(o);}
+  for(const z of [cz-.65,cz+.65]){const o=new THREE.Mesh(boxUV(3.4,.1,.1,1),MATS.wood);o.position.set(sx0+1.5,Hh*.5+.5,z);o.rotation.z=Math.atan2(Hh,3);o.castShadow=true;st.add(o);addBox(sx0,x0,z-.06,z+.06,Hh+.3);}
+  FLOORS.push({x0:sx0,x1:x0+.01,z0:cz-.6,z1:cz+.6,ramp:'x',a0:sx0,a1:x0,h0:0,h1:Hh});
+  const posts=[];for(const [px,pz] of [[x0+.15,z0+.15],[cx,z0+.15],[x1-.15,z0+.15],[x0+.15,z1-.15],[cx,z1-.15],[x1-.15,z1-.15]]){const g=new THREE.Group();g.position.set(px,0,pz);const m=new THREE.Mesh(boxUV(.2,Hh-.2,.2,1),MATS.wood);m.position.y=(Hh-.2)/2;g.add(m);
+    const q=propAdd('post',g,px,pz,.14,Hh-.2,26,null);q.scaf=true;posts.push(q);}
+  SCAF={F,box,deck,posts,cx,cz,W,D,Hh,down:false,t:0,ax:V(),fallT:-1};}
+function scafCheck(dir){const S=SCAF;if(!S||S.down)return;const b=S.posts.map(p=>!!p.broken),n=b.filter(Boolean).length;
+  const end0=b[0]&&b[3],end1=b[2]&&b[5],side0=(b[0]+b[1]+b[2])>=2,side1=(b[3]+b[4]+b[5])>=2;
+  if(n>=3||end0||end1||side0||side1){let ax=0,az=0;S.posts.forEach((p,i)=>{if(p.broken){ax+=p.x-S.cx;az+=p.z-S.cz;}});scafCollapse(ax,az);}}
+function scafCollapse(ax,az,net=true){const S=SCAF;if(!S||S.down)return;S.down=true;mapDirty=true;S.F.down=true;gridRemove(S.box);if(NET.mode==='host'&&net)netEv(['SF',r3(ax),r3(az)]);
+  const l=Math.hypot(ax,az)||1;S.ax.set(ax/l,0,az/l);S.fallT=0;
+  for(const p of S.posts)if(!p.broken){p.broken=true;world.remove(p.mesh);}
+  sThud(V(S.cx,1,S.cz),1.4);sfx('crush',V(S.cx,1,S.cz),1,.7,0,false);sfx('fall',V(S.cx,1,S.cz),1,.6,.1,false);spawnDust(V(S.cx,.3,S.cz),14,1.2,.5);
+  if(NET.mode==='client')return;
+  for(const f of fighters){if(!f.alive||f.ragdoll)continue;if(f.pos.x>S.F.x0-.2&&f.pos.x<S.F.x1+.2&&f.pos.z>S.F.z0-.2&&f.pos.z<S.F.z1+.2&&f.pos.y>.8){
+      f.damage(8,f.lastHitBy,'fell');if(f.alive){f.knockdown(rand(1.4,2.4),V(S.ax.x*1.5+(Math.random()-.5),-.5,S.ax.z*1.5+(Math.random()-.5)),f.chest);tell(f,'The scaffold gives way','red');}}}
+  for(let i=0;i<2;i++){const s2=new Sword(WEAPONS.plank);s2.reset(V(S.cx+(Math.random()-.5)*2,.4,S.cz+(Math.random()-.5)*2),V(Math.random()-.5,.1,Math.random()-.5).normalize());s2.edge.set(0,1,0);s2.free=true;s2.age=0;if(s2.rb){s2.physPose();s2.setGroup(GR_LOOSE);}freeSwords.push(s2);loot.push({kind:'weapon',def:s2.def,sword:s2,halo:null});}}
+function scafVisual(dt){const S=SCAF;if(!S||S.fallT<0||S.fallT>1)return;S.fallT=Math.min(1.01,S.fallT+dt*1.6);const u=Math.min(1,S.fallT),e=u*u;   // tips toward the broken side and drops flat
+  S.deck.position.set(S.cx+S.ax.x*.5*e,-(S.Hh-.25)*e,S.cz+S.ax.z*.5*e);S.deck.rotation.set(S.ax.z*.22*Math.sin(Math.PI*u),0,-S.ax.x*.22*Math.sin(Math.PI*u));}
+// ---- the village burns: the ring of fire catches the thatch of the inner houses as it closes (and once in a match a stray spark
+// lights one well inside it). A burning house roars for twenty-odd seconds, then caves in: the roof and walls drop, burning beams
+// pitch out across the street in front of it (blocking it, and setting alight whoever touches them) and leave a charred heap
+const charMat=std({color:0x15110e,roughness:1});
+const smokeSpriteMat=new THREE.SpriteMaterial({map:TX.glow,color:0x231e1a,transparent:true,depthWrite:false,opacity:.5});
+function houseLocal(H,lx,y,lz){const c=Math.cos(H.rot),s=Math.sin(H.rot);return V(H.x+lx*c+lz*s,y,H.z-lx*s+lz*c);}
+function houseFlame(H,p,size){const f=new THREE.Sprite(flameMat);f.position.copy(p);f.position.y+=.18*size;f.scale.set(.32*size,.62*size,1);world.add(f);const h=new THREE.Sprite(haloMat);h.position.copy(p);h.scale.setScalar(Math.min(5,2.2*size));world.add(h);   // (a torch-sized glow per flame: big halos washed the whole street orange)
+  const e={f,h,L:null,base:size,ph:Math.random()*100,x:p.x,y:p.y,z:p.z};flames.push(e);H.fx.push(e);return e;}
+function dropFlames(list){for(const e of list){world.remove(e.f);world.remove(e.h);const i=flames.indexOf(e);if(i>=0)flames.splice(i,1);}list.length=0;}
+function houseIgnite(i,net=true){const H=HOUSES[i];if(!H||H.st!=='whole')return;H.st='burning';H.t=0;H.burnFor=rand(18,26);mapDirty=true;if(NET.mode==='host'&&net)netEv(['HF',i]);
+  const hw=H.W/2,hd=H.D/2;for(let k=0;k<8;k++){const lx=(Math.random()-.5)*H.W*.9,lz=(Math.random()-.5)*H.D*.8;houseFlame(H,houseLocal(H,lx,H.H-H.rh*Math.abs(lz)/(H.D/2)+.1,lz),2.6+Math.random()*1.8);}   // on the roof's surface, not inside it
+  H.smoke=[];for(let k=0;k<12;k++){const sp=new THREE.Sprite(smokeSpriteMat.clone());sp.material.opacity=0;sp.renderOrder=6;world.add(sp);H.smoke.push({sp,t:k/12*4});}
+  for(let k=0;k<3;k++)houseFlame(H,houseLocal(H,(Math.random()-.5)*H.W*.8,1.3+Math.random()*1.5,(Math.random()<.5?-1:1)*(hd+.1)),1.2+Math.random()*.6);
+  sfx('crackle',V(H.x,2,H.z),1,.8,0,false);}
+function houseCollapse(i,net=true){const H=HOUSES[i];if(!H||H.st==='down'||H.st==='collapsing')return;H.st='collapsing';H.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['HC',i]);
+  dropFlames(H.torch);const P=V(H.x,1.5,H.z);sThud(P,1.6);sfx('crush',P,1,.6,0,false);sfx('crush',P,.8,.5,.25,false);spawnDust(V(H.x,.4,H.z),20,2,.8);
+  // burning beams pitched out across the street in front (the door side faces the street)
+  H.beams=[];const fwd=V(Math.sin(H.rot),0,Math.cos(H.rot));
+  for(let k=0;k<3;k++){const along=(k-1)*H.W*.32+(Math.random()-.5)*.6,out=H.D/2+1.2+Math.random()*2.2,c=houseLocal(H,along,.14,out),ang=H.rot+(Math.random()-.5)*.9,L=3+Math.random()*1.2;
+    const m=new THREE.Mesh(boxUV(.24,.24,L,1),charMat);m.position.copy(c);m.rotation.y=ang;m.castShadow=m.receiveShadow=true;m.visible=false;world.add(m);
+    const ex=Math.abs(Math.sin(ang))*L/2+.15,ez=Math.abs(Math.cos(ang))*L/2+.15;const box=addBox(c.x-Math.max(ex,.2),c.x+Math.max(ex,.2),c.z-Math.max(ez,.2),c.z+Math.max(ez,.2),.45);gridRemove(box);
+    H.beams.push({m,box,c,L,ang,fx:[],burn:22,laid:false});}
+  if(NET.mode==='client')return;
+  for(const f of fighters){if(!f.alive||f.ragdoll)continue;const d=V(f.pos.x-H.x,0,f.pos.z-H.z),lz=d.dot(fwd),lx=Math.abs(d.x*Math.cos(H.rot)-d.z*Math.sin(H.rot));
+    if(lz>H.D/2-.2&&lz<H.D/2+4&&lx<H.W/2+.6){f.damage(14,null,'crushed by a falling house');if(f.alive){f.burn=Math.max(f.burn,2.5);f.knockdown(rand(1.5,2.5),fwd.clone().multiplyScalar(2).setY(.3),f.chest);tell(f,'The house falls on you','red');}}}}
+function villageStep(h){if(!HOUSES.length||NET.mode==='client')return;const mt=simTime-CD_END;
+  for(let i=0;i<HOUSES.length;i++){const H=HOUSES[i];
+    if(H.st==='whole'&&state==='playing'&&!zone.off){const d=Math.hypot(H.x-zone.c.x,H.z-zone.c.z),hr=Math.max(H.hw,H.hd);if(zone.r-(d+hr)<3&&d-hr<zone.r+6)houseIgnite(i);}
+    if(H.st==='burning'){H.t+=h;if(H.t>H.burnFor)houseCollapse(i);
+      for(const f of fighters){if(!f.alive||f.ragdoll)continue;if(Math.abs(f.pos.x-H.x)<H.hw+.5&&Math.abs(f.pos.z-H.z)<H.hd+.5)f.burn=Math.max(f.burn,1.2);}}   // too close to the blaze
+    if(H.beams)for(const b of H.beams){if(!b.laid||b.burn<=0)continue;for(const f of fighters){if(!f.alive||f.ragdoll||f.pos.y>.6)continue;const o=b.box;if(f.pos.x>o.x0-.35&&f.pos.x<o.x1+.35&&f.pos.z>o.z0-.35&&f.pos.z<o.z1+.35)f.burn=Math.max(f.burn,1.5);}}}
+  // once a match a spark carried on the wind lights a house well inside the ring
+  if(state==='playing'&&!zone.off&&mt>70&&!villageStep.spark){villageStep.spark=true;const c=HOUSES.map((H,i)=>i).filter(i=>HOUSES[i].st==='whole'&&Math.hypot(HOUSES[i].x-zone.c.x,HOUSES[i].z-zone.c.z)+8<zone.r);if(c.length)houseIgnite(c[(Math.random()*c.length)|0]);}}
+function villageVisual(dt){for(const H of HOUSES){
+    if(H.st==='down')H.t+=dt;
+    if(H.smoke){const on=H.st==='burning'||H.st==='collapsing'||(H.st==='down'&&H.t<9);for(const q of H.smoke){q.t+=dt;if(q.t>4){q.t-=4;q.x=(Math.random()-.5)*H.W*.6;q.z=(Math.random()-.5)*H.D*.4;}const u=q.t/4,p=houseLocal(H,q.x||0,0,q.z||0);q.sp.position.set(p.x+u*1.5,(H.st==='down'?1:H.H)+u*9,p.z+u*.8);q.sp.scale.setScalar(2+u*7);q.sp.material.opacity=on?.55*Math.sin(Math.PI*u):Math.max(0,q.sp.material.opacity-dt*.2);}}
+    if(H.st==='collapsing'){H.t+=dt;const u=Math.min(1,H.t/1.4),e=u*u;const fwd=V(Math.sin(H.rot),0,Math.cos(H.rot));H.grp.position.set(fwd.x*.6*e,-H.H*.95*e,fwd.z*.6*e);H.grp.rotation.set(0,0,0);
+      if(u>=1){H.st='down';world.remove(H.grp);gridRemove(H.box);dropFlames(H.fx);
+        const heap=new THREE.Group();for(let k=0;k<9;k++){const m=new THREE.Mesh(boxUV(.22,.22,1.6+Math.random()*2.4,1),charMat);m.position.copy(houseLocal(H,(Math.random()-.5)*H.W*.8,.15+Math.random()*.5,(Math.random()-.5)*H.D*.8));m.rotation.set((Math.random()-.5)*.6,Math.random()*3,(Math.random()-.5)*.6);m.castShadow=m.receiveShadow=true;heap.add(m);}
+        world.add(heap);H.heap=heap;H.heapBox=addBox(H.box.x0+.3,H.box.x1-.3,H.box.z0+.3,H.box.z1-.3,.9);
+        for(let k=0;k<4;k++)houseFlame(H,houseLocal(H,(Math.random()-.5)*H.W*.6,.5,(Math.random()-.5)*H.D*.6),1+Math.random()*.6);   // embers still burning in the heap
+        for(const b of H.beams){b.m.visible=true;b.laid=true;gridInsert(b.box,b.box.x0-1,b.box.x1+1,b.box.z0-1,b.box.z1+1);for(let k=0;k<2;k++){const t=(k+.5)/2-.5;houseFlame({fx:b.fx},V(b.c.x+Math.sin(b.ang)*t*b.L*.8,.25,b.c.z+Math.cos(b.ang)*t*b.L*.8),.8+Math.random()*.4);}spawnDust(b.c,6,1,.4);}}}
+    if(H.beams)for(const b of H.beams)if(b.laid&&b.burn>0){b.burn-=dt;if(b.burn<=0)dropFlames(b.fx);}}}
 function well(x,z){
   addGeo('stone',new THREE.CylinderGeometry(1.1,1.15,.9,18,1,true),T(x,.45,z));
   addGeo('stone',new THREE.TorusGeometry(1.1,.12,6,18),T(x,.9,z,0,Math.PI/2));
@@ -712,6 +796,7 @@ function buildWorld(){
   const cl=['cloth1','cloth2','cloth3'];
   for(let i=0;i<5;i++){const a=.35+i*1.25;const r=11.5;stall(Math.cos(a)*r,Math.sin(a)*r,-a+Math.PI/2,cl[i%3]);}
   barrel(-4,4.5);barrel(-4.6,5.1);crate(-5.3,4.2);crate(5.5,6);barrel(6.2,5.2);cart(-6,-6,.7);
+  scaffold(-.75,1);
 
   buildChurch(22,22);
   // radial streets
@@ -772,7 +857,7 @@ function onBridge(x,z){if(!PIT||PIT.down)return false;
   if(PIT.planks){if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r+.6)return false;const k=Math.round((x-PIT.p0)/.19),pl=PIT.planks[k];return !(pl&&pl.broken);}   // the plank bridge: a gap where a plank is gone
   const G=PIT.grate;if(!G||G.mode!=='rest')return false;return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}
 function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
-function groundY(x,z,y=0){if(!PIT)return 0;
+function groundY(x,z,y=0){if(!PIT)return FLOORS.length?floorY(x,z,y):0;
   if(PIT.grate&&PIT.grate.mode==='fallen'&&Math.abs(Math.sin(PIT.grate.phi))<(PIT.grate.bridge?.64:.55)){   /* only once it has come to rest: a falling slab under you is no floor */const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}   /* steeper than about 33° it's a wall of iron, not a ramp: nobody walks up out of the shaft on it */const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
   return inC&&(y<-.04||!onBridge(x,z))?-PIT.d:0;}   // the deck is only ground from above: a body under it isn't snapped up through the boards
 function pitWall(p,r){if(!PIT||p.y>-.02)return;const dx=p.x-PIT.x,dz=p.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r-r;if(d>m&&d>1e-6){p.x=PIT.x+dx/d*m;p.z=PIT.z+dz/d*m;}}   // below the rim you're inside the shaft
@@ -828,7 +913,7 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
 function clearWorld(){PIT=null;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
-  boxes.length=0;circles.length=0;grid.clear();flames.length=0;torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
+  boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
 
 // ================================================================ the arena (Half Sword style colosseum, daylight)
@@ -1983,7 +2068,7 @@ function improvStep(){for(const d of debris){const s=d.wep;if(!s)continue;if(!fr
 const PROPS=[];
 function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});world.add(mesh);const p={kind,mesh,x,z,r,h,hp,hp0:hp,col,cd:new Map(),jig:0};PROPS.push(p);return p;}
 function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
-function propBreak(p,dir,by){if(p.broken)return;p.broken=true;world.remove(p.mesh);if(p.col)gridRemove(p.col);
+function propBreak(p,dir,by){if(p.broken)return;p.broken=true;mapDirty=true;world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
   if(NET.mode==='client')return;
@@ -1995,13 +2080,14 @@ function propBreak(p,dir,by){if(p.broken)return;p.broken=true;world.remove(p.mes
     s.reset(at,ax);s.edge.set(0,1,0);
     s.free=true;s.age=0;if(p.loose){s.Hp.copy(s.H);s.Tp.copy(s.T);p.loose=false;}else{s.Hp.copy(s.H).addScaledVector(dv,-H*(1.5+Math.random()*2)).addScaledVector(Y_AXIS,-H*2);s.Tp.copy(s.T).addScaledVector(dv,-H*2);}if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}
     freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:null});}
+  if(p.scaf)scafCheck(dir);
   if(p.kind==='plank'&&by)tell(by,'The plank gives way','sm');
   if(p.kind==='plank'&&PIT&&PIT.planks&&!PIT.down){const P=PIT.planks;let run=0,maxRun=0,n=0;for(const q of P){if(q.broken){n++;run++;maxRun=Math.max(maxRun,run);}else run=0;}
     PIT.integ-=.07;if(maxRun>=6||n>=P.length*.55||PIT.integ<=0)bridgeCollapse(dir);}}
 // the whole bridge gives way, the way Half Sword's grate does: it goes as one piece. The end that has lost its footing drops, it tips
 // over the other rim, slides off and crashes down the shaft, and ends up wedged across it, leaning from the floor against the far
 // wall, boards and all. Whoever was on it goes with it; down there it's something to stand on, not a way out.
-function bridgeCollapse(dir){if(!PIT||PIT.down)return;PIT.down=true;if(NET.mode==='host')netEv(['B']);
+function bridgeCollapse(dir){if(!PIT||PIT.down)return;PIT.down=true;mapDirty=true;if(NET.mode==='host')netEv(['B']);
   sThud(V(PIT.x,0,PIT.z),1.4);sfx('crush',V(PIT.x,0,PIT.z),1,.7,0,false);
   const g=new THREE.Group();g.position.set(PIT.x,0,PIT.z);world.add(g);
   for(const m of PIT.beams||[]){world.remove(m);m.position.x-=PIT.x;m.position.z-=PIT.z;g.add(m);}
@@ -2507,7 +2593,8 @@ class Fighter{
       else if(simTime-this.fallT>.38){this.fallT=null;this.pitFall();return;}}
     if(PIT&&!this.isPlayer&&!this.remote){const dx=this.pos.x-PIT.x,dz=this.pos.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r+1.3;   // bots keep back from the edge
       if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
-    const onGround=this.pos.y<=.001&&this.fallT==null;
+    const fy=FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.fallT==null&&this.vy<=0&&this.pos.y>fy&&this.pos.y-fy<.1)this.pos.y=fy;   // down a stair
+    const onGround=this.pos.y<=fy+.001&&this.fallT==null;if(onGround&&this.pos.y<fy)this.pos.y=fy;
     run=run&&!exhausted&&!this.crouch&&onGround;
     const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45||(this.gut||0)>=1)run=false;   // an opened belly: no running
     if(this.heartT&&simTime>this.heartT){this.heartT=0;if(this.alive&&!this.downed&&NET.mode!=='client'){this.goDown(this.lastHitBy);return;}}   // the heart gives out: down in a second or two
@@ -2529,7 +2616,7 @@ class Fighter{
     // thrusts step in behind the point
     
     if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);}
-    else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;if(this.pos.y<=0){this.pos.y=0;this.vy=0;}}
+    else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
     this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.fwd(_f);this.kickRun=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z);this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
@@ -3767,7 +3854,7 @@ const KICK={p:0,y:0,r:0,vp:0,vy:0,vr:0};
 const _kr=new THREE.Vector3(),_kf=new THREE.Vector3();
 function applyKick(dir,amt){if(!player)return;player.right(_kr);player.fwd(_kf);const x=dir.dot(_kr),z=dir.dot(_kf);
   KICK.vy-=x*amt*1.6;KICK.vp+=(-z*.7+dir.y*.6)*amt*1.4;KICK.vr+=x*amt*.9;}
-function camKick(f,dir,amt){if(!f)return;if(f.isPlayer)applyKick(dir,amt);else if(f.remote&&NET.mode==='host')netEv(['q',f.id,r3v(dir),r3(amt)]);}
+function camKick(f,dir,amt){if(!f)return;if(f.isPlayer)applyKick(dir,amt);else if(f.remote&&NET.mode==='host')netEv(['ck',f.id,r3v(dir),r3(amt)]);}
 function kickStep(dt){const k=240,c=2*Math.sqrt(k)*.42;for(const a of ['p','y','r']){const v='v'+a;KICK[v]+=(-k*KICK[a]-c*KICK[v])*dt;KICK[a]+=KICK[v]*dt;KICK[a]=clamp(KICK[a],-.3,.3);}}
 function sThud(p,power=1){netEv(['t',r3v(p),power]);if(sfx(power>.8?'crush':power>.45?'strike':'punch',p,.9*clamp(power+.2,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.8;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,.1,'lowpass',500,.7,v);const o=AC.createOscillator();o.frequency.setValueAtTime(90,t);o.frequency.exponentialRampToValueAtTime(32,t+.14);const g=AC.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.16);o.connect(g);g.connect(master);o.start(t);o.stop(t+.18);}
 function sClank(p,power=1){netEv(['n',r3v(p),power]);if(sfx(Math.random()<.5?'hitPlate':'hitMail',p,.8*clamp(power+.3,.4,1.2),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1)*.35;if(v<.01)return;const t=AC.currentTime,base=380+Math.random()*200;[1,2.7,4.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=base*r;const g=AC.createGain();g.gain.setValueAtTime(v/(1+i),t);g.gain.exponentialRampToValueAtTime(.0005,t+.18/(1+i*.3));o.connect(g);g.connect(master);o.start(t);o.stop(t+.25);});noiseBurst(t,.05,'bandpass',2200,1,v*.6);}
@@ -3828,6 +3915,8 @@ const input={keys:{},lmb:false,rmb:false,locked:false,mx:.5,my:.5};
 const BOT_WEAPONS=['arming','longsword','axe','mace','spear','arming','longsword'];
 function botLoad(){const armor=[];if(Math.random()<.55)armor.push(pick(['kettle','nasal','kettle','bascinet']));if(Math.random()<.3)armor.push('mail');if(Math.random()<.15)armor.push('vambraces');if(Math.random()<.12)armor.push('greaves');return {weapon:pick(BOT_WEAPONS),armor};}
 function clearMatch(){
+  if(mapDirty&&NET.mode!=='client')loadMap(curMap);   // a burned village, a fallen scaffold or bridge, smashed barrels: the next match starts on the map as built
+  villageStep.spark=false;
   physStatic();clearDetails();specStop();SPEC.dismissed=false;
   for(const f of fighters)f.dispose();fighters.length=0;
   for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;
@@ -3862,7 +3951,7 @@ function onKill(killer,victim,cause){
   cheer(victim.isPlayer?.5:.7);
   if(killer&&killer!==victim){killer.kills++;if(killer.isPlayer){hitMarker(true);addScore(100);note('+100','gold');if(simTime-multi.t<7)multi.n++;else multi.n=1;multi.t=simTime;if(multi.n===2)note('Double kill','gold');if(multi.n===3)note('Triple kill','gold');if(multi.n>=4)note(curMap==='arena'?'Champion of the arena':'Butcher of the village','gold');}}
   const alive=fighters.filter(f=>f.alive).length;
-  netEv(['K',killer&&killer!==victim?killer.id:-1,victim.id,cause,alive]);if(alive===1){const w=fighters.find(f=>f.alive);if(w&&w.remote)netEv(['W',w.id]);}
+  netEv(['K',killer&&killer!==victim?killer.id:-1,victim.id,cause,alive]);if(alive===1){const w=fighters.find(f=>f.alive);if(w&&w.remote)netEv(['Wn',w.id]);}
   feedRow(killer,victim,cause);
   if(MODE!=='br'&&RUN){modeKill(killer,victim);return;}
   if(victim.isPlayer){state='dead';deathT=performance.now();placement=alive+1;document.getElementById('endcause').textContent=deathText(killer,victim,cause);}
@@ -4179,6 +4268,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
+  villageStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 // bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
@@ -4206,7 +4296,7 @@ function logic(dt){
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
-  propVisual(dt);grateVisual();
+  propVisual(dt);grateVisual();villageVisual(dt);scafVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -4803,7 +4893,7 @@ function clientData(d){
 }
 function clientStart(d){
   if(PW){for(const f of fighters)f.dispose();fighters.length=0;for(const s of freeSwords)s.dispose();freeSwords.length=0;for(const it of [...loot])removeLoot(it);PW.free();PW=null;PHC.clear();physStatics.length=0;physKey=-1;}
-  if(MAPS[d.map]&&d.map!==curMap)loadMap(d.map);
+  if(MAPS[d.map]&&(d.map!==curMap||mapDirty))loadMap(d.map);villageStep.spark=false;
   for(const f of fighters)f.dispose();fighters.length=0;
   for(const dd of debris){scene.remove(dd.clone);scene.remove(dd.root);}debris.length=0;
   for(const it of [...loot]){removeLoot(it);if(it.sword)it.sword.dispose();}freeSwords.length=0;spurts.length=0;NET.lootMap.clear();
@@ -4872,7 +4962,7 @@ function clientFrame(dt){
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);grateVisual();
+  propVisual(dt);grateVisual();villageVisual(dt);scafVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -4883,22 +4973,22 @@ function clientEvents(ev){
     case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'h':sHit(P(e[1]),e[2],e[3]);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
     case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5]);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
-    case 'B':bridgeCollapse(null);break;
+    case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
     case 'q':{const f=NET.puppets.get(e[1]);if(f){f.clutchP=e[2];f.clutchT=simTime+e[3];}break;}
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
+    case 'SF':scafCollapse(e[1],e[2],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
-    case 'q':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
+    case 'ck':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
     case 'g':{const f=NET.puppets.get(e[1]);if(f){addWound(f,e[2],P(e[3]),P(e[4]),e[5],e[6]);const c=f.caps[e[2]];if(c&&f.pbd){const p=P(e[3]);_wl1.subVectors(c.b,c.a);const t=clamp(_wl2.subVectors(p,c.a).dot(_wl1)/Math.max(1e-6,_wl1.lengthSq()),0,1);_wl2.copy(c.a).addScaledVector(_wl1,t).sub(p);f.bodyHit(c.ba==='Hips'?'Spine1':c.ba,_wl2,Math.min(6,e[5]*.09));}}break;}
     case 'K':{const k=e[1]>=0?NET.puppets.get(e[1]):null,v=NET.puppets.get(e[2]);if(!v)break;feedRow(k,v,e[3]);cheer(.5);
       if(k&&k.isPlayer){hitMarker(true);note('+100','gold');}
       if(v.isPlayer&&NET.mode2==='br'){v.alive=false;state='dead';deathT=performance.now();placement=e[4]+1;el('endcause').textContent=deathText(k,v,e[3]);}break;}
-    case 'B':showBanner(e[1],e[2]);break;
-    case 'W':if(e[1]===NET.myId&&state==='playing'){state='won';deathT=performance.now();placement=1;}break;
+    case 'Wn':if(e[1]===NET.myId&&state==='playing'){state='won';deathT=performance.now();placement=1;}break;
   }}catch(err){}}
 }
 el('hostBtn').addEventListener('click',()=>{initAudio();netHost();});
@@ -4936,6 +5026,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
