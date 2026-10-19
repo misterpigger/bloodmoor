@@ -308,7 +308,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=76;
+const BUILD=77;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1046,29 +1046,49 @@ function railBreak(i,net=true){const R=TAV.rails[i];if(!R||R.broken)return;R.bro
 // ---- the longship: a narrow deck at sea, rowing benches to step over, a mast and sail. The ship rolls with the swell (the sea and
 // sky tilt round it, and everything on deck is pushed toward the low side); now and then a big swell staggers everyone. The rail is
 // low: a body knocked into it can go over, and over the side is the end
-const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uAmp:{value:.7},uSL:{value:20},uSW:{value:4.6},uTime:{value:0},uDeep:{value:new THREE.Color(0x0b2129)},uShal:{value:new THREE.Color(0x2b4e57)},uSky:{value:new THREE.Color(0xa9b1b6)},uSun:{value:V(.35,.75,-.5).normalize()}}]),
-  vertexShader:`uniform float uTime,uAmp;varying vec3 vN;varying vec3 vW;varying float vH;
+// ---- the sea: long swells running in from the west-south-west, a cross swell, chop on top, and now and then a big wave you can
+// watch come in from far off. The ship rides them: its heave, roll and pitch are measured from the water under its bow, stern
+// and both sides (seaH, the same sum as the shader), so a crest lifting the bow tips the deck back and a wave passing under the
+// beam heels it over and back. Everything stays in the ship's frame: the ship never moves; the sea and sky move round it
+const SEA_W=[[.55,38,.3,0],[.35,21,1.15,1.7],[.18,9.5,-.55,4.1],[.07,4.3,2.2,2.6]];   // amplitude, wavelength, heading, phase
+const SEA_PK={L:46,W:28};
+function seaH(x,z,t,amp,pk){let h=0;for(const [a,l,hd,ph] of SEA_W){const k=6.2832/l,w=Math.sqrt(9.8*k);h+=a*amp*Math.sin(k*(x*Math.cos(hd)+z*Math.sin(hd))-w*t+ph);}
+  if(pk&&pk.A>0){const d=x*pk.dx+z*pk.dz-pk.s,k=6.2832/SEA_PK.L;h+=pk.A*Math.exp(-(d*d)/(SEA_PK.W*SEA_PK.W))*Math.cos(k*d);}return h;}
+const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uAmp:{value:.7},uPk:{value:new THREE.Vector4(1,0,-999,0)},uSL:{value:20},uSW:{value:4.6},uTime:{value:0},uDeep:{value:new THREE.Color(0x0a1c24)},uShal:{value:new THREE.Color(0x2d5560)},uSky:{value:new THREE.Color(0xa9b1b6)},uSun:{value:V(.35,.75,-.5).normalize()}}]),
+  vertexShader:`uniform float uTime,uAmp;uniform vec4 uPk;varying vec3 vN;varying vec3 vW;varying float vH;varying float vF;
     #include <fog_pars_vertex>
-    void main(){vec3 p=position;float t=uTime;vec4 w0=modelMatrix*vec4(p,1.);float A=uAmp*mix(.35,1.,smoothstep(5.,16.,length(w0.xz*vec2(.24,1.))));
-      float h=.62*sin(p.x*.11+t*.7)+.42*sin(p.z*.15+p.x*.05-t*.85)+.14*sin((p.x+p.z)*.41+t*1.5);
-      float dx=.62*.11*cos(p.x*.11+t*.7)+.42*.05*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5),dz=.42*.15*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5);
-      h*=A;dx*=A;dz*=A;p.y+=h;vH=h/max(A,.3);vN=normalize((modelMatrix*vec4(-dx,1.,-dz,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
+    const float TAU=6.2832;
+    void wave(vec2 p,float a,float l,float hd,float ph,inout float h,inout vec2 g){float k=TAU/l,w=sqrt(9.8*k);vec2 d=vec2(cos(hd),sin(hd));float s=k*dot(p,d)-w*uTime+ph;h+=a*sin(s);g+=a*k*cos(s)*d;}
+    void main(){vec3 p=position;float h=0.;vec2 g=vec2(0.);
+      wave(p.xz,.55*uAmp,38.,.3,0.,h,g);wave(p.xz,.35*uAmp,21.,1.15,1.7,h,g);wave(p.xz,.18*uAmp,9.5,-.55,4.1,h,g);wave(p.xz,.07*uAmp,4.3,2.2,2.6,h,g);
+      if(uPk.w>0.){float d=dot(p.xz,uPk.xy)-uPk.z,k=TAU/${SEA_PK.L}.,W=${SEA_PK.W}.;float e=exp(-d*d/(W*W));h+=uPk.w*e*cos(k*d);g+=uPk.w*e*(-k*sin(k*d)-2.*d/(W*W)*cos(k*d))*uPk.xy;}
+      p.y+=h;vH=h;vF=length(g);vN=normalize((modelMatrix*vec4(-g.x,1.,-g.y,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
     }`,
-  fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;uniform float uSL,uSW,uTime;varying vec3 vN;varying vec3 vW;varying float vH;
+  fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;uniform float uSL,uSW,uTime,uAmp;varying vec3 vN;varying vec3 vW;varying float vH;varying float vF;
     #include <fog_pars_fragment>
-    void main(){float u=vW.x/uSL,u4=u*u*u*u,sh=.55+.55*u4,sa=(sh-vW.y)/(sh+1.15),hw=u4<1.&&sa<1.?(uSW*sqrt(1.-u4)+.08)*sqrt(1.-clamp(sa,0.,1.)*clamp(sa,0.,1.)):-1.,ed=abs(vW.z)-hw;if(ed<0.)discard;   /* inside the hull at this height: the hull keeps the sea out (its sides curve in toward the keel) */vec3 n=normalize(vN),v=normalize(cameraPosition-vW);float fr=pow(1.-max(dot(n,v),0.),4.);
-      vec3 c=mix(uDeep,uShal,clamp(vH*.7+.4,0.,1.));c=mix(c,uSky,fr*.75);c+=vec3(1.)*pow(max(dot(reflect(-uSun,n),v),0.),90.)*.6;
-      c+=vec3(.85)*smoothstep(.75,1.05,vH)*.3;   // foam on the crests
-      if(hw>0.)c=mix(c,vec3(.78,.82,.84),(1.-smoothstep(0.,.6,ed))*.55*(.6+.4*sin(vW.x*3.1+uTime*2.3)));   // and where it slaps the hull
+    float hsh(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+    void main(){float u=vW.x/uSL,u4=u*u*u*u,sh=.55+.55*u4,sa=(sh-vW.y)/(sh+1.15),hw=u4<1.&&sa<1.?(uSW*sqrt(1.-u4)+.08)*sqrt(1.-clamp(sa,0.,1.)*clamp(sa,0.,1.)):-1.,ed=abs(vW.z)-hw;if(ed<0.)discard;   /* inside the hull at this height: the hull keeps the sea out */
+      vec3 n=normalize(vN),v=normalize(cameraPosition-vW);float fr=pow(1.-max(dot(n,v),0.),4.);
+      vec3 c=mix(uDeep,uShal,clamp(vH*.45+.45,0.,1.));c=mix(c,uSky,fr*.7);c+=vec3(1.)*pow(max(dot(reflect(-uSun,n),v),0.),90.)*.6;
+      float crest=smoothstep(.35,.75,vF)*smoothstep(0.,.6,vH);float fn=hsh(floor(vW.xz*3.)+floor(uTime*2.));c=mix(c,vec3(.86,.9,.92),crest*(.45+.4*fn));   // white water where a crest steepens
+      if(hw>0.)c=mix(c,vec3(.8,.84,.86),(1.-smoothstep(0.,.7,ed))*.6*(.55+.45*sin(vW.x*3.1+uTime*2.3)));   // and where it slaps the hull
       gl_FragColor=vec4(c,1.);
       #include <fog_fragment>
     }`});
+function clinkerTex(){const c=mkCanvas(512,512),g=c.getContext('2d');const NS=11,h=512/NS;
+  for(let i=0;i<NS;i++){const y=i*h,l=(52+Math.random()*16)|0;g.fillStyle=`rgb(${l+30},${l+14},${l})`;g.fillRect(0,y,512,h);
+    for(let k=0;k<26;k++){g.strokeStyle=`rgba(20,10,4,${.1+Math.random()*.15})`;g.lineWidth=1;g.beginPath();const yy=y+Math.random()*h;g.moveTo(0,yy);g.bezierCurveTo(170,yy+(Math.random()-.5)*6,340,yy+(Math.random()-.5)*6,512,yy+(Math.random()-.5)*4);g.stroke();}
+    g.fillStyle='rgba(255,220,170,.10)';g.fillRect(0,y,512,3);g.fillStyle='rgba(8,4,2,.55)';g.fillRect(0,y+h-4,512,4);   // the lap: a lit edge above, a dark seam below
+    for(let x=10;x<512;x+=22){g.fillStyle='rgba(30,26,22,.8)';g.beginPath();g.arc(x+Math.random()*3,y+h-9,1.8,0,7);g.fill();}   // rivets along the lap
+    for(let x=Math.random()*200;x<512;x+=180+Math.random()*140){g.fillStyle='rgba(10,5,2,.6)';g.fillRect(x,y,2,h);}}   // scarf joints
+  g.fillStyle='rgba(10,6,3,.35)';g.fillRect(0,512-3*h,512,3*h);   // tar below the waterline
+  const t=tex(c);t.wrapS=THREE.RepeatWrapping;t.wrapT=THREE.ClampToEdgeWrapping;return t;}
 function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.uniforms.uSL.value=SL;seaMat.uniforms.uSW.value=SW;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(12,18),sea:null,sail:null};
-  const hullMat=std({map:TX.wood,color:0x5c4332,roughness:.85,side:THREE.DoubleSide}),gunY=.55;
+  const hullMat=std({map:clinkerTex(),color:0xd8c2a8,roughness:.8,side:THREE.DoubleSide}),gunY=.55,NS=11;
   // hull: planked sides from the gunwale down to the keel, the sheer rising toward prow and stern
-  {const N=56,M=8,pos=[],uv=[],idx=[];for(const sd of [1,-1]){const base=pos.length/3;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N,u=x/SL,hw=shipHalfW(x)+.06,sheer=gunY+.55*u*u*u*u;
-      for(let j=0;j<=M;j++){const v=j/M,a=v*Math.PI/2;pos.push(x,sheer-(sheer+1.15)*Math.sin(a),sd*hw*Math.cos(a));uv.push(x/1.5,v*2.2);}}
+  {const N=80,M=NS*4,pos=[],uv=[],idx=[];for(const sd of [1,-1]){const base=pos.length/3;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N,u=x/SL,hw=shipHalfW(x)+.06,sheer=gunY+.55*u*u*u*u;
+      for(let j=0;j<=M;j++){const v=j/M,a=v*Math.PI/2,lap=.035*(1-((v*NS)%1))*(1-v*.5);pos.push(x,sheer-(sheer+1.15)*Math.sin(a),sd*(hw+lap)*Math.cos(a));uv.push(x/2.2,v);}}   // each strake overlaps the one below it
     for(let i=0;i<N;i++)for(let j=0;j<M;j++){const a=base+i*(M+1)+j,b=a+M+1;sd>0?idx.push(a,b,a+1,b,b+1,a+1):idx.push(a,a+1,b,b,a+1,b+1);}}
    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
    const m=new THREE.Mesh(g,hullMat);m.castShadow=m.receiveShadow=true;world.add(m);}
@@ -1081,7 +1101,10 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   for(const sd of [1,-1]){const pts=[];for(let x=-SL+.3;x<=SL-.3;x+=.5)pts.push(V(x,gunY+.55*Math.pow(x/SL,4)+.04,sd*(shipHalfW(x)+.03)));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),60,.06,5),T(0,0,0));}
   // prow and stern posts curling up, a dragon's head at the prow
   for(const sx of [1,-1]){const c=new THREE.CatmullRomCurve3([V(sx*(SL-.4),gunY+.4,0),V(sx*(SL+.6),1.4,0),V(sx*(SL+1.1),2.6,0),V(sx*(SL+.9),3.6,0),V(sx*(SL+.4),4.1,0)]);addGeo('beam',new THREE.TubeGeometry(c,24,.16,7),T(0,0,0));}
-  addGeo('beam',new THREE.ConeGeometry(.22,.7,6),T(SL+.15,4.1,0,0,0,Math.PI/2));addGeo('beam',boxUV(.5,.18,.3,1),T(SL+.25,4.25,0));
+  {const hx=SL+.45,hy=4.15;addGeo('beam',new THREE.SphereGeometry(.3,10,8),T(hx,hy,0,0,0,0,1.25,.9,.85));   // the head
+   addGeo('beam',new THREE.ConeGeometry(.2,.75,8),T(hx+.55,hy+.02,0,0,0,-Math.PI/2,1,1,.75));addGeo('beam',new THREE.ConeGeometry(.16,.6,8),T(hx+.48,hy-.2,0,0,0,-Math.PI/2-.35,1,1,.7));   // snout and open jaw
+   for(const sz of [-1,1]){addGeo('glassLit',new THREE.SphereGeometry(.05,6,5),T(hx+.2,hy+.13,sz*.2));addGeo('beam',new THREE.ConeGeometry(.06,.45,5),T(hx-.12,hy+.3,sz*.14,0,sz*.3,.7));}   // eyes and horns
+   addGeo('beam',new THREE.TorusGeometry(.35,.09,6,14,Math.PI*1.4),T(-SL-.55,4.2,0,0,0,.6));}   // the stern post curls over like a tail
   // mast, yard and a striped sail; stays to prow and stern
   addGeo('beam',new THREE.CylinderGeometry(.2,.28,12.5,10),T(0,6.25,0));addCircle(0,0,.3,12.5);
   addGeo('beam',new THREE.CylinderGeometry(.1,.1,8.6,8),T(.25,10.2,0,Math.PI/2));
@@ -1090,7 +1113,13 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   for(const [x,y] of [[SL+.6,1.6],[-SL-.6,1.6]])addGeo('beam',new THREE.CylinderGeometry(.02,.02,Math.hypot(x,12.2-y),4),T(x/2,(12.2+y)/2,0,0,0,Math.atan2(x,12.2-y)));
   // shields along the sides, oars shipped and resting out over the water
   const shc=[0x7a1c16,0xd8ccb0,0x1e3560,0xbfa45c];let k=0;for(const sd of [1,-1])for(let x=-SL+3;x<=SL-3;x+=.85){const z=sd*(shipHalfW(x)+.12),m=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.05,14),std({color:shc[(k++)%4],roughness:.8}));m.position.set(x,.32+.55*Math.pow(x/SL,4),z);m.rotation.x=Math.PI/2;m.castShadow=true;world.add(m);}
-  for(const sd of [1,-1])for(let x=-SL+4;x<=SL-4;x+=3.2)addGeo('wood',new THREE.CylinderGeometry(.05,.06,5,6),T(x+.4,-.4,sd*(shipHalfW(x)+1.9),0,0,sd*1.15));
+  for(const sd of [1,-1])for(let x=-SL+3;x<=SL-3;x+=.85){const y=.32+.55*Math.pow(x/SL,4);addGeo('iron',new THREE.SphereGeometry(.08,8,5,0,6.283,0,1.6),T(x,y,sd*(shipHalfW(x)+.16),0,sd*Math.PI/2));}   // shield bosses
+  for(const sd of [1,-1]){const pts=[];for(let x=-SL+2.6;x<=SL-2.6;x+=.5)pts.push(V(x,.62+.55*Math.pow(x/SL,4),sd*(shipHalfW(x)+.1)));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),60,.035,4),T(0,0,0));}   // the shield rack
+  for(const sd of [1,-1])for(let x=-SL+3.4;x<=SL-3.4;x+=.85)addGeo('dirt',new THREE.CircleGeometry(.06,8),T(x+.42,.12+.55*Math.pow(x/SL,4),sd*(shipHalfW(x)+.07),sd>0?0:Math.PI));   // oar ports
+  // the keel
+  {const pts=[];for(let x=-SL+.5;x<=SL-.5;x+=1)pts.push(V(x,-1.18-.06*(1-(x/SL)**2),0));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.1,5),T(0,0,0));}
+  // shrouds from the masthead down to each side, and the yard's braces
+  for(const sd of [1,-1])for(const x of [-1.6,-.5,.6]){const a=V(0,11.6,0),b=V(x,.6,sd*(shipHalfW(x)+.05)),d=V().subVectors(b,a),L=d.length();const g=new THREE.CylinderGeometry(.015,.015,L,4);g.translate(0,-L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,-1,0),d.normalize());const m=new THREE.Matrix4().compose(a,q,V(1,1,1));addGeo('beam',g,m);}
   // deck planking seams, and the mast step
   for(let z=-SW+.3;z<SW-.2;z+=.42){let x0=null;for(let x=-SL+.4;x<=SL-.4;x+=.25){const inn=shipHalfW(x)-.18>Math.abs(z);if(inn&&x0==null)x0=x;if((!inn||x>SL-.6)&&x0!=null){if(x-x0>.5)addGeo('beam',boxUV(x-x0,.012,.025,1),T((x+x0)/2,.01,z));x0=null;}}}
   addGeo('beam',boxUV(1.6,.32,.7,1),T(0,.16,0));addBox(-.8,.8,-.35,.35,.32);FLOORS.push({x0:-.8,x1:.8,z0:-.35,z1:.35,h:.34});
@@ -1108,31 +1137,39 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   addGeo('woodLight',boxUV(3,.36,2*shipHalfW(-SL+3)-.6,1),T(-SL+3.3,.18,0));{const x0=-SL+1.8,x1=-SL+4.8,hw=shipHalfW(-SL+3)-.3;addBox(x0,x1,-hw,hw,.36);FLOORS.push({x0,x1,z0:-hw,z1:hw,h:.38});}
   addGeo('beam',new THREE.ConeGeometry(.15,.55,5),T(SL+.35,3.95,0,0,0,Math.PI/2+.35));for(const sz of [-.12,.12])addGeo('glassLit',new THREE.SphereGeometry(.04,6,5),T(SL+.12,4.32,sz));
   // the sea
-  {const g=new THREE.PlaneGeometry(900,900,220,220);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,seaMat);m.position.y=-1.7;m.frustumCulled=false;world.add(m);SHIP.sea=m;}
+  {const sea=new THREE.Group();sea.position.y=-1.7;const g=new THREE.PlaneGeometry(240,240,240,240);g.rotateX(-Math.PI/2);{const P=g.attributes.position,I=g.index.array,keep=[];for(let i=0;i<I.length;i+=3){let cx=0,cz=0;for(let k=0;k<3;k++){cx+=P.getX(I[i+k]);cz+=P.getZ(I[i+k]);}if(Math.hypot(cx/3,cz/3)<119.5)keep.push(I[i],I[i+1],I[i+2]);}g.setIndex(keep);}   /* a disc, so it meets the outer ring without overlapping */const m=new THREE.Mesh(g,seaMat);m.frustumCulled=false;sea.add(m);   // fine near the ship, where you see the waves' shape
+   const r=new THREE.RingGeometry(119,600,240,24);r.rotateX(-Math.PI/2);const m2=new THREE.Mesh(r,seaMat);m2.frustumCulled=false;sea.add(m2);world.add(sea);SHIP.sea=sea;}
   DUST.p.material.uniforms.uCol.value.setRGB(.82,.86,.9);   // spray, not sand
   flushBatch();}
-function shipMotion(S,t){const sm=S.storm||0,P=S.ph||(S.ph=[0,1,2,3,4,5,6,7].map(()=>Math.random()*6.283)),g=.75+.3*Math.sin(t*.113+P[6])+.2*Math.sin(t*.271+P[7]);
-  const roll=(.075+.08*sm)*g*(.55*Math.sin(t*.57+P[0])+.3*Math.sin(t*.94+P[1])+.18*Math.sin(t*1.63+P[2]))+.12*S.swell*Math.sin(t*.8);
-  const pitch=(.05+.08*sm)*g*(.5*Math.sin(t*.41+P[3])+.32*Math.sin(t*.79+P[4])+.2*Math.sin(t*1.37+P[5]))+.06*S.swell*Math.sin(t*.6+1);return [roll,pitch];}
+// the ship's attitude from the water under it: heave from the mean, pitch from bow against stern, roll from one side against the
+// other (a ship rolls further than the slope of the sea: it's tall and swings), followed through a spring so it lags, overshoots
+// and settles like something heavy riding the swell
+function shipRide(S,dt){const amp=seaMat.uniforms.uAmp.value,t=S.t,pk=S.pk,L=S.SL*.75,B=S.SW*.95;
+  const hb=seaH(L,0,t,amp,pk),hs=seaH(-L,0,t,amp,pk),hp=seaH(0,B,t,amp,pk),hq=seaH(0,-B,t,amp,pk),hc=seaH(0,0,t,amp,pk);
+  const tr=-Math.atan2(hp-hq,2*B)*1.25,tp=-Math.atan2(hb-hs,2*L)*1.0,ty=(hb+hs+hp+hq+2*hc)/6;
+  const st=(k,c,x,v,tg)=>{v+=(k*(tg-x)-c*v)*dt;return [x+v*dt,v];};
+  [S.roll,S.rollV]=st(5.5,2.1,S.roll,S.rollV||0,tr);[S.pitch,S.pitchV]=st(5,2.4,S.pitch,S.pitchV||0,tp);[S.heave,S.heaveV]=st(7,3,S.heave||0,S.heaveV||0,ty);}
 function shipCargo(dt){const S=SHIP;const ax=9.8*S.pitch*.6,az=9.8*S.roll*.6,am=Math.hypot(ax,az),k=am>.3?(am-.3)/am*1.5:0;
   for(const p of PROPS){if(p.broken||p.kind!=='barrel'||!p.col)continue;const v=p.sv||(p.sv=V());v.x+=ax*k*dt;v.z+=az*k*dt;v.multiplyScalar(1-1.1*dt);
     let nx=p.x+v.x*dt,nz=p.z+v.z*dt;const lim=shipHalfW(nx)-.75;if(Math.abs(nz)>lim){nz=Math.sign(nz)*lim;v.z*=-.25;}if(Math.abs(nx)>S.SL-3){nx=Math.sign(nx)*(S.SL-3);v.x*=-.25;}
     if(Math.abs(nx-p.x)+Math.abs(nz-p.z)>1e-4){p.x=nx;p.z=nz;p.mesh.position.x=nx;p.mesh.position.z=nz;gridRemove(p.col);p.col.x=nx;p.col.z=nz;gridInsert(p.col,nx-p.col.r-1,nx+p.col.r+1,nz-p.col.r-1,nz+p.col.r+1);}
     p.mesh.rotation.x=v.z*.25+S.roll*.4;p.mesh.rotation.z=-v.x*.25-S.pitch*.4;}}   // the cargo shifts: barrels skid and rock across the deck
+function shipWave(ang,A){const S=SHIP;if(!S)return;S.pk={dx:Math.cos(ang),dz:Math.sin(ang),s:-170,A,t0:S.t,hit:false};S.swell=1;tell(player,'A big wave is coming','sm');}
 function splash(p){sfx('fall',p,1,.55,0,false);sfx('fallArmoured',p,.5,.5,.06,false);spawnDust(V(p.x,-1,p.z),14,1.6,1.4);}
 function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
   {const mt=state==='playing'?simTime-CD_END:0;const st=clamp((mt-15)/200,0,1);S.storm=window.__storm!=null?window.__storm:st;if(NET.mode==='host'&&(S.stT=(S.stT||0)-h)<=0){S.stT=3;netEv(['ST',r3(S.storm)]);}}   // the sea gets up as the fight goes on: in about three and a half minutes it's a gale
-  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20)*(1-.55*(S.storm||0));S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
-    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,rand(.9,1.35)*(1+.5*(S.storm||0))*(f.crouch?.35:1)*(1+Math.min(1,mv/4)*.5+(f.commit?.25:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.55);}tell(player,'A swell lifts the ship','sm');}
+  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END&&!(S.pk&&S.pk.A>0)){S.swT=rand(16,26)*(1-.45*(S.storm||0));const ang=rand(-1.3,1.3)+(Math.random()<.5?0:Math.PI),A=rand(.9,1.4)*(.7+.9*(S.storm||0));shipWave(ang,A);netEv(['SW',r3(ang),r3(A)]);}
+  if(S.pk&&S.pk.A>0&&!S.pk.hit&&S.pk.s>-6){S.pk.hit=true;   // it reaches the ship: everyone on deck is thrown, worst for those on their feet and moving
+    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V(S.pk.dx,0,S.pk.dz).multiplyScalar(-1).add(V(0,0,Math.sign(S.roll)||1)).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,S.pk.A*rand(.8,1.2)*(f.crouch?.3:1)*(1+Math.min(1,mv/4)*.6+(f.commit?.3:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.6);}}
   shipCargo(h);
-  const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6,[r1,p1]=shipMotion(S,S.t+.05),[r0,p0]=shipMotion(S,S.t-.05),wr=(r1-r0)*10,wp=(p1-p0)*10;   // tilt, and how fast it's tilting
+  const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6,wr=S.rollV||0,wp=S.pitchV||0;   // tilt, and how fast it's tilting
   {const am=Math.hypot(ax,az),k=am>.22?(am-.22)/am*1.7:0;for(const sw of freeSwords){if(sw.flying||!sw.free||sw.H.y>.3||!shipIn(sw.H.x,sw.H.z))continue;const v=sw.sv||(sw.sv=V());v.x+=ax*k*h;v.z+=az*k*h;v.multiplyScalar(1-1.1*h);
     for(const q of [sw.H,sw.T,sw.Hp,sw.Tp]){q.x+=v.x*h;q.z+=v.z*h;}if(!shipIn(sw.H.x,sw.H.z,.35)){v.z*=-.3;sw.H.z=sw.T.z=sw.Hp.z=sw.Tp.z=Math.sign(sw.H.z)*(shipHalfW(sw.H.x)-.4);}}}   // loose weapons slide downhill once the deck is steep enough, and fetch up against the side
   for(const f of fighters){
     if(f.ragdoll){const R=f.ragdoll;for(const n of R.names){R.P[n].z+=az*h*h*.2;R.P[n].x+=ax*h*h*.2;}R.sleep=false;   /* bodies slide too */
       const P=R.P.Hips;if(P&&!shipIn(P.x,P.z)&&P.y<-.9&&!f.splashed){f.splashed=true;splash(P);if(f.alive)f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'thrown overboard');}continue;}
     if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.035:.3+.25*mv*mv+.08*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.45*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
-      f.vel.z+=az*h;f.vel.x+=ax*h;const pz=clamp((az*.8+wr*14)*k*12,-5,5),px=clamp((ax*.8+wp*10)*k*12,-5,5);f.balV.z+=pz*h;f.balV.x+=px*h;}   // the deck moving under your feet throws your weight off them: you step to catch it
+      f.vel.z+=az*h;f.vel.x+=ax*h;const pz=clamp((az*.8+wr*14)*k*9,-5,5),px=clamp((ax*.8+wp*10)*k*9,-5,5);f.balV.z+=pz*h;f.balV.x+=px*h;}   // the deck moving under your feet throws your weight off them: you step to catch it
       // losing your footing: the steeper the deck and the faster you're going (or swinging, kicking, spent, lame), the likelier
       // a step lands wrong. Most are a stagger toward the low side; the worse it is, the more often you go down. Crouched you hardly ever do
       if(f.pos.y>-.05&&f.pos.y<.6&&state==="playing"&&simTime>CD_END){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),sm=S.storm||0,tilt=Math.min(1,Math.hypot(S.roll,S.pitch*1.3)/.3),legF=Math.max(f.limbF('legL'),f.limbF('legR'));
@@ -1142,8 +1179,11 @@ function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
           else{f.shove(d,.8+mv);f.stagger=Math.max(f.stagger,.5);}}}   // the deck tilting under you: you slide and lean toward the low side and have to catch yourself
     if(!shipIn(f.pos.x,f.pos.z)&&f.pos.y<-.5&&!f.splashed){f.splashed=true;splash(f.pos);f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'went over the side');}}}
 function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.swell-dt*.22);
-  const sm=S.storm||0;[S.roll,S.pitch]=shipMotion(S,S.t);seaMat.uniforms.uAmp.value=.65+1.0*sm+.35*S.swell;   // waves and roll grow together
-  if(S.sea){S.sea.rotation.set(-S.roll,0,S.pitch);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(-S.roll,0,S.pitch);
+  const sm=S.storm||0;seaMat.uniforms.uAmp.value=.7+1.1*sm;   // the sea gets up through the match
+  if(S.pk&&S.pk.A>0){S.pk.s=-170+Math.sqrt(9.8*SEA_PK.L/6.2832)*(S.t-S.pk.t0);if(S.pk.s>170)S.pk.A=0;seaMat.uniforms.uPk.value.set(S.pk.dx,S.pk.dz,S.pk.s,S.pk.A);}else seaMat.uniforms.uPk.value.w=0;
+  {let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(a,1/60);shipRide(S,hh);a-=hh;}}
+  if(S.sea){S.sea.rotation.set(-S.roll,0,S.pitch);S.sea.position.y=-1.7-(S.heave||0);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(-S.roll,0,S.pitch);
+  if(S.pk&&S.pk.A>0&&S.pk.s>-8&&S.pk.s<4&&Math.random()<dt*14){const x=(Math.random()-.5)*S.SL*1.6,z=Math.sign(-S.pk.dz||1)*(shipHalfW(x)+.3);spawnDust(V(x,.4,z),6,1.2,2.2);if(Math.random()<.2)sfx('fall',V(x,0,z),.5,.4,0,false);}   // spray as it breaks against the side
   if(NET.mode==='client')shipCargo(dt);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
 function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
@@ -5458,7 +5498,7 @@ function clientEvents(ev){
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
-    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)SHIP.swell=1;break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false,e[2]);break;case 'BT':if(e[1]===1)towerIgnite(false);else towerCollapse(e[2],false);break;
+    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)shipWave(e[1]??0,e[2]??1);break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false,e[2]);break;case 'BT':if(e[1]===1)towerIgnite(false);else towerCollapse(e[2],false);break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
     case 'ck':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
@@ -5504,6 +5544,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
