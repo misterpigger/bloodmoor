@@ -299,6 +299,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 
 // ================================================================ utils
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
@@ -309,7 +310,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=83;
+const BUILD=84;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -496,6 +497,18 @@ const sky=new THREE.Mesh(new THREE.SphereGeometry(400,32,16),new THREE.ShaderMat
 }));
 sky.renderOrder=-10;scene.add(sky);
 const moonDir=V(-0.45,0.62,0.64).normalize();
+// dust in the air: motes drifting round the camera, caught by the light (strongest in sun and firelight)
+const MOTES=(()=>{const n=700,B=14,pos=new Float32Array(n*3),rnd=new Float32Array(n);for(let i=0;i<n;i++){pos[i*3]=Math.random()*B;pos[i*3+1]=Math.random()*B*.45;pos[i*3+2]=Math.random()*B;rnd[i]=Math.random();}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('rnd',new THREE.BufferAttribute(rnd,1));g.boundingSphere=new THREE.Sphere(V(),1e5);
+  const m=new THREE.ShaderMaterial({uniforms:{uCam:{value:V()},uT:{value:0},uCol:{value:new THREE.Color(1,.9,.7)},uAmt:{value:.4},uPx:{value:1}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+    vertexShader:`uniform vec3 uCam;uniform float uT,uPx;attribute float rnd;varying float vA;
+      void main(){vec3 B=vec3(14.,6.3,14.);vec3 p=position+vec3(sin(uT*.13+rnd*40.)*.6+uT*.05,sin(uT*.21+rnd*17.)*.35-uT*.012,cos(uT*.11+rnd*23.)*.6+uT*.03);
+        p=mod(p-uCam+B*.5,B)-B*.5+uCam;p.y=max(p.y,uCam.y-2.6+fract(rnd*7.)*.4);vec4 mv=modelViewMatrix*vec4(p,1.);float d=-mv.z;
+        vec3 q=abs(p-uCam)/(B*.5);vA=(1.-smoothstep(.65,1.,max(q.x,max(q.y,q.z))))*smoothstep(.8,2.5,d)*(.4+.6*fract(rnd*13.))*(.55+.45*sin(uT*(1.+rnd)+rnd*50.));
+        gl_PointSize=uPx*(1.+1.4*fract(rnd*29.))*26./max(d,.6);gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`uniform vec3 uCol;uniform float uAmt;varying float vA;void main(){vec2 c=gl_PointCoord-.5;float r=dot(c,c)*4.;if(r>1.)discard;gl_FragColor=vec4(uCol*(1.-r)*(1.-r)*vA*uAmt,1.);}`});
+  const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=5;return {pts,m};})();
+scene.add(MOTES.pts);
 const moonSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(radialCanvas([[0,'rgba(255,255,250,1)'],[.18,'rgba(235,240,255,1)'],[.22,'rgba(180,200,255,.35)'],[1,'rgba(120,140,220,0)']])),fog:false,depthWrite:false,transparent:true,blending:THREE.AdditiveBlending}));
 moonSprite.scale.setScalar(70);scene.add(moonSprite);
 
@@ -1532,14 +1545,14 @@ function cheer(x,gasp){netEv(['C',x,gasp?1:0]);crowdU.uCheer.value=Math.min(1.3,
 function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,128);stops.forEach(([o,col])=>gr.addColorStop(o,col));g.fillStyle=gr;g.fillRect(0,0,256,128);
   const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;t.colorSpace=THREE.SRGBColorSpace;return new THREE.PMREMGenerator(renderer).fromEquirectangular(t).texture;}
 const LIGHTS={
-  dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
+  dusk:{fog:0x34405c,dust:.12,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x9a8466,hi:.95,sun:0xffe2b6,si:3.4,dir:[.5,.62,-.6],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
+  day:{fog:0xd6cdbb,dust:.2,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x8a7458,hi:.62,sun:0xffd9a6,si:4.3,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
-LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
+LIGHTS.sea={fog:0x7f8b94,dust:.04,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
   env:[[0,'#4d5d6e'],[.42,'#8a98a6'],[.5,'#b6bcc0'],[.53,'#33454c'],[1,'#1a262c']]};
-LIGHTS.tavern={fog:0x1a120b,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0xb08458,hg:0x3a2818,hi:.85,sun:0xffc890,si:.35,dir:[.3,.9,.2],moon:false,exp:1.85,cool:.15,halo:.3,shR:12,shMap:2048,
+LIGHTS.tavern={fog:0x1a120b,dust:.45,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0xb08458,hg:0x3a2818,hi:.85,sun:0xffc890,si:.35,dir:[.3,.9,.2],moon:false,exp:1.85,cool:.15,halo:.3,shR:12,shMap:2048,
   env:[[0,'#120c08'],[.45,'#3a2616'],[.5,'#6a4424'],[.55,'#24170e'],[1,'#0c0805']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
@@ -1557,7 +1570,7 @@ function applyLighting(k){
     if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;sky.visible=!L.bg;if(L.bg){scene.background=L.bg;scene.backgroundIntensity=.85;}else{if(!scene.background||!scene.background.isColor)scene.background=new THREE.Color();scene.background.setHex(L.fog);}
   const u=sky.material.uniforms;u.top.value.setHex(L.top);u.mid.value.setHex(L.mid);u.hor.value.setHex(L.hor);u.glowCol.value.setHex(L.glow);u.glowDir.value.set(...L.glowDir).normalize();u.stars.value=L.stars;
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
-  renderer.toneMappingExposure=L.exp*1.2;scene.environment=L.envTex;grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
+  renderer.toneMappingExposure=L.exp*1.2;scene.environment=L.envTex;MOTES.m.uniforms.uAmt.value=L.dust??.25;MOTES.m.uniforms.uCol.value.setHex(L.sun).lerp(new THREE.Color(1,.92,.8),.5);grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
 }
 function loadMap(id){const m=MAPS[id];curMap=id;mapKey++;clearWorld();MAP=m.MAP;ARENA_R=m.arena;m.build();applyLighting(m.light);buildMinimap();}
 
@@ -4707,6 +4720,8 @@ let gtao=null;try{gtao=new GTAOPass(scene,camera,innerWidth,innerHeight);gtao.ou
   gtao.updatePdMaterial({lumaPhi:10,depthPhi:2,normalPhi:3,radius:5,rings:2,samples:12});gtao.blendIntensity=.95;composer.addPass(gtao);}catch(e){console.warn('AO unavailable',e);gtao=null;}
 const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.32,.45,1.15);composer.addPass(bloom);   // only real highlights glow: the bright sky and sunlit steel were blooming the whole screen white
 composer.addPass(new OutputPass());
+// edge smoothing on the finished image: blades, hafts and limbs no longer stair-step
+let smaa=null;try{smaa=new SMAAPass(innerWidth*renderer.getPixelRatio(),innerHeight*renderer.getPixelRatio());composer.addPass(smaa);}catch(e){console.warn('SMAA unavailable',e);}
 const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uHurt:{value:0},uZone:{value:0},uDesat:{value:0},uCool:{value:1}},
   vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader:`uniform sampler2D tDiffuse;uniform float uTime,uHurt,uZone,uDesat,uCool;varying vec2 vUv;
@@ -4714,7 +4729,7 @@ const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uHur
   void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;float l=dot(c,vec3(.299,.587,.114));
     c*=mix(mix(vec3(.98,.99,1.02),vec3(.82,.95,1.1),uCool),mix(vec3(1.05,1.,.94),vec3(1.1,1.,.86),uCool),smoothstep(.1,.72,l));
     c=mix(vec3(l),c,1.-uDesat*.85);
-    c=(c-.5)*1.07+.5;
+    c=(c-.5)*1.1+.5;
     vec2 d=vUv-.5;c*=clamp(1.-dot(d,d)*1.15,0.,1.);
     c=mix(c,vec3(.45,.02,.02),uHurt*smoothstep(.15,.75,length(d))*.9);
     c=mix(c,c*vec3(1.25,.62,.45),uZone*.55);
@@ -4941,7 +4956,7 @@ function frame(now){
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
   sky.position.copy(camera.position);
-  moonSprite.position.copy(camera.position).addScaledVector(moonDir,320);
+  moonSprite.position.copy(camera.position).addScaledVector(moonDir,320);MOTES.m.uniforms.uCam.value.copy(camera.position);MOTES.m.uniforms.uT.value=now/1000;MOTES.m.uniforms.uPx.value=renderer.getPixelRatio()*innerHeight/900;
   const fp=player&&!player.ragdoll?player.pos:camera.position;
   moon.target.position.set(Math.round(fp.x),0,Math.round(fp.z));moon.position.copy(moon.target.position).addScaledVector(moonDir,70);
   {const on=state!=='attract'&&!zone.off;zoneMesh.visible=scorch.visible=on;
@@ -4994,9 +5009,6 @@ const DUST=(()=>{const n=320,g=new THREE.BufferGeometry(),pos=new Float32Array(n
 function spawnDust(p,n,sp=.5,up=.3){if(p.distanceToSquared(camera.position)>900)return;const D=DUST;
   for(let k=0;k<n;k++){const i=D.i;D.i=(i+1)%D.n;D.pos[i*3]=p.x+(Math.random()-.5)*.2;D.pos[i*3+1]=Math.max(p.y,groundY(p.x,p.z,p.y)+.04);D.pos[i*3+2]=p.z+(Math.random()-.5)*.2;
     const a=Math.random()*6.283,r=sp*(.3+Math.random()*.7);D.vel[i*3]=Math.cos(a)*r;D.vel[i*3+1]=up*(.3+Math.random());D.vel[i*3+2]=Math.sin(a)*r;D.max[i]=D.life[i]=.9+Math.random()*1.3;}}
-const MOTES=(()=>{const n=90,g=new THREE.BufferGeometry(),pos=new Float32Array(n*3);for(let i=0;i<n*3;i++)pos[i]=(Math.random()-.5)*12;g.setAttribute('position',new THREE.BufferAttribute(pos,3));
-  const m=new THREE.PointsMaterial({color:0xfff1d6,size:.016,sizeAttenuation:true,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false,map:TX.glow});
-  const p=new THREE.Points(g,m);p.frustumCulled=false;scene.add(p);return {p,pos,n};})();
 // ---- footprints and drag marks pressed into the sand
 function softTex(foot){const c=document.createElement('canvas');c.width=32;c.height=64;const x=c.getContext('2d');x.filter='blur(2px)';x.fillStyle='#fff';
   if(foot){x.beginPath();x.ellipse(16,21,9,14,0,0,7);x.fill();x.beginPath();x.ellipse(16,49,7,8,0,0,7);x.fill();}
@@ -5121,8 +5133,7 @@ function detailTick(dt){
   {const D=DUST;for(let i=0;i<D.n;i++){if(D.life[i]<=0)continue;D.life[i]-=dt;if(D.life[i]<=0){D.pos[i*3+1]=-999;D.al[i]=0;continue;}const k=1-2*dt;D.vel[i*3]*=k;D.vel[i*3+1]=D.vel[i*3+1]*k+.06*dt;D.vel[i*3+2]*=k;
       D.pos[i*3]+=D.vel[i*3]*dt;D.pos[i*3+1]+=D.vel[i*3+1]*dt;D.pos[i*3+2]+=D.vel[i*3+2]*dt;D.al[i]=D.life[i]/D.max[i];}
     D.p.geometry.attributes.position.needsUpdate=true;D.p.geometry.attributes.aA.needsUpdate=true;}
-  {const M=MOTES,on=curMap!=='village';M.p.visible=on;if(on){const c=camera.position,t=simTime;for(let i=0;i<M.n;i++){const o=i*3;M.pos[o]+=Math.sin(t*.3+i)*.05*dt;M.pos[o+1]+=(Math.sin(t*.21+i*1.7)*.04-.01)*dt;M.pos[o+2]+=Math.cos(t*.27+i*.6)*.05*dt;
-      for(let a=0;a<3;a++){const ca=a===1?c.y+1:a===0?c.x:c.z,r=a===1?2.5:6;if(M.pos[o+a]>ca+r)M.pos[o+a]-=2*r;else if(M.pos[o+a]<ca-r)M.pos[o+a]+=2*r;}}M.p.geometry.attributes.position.needsUpdate=true;}}
+  
   // blood runs down a bloodied blade and drips from its lowest end for a while after the hit
   const drip=s=>{if(!s||(s.blood||0)<.12||s.bloodT==null)return;const age=simTime-s.bloodT;if(age>30||Math.random()>dt*4*s.blood*(1-age/30))return;s.pointAt(s.axis.y<-.2?1:s.axis.y>.5?.35:.8,_fd);if(_fd.distanceToSquared(camera.position)<400)dripBlood(_fd);};
   for(const f of fighters)drip(f.sword);for(const s of freeSwords)drip(s);
