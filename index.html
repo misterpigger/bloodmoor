@@ -181,7 +181,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
       <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
-      <dt><kbd>G</kbd></dt><dd>Hold with a fist held to open that hand and grab: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Mash <kbd>Space</kbd> to struggle free and get up sooner.</dd>
+      <dt><kbd>G</kbd></dt><dd>Hold with a fist held to open that hand and grab: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small" id="buildTag" style="opacity:.6"></p>
@@ -308,7 +308,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=73;
+const BUILD=74;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -896,13 +896,13 @@ function railBreak(i,net=true){const R=TAV.rails[i];if(!R||R.broken)return;R.bro
 // ---- the longship: a narrow deck at sea, rowing benches to step over, a mast and sail. The ship rolls with the swell (the sea and
 // sky tilt round it, and everything on deck is pushed toward the low side); now and then a big swell staggers everyone. The rail is
 // low: a body knocked into it can go over, and over the side is the end
-const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uSL:{value:20},uSW:{value:4.6},uTime:{value:0},uDeep:{value:new THREE.Color(0x0b2129)},uShal:{value:new THREE.Color(0x2b4e57)},uSky:{value:new THREE.Color(0xa9b1b6)},uSun:{value:V(.35,.75,-.5).normalize()}}]),
-  vertexShader:`uniform float uTime;varying vec3 vN;varying vec3 vW;varying float vH;
+const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uAmp:{value:.7},uSL:{value:20},uSW:{value:4.6},uTime:{value:0},uDeep:{value:new THREE.Color(0x0b2129)},uShal:{value:new THREE.Color(0x2b4e57)},uSky:{value:new THREE.Color(0xa9b1b6)},uSun:{value:V(.35,.75,-.5).normalize()}}]),
+  vertexShader:`uniform float uTime,uAmp;varying vec3 vN;varying vec3 vW;varying float vH;
     #include <fog_pars_vertex>
-    void main(){vec3 p=position;float t=uTime;
+    void main(){vec3 p=position;float t=uTime;vec4 w0=modelMatrix*vec4(p,1.);float A=uAmp*mix(.35,1.,smoothstep(5.,16.,length(w0.xz*vec2(.24,1.))));
       float h=.62*sin(p.x*.11+t*.7)+.42*sin(p.z*.15+p.x*.05-t*.85)+.14*sin((p.x+p.z)*.41+t*1.5);
       float dx=.62*.11*cos(p.x*.11+t*.7)+.42*.05*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5),dz=.42*.15*cos(p.z*.15+p.x*.05-t*.85)+.14*.41*cos((p.x+p.z)*.41+t*1.5);
-      p.y+=h;vH=h;vN=normalize((modelMatrix*vec4(-dx,1.,-dz,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
+      h*=A;dx*=A;dz*=A;p.y+=h;vH=h/max(A,.3);vN=normalize((modelMatrix*vec4(-dx,1.,-dz,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
     }`,
   fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;uniform float uSL,uSW;varying vec3 vN;varying vec3 vW;varying float vH;
@@ -914,7 +914,7 @@ const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.mer
       gl_FragColor=vec4(c,1.);
       #include <fog_fragment>
     }`});
-function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uSL.value=SL;seaMat.uniforms.uSW.value=SW;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(12,18),sea:null,sail:null};
+function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.uniforms.uSL.value=SL;seaMat.uniforms.uSW.value=SW;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(12,18),sea:null,sail:null};
   const hullMat=std({map:TX.wood,color:0x5c4332,roughness:.85,side:THREE.DoubleSide}),gunY=.55;
   // hull: planked sides from the gunwale down to the keel, the sheer rising toward prow and stern
   {const N=56,M=8,pos=[],uv=[],idx=[];for(const sd of [1,-1]){const base=pos.length/3;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N,u=x/SL,hw=shipHalfW(x)+.06,sheer=gunY+.55*u*u*u*u;
@@ -963,17 +963,25 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uSL.value=SL;seaMat.unif
   flushBatch();}
 function splash(p){sfx('fall',p,1,.55,0,false);sfx('fallArmoured',p,.5,.5,.06,false);spawnDust(V(p.x,-1,p.z),14,1.6,1.4);}
 function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
-  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20);S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
-    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,rand(.9,1.35)*(f.crouch?.35:1)*(1+Math.min(1,mv/4)*.5+(f.commit?.25:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.55);}tell(player,'A swell lifts the ship','sm');}
+  {const mt=state==='playing'?simTime-CD_END:0;const st=clamp((mt-15)/200,0,1);S.storm=window.__storm!=null?window.__storm:st;if(NET.mode==='host'&&(S.stT=(S.stT||0)-h)<=0){S.stT=3;netEv(['ST',r3(S.storm)]);}}   // the sea gets up as the fight goes on: in about three and a half minutes it's a gale
+  S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20)*(1-.55*(S.storm||0));S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
+    for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,rand(.9,1.35)*(1+.5*(S.storm||0))*(f.crouch?.35:1)*(1+Math.min(1,mv/4)*.5+(f.commit?.25:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.55);}tell(player,'A swell lifts the ship','sm');}
   const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6;
   for(const f of fighters){
     if(f.ragdoll){const R=f.ragdoll;for(const n of R.names)R.P[n].z+=az*h*h*.3;R.sleep=false;
       const P=R.P.Hips;if(P&&!shipIn(P.x,P.z)&&P.y<-.9&&!f.splashed){f.splashed=true;splash(P);if(f.alive)f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'thrown overboard');}continue;}
-    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=f.crouch?.025:.085+.17*mv+(f.commit?.07:0)+(f.stagger>0?.06:0)+(f.kickT>=0?.1:0);   // braced and low you ride it; running, swinging or kicking you don't
-      f.vel.z+=az*h;f.vel.x+=ax*h;f.balV.z+=az*h*k;f.balV.x+=ax*h*k*.6;}   // the deck tilting under you: you slide and lean toward the low side and have to catch yourself
+    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.03:.12+.5*mv*mv+.12*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.9*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
+      f.vel.z+=az*h;f.vel.x+=ax*h;f.balV.z+=az*h*k;f.balV.x+=ax*h*k*.6;}
+      // losing your footing: the steeper the deck and the faster you're going (or swinging, kicking, spent, lame), the likelier
+      // a step lands wrong. Most are a stagger toward the low side; the worse it is, the more often you go down. Crouched you hardly ever do
+      if(f.pos.y>-.05&&f.pos.y<.6&&state==="playing"&&simTime>CD_END){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),sm=S.storm||0,tilt=Math.min(1,Math.abs(S.roll)/.3),legF=Math.max(f.limbF('legL'),f.limbF('legR'));
+        let dg=tilt*(.15+1.2*mv*mv+(f.commit?.45:0)+(f.kickT>=0?.6:0)+(f.stamina<25?.4:0)+.8*legF)*(.4+.9*sm);if(f.crouch)dg*=.1;
+        if(Math.random()<h*.45*dg){const d=V((Math.random()-.5)*.6,0,Math.sign(S.roll)||1).normalize();
+          if(Math.random()<clamp(dg*.45,.12,.75)){f.knockdown(rand(1,1.6),d.clone().multiplyScalar(2+mv*1.5).setY(.3),f.chest.clone());tell(f,'You lose your footing','red');}
+          else{f.shove(d,.8+mv);f.stagger=Math.max(f.stagger,.5);}}}   // the deck tilting under you: you slide and lean toward the low side and have to catch yourself
     if(!shipIn(f.pos.x,f.pos.z)&&f.pos.y<-.5&&!f.splashed){f.splashed=true;splash(f.pos);f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'went over the side');}}}
 function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.swell-dt*.22);
-  S.roll=(.1+.14*S.swell)*Math.sin(S.t*.55)+.03*Math.sin(S.t*1.31);S.pitch=.04*Math.sin(S.t*.37+1)+.05*S.swell*Math.sin(S.t*.85);
+  const sm=S.storm||0;S.roll=(.07+.12*sm+.12*S.swell)*Math.sin(S.t*(.55+.12*sm))+(.02+.03*sm)*Math.sin(S.t*1.31);S.pitch=(.03+.04*sm)*Math.sin(S.t*.37+1)+.05*S.swell*Math.sin(S.t*.85);seaMat.uniforms.uAmp.value=.65+1.0*sm+.35*S.swell;   // waves and roll grow together
   if(S.sea){S.sea.rotation.set(S.pitch,0,-S.roll);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(S.pitch,0,-S.roll);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
 function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
@@ -2824,7 +2832,7 @@ class Fighter{
         else if(hy<-PIT.d+1.6&&simTime-this.pitT>9){this.die(null,'fell into the pit');return;}}   // wedged on the way down of the shaft kills
       if(this.alive&&(this.downed||this.bleeds&&this.bleeds.length)){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<10?this.lastHitBy:null,'burned alive',null);return;}}
-      if(this.alive&&(this.jumpReq||(!this.isPlayer&&!this.remote&&Math.random()<h*(grabbedBy(this).length?3:1.2)))){this.jumpReq=false;this.struggle();}
+      if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.startRise();}
       else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(this.sword&&!this.sword.free){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}   // the weapon comes up with the hand that holds it
         if(r.t>=r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
@@ -2869,7 +2877,8 @@ class Fighter{
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
     if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
     if(!this.isPlayer&&!this.remote&&Math.random()<h*2.5&&grabbedBy(this).length)this.struggle();
-    if(this.jumpReq){this.jumpReq=false;if(grabbedBy(this).length)this.struggle();else if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
+    if(this.rockAD()&&grabbedBy(this).length)this.struggle();
+    if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
     // thrusts step in behind the point
     
     if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);}
@@ -3024,7 +3033,10 @@ class Fighter{
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
     this.makeRagdoll(imp,impP,.25);this.ragdoll.reflex=.75;this.ragdoll.tone=.22;   // conscious: the arms go out to catch the fall
   }
-  // mash Space while down or held: thrash, tear loose of hands on you, and get up sooner. It costs breath.
+  // A and D in turn: each new press of the other key is one heave (holding one, or mashing the same key, does nothing)
+  rockAD(){const k=this.isPlayer?(input.keys.KeyA?1:0)|(input.keys.KeyD?2:0):this.remote&&this.rin?((this.rin.k&8)?1:0)|((this.rin.k&4)?2:0):0;const nw=k&~(this.adPrev||0);this.adPrev=k;
+    if(!nw)return false;const key=nw&1?1:2;if(key===this.adLast)return false;this.adLast=key;return true;}
+  // rock A and D while down or held: thrash, tear loose of hands on you, and get up sooner. It costs breath.
   struggle(){if(this.stamina<5||simTime<(this.strugT||0))return;this.strugT=simTime+.12;this.useStamina(4);
     if(this.knocked>0)this.knocked=Math.max(.05,this.knocked-.18);else if(this.ragdoll&&this.ragdoll.rise)this.ragdoll.rise.t+=.08;
     const R=this.ragdoll;if(R){R.sleep=false;for(const n of ['LeftForeArm','RightForeArm','LeftLeg','RightLeg']){const P=R.P[n],Q=R.Q[n];if(P&&Q){Q.x-=rand(-.5,.5)*H*10;Q.z-=rand(-.5,.5)*H*10;Q.y-=rand(0,.4)*H*10;}}}
@@ -3428,8 +3440,8 @@ class Fighter{
   // blood loss: each wound bleeds at its own rate and clots with its own time constant (an artery hardly clots; a scrape stops quickly)
   get bleed(){let r=0;if(this.bleeds)for(const b of this.bleeds)r+=b[0];return r;}
   set bleed(v){this.bleeds=v>0?[[v,1e9]]:[];}
-  addBleed(rate,tau){rate*=.6;if(rate>.01)(this.bleeds||(this.bleeds=[])).push([rate,tau]);}   // (all bleeding scaled down: people bled out too fast)
-  bleedStep(h){const B=this.bleeds;if(!B||!B.length)return 0;let r=0;for(let i=B.length-1;i>=0;i--){const b=B[i];r+=b[0];b[0]*=1-h/b[1];if(b[0]<.01)B.splice(i,1);}return r*h;}
+  addBleed(rate,tau){rate*=.45;if(rate>.01)(this.bleeds||(this.bleeds=[])).push([rate,tau]);}   // (all bleeding scaled down: people bled out too fast)
+  bleedStep(h){const B=this.bleeds;if(!B||!B.length)return 0;const rest=simTime-(this.hurtT??-99)>5&&!this.ragdoll?2.5:1;let r=0;for(let i=B.length-1;i>=0;i--){const b=B[i];r+=b[0];b[0]*=1-h*rest/Math.min(b[1],400);if(b[0]<.01)B.splice(i,1);}return r*h;}
   // what an injury to one part does to the fighter: legs limp and give out, an arm goes weak and then useless
   limbF(z){const L=this.limbs[z];return L.sev||L.dead?1:clamp(1-L.hp/LIMB_HP[z],0,1);}
   injureLimb(z,by){const L=this.limbs[z];if(!L||L.sev||L.dead||L.hp>LIMB_HP[z]*.15)return;L.dead=true;if(NET.mode==='host')netEv(['L',this.id,z]);
@@ -3437,8 +3449,8 @@ class Fighter{
       if((z==='armR'&&this.mainArm==='R')||(z==='armL'&&this.mainArm==='L')){const o=z==='armR'?'armL':'armR';if(NET.mode==='client'){}else if(!this.limbs[o].sev&&!this.limbs[o].dead){this.dropSword();this.mainArm=o==='armL'?'L':'R';}else{this.dropSword();this.mainArm=null;}}}
     else{tell(this,'Your leg gives way','red');if(by&&by!==this)tell(by,'Their leg gives way','gold');if(this.alive&&!this.ragdoll&&NET.mode!=='client')this.knockdown(2.2,V(),this.chest.clone());}}
   heal(h){if(!this.alive||this.ragdoll||this.downed||NET.mode==='client')return;
-    if(simTime-(this.hurtT??-99)<9||this.bleed>.04)return;
-    this.hp=Math.min(100,this.hp+1.1*h);
+    if(simTime-(this.hurtT??-99)<7||this.bleed>.15)return;
+    if(this.hp<50)this.hp=Math.min(50,this.hp+2.2*h);   // get away and catch your breath: you come back to about half, no further
     for(const k in this.limbs){const L=this.limbs[k];if(k==='head'||L.sev||L.dead)continue;const mx=LIMB_HP[k];if(L.hp<mx)L.hp=Math.min(mx,L.hp+.9*h);}}
   damage(dmg,by,cause){if(dmg>.5)this.hurtT=simTime;
     if(!this.alive)return;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
@@ -3834,9 +3846,11 @@ function resolveHit(A,B,cap,t,P,pv){
   yardHit(A,W.name,mode,organ?organ.name:cap.zone,dmg,speed,glance,prot);
   let sev=null;
   if(mode==='cut'&&W.sever>0&&cap.sever&&!glance){
-    const need=7+prot*7*(1-pen)-(W.sever-1)*3+(1-Math.min(arcF,1))*4;
-    if(cap.zone==='neck'){if(speed>need+1&&Math.random()<.5+(speed-need-1)/3)sev='Head';}
-    else if(cap.zone!=='head'&&cap.zone!=='torso'){const L=B.limbs[cap.zone];L.hp-=dmg;if(speed>need+2.5||(L.hp<=0&&speed>need-1.5)||(speed>need&&Math.random()<(speed-need)/3))sev=cap.sever;}
+    // whether it comes off depends on the blow: how fast, how heavy, the edge square to the cut, a full committed swing with strength
+    // behind it, and where it lands (through the middle of the limb or at a joint cuts deeper than a skim off the side). Little luck.
+    const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF),L=B.limbs[cap.zone];if(L&&cap.zone!=='neck')L.hp-=dmg;
+    const res=sevResist(B,cap,prot,pen);if(window.__sevLog)window.__sevLog.push([cap.zone,+cp.toFixed(2),+res.toFixed(2)]);
+    if(cp>res&&cap.zone!=='head'&&cap.zone!=='torso')sev=cap.zone==='neck'?'Head':cap.sever;
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
   if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
@@ -4006,6 +4020,11 @@ function grabRelease(A,arm){const G=arm.grab,tv=arm.tgtV;if(!G||!tv||NET.mode===
   if(G.k==='r'){const R=G.R;R.sleep=false;for(const n in R.P){const Q=R.Q[n];Q.x-=_v.x*H;Q.y-=_v.y*H;Q.z-=_v.z*H;}sThud(R.P.Hips,.3);}
   else if(G.k==='f'&&!G.B.ragdoll&&G.B.alive&&sp>3){G.B.knockdown(rand(1.2,1.8),_v.clone().multiplyScalar(1.1),G.B.chest.clone());tell(A,'Thrown','gold');}
   sSwing(arm.pos,4+sp,'fist');}
+function sevPlace(cap,P){_ov.subVectors(cap.b,cap.a);const L2=_ov.lengthSq()||1e-6,u=clamp(_ow.subVectors(P,cap.a).dot(_ov)/L2,0,1);_ow.copy(cap.a).addScaledVector(_ov,u);
+  const off=Math.min(1,P.distanceTo(_ow)/(cap.r+.06));return clamp(1.05-.55*off,.5,1.05)*(u<.18||u>.82?1.12:1);}   // centred on the limb, or at a joint
+function sevPower(A,W,cap,P,speed,mw,align,arcF,stamF){return speed*Math.sqrt(mw)*(.35+.65*align)*Math.min(arcF,1.1)*stamF*(A.commit?1.12:.9)*sevPlace(cap,P)*W.sever*(.96+Math.random()*.08);}
+const SEV_RES={neck:9,armL:9.5,armR:9.5,legL:12.5,legR:12.5};
+function sevResist(B,cap,prot,pen){const L=B.limbs[cap.zone],hurt=L&&LIMB_HP[cap.zone]?clamp(L.hp/LIMB_HP[cap.zone],0,1):1;return (SEV_RES[cap.zone]||99)*(1+prot*(1-pen)*2.2)*(.62+.38*hurt);}   // armour and an already-hacked limb change what it takes
 function grabbedBy(B){const out=[];for(const A of fighters){if(A===B)continue;for(const k of ['R','L']){const a=A.fists[k],G=a&&a.grab;if(G&&((G.k==='f'&&G.B===B)||(G.k==='r'&&B.ragdoll&&G.R===B.ragdoll)))out.push(a);}}return out;}
 function grabNearest(R,p){let best=null,bd=1e9;for(const n in R.P){const d=R.P[n].distanceToSquared(p);if(d<bd){bd=d;best=n;}}return best&&bd<1?{k:'r',R,n:best}:null;}
 function grabRag(R,p){let best=null,bd=1e9;for(const n in R.P){const q=R.P[n],dx=q.x-p.x,dz=q.z-p.z,dy=p.y-q.y,hz=dx*dx+dz*dz;
@@ -4079,7 +4098,7 @@ function thrownHit(s,B,hit,ht,P,pv){
     const by=s.thrower;yardHit(by,W.name,mode,hit.zone,dmg,speed,false,prot);
     if(mode==='point'||mode==='cut'){spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.2).setY(.6),(6+dmg*.6)|0,1.6,1);sHit(P,speed/10,false);}else{sThud(P,speed/10);if(prot>.3)sClank(P,.6);}
     B.addFlinch(dir,.2+Math.min(.4,speed*.03));B.stagger=Math.max(B.stagger,.3+Math.min(.4,speed*.03));B.shove(dir,speed*W.weight*.12);
-    if(!B.noSever&&mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed>9&&Math.random()<.5){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
+    if(!B.noSever&&mode==='cut'&&hit.sever&&hit.zone!=='torso'&&hit.zone!=='head'&&speed*Math.sqrt(Math.pow(W.weight/1.1,.8))*sevPlace(hit,P)*W.sever>sevResist(B,hit,prot,W.pen)*1.1){B.sever(hit.sever,dir.clone().multiplyScalar(speed*.4));if(by&&by.isPlayer)note('Dismembered','red');}
     const body=(hit.zone==='torso'||hit.zone==='head'||hit.zone==='neck')?dmg:dmg*.5;
     if(dmg>4){addWound(B,B.caps.indexOf(hit),P,s.axis,dmg,mode==='point'?'stab':mode==='cut'?'cut':'bruise');if(mode!=='flat')s.bloody(Math.min(.35,dmg/90));}
     if(B.alive)B.damage(body,by,mode==='point'?'skewered':'struck down');
@@ -5266,7 +5285,7 @@ function clientEvents(ev){
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
-    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)SHIP.swell=1;break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
+    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)SHIP.swell=1;break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
     case 'ck':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
