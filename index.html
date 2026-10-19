@@ -310,7 +310,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=84;
+const BUILD=85;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -497,18 +497,6 @@ const sky=new THREE.Mesh(new THREE.SphereGeometry(400,32,16),new THREE.ShaderMat
 }));
 sky.renderOrder=-10;scene.add(sky);
 const moonDir=V(-0.45,0.62,0.64).normalize();
-// dust in the air: motes drifting round the camera, caught by the light (strongest in sun and firelight)
-const MOTES=(()=>{const n=700,B=14,pos=new Float32Array(n*3),rnd=new Float32Array(n);for(let i=0;i<n;i++){pos[i*3]=Math.random()*B;pos[i*3+1]=Math.random()*B*.45;pos[i*3+2]=Math.random()*B;rnd[i]=Math.random();}
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('rnd',new THREE.BufferAttribute(rnd,1));g.boundingSphere=new THREE.Sphere(V(),1e5);
-  const m=new THREE.ShaderMaterial({uniforms:{uCam:{value:V()},uT:{value:0},uCol:{value:new THREE.Color(1,.9,.7)},uAmt:{value:.4},uPx:{value:1}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
-    vertexShader:`uniform vec3 uCam;uniform float uT,uPx;attribute float rnd;varying float vA;
-      void main(){vec3 B=vec3(14.,6.3,14.);vec3 p=position+vec3(sin(uT*.13+rnd*40.)*.6+uT*.05,sin(uT*.21+rnd*17.)*.35-uT*.012,cos(uT*.11+rnd*23.)*.6+uT*.03);
-        p=mod(p-uCam+B*.5,B)-B*.5+uCam;p.y=max(p.y,uCam.y-2.6+fract(rnd*7.)*.4);vec4 mv=modelViewMatrix*vec4(p,1.);float d=-mv.z;
-        vec3 q=abs(p-uCam)/(B*.5);vA=(1.-smoothstep(.65,1.,max(q.x,max(q.y,q.z))))*smoothstep(.8,2.5,d)*(.4+.6*fract(rnd*13.))*(.55+.45*sin(uT*(1.+rnd)+rnd*50.));
-        gl_PointSize=uPx*(1.+1.4*fract(rnd*29.))*26./max(d,.6);gl_Position=projectionMatrix*mv;}`,
-    fragmentShader:`uniform vec3 uCol;uniform float uAmt;varying float vA;void main(){vec2 c=gl_PointCoord-.5;float r=dot(c,c)*4.;if(r>1.)discard;gl_FragColor=vec4(uCol*(1.-r)*(1.-r)*vA*uAmt,1.);}`});
-  const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=5;return {pts,m};})();
-scene.add(MOTES.pts);
 const moonSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(radialCanvas([[0,'rgba(255,255,250,1)'],[.18,'rgba(235,240,255,1)'],[.22,'rgba(180,200,255,.35)'],[1,'rgba(120,140,220,0)']])),fog:false,depthWrite:false,transparent:true,blending:THREE.AdditiveBlending}));
 moonSprite.scale.setScalar(70);scene.add(moonSprite);
 
@@ -1545,14 +1533,14 @@ function cheer(x,gasp){netEv(['C',x,gasp?1:0]);crowdU.uCheer.value=Math.min(1.3,
 function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,128);stops.forEach(([o,col])=>gr.addColorStop(o,col));g.fillStyle=gr;g.fillRect(0,0,256,128);
   const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;t.colorSpace=THREE.SRGBColorSpace;return new THREE.PMREMGenerator(renderer).fromEquirectangular(t).texture;}
 const LIGHTS={
-  dusk:{fog:0x34405c,dust:.12,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
+  dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xd6cdbb,dust:.2,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x8a7458,hi:.62,sun:0xffd9a6,si:4.3,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
+  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x8a7458,hi:.62,sun:0xffd9a6,si:4.3,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
-LIGHTS.sea={fog:0x7f8b94,dust:.04,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
+LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
   env:[[0,'#4d5d6e'],[.42,'#8a98a6'],[.5,'#b6bcc0'],[.53,'#33454c'],[1,'#1a262c']]};
-LIGHTS.tavern={fog:0x1a120b,dust:.45,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0xb08458,hg:0x3a2818,hi:.85,sun:0xffc890,si:.35,dir:[.3,.9,.2],moon:false,exp:1.85,cool:.15,halo:.3,shR:12,shMap:2048,
+LIGHTS.tavern={fog:0x1a120b,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0xb08458,hg:0x3a2818,hi:.85,sun:0xffc890,si:.35,dir:[.3,.9,.2],moon:false,exp:1.85,cool:.15,halo:.3,shR:12,shMap:2048,
   env:[[0,'#120c08'],[.45,'#3a2616'],[.5,'#6a4424'],[.55,'#24170e'],[1,'#0c0805']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
@@ -1570,7 +1558,7 @@ function applyLighting(k){
     if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;sky.visible=!L.bg;if(L.bg){scene.background=L.bg;scene.backgroundIntensity=.85;}else{if(!scene.background||!scene.background.isColor)scene.background=new THREE.Color();scene.background.setHex(L.fog);}
   const u=sky.material.uniforms;u.top.value.setHex(L.top);u.mid.value.setHex(L.mid);u.hor.value.setHex(L.hor);u.glowCol.value.setHex(L.glow);u.glowDir.value.set(...L.glowDir).normalize();u.stars.value=L.stars;
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
-  renderer.toneMappingExposure=L.exp*1.2;scene.environment=L.envTex;MOTES.m.uniforms.uAmt.value=L.dust??.25;MOTES.m.uniforms.uCol.value.setHex(L.sun).lerp(new THREE.Color(1,.92,.8),.5);grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
+  renderer.toneMappingExposure=L.exp*1.2;scene.environment=L.envTex;grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
 }
 function loadMap(id){const m=MAPS[id];curMap=id;mapKey++;clearWorld();MAP=m.MAP;ARENA_R=m.arena;m.build();applyLighting(m.light);buildMinimap();}
 
@@ -2100,33 +2088,63 @@ function makeHelmet(type,metal){
 // ================================================================ weapons
 const woodMat=std({color:0xb09070,map:GEAR.wood[0],normalMap:GEAR.wood[1],roughness:.72});
 function wpnGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1] of parts){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);}scene.add(g);return g;}
-function bladeGeo(L,w,base=.045){const NS=26,sec=[[1,0],[.66,.55],[.3,1],[.12,1],[0,.55],[-.12,1],[-.3,1],[-.66,.55],[-1,0],[-.66,-.55],[-.3,-1],[-.12,-1],[0,-.55],[.12,-1],[.3,-1],[.66,-.55]],K=sec.length,pos=[];
-  const ring=j=>{const u=j/NS,y=u*L,wd=u<.82?w*(1-.25*u/.82):w*.75*Math.max(0,(1-u)/.18),th=.0034*(1-.45*u)+.0006,ful=clamp(1-u/.7,0,1);   // taper, thinning, the fuller fading out
+// blades: a lenticular section with ground edge bevels and a fuller; vertex colour marks the polished bevels bright and the fuller dark
+function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3,1],[.12,1],[0,.55],[-.12,1],[-.3,1],[-.66,.55],[-1,0],[-.66,-.55],[-.3,-1],[-.12,-1],[0,-.55],[.12,-1],[.3,-1],[.66,-.55]],K=sec.length,pos=[],col=[];
+  const width=u=>leaf?w*(.32+.68*Math.sin(Math.PI*Math.pow(u,.72)))*(1-Math.pow(u,6)):u<.76?w*(1-.24*u/.76):w*.76*Math.cos((u-.76)/.24*Math.PI/2);   // a straight taper, then an ogive point
+  const ring=j=>{const u=j/NS,y=u*L,wd=width(u),th=.0036*(1-.5*u)+.0006,ful=leaf?0:clamp(1-u/.68,0,1);
     return sec.map(([a,b])=>{const fl=Math.abs(a)<.01?(.55+.45*(1-ful))/.55:1;return [a*wd,y,b*th*fl];});};
-  let prev=ring(0);for(let j=1;j<=NS;j++){const cur=ring(j);for(let k=0;k<K;k++){const a=prev[k],b=prev[(k+1)%K],c=cur[k],d=cur[(k+1)%K];pos.push(...a,...b,...d,...a,...d,...c);}prev=cur;}
-  {const r0=ring(0);for(let k=0;k<K;k++){pos.push(0,0,0,...r0[(k+1)%K],...r0[k]);}}   // the shoulder of the blade under the guard
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.computeVertexNormals();
+  const shade=(k,j)=>{const a=Math.abs(sec[k][0]),ful=leaf?0:clamp(1-j/NS/.68,0,1);return a>.99?1.32:a>.6?1.16:a<.01?1-.2*ful:.97;};
+  const put=(v,k,j)=>{pos.push(...v);const c=shade(k,j);col.push(c,c,c);};
+  let prev=ring(0);for(let j=1;j<=NS;j++){const cur=ring(j);for(let k=0;k<K;k++){const k2=(k+1)%K;put(prev[k],k,j-1);put(prev[k2],k2,j-1);put(cur[k2],k2,j);put(prev[k],k,j-1);put(cur[k2],k2,j);put(cur[k],k,j);}prev=cur;}
+  {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0],4,0);put(r0[(k+1)%K],(k+1)%K,0);put(r0[k],k,0);}}   // the shoulder of the blade under the guard
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);return g;}
-function makeBlade(L,w,grip){return wpnGroup([[bladeGeo(L,w),steelMat,0,0,0],[new THREE.BoxGeometry(.25,.022,.028),steelDark,0,.032,0],[new THREE.CylinderGeometry(.0155,.017,grip,10),leatherMat,0,.02-grip/2,0],[new THREE.CylinderGeometry(.032,.032,.022,20),steelDark,0,.005-grip,0,Math.PI/2],[new THREE.CylinderGeometry(.014,.014,.03,12),steelDark,0,.005-grip,0,Math.PI/2]]);}
-function makeGreatsword(){return wpnGroup([[bladeGeo(1.22,.03,.06),steelMat,0,0,0],[new THREE.BoxGeometry(.38,.026,.032),steelDark,0,.035,0],[new THREE.BoxGeometry(.11,.016,.02),steelDark,0,.21,0],[new THREE.CylinderGeometry(.017,.019,.42,10),leatherMat,0,-.19,0],[new THREE.SphereGeometry(.036,12,8),steelDark,0,-.41,0]]);}
+const bladeMat=std({color:0x96938e,metalness:.92,roughness:.24,envMapIntensity:1.2,vertexColors:true});steelDetail(bladeMat,'blade');
+const gripMat=std({color:0x9a7050,roughness:.72});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1,3);x.anisotropy=MAXANI;}Object.assign(gripMat,{map:ld,normalMap:ln});gripMat.normalScale.set(.6,.6);}
+// a grip bound in leather over cord: the wrap's ridges spiral down it, waisted or swelling along its length
+function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Math.max(8,Math.round(len*260)),true),p=g.attributes.position;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),t=y/len+.5,th=Math.atan2(z,x),ph=th/(Math.PI*2)+y/.011,cord=Math.pow(Math.abs(Math.sin(Math.PI*ph)),.55)*.0011,
+    prof=1+swell*Math.sin(Math.PI*t)-.06*Math.pow(Math.abs(2*t-1),6),k=(r*prof+cord)/r;p.setX(i,x*k);p.setZ(i,z*k);}
+  g.computeVertexNormals();return g;}
+// a cross guard: quillons tapering out from a block and flaring at the tips, edges rounded, bent toward the blade if asked
+function guardGeo(S,H,D,bend=0){const xs=[-.5,-.46,-.4,-.13,0,.13,.4,.46,.5],hs=[.5,.78,.52,.6,1,.6,.52,.78,.5],h=H/2,sh=new THREE.Shape();
+  sh.moveTo(xs[0]*S,hs[0]*h);for(let i=1;i<9;i++)sh.lineTo(xs[i]*S,hs[i]*h);for(let i=8;i>=0;i--)sh.lineTo(xs[i]*S,-hs[i]*h*.92);
+  const g=new THREE.ExtrudeGeometry(sh,{depth:D*.7,bevelEnabled:true,bevelThickness:D*.15,bevelSize:Math.min(.003,H*.18),bevelSegments:2,curveSegments:4});g.translate(0,0,-D*.35);
+  const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),f=Math.abs(x)/(S/2);p.setY(i,p.getY(i)+bend*f*f);p.setZ(i,p.getZ(i)*(1-.35*f*f));}g.computeVertexNormals();return g;}
+// pommels: a bevelled wheel with a peened tang button, or a pear for the greatsword
+function wheelPommel(R,T){const g=lathe([[0,-T/2-.004],[.006,-T/2-.004],[.007,-T/2],[R*.5,-T/2],[R*.9,-T*.32],[R,-T*.1],[R,T*.1],[R*.9,T*.32],[R*.5,T/2],[.007,T/2],[.006,T/2+.004],[0,T/2+.004]].reverse(),28);g.rotateX(Math.PI/2);return g;}
+function pearPommel(R){return lathe([[0,-R*1.25],[R*.25,-R*1.2],[R*.75,-R*.8],[R,-R*.15],[R*.85,R*.5],[R*.45,R*.85],[R*.3,R*1.05],[0,R*1.08]].reverse(),24);}
+function bandGeo(r,h){return lathe([[r*.82,-h/2],[r,-h*.3],[r,h*.3],[r*.82,h/2]].reverse(),20);}
+function makeBlade(L,w,grip){const two=grip>.2;
+  return wpnGroup([[bladeGeo(L,w),bladeMat,0,0,0],[guardGeo(two?.25:.22,.02,.026,two?.006:-.004),steelDark,0,.032,0],[gripGeo(grip-.012,.0158,two?.09:.05),gripMat,0,.016-grip/2,0],
+    [bandGeo(.018,.009),steelDark,0,.02,0],[bandGeo(.0175,.008),steelDark,0,.012-grip,0],[wheelPommel(two?.034:.031,.022),steelDark,0,-.006-grip,0]]);}
+function makeGreatsword(){return wpnGroup([[bladeGeo(1.22,.03,.06),bladeMat,0,0,0],[guardGeo(.38,.028,.032,.012),steelDark,0,.035,0],[guardGeo(.1,.016,.02,-.004),steelDark,0,.21,0],
+  [gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],[pearPommel(.03),steelDark,0,-.41,0]]);}
+const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');
+function edgeShade(g,f){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=f(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=c[i*3+1]=c[i*3+2]=v;}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g;}
 function makeAxe(){
-  // a bearded axe head: thick at the eye round the haft, ground down to a thin cutting edge, the beard sweeping down
+  // a bearded axe head: thick at the eye round the haft, ground down to a thin cutting edge, the beard sweeping down; the ground edge bright against the dark forged head
   const sh=new THREE.Shape();sh.moveTo(-.024,.985);sh.lineTo(.035,.985);sh.quadraticCurveTo(.1,.99,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.75,.07,.83);sh.quadraticCurveTo(.045,.87,.035,.88);sh.lineTo(-.024,.88);sh.closePath();
-  const hg=new THREE.ExtrudeGeometry(sh,{depth:.024,bevelEnabled:false,curveSegments:10});hg.translate(0,0,-.012);
+  const hg=new THREE.ExtrudeGeometry(sh,{depth:.024,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:14});hg.translate(0,0,-.012);
   {const p=hg.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),k=x<.03?1:Math.max(.06,1-(x-.03)/.15*.94);p.setZ(i,p.getZ(i)*k);}hg.computeVertexNormals();}
-  const eye=new THREE.CylinderGeometry(.026,.026,.11,14);
-  return wpnGroup([[new THREE.CylinderGeometry(.016,.019,1.32,10),woodMat,0,.33,0],[hg,steelDark,0,0,0],[eye,steelDark,0,.932,0],[new THREE.CylinderGeometry(.019,.019,.24,10),leatherMat,0,-.2,0],[new THREE.CylinderGeometry(.02,.017,.03,10),steelDark,0,-.33,0]]);
+  edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
+  const eye=edgeShade(lathe([[.024,-.06],[.028,-.05],[.028,.05],[.024,.06]].reverse(),16),()=>.9);
+  const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.995],[0,.995]].reverse(),14);
+  return wpnGroup([[haft,woodMat,0,0,0],[hg,headMat,0,0,0],[eye,headMat,0,.932,0],[gripGeo(.24,.0195,.03),gripMat,0,-.2,0],[bandGeo(.021,.01),steelDark,0,-.075,0]]);
 }
 function makeMace(){
   // a flanged mace: seven pointed steel flanges round a turned core, a knob on top, a leather grip and a disc guard
   const core=lathe([[.0,.0],[.02,.0],[.026,.03],[.028,.11],[.022,.15],[.0,.16]].reverse(),16);
   const fl=new THREE.Shape();fl.moveTo(0,0);fl.lineTo(.03,.025);fl.quadraticCurveTo(.05,.07,.034,.13);fl.lineTo(0,.155);fl.closePath();
   const fg=new THREE.ExtrudeGeometry(fl,{depth:.007,bevelEnabled:true,bevelThickness:.0015,bevelSize:.0015,bevelSegments:1,curveSegments:6});fg.translate(.018,0,-.0035);
-  const parts=[[new THREE.CylinderGeometry(.015,.017,.86,10),steelDark,0,.2,0],[new THREE.CylinderGeometry(.019,.019,.22,10),leatherMat,0,-.1,0],[core,steelDark,0,.58,0],[new THREE.SphereGeometry(.018,12,8),steelDark,0,.755,0],[new THREE.CylinderGeometry(.034,.034,.008,16),steelDark,0,.015,0],[new THREE.SphereGeometry(.024,12,8),steelDark,0,-.23,0]];
-  for(let i=0;i<7;i++){const a=i/7*Math.PI*2;parts.push([fg,steelMat,0,.585,0,0,-a,0]);}
+  edgeShade(fg,(x)=>x>.04?1.35:x>.032?1.1:.9);
+  const shaft=lathe([[0,-.23],[.016,-.23],[.015,.3],[.017,.6],[.0,.6]].reverse(),12);
+  const parts=[[shaft,steelDark,0,0,0],[gripGeo(.22,.019,.04),gripMat,0,-.1,0],[bandGeo(.021,.01),steelDark,0,.012,0],[core,steelDark,0,.58,0],[lathe([[0,-.004],[.012,-.004],[.019,.006],[.012,.02],[0,.026]].reverse(),14),steelDark,0,.74,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
+  for(let i=0;i<7;i++){const a=i/7*Math.PI*2;parts.push([fg,headMat,0,.585,0,0,-a,0]);}
   return wpnGroup(parts);
 }
-function makeSpear(){return wpnGroup([[new THREE.CylinderGeometry(.016,.018,1.98,8),woodMat,0,.63,0],[new THREE.ConeGeometry(.022,.09,8),steelDark,0,1.64,0,Math.PI],[bladeGeo(.22,.034,1.62),steelMat,0,0,0],[new THREE.CylinderGeometry(.02,.02,.04,8),steelDark,0,-.36,0]]);}
+function makeSpear(){const sock=lathe([[.0175,-.05],[.019,-.04],[.017,.02],[.012,.07],[.008,.09]].reverse(),14);
+  return wpnGroup([[lathe([[0,-.37],[.019,-.37],[.017,-.34],[.016,.6],[.0175,1.6],[0,1.6]].reverse(),12),woodMat,0,0,0],[sock,steelDark,0,1.58,0],[bandGeo(.0195,.008),steelDark,0,1.545,0],[bladeGeo(.24,.03,1.66,true),bladeMat,0,0,0],[bandGeo(.02,.03),steelDark,0,-.36,0]]);}
 const WEAPONS={
   arming:{id:'arming',name:'Arming sword',kind:'blade',len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:1,make:()=>makeBlade(.78,.024,.15)},
   longsword:{id:'longsword',name:'Longsword',kind:'blade',len:1.0,grip2:-.12,weight:1.1,cut:1.1,thrust:1.1,sever:1.1,pen:.25,hitFrom:.22,tier:2,make:()=>makeBlade(.95,.025,.24)},
@@ -4956,7 +4974,7 @@ function frame(now){
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
   sky.position.copy(camera.position);
-  moonSprite.position.copy(camera.position).addScaledVector(moonDir,320);MOTES.m.uniforms.uCam.value.copy(camera.position);MOTES.m.uniforms.uT.value=now/1000;MOTES.m.uniforms.uPx.value=renderer.getPixelRatio()*innerHeight/900;
+  moonSprite.position.copy(camera.position).addScaledVector(moonDir,320);
   const fp=player&&!player.ragdoll?player.pos:camera.position;
   moon.target.position.set(Math.round(fp.x),0,Math.round(fp.z));moon.position.copy(moon.target.position).addScaledVector(moonDir,70);
   {const on=state!=='attract'&&!zone.off;zoneMesh.visible=scorch.visible=on;
