@@ -308,7 +308,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=75;
+const BUILD=76;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -806,10 +806,10 @@ function sinkWall(p,r){const S=SINK;if(S.st!=='open'||p.y>-.05)return;const dx=p
 // flat by the landing and comes to rest lying properly on the ground (never balanced on an edge or hanging in the air). While it
 // moves fast it crushes whoever it hits; once it lies still a big piece is something to climb over, a burning one sets you alight,
 // and a few beams are left loose to pick up and swing. Host and friends run the same pieces from the same seed; only the host deals damage
-const RUBBLE=[];let rubSeed=1;const rrand=()=>{rubSeed=(rubSeed*16807)%2147483647;return (rubSeed-1)/2147483646;};
+const RUBBLE=[],HEAP=new Map();let rubSeed=1;const heapKey=(x,z)=>Math.round(x*2)*100003+Math.round(z*2),heapAt=(x,z)=>HEAP.get(heapKey(x,z))||0;const rrand=()=>{rubSeed=(rubSeed*16807)%2147483647;return (rubSeed-1)/2147483646;};
 const _rbq=new THREE.Quaternion(),_rbv=V(),_rbc=V(),_rbw=V(),_rbax=[V(1,0,0),V(0,1,0),V(0,0,1)];
 function rubbleAdd(o){const r=Object.assign({vel:V(),w:V(),rest:false,slow:0,hit:new Set(),mass:30,cause:'crushed',burn:0,fx:null},o);r.m.position.copy(r.pos);r.m.quaternion.copy(r.q);r.m.castShadow=r.m.receiveShadow=true;if(!r.m.parent)world.add(r.m);RUBBLE.push(r);return r;}
-function rubbleClear(){for(const r of RUBBLE){world.remove(r.m);if(r.fx)dropFlames(r.fx);}RUBBLE.length=0;}
+function rubbleClear(){for(const r of RUBBLE){world.remove(r.m);if(r.fx)dropFlames(r.fx);}RUBBLE.length=0;HEAP.clear();}
 function rubbleStep(h){if(!RUBBLE.length)return;
   for(const r of RUBBLE){if(r.rest)continue;
     if(r.settle){r.settle.t+=h;const u=Math.min(1,r.settle.t/.35);r.q.slerpQuaternions(r.settle.q0,r.settle.q1,u*u*(3-2*u));r.pos.y+=(r.settle.y-r.pos.y)*Math.min(1,h*14);r.m.position.copy(r.pos);r.m.quaternion.copy(r.q);if(u>=1){r.rest=true;rubbleRest(r);}continue;}
@@ -817,7 +817,7 @@ function rubbleStep(h){if(!RUBBLE.length)return;
     const wl=r.w.length();if(wl>1e-5){_rbq.setFromAxisAngle(_rbw.copy(r.w).multiplyScalar(1/wl),wl*h);r.q.premultiply(_rbq).normalize();}
     // the lowest corner against the ground
     let lo=1e9,lc=null;for(let i=0;i<8;i++){_rbc.set(i&1?r.half.x:-r.half.x,i&2?r.half.y:-r.half.y,i&4?r.half.z:-r.half.z).applyQuaternion(r.q);if(_rbc.y<lo){lo=_rbc.y;lc=_rbc.clone();}}
-    const gy=groundY(r.pos.x,r.pos.z,r.pos.y+1);
+    const gy=Math.max(groundY(r.pos.x,r.pos.z,r.pos.y+1),heapAt(r.pos.x,r.pos.z)*.6);
     if(r.pos.y+lo<gy){r.pos.y=gy-lo;
       _rbv.copy(r.w).cross(lc).add(r.vel);   // speed of that corner
       if(_rbv.y<-.4&&!r.landed){r.landed=true;rubbleLand(r);}
@@ -831,6 +831,7 @@ function rubbleStep(h){if(!RUBBLE.length)return;
   for(const r of RUBBLE)if(r.fx&&!r.rest)for(const e of r.fx){_rbc.copy(r.offs||V()).applyQuaternion(r.q).add(r.pos);e.x=_rbc.x;e.y=_rbc.y+.1;e.z=_rbc.z;e.f.position.set(e.x,e.y+.18*e.base,e.z);e.h.position.set(e.x,e.y,e.z);}}
 // come to rest on whichever face is nearest to down, lying flat on the ground
 function rubbleSettle(r,gy){let best=0,bd=-1,sg=1;for(let i=0;i<3;i++){const a=_rbv.copy(_rbax[i]).applyQuaternion(r.q),d=Math.abs(a.y);if(d>bd){bd=d;best=i;sg=a.y>=0?1:-1;}}
+  {const hh=[r.half.x,r.half.y,r.half.z],mx=Math.max(...hh);if(hh[best]===mx&&mx>1.8*Math.min(...hh)){let b2=-1,d2=-1;for(let i=0;i<3;i++){if(i===best)continue;const a=_rbv.copy(_rbax[i]).applyQuaternion(r.q),d=Math.abs(a.y);if(d>d2){d2=d;b2=i;sg=a.y>=0?1:-1;}}best=b2;}}   // a long piece doesn't stay standing on its end: it falls over
   const a=_rbax[best].clone().applyQuaternion(r.q).multiplyScalar(sg),q1=new THREE.Quaternion().setFromUnitVectors(a,V(0,1,0)).multiply(r.q);
   const hy=[r.half.x,r.half.y,r.half.z][best];r.settle={t:0,q0:r.q.clone(),q1,y:gy+hy};r.vel.set(0,0,0);r.w.set(0,0,0);}
 function rubbleLand(r){const big=r.mass>40;if(big){sThud(r.pos,Math.min(1.6,r.mass/80));spawnDust(V(r.pos.x,.2,r.pos.z),big?10:4,Math.max(r.half.x,r.half.z),.5);}
@@ -838,6 +839,7 @@ function rubbleLand(r){const big=r.mass>40;if(big){sThud(r.pos,Math.min(1.6,r.ma
 function rubbleRest(r){if(r.fx&&r.burn<=0)dropFlames(r.fx);
   const e=[0,0];for(let i=0;i<8;i++){_rbc.set(i&1?r.half.x:-r.half.x,i&2?r.half.y:-r.half.y,i&4?r.half.z:-r.half.z).applyQuaternion(r.q);e[0]=Math.max(e[0],Math.abs(_rbc.x));e[1]=Math.max(e[1],Math.abs(_rbc.z));}
   const top=r.pos.y+Math.min(r.half.x,r.half.y,r.half.z)*1.0;
+  if(r.mass>20)for(let gx=-e[0];gx<=e[0];gx+=.5)for(let gz=-e[1];gz<=e[1];gz+=.5){const k=heapKey(r.pos.x+gx,r.pos.z+gz);HEAP.set(k,Math.max(HEAP.get(k)||0,Math.min(top,3.5)));}   // later stones land on this one
   if(Math.max(e[0],e[1])>.7&&top>.25){const b=addBox(r.pos.x-e[0]*.85,r.pos.x+e[0]*.85,r.pos.z-e[1]*.85,r.pos.z+e[1]*.85,Math.min(top+.1,2.4));r.box=b;}   // something to climb over or go round
   if(r.loot&&NET.mode!=='client'){const def=WEAPONS[r.loot];if(def){world.remove(r.m);r.gone=true;const s=new Sword(def),ax=V(1,0,0).applyQuaternion(r.q).setY(0).normalize();s.reset(r.pos.clone().addScaledVector(ax,-def.len/2).setY(.1),ax);s.edge.set(0,1,0);s.free=true;s.age=0;if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}}
 function rubbleHits(r){const R=Math.max(r.half.x,r.half.y,r.half.z)+.3,sp=r.vel.length();
@@ -863,74 +865,101 @@ function houseBreak(H,seed){rubSeed=seed||1;const dir=rrand()*6.283,lean=V(Math.
     tip(r,V(rrand()-.5,0,sd),.8);r.vel.y=-1;r.fx=[];r.offs=V(0,.2,0);houseFlame({fx:r.fx},r.pos.clone(),1.6+rrand());}
   for(let i=0;i<7;i++){const L=2+rrand()*Math.max(1,W-2),r=piece(.22,.22,L,charMat,(rrand()-.5)*W*.6,wallH*(.4+rrand()*.6),(rrand()-.5)*D*.6,new THREE.Quaternion().setFromAxisAngle(Y_AXIS,rrand()*3),{burn:i<3?16+rrand()*8:0,loot:i===5||i===6?'plank':null,mass:60});
     tip(r,V(rrand()-.5,0,rrand()-.5),1.4);if(r.burn>0){r.offs=V(0,.1,0);r.fx=[];houseFlame({fx:r.fx},r.pos.clone(),1+rrand()*.5);}}}
-// ---- the bell tower in the square: a stone shaft, a timber belfry with its bell, a shingled spire, eighteen metres in all.
-// Partway into a match the belfry catches fire. It burns for half a minute and gives every warning: smoke, the bell clanging as the
-// frame shifts, burning shingles and beams dropping, creaks and grinding, dust from the base. Then it comes down, one of two ways,
-// at random: the shaft snaps somewhere up its height and the top tips over in a random direction, coming apart as it falls, or the
-// base gives way and the whole thing crumbles and spills out round itself. Anything under it is crushed; the stone left lying is cover
+// ---- the bell tower in the square: an ashlar stone shaft with corner quoins and buttresses, a cornice, an open stone belfry with
+// arched openings and its bell hung from a timber headstock, a slated spire with a cross. About twenty metres to the cross, built of
+// a hundred-odd separate stones and timbers so it can really come apart.
+// Partway into a match the belfry timbers catch fire and it burns for half a minute: smoke, the bell clanging as the headstock gives,
+// burning slates and timbers dropping, then creaking, grinding and dust from the base. Then it goes, one of two ways, at random:
+//  · it snaps somewhere up the shaft and the top tips over in a random direction, falling as one piece and shattering where it lands;
+//  · the base gives way, the upper tower drops into its own footprint and spills outward as it hits.
+// Stones pile on each other as they land (a rubble heightfield), anything under the fall is crushed, and the heap is cover.
 const TOWER={st:'none'};
-function sBell(p,v){if(!AC)return;const vol=distVol(p)*v;if(vol<.005)return;const t=AC.currentTime,f0=196*(1+(Math.random()-.5)*.02);
-  for(const [r,a,d] of [[.5,.5,4.5],[1,1,3.5],[1.19,.45,2.6],[1.5,.35,2],[2,.3,1.6],[2.74,.2,1.1],[3.76,.12,.7]]){const o=AC.createOscillator();o.type='sine';o.frequency.value=f0*r;const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol*a*.22,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);}}
-function buildTower(x,z){const T={st:'whole',x,z,t:0,at:rand(60,100),burnFor:rand(28,36),parts:[],fx:[],smoke:[],tollT:3,emberT:2,creakT:0,warned:false};Object.assign(TOWER,T);TOWER.parts=[];TOWER.fx=[];TOWER.smoke=[];
-  const S=3.6,hs=S/2,wt=.5,ch=1.6,stoneM=MATS.stone;
-  const part=(geo,mat,half,pos,q,mass,kind)=>{const m=new THREE.Mesh(geo,mat);m.position.copy(pos);if(q)m.quaternion.copy(q);m.castShadow=m.receiveShadow=true;world.add(m);TOWER.parts.push({m,half,pos:pos.clone(),q:(q||new THREE.Quaternion()).clone(),mass,kind});};
-  // the stone shaft: five courses, each side two blocks, with a doorway on the north side of the ground course
-  for(let c=0;c<5;c++){const y=c*ch+ch/2;for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]])for(const k of [-1,1]){if(c===0&&sz===1&&k===1)continue;
-      const along=k*(S/4+(sz?0:-wt/4)),len=sz?S/2:S/2-wt/2,px=x+(sz?along:sx*(hs-wt/2)),pz=z+(sz?sz*(hs-wt/2):along);
-      const g=sz?boxUV(len-.02,ch-.02,wt,1.5):boxUV(wt,ch-.02,len-.02,1.5);part(g,stoneM,sz?V(len/2,ch/2,wt/2):V(wt/2,ch/2,len/2),V(px,y,pz),null,260,'stone');}}
-  // a string course and the belfry floor
-  part(boxUV(S+.3,.25,S+.3,1.5),MATS.beam,V((S+.3)/2,.125,(S+.3)/2),V(x,8.12,z),null,160,'wood');
-  // four corner posts, cross braces, louvred sides and the bell
-  for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]])part(boxUV(.3,4.4,.3,1),MATS.beam,V(.15,2.2,.15),V(x+sx*(hs-.15),10.45,z+sz*(hs-.15)),null,90,'wood');
-  for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const q=new THREE.Quaternion().setFromAxisAngle(Y_AXIS,sx?Math.PI/2:0);part(boxUV(S-.3,1.1,.12,1),MATS.wood,V((S-.3)/2,.55,.06),V(x+sx*(hs-.1),9,z+sz*(hs-.1)),q,40,'wood');}
-  {const g=new THREE.CylinderGeometry(.45,.75,1.1,14,1,true);const m=new THREE.Mesh(g,std({color:0x6b5a3a,metalness:.85,roughness:.35,side:THREE.DoubleSide}));m.position.set(x,11,z);m.castShadow=true;world.add(m);TOWER.parts.push({m,half:V(.7,.55,.7),pos:V(x,11,z),q:new THREE.Quaternion(),mass:220,kind:'bell'});}
-  part(boxUV(S+.2,.25,.25,1),MATS.beam,V((S+.2)/2,.125,.125),V(x,11.7,z),null,50,'wood');
-  // the spire, in two pieces
-  {const g=new THREE.ConeGeometry(2.75,3.2,4,1,true);g.rotateY(Math.PI/4);part(g,MATS.tile,V(1.95,1.6,1.95),V(x,14.3,z),null,180,'roof');
-   const g2=new THREE.ConeGeometry(1.1,2.6,4);g2.rotateY(Math.PI/4);part(g2,MATS.tile,V(.78,1.3,.78),V(x,17.2,z),null,60,'roof');}
-  part(new THREE.CylinderGeometry(.03,.03,1.2,4),MATS.iron,V(.05,.6,.05),V(x,19,z),null,4,'iron');
-  TOWER.box=addBox(x-hs,x+hs,z-hs,z+hs,18);}
+function sBell(p,v){if(!AC)return;const vol=distVol(p)*v;if(vol<.005)return;const t=AC.currentTime,f0=174*(1+(Math.random()-.5)*.02);
+  for(const [r,a,d] of [[.5,.5,5],[1,1,4],[1.19,.45,3],[1.5,.35,2.2],[2,.3,1.8],[2.74,.2,1.2],[3.76,.12,.8]]){const o=AC.createOscillator();o.type='sine';o.frequency.value=f0*r;const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol*a*.22,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);}}
+const towerStoneM=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xb8ad9a,roughness:.95}),towerQuoinM=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xd8cfbc,roughness:.92}),towerSlateM=std({map:TX.tile,color:0x55606a,roughness:.7});
+function bellGeo(){const pts=[[.06,.95],[.2,.94],[.3,.88],[.34,.75],[.36,.5],[.42,.25],[.55,.08],[.6,0],[.57,-.01]].map(([x,y])=>new THREE.Vector2(x,y));return new THREE.LatheGeometry(pts,20);}
+function buildTower(x,z){Object.assign(TOWER,{st:'whole',x,z,t:0,at:rand(60,100),burnFor:rand(28,36),parts:[],fx:[],smoke:[],tollT:3,emberT:2,creakT:0,warned:false,rig:null});
+  const S=3.8,ch=.9,NC=9,wt=.55;   // side, course height, courses up to the cornice, wall thickness
+  const part=(m,half,pos,q,mass,kind)=>{m.position.copy(pos);if(q)m.quaternion.copy(q);m.castShadow=m.receiveShadow=true;world.add(m);const p={m,half,pos:pos.clone(),q:(q||new THREE.Quaternion()).clone(),mass,kind};TOWER.parts.push(p);return p;};
+  const blk=(w,hh,d,mat,pos,mass,kind,q)=>part(new THREE.Mesh(boxUV(w,hh,d,1.2),mat),V(w/2,hh/2,d/2),pos,q,mass,kind||'stone');
+  // plinth
+  for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const w=sz?S+1:1.1,d=sz?.5:S;blk(w,.5,d,towerStoneM,V(x+sx*(S/2+.25-.25),.25,z+sz*(S/2+.25-.25)).add(V(sx*.25,0,sz*.25)),320);}
+  // the shaft: courses of ashlar, joints staggered course to course, pale quoins at the corners, a door on the north and slit windows
+  for(let c=0;c<NC;c++){const y=.5+c*ch+ch/2,tap=1-c*.008,s=S*tap,hs=s/2,off=c%2?.35:-.35;
+    for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const L=sz?s:s-2*wt;const cuts=[-L/2,off-.45,off+.45+(c%3?0:.2),L/2];
+      for(let i=0;i<3;i++){const a=cuts[i],b=cuts[i+1],len=b-a-.02,mid=(a+b)/2;if(len<.2)continue;
+        if(c<3&&sz===1&&i===1)continue;   // the doorway
+        const quoin=sz&&(i===0||i===2);const px=x+(sz?mid:sx*(hs-wt/2)),pz=z+(sz?sz*(hs-wt/2):mid);
+        const p=sz?blk(len,ch-.02,wt,quoin?towerQuoinM:towerStoneM,V(px,y,pz),len*ch*wt*500):blk(wt,ch-.02,len,towerStoneM,V(px,y,pz),len*ch*wt*500);
+        if(i===1&&(c===4||c===7)&&!sz){const sl=new THREE.Mesh(new THREE.BoxGeometry(.06,.55,.14),MATS.dirt);sl.position.set(sx*(wt/2+.005),0,0);p.m.add(sl);}}}}
+  // buttresses at the four corners, stepping in as they rise
+  for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]])for(let k=0;k<3;k++){const w=.7-k*.15,hh=1.3;blk(w,hh,w,towerQuoinM,V(x+sx*(S/2+w/2-.15),.5+k*hh+hh/2,z+sz*(S/2+w/2-.15)),w*w*hh*500);}
+  // the doorway lintel
+  blk(1.3,.35,wt+.05,towerQuoinM,V(x,.5+3*ch-.17,z+S/2-wt/2),160);
+  // cornice
+  const yc=.5+NC*ch;for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const w=sz?S+.5:.45,d=sz?.45:S-.4;blk(w,.32,d,towerQuoinM,V(x+sx*(S/2+.02),yc+.16,z+sz*(S/2+.02)),200);}
+  // the belfry: four corner piers and a wall on each face with an arched opening (louvres inside), timber floor
+  const yb=yc+.32,bh=3.4,Sb=S*.94;
+  blk(Sb-.4,.2,Sb-.4,MATS.beam,V(x,yb+.1,z),120,'wood');
+  for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]])blk(.6,bh,.6,towerQuoinM,V(x+sx*(Sb/2-.3),yb+bh/2,z+sz*(Sb/2-.3)),.6*.6*bh*500);
+  for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const w=Sb-1.2,sh=new THREE.Shape();sh.moveTo(-w/2,0);sh.lineTo(w/2,0);sh.lineTo(w/2,bh);sh.lineTo(-w/2,bh);sh.lineTo(-w/2,0);
+    const hole=new THREE.Path();const aw=.55;hole.moveTo(-aw,.7);hole.lineTo(aw,.7);hole.lineTo(aw,2.3);hole.absarc(0,2.3,aw,0,Math.PI,false);hole.lineTo(-aw,.7);sh.holes.push(hole);
+    const g=new THREE.ExtrudeGeometry(sh,{depth:.35,bevelEnabled:false});g.translate(0,-bh/2,-.175);g.computeVertexNormals();const q=new THREE.Quaternion().setFromAxisAngle(Y_AXIS,sx?Math.PI/2:0);
+    const p=part(new THREE.Mesh(g,towerStoneM),V(w/2,bh/2,.175),V(x+sx*(Sb/2-.18),yb+bh/2,z+sz*(Sb/2-.18)),q,w*bh*.35*400,'stone');
+    for(let k=0;k<4;k++){const lv=new THREE.Mesh(new THREE.BoxGeometry(1.05,.06,.3),MATS.beam);lv.position.set(0,-bh/2+.95+k*.38,0);lv.rotation.x=.5;p.m.add(lv);}}
+  // headstock and bell
+  blk(Sb-.9,.26,.3,MATS.beam,V(x,yb+bh-.55,z),70,'wood');
+  {const m=new THREE.Mesh(bellGeo(),std({color:0x7a6236,metalness:.9,roughness:.32,side:THREE.DoubleSide}));m.scale.setScalar(1.25);part(m,V(.72,.6,.72),V(x,yb+bh-1.75,z),null,260,'bell');}
+  // a stone band and the spire: slated, steep, bell-cast at the foot, a cross on top
+  const ys=yb+bh;for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const w=sz?Sb+.3:.4,d=sz?.4:Sb-.5;blk(w,.28,d,towerQuoinM,V(x+sx*(Sb/2),ys+.14,z+sz*(Sb/2)),150);}
+  {const g=new THREE.CylinderGeometry(1.15,2.85,3.6,4,1,true);g.rotateY(Math.PI/4);part(new THREE.Mesh(g,towerSlateM),V(2,1.8,2),V(x,ys+.28+1.8,z),null,200,'roof');
+   const g2=new THREE.ConeGeometry(1.15,4.2,4);g2.rotateY(Math.PI/4);part(new THREE.Mesh(g2,towerSlateM),V(.8,2.1,.8),V(x,ys+.28+3.6+2.1,z),null,90,'roof');
+   const cr=new THREE.Group();const a=new THREE.Mesh(new THREE.BoxGeometry(.07,1.1,.07),MATS.iron),b=new THREE.Mesh(new THREE.BoxGeometry(.5,.07,.07),MATS.iron);b.position.y=.2;cr.add(a,b);part(cr,V(.25,.55,.05),V(x,ys+.28+3.6+4.2+.5,z),null,5,'iron');}
+  TOWER.top=ys+9;TOWER.hs=S/2+.4;TOWER.box=addBox(x-S/2-.5,x+S/2+.5,z-S/2-.5,z+S/2+.5,TOWER.top);}
 function towerIgnite(net=true){const T=TOWER;if(T.st!=='whole')return;T.st='burning';T.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['BT',1]);
-  for(let k=0;k<7;k++){const p=V(T.x+(Math.random()-.5)*3,8.5+Math.random()*4.5,T.z+(Math.random()-.5)*3);houseFlame(T,p,2+Math.random()*1.8);}
-  for(let k=0;k<14;k++){const sp=new THREE.Sprite(smokeSpriteMat.clone());sp.material.opacity=0;sp.renderOrder=6;world.add(sp);T.smoke.push({sp,t:k/14*5});}
-  sfx('crackle',V(T.x,10,T.z),1,.7,0,false);sBell(V(T.x,11,T.z),1);note('The bell tower is on fire','red');}
+  const yb=T.top-9;for(let k=0;k<8;k++){const a=Math.random()*6.283,r=Math.random()*1.4,p=V(T.x+Math.cos(a)*r,yb-3.2+Math.random()*3.6,T.z+Math.sin(a)*r);houseFlame(T,p,1.8+Math.random()*1.6);}
+  for(let k=0;k<4;k++){const a=k/4*6.283+.6;houseFlame(T,V(T.x+Math.cos(a)*1.6,yb+1.2,T.z+Math.sin(a)*1.6),2.2+Math.random());}   // the spire's timbers alight at its foot
+  for(let k=0;k<16;k++){const sp=new THREE.Sprite(smokeSpriteMat.clone());sp.material.opacity=0;sp.renderOrder=6;world.add(sp);T.smoke.push({sp,t:k/16*6});}
+  sfx('crackle',V(T.x,yb,T.z),1,.7,0,false);sBell(V(T.x,yb,T.z),1);note('The bell tower is on fire','red');}
 function towerCollapse(seed,net=true){const T=TOWER;if(T.st==='down'||T.st==='falling')return;T.st='falling';T.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['BT',2,seed]);
-  rubSeed=seed;const mode=rrand()<.55?'tip':'crumble',th=rrand()*6.283,dir=V(Math.cos(th),0,Math.sin(th)),hb=mode==='tip'?1.6*(1+Math.floor(rrand()*3)):1.6*Math.floor(rrand()*2);
-  T.mode=mode;gridRemove(T.box);if(T.box.phys&&PW){try{PW.removeCollider(T.box.phys,false);}catch(e){}}
-  const P0=V(T.x,hb,T.z).addScaledVector(dir,1.8),axis=V(0,1,0).cross(dir).normalize().negate();
-  sfx('crush',V(T.x,hb+1,T.z),1,.45,0,false);sfx('crush',V(T.x,hb+1,T.z),1,.6,.3,false);sThud(V(T.x,hb,T.z),2);spawnDust(V(T.x,hb+.5,T.z),40,2.5,1.5);sBell(V(T.x,11,T.z),1.2);
-  T.rig=[];T.P0=P0;T.axis=axis;T.phi=.02;T.phiV=0;T.sep=.45+rrand()*.4;
-  for(const p of T.parts){const above=p.pos.y>hb+.01;if(!above)continue;
-    const brk=p.pos.y<hb+1.65&&p.kind==='stone';   // the course at the break bursts out
-    if(mode==='crumble'||brk){const out=V(p.pos.x-T.x,0,p.pos.z-T.z);if(out.lengthSq()<.01)out.set(rrand()-.5,0,rrand()-.5);out.normalize();
-        const r=rubbleAdd({m:p.m,half:p.half,pos:p.pos.clone(),q:p.q.clone(),mass:p.mass,cause:'crushed by the bell tower'});
-        r.vel.copy(out).multiplyScalar((brk?1.5:.6)+rrand()*(mode==='crumble'?2.6:1.5)).add(dir.clone().multiplyScalar(mode==='crumble'?rrand()*1.2:0));r.vel.y=rrand()*.6;r.w.set(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(mode==='crumble'?3:2);p.r=r;}
-    else T.rig.push({p,pos0:p.pos.clone(),q0:p.q.clone()});}
-  if(mode==='crumble'){T.rig.length=0;}
-  // the flames go with the timbers they're on
-  for(const e of T.fx){let best=null,bd=1e9;for(const p of T.parts){if(p.kind==='stone')continue;const d=(p.pos.x-e.x)**2+(p.pos.y-e.y)**2+(p.pos.z-e.z)**2;if(d<bd){bd=d;best=p;}}if(best){best.fl=(best.fl||[]);best.fl.push(e);}}
+  rubSeed=seed;const mode=rrand()<.55?'tip':'crumble',th=rrand()*6.283,dir=V(Math.cos(th),0,Math.sin(th));
+  const hb=mode==='tip'?.5+.9*(2+Math.floor(rrand()*5)):.5+.9*Math.floor(rrand()*2);T.mode=mode;
+  gridRemove(T.box);if(T.box.phys&&PW){try{PW.removeCollider(T.box.phys,false);}catch(e){}}
+  const C=V(T.x,hb,T.z);sfx('crush',C,1,.4,0,false);sfx('crush',C,1,.55,.35,false);sThud(C,2);spawnDust(C.clone().setY(hb+.4),40,2.6,1.4);sBell(V(T.x,T.top-11,T.z),1.2);
+  T.rig=[];T.phi=0;T.phiV=0;T.dropV=0;T.drop=0;T.axis=V(0,1,0).cross(dir).normalize().negate();T.P0=V(T.x,hb,T.z).addScaledVector(dir,T.hs);T.dir=dir;T.tilt=V(rrand()-.5,0,rrand()-.5).normalize().multiplyScalar(.15+rrand()*.2);
+  for(const p of T.parts){if(p.pos.y<=hb+.01&&p.pos.y>hb-1.6&&p.kind==='stone'&&rrand()<(p.pos.y>hb-.8?.6:.3)){const out=V(p.pos.x-T.x,0,p.pos.z-T.z).normalize();const r=rubbleAdd({m:p.m,half:p.half,pos:p.pos.clone(),q:p.q.clone(),mass:p.mass,cause:'crushed by the bell tower'});r.vel.copy(out).multiplyScalar(.6+rrand()*1.2);r.vel.y=rrand()*.5;r.w.set(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(1.5);p.r=r;}}   // the stump's top is left ragged
+  for(const p of T.parts){if(p.pos.y<=hb+.01)continue;const brk=p.pos.y<hb+1.0&&p.kind==='stone';
+    if(brk){const out=V(p.pos.x-T.x,0,p.pos.z-T.z).normalize();const r=rubbleAdd({m:p.m,half:p.half,pos:p.pos.clone(),q:p.q.clone(),mass:p.mass,cause:'crushed by the bell tower'});
+      r.vel.copy(out).multiplyScalar(1.2+rrand()*1.6);r.vel.y=rrand()*.8;r.w.set(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(2);p.r=r;continue;}   // the course at the break bursts out
+    T.rig.push({p,pos0:p.pos.clone(),q0:p.q.clone()});}
+  for(const e of T.fx){let best=null,bd=1e9;for(const p of T.parts){if(p.kind==='stone')continue;const d=(p.pos.x-e.x)**2+(p.pos.y-e.y)**2+(p.pos.z-e.z)**2;if(d<bd){bd=d;best=p;}}if(best){(best.fl??=[]).push(e);}}
   note(mode==='tip'?'The bell tower is coming down!':'The bell tower is collapsing!','red');}
+function towerRelease(T,velOf,spin){for(const g of T.rig){const r=rubbleAdd({m:g.p.m,half:g.p.half,pos:g.p.pos.clone(),q:g.p.q.clone(),mass:g.p.mass,cause:'crushed by the bell tower'});velOf(r,g);r.w.add(V(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(spin));g.p.r=r;if(g.p.fl){r.fx=g.p.fl;r.offs=V();r.burn=20;g.p.fl=null;}}T.rig.length=0;}
 function towerStep(h){const T=TOWER;if(T.st==='none')return;const host=NET.mode!=='client';
   if(T.st==='whole'&&host&&state==='playing'&&!RUN&&simTime-CD_END>T.at)towerIgnite();
   if(T.st==='whole'&&host&&state==='playing'&&!zone.off&&Math.hypot(T.x-zone.c.x,T.z-zone.c.z)>zone.r-4)towerIgnite();   // the ring reaches it
-  if(T.st==='burning'){T.t+=h;const left=T.burnFor-T.t,P=V(T.x,11,T.z);
-    if((T.tollT-=h)<=0){T.tollT=left<8?rand(.6,1.6):rand(2.5,5.5);sBell(P,left<8?1.1:.8);}   // the bell swings as the frame shifts
-    if((T.emberT-=h)<=0){T.emberT=rand(.8,2.2);const wood=Math.random()<.35;const L=wood?1+Math.random():.4,m=new THREE.Mesh(boxUV(wood?.16:.35,wood?.16:.05,L,1),wood?charMat:MATS.tile);
-      const r=rubbleAdd({m,half:V(wood?.08:.175,wood?.08:.025,L/2),pos:V(T.x+(Math.random()-.5)*3.4,9+Math.random()*4,T.z+(Math.random()-.5)*3.4),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*3,Math.random()*3,0)),mass:wood?10:2,burn:wood?8:0,cause:'struck by falling timber'});
-      r.vel.set((Math.random()-.5)*3,0,(Math.random()-.5)*3);r.w.set(Math.random()*4,Math.random()*4,Math.random()*4);if(wood){r.fx=[];r.offs=V();houseFlame({fx:r.fx},r.pos.clone(),.9);}}   // burning bits come down first
-    if(left<9){if(!T.warned){T.warned=true;note('The bell tower is about to fall!','red');}if((T.creakT-=h)<=0){T.creakT=rand(.5,1.4);sfx('crush',V(T.x,3,T.z),.45,.35+Math.random()*.15,0,false);spawnDust(V(T.x+(Math.random()-.5)*4,.2,T.z+(Math.random()-.5)*4),6,1,.4);if(Math.random()<.4&&TOWER.parts.length){const p=TOWER.parts[(Math.random()*20)|0];if(p&&p.m)p.m.position.x+=(Math.random()-.5)*.02;}}}
+  if(T.st==='burning'){T.t+=h;const left=T.burnFor-T.t,yb=T.top-9,P=V(T.x,yb-1.5,T.z);
+    if((T.tollT-=h)<=0){T.tollT=left<8?rand(.5,1.4):rand(2.5,5.5);sBell(P,left<8?1.1:.8);}   // the bell swings as the headstock burns
+    if((T.emberT-=h)<=0){T.emberT=rand(.7,2);const wood=Math.random()<.4;const L=wood?.9+Math.random()*.8:.35,m=new THREE.Mesh(boxUV(wood?.14:.3,wood?.14:.03,L,1),wood?charMat:towerSlateM);
+      const r=rubbleAdd({m,half:V(wood?.07:.15,wood?.07:.015,L/2),pos:V(T.x+(Math.random()-.5)*4.4,yb+Math.random()*3,T.z+(Math.random()-.5)*4.4),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*3,Math.random()*3,0)),mass:wood?10:2,burn:wood?8:0,cause:'struck by falling timber'});
+      r.vel.set((Math.random()-.5)*2.5,0,(Math.random()-.5)*2.5);r.w.set(Math.random()*3,Math.random()*3,Math.random()*3);if(wood){r.fx=[];r.offs=V();houseFlame({fx:r.fx},r.pos.clone(),.9);}}   // burning slates and timbers come down first
+    if(left<9){if(!T.warned){T.warned=true;note('The bell tower is about to fall!','red');}if((T.creakT-=h)<=0){T.creakT=rand(.45,1.2);sfx('crush',V(T.x,2,T.z),.45,.32+Math.random()*.15,0,false);spawnDust(V(T.x+(Math.random()-.5)*5,.2,T.z+(Math.random()-.5)*5),6,1,.4);}}
     if(host&&left<=0)towerCollapse((Math.random()*1e6)|0);}
   if(T.st==='falling'){T.t+=h;
-    if(T.rig&&T.rig.length){const L=Math.max(3,(19-T.P0.y)/2);T.phiV+=1.5*9.8/L*Math.sin(T.phi+.05)*h;T.phi+=T.phiV*h;_rbq.setFromAxisAngle(T.axis,T.phi);
-      for(const g of T.rig){g.p.pos.copy(g.pos0).sub(T.P0).applyQuaternion(_rbq).add(T.P0);g.p.q.copy(_rbq).multiply(g.q0);g.p.m.position.copy(g.p.pos);g.p.m.quaternion.copy(g.p.q);
-        if(g.p.fl)for(const e of g.p.fl){e.f.position.copy(g.p.pos);e.h.position.copy(g.p.pos);}}
-      if(T.phi>T.sep){for(const g of T.rig){const rr=V().subVectors(g.p.pos,T.P0),w=T.axis.clone().multiplyScalar(T.phiV);const r=rubbleAdd({m:g.p.m,half:g.p.half,pos:g.p.pos.clone(),q:g.p.q.clone(),mass:g.p.mass,cause:'crushed by the bell tower'});
-          r.vel.copy(w).cross(rr).add(V(rrand()-.5,rrand()*.5,rrand()-.5).multiplyScalar(1.5));r.w.copy(w).add(V(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(2.5));g.p.r=r;}T.rig.length=0;sfx('crush',T.P0,1,.5,0,false);}}
-    for(const p of T.parts)if(p.r&&p.fl){r2fx(p);}
-    if(T.t>12)T.st='down';}}
-function r2fx(p){if(!p.r.fx){p.r.fx=p.fl;p.r.offs=V();p.r.burn=20;p.fl=null;}}
-function towerVisual(dt){const T=TOWER;if(T.st!=='burning'&&!(T.st==='falling'||T.st==='down')||!T.smoke)return;const on=T.st==='burning'||T.t<10;
-  for(const q of T.smoke){q.t+=dt;if(q.t>5){q.t-=5;q.x=(Math.random()-.5)*2.5;q.z=(Math.random()-.5)*2.5;}const u=q.t/5;q.sp.position.set(T.x+(q.x||0)+u*2.5,(T.st==='burning'?12:2)+u*14,T.z+(q.z||0)+u*1.2);q.sp.scale.setScalar(2+u*7);q.sp.material.opacity=on?.55*(1-u)*Math.min(1,u*6):Math.max(0,q.sp.material.opacity-dt*.2);}}
+    if(T.rig.length&&T.mode==='tip'){   // the top falls as one piece about its hinge, and comes apart where it lands
+      const L=Math.max(3,(T.top-T.P0.y)/2);T.phiV+=1.5*9.8/L*Math.sin(T.phi+.06)*h;T.phi+=T.phiV*h;_rbq.setFromAxisAngle(T.axis,T.phi);let lo=1e9;
+      for(const g of T.rig){g.p.pos.copy(g.pos0).sub(T.P0).applyQuaternion(_rbq).add(T.P0);g.p.q.copy(_rbq).multiply(g.q0);g.p.m.position.copy(g.p.pos);g.p.m.quaternion.copy(g.p.q);lo=Math.min(lo,g.p.pos.y-Math.max(g.p.half.x,g.p.half.y));if(g.p.fl)for(const e of g.p.fl){e.f.position.copy(g.p.pos);e.h.position.copy(g.p.pos);}}
+      if(lo<.05||T.phi>1.45){const w=T.axis.clone().multiplyScalar(T.phiV);towerRelease(T,(r,g)=>{r.vel.copy(w).cross(V().subVectors(g.p.pos,T.P0)).multiplyScalar(.75);r.w.copy(w).multiplyScalar(.5);},1.2);
+        sfx('crush',T.P0.clone().addScaledVector(T.dir,8),1,.45,0,false);sThud(T.P0.clone().addScaledVector(T.dir,8),2);spawnDust(T.P0.clone().addScaledVector(T.dir,7).setY(.3),50,4,1.2);}}
+    if(T.rig.length&&T.mode==='crumble'){   // the upper tower drops into its own footprint, leaning a little, and spills where it hits
+      T.dropV+=9.8*h;T.drop+=T.dropV*h;_rbq.setFromAxisAngle(V(T.tilt.z,0,-T.tilt.x).normalize(),T.tilt.length()*Math.min(1,T.drop/6));let lo=1e9;
+      for(const g of T.rig){g.p.pos.copy(g.pos0).sub(V(T.x,T.P0.y,T.z)).applyQuaternion(_rbq).add(V(T.x,T.P0.y-T.drop,T.z));g.p.q.copy(_rbq).multiply(g.q0);g.p.m.position.copy(g.p.pos);g.p.m.quaternion.copy(g.p.q);lo=Math.min(lo,g.p.pos.y-g.p.half.y);if(g.p.fl)for(const e of g.p.fl){e.f.position.copy(g.p.pos);e.h.position.copy(g.p.pos);}}
+      if(lo<.2){const vy=T.dropV;towerRelease(T,(r,g)=>{const out=V(g.p.pos.x-T.x,0,g.p.pos.z-T.z);if(out.lengthSq()<.01)out.set(rrand()-.5,0,rrand()-.5);out.normalize();const hgt=Math.max(0,g.pos0.y-T.P0.y);
+          r.vel.copy(out).multiplyScalar((1.1+hgt*.28)*(.6+rrand()*.8)).addScaledVector(T.tilt.clone().normalize(),hgt*.16);r.vel.y=-vy*.35;},1.8);
+        sThud(V(T.x,0,T.z),2);sfx('crush',V(T.x,1,T.z),1,.4,0,false);spawnDust(V(T.x,.4,T.z),60,4,1.6);}}
+    if(T.t>15)T.st='down';}}
+function towerVisual(dt){const T=TOWER;if(!T.smoke||!T.smoke.length)return;const on=T.st==='burning'||((T.st==='falling'||T.st==='down')&&T.t<12);
+  for(const q of T.smoke){q.t+=dt;if(q.t>6){q.t-=6;q.x=(Math.random()-.5)*2.5;q.z=(Math.random()-.5)*2.5;}const u=q.t/6;q.sp.position.set(T.x+(q.x||0)+u*3,(T.st==='burning'?T.top-6:1.5)+u*16,T.z+(q.z||0)+u*1.4);q.sp.scale.setScalar(2.2+u*8);q.sp.material.opacity=on?.55*(1-u)*Math.min(1,u*6):Math.max(0,q.sp.material.opacity-dt*.2);}}
 // ---- the tavern: a timbered hall with a bar, a hearth, tables and benches you can stand on, and a gallery up a stair whose
 // rail gives way when a body is driven through it. A brawl: everyone starts bare-handed and fights with what's lying about
 const TAV={rails:[],spots:[]};
@@ -1083,19 +1112,26 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   DUST.p.material.uniforms.uCol.value.setRGB(.82,.86,.9);   // spray, not sand
   flushBatch();}
 function shipMotion(S,t){const sm=S.storm||0,P=S.ph||(S.ph=[0,1,2,3,4,5,6,7].map(()=>Math.random()*6.283)),g=.75+.3*Math.sin(t*.113+P[6])+.2*Math.sin(t*.271+P[7]);
-  const roll=(.075+.11*sm)*g*(.55*Math.sin(t*.57+P[0])+.3*Math.sin(t*.94+P[1])+.18*Math.sin(t*1.63+P[2]))+.12*S.swell*Math.sin(t*.8);
+  const roll=(.075+.08*sm)*g*(.55*Math.sin(t*.57+P[0])+.3*Math.sin(t*.94+P[1])+.18*Math.sin(t*1.63+P[2]))+.12*S.swell*Math.sin(t*.8);
   const pitch=(.05+.08*sm)*g*(.5*Math.sin(t*.41+P[3])+.32*Math.sin(t*.79+P[4])+.2*Math.sin(t*1.37+P[5]))+.06*S.swell*Math.sin(t*.6+1);return [roll,pitch];}
+function shipCargo(dt){const S=SHIP;const ax=9.8*S.pitch*.6,az=9.8*S.roll*.6,am=Math.hypot(ax,az),k=am>.3?(am-.3)/am*1.5:0;
+  for(const p of PROPS){if(p.broken||p.kind!=='barrel'||!p.col)continue;const v=p.sv||(p.sv=V());v.x+=ax*k*dt;v.z+=az*k*dt;v.multiplyScalar(1-1.1*dt);
+    let nx=p.x+v.x*dt,nz=p.z+v.z*dt;const lim=shipHalfW(nx)-.75;if(Math.abs(nz)>lim){nz=Math.sign(nz)*lim;v.z*=-.25;}if(Math.abs(nx)>S.SL-3){nx=Math.sign(nx)*(S.SL-3);v.x*=-.25;}
+    if(Math.abs(nx-p.x)+Math.abs(nz-p.z)>1e-4){p.x=nx;p.z=nz;p.mesh.position.x=nx;p.mesh.position.z=nz;gridRemove(p.col);p.col.x=nx;p.col.z=nz;gridInsert(p.col,nx-p.col.r-1,nx+p.col.r+1,nz-p.col.r-1,nz+p.col.r+1);}
+    p.mesh.rotation.x=v.z*.25+S.roll*.4;p.mesh.rotation.z=-v.x*.25-S.pitch*.4;}}   // the cargo shifts: barrels skid and rock across the deck
 function splash(p){sfx('fall',p,1,.55,0,false);sfx('fallArmoured',p,.5,.5,.06,false);spawnDust(V(p.x,-1,p.z),14,1.6,1.4);}
 function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
   {const mt=state==='playing'?simTime-CD_END:0;const st=clamp((mt-15)/200,0,1);S.storm=window.__storm!=null?window.__storm:st;if(NET.mode==='host'&&(S.stT=(S.stT||0)-h)<=0){S.stT=3;netEv(['ST',r3(S.storm)]);}}   // the sea gets up as the fight goes on: in about three and a half minutes it's a gale
   S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20)*(1-.55*(S.storm||0));S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
     for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,rand(.9,1.35)*(1+.5*(S.storm||0))*(f.crouch?.35:1)*(1+Math.min(1,mv/4)*.5+(f.commit?.25:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.55);}tell(player,'A swell lifts the ship','sm');}
+  shipCargo(h);
   const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6,[r1,p1]=shipMotion(S,S.t+.05),[r0,p0]=shipMotion(S,S.t-.05),wr=(r1-r0)*10,wp=(p1-p0)*10;   // tilt, and how fast it's tilting
-  for(const sw of freeSwords){if(sw.flying||!sw.free||sw.H.y>.25||!shipIn(sw.H.x,sw.H.z))continue;for(const q of [sw.H,sw.T]){q.z+=az*h*h*.55;q.x+=ax*h*h*.55;}}   // loose weapons slide downhill
+  {const am=Math.hypot(ax,az),k=am>.22?(am-.22)/am*1.7:0;for(const sw of freeSwords){if(sw.flying||!sw.free||sw.H.y>.3||!shipIn(sw.H.x,sw.H.z))continue;const v=sw.sv||(sw.sv=V());v.x+=ax*k*h;v.z+=az*k*h;v.multiplyScalar(1-1.1*h);
+    for(const q of [sw.H,sw.T,sw.Hp,sw.Tp]){q.x+=v.x*h;q.z+=v.z*h;}if(!shipIn(sw.H.x,sw.H.z,.35)){v.z*=-.3;sw.H.z=sw.T.z=sw.Hp.z=sw.Tp.z=Math.sign(sw.H.z)*(shipHalfW(sw.H.x)-.4);}}}   // loose weapons slide downhill once the deck is steep enough, and fetch up against the side
   for(const f of fighters){
     if(f.ragdoll){const R=f.ragdoll;for(const n of R.names){R.P[n].z+=az*h*h*.2;R.P[n].x+=ax*h*h*.2;}R.sleep=false;   /* bodies slide too */
       const P=R.P.Hips;if(P&&!shipIn(P.x,P.z)&&P.y<-.9&&!f.splashed){f.splashed=true;splash(P);if(f.alive)f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'thrown overboard');}continue;}
-    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.03:.18+.25*mv*mv+.08*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.9*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
+    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.035:.3+.25*mv*mv+.08*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.45*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
       f.vel.z+=az*h;f.vel.x+=ax*h;const pz=clamp((az*.8+wr*14)*k*12,-5,5),px=clamp((ax*.8+wp*10)*k*12,-5,5);f.balV.z+=pz*h;f.balV.x+=px*h;}   // the deck moving under your feet throws your weight off them: you step to catch it
       // losing your footing: the steeper the deck and the faster you're going (or swinging, kicking, spent, lame), the likelier
       // a step lands wrong. Most are a stagger toward the low side; the worse it is, the more often you go down. Crouched you hardly ever do
@@ -1108,6 +1144,7 @@ function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
 function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.swell-dt*.22);
   const sm=S.storm||0;[S.roll,S.pitch]=shipMotion(S,S.t);seaMat.uniforms.uAmp.value=.65+1.0*sm+.35*S.swell;   // waves and roll grow together
   if(S.sea){S.sea.rotation.set(-S.roll,0,S.pitch);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(-S.roll,0,S.pitch);
+  if(NET.mode==='client')shipCargo(dt);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
 function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
   addGeo('stone',new THREE.CylinderGeometry(1.1,1.15,.9,18,1,true),T(x,.45,z));
@@ -2998,7 +3035,7 @@ class Fighter{
     const drag=this.dragT>simTime;if(drag)run=false;const dragB=this.dragBody>simTime;
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
-    let spd=(dragB?.38:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
+    let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(6.5*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -3049,7 +3086,7 @@ class Fighter{
       if(stum>0)this.stagger=Math.max(this.stagger,.12);
       let m2=Math.hypot(this.bal.x,this.bal.z);
       if(HYBRID&&m2>.3&&stum>1.5){this.fwd(_f);if((this.bal.x*_f.x+this.bal.z*_f.z)<-.75*m2&&Math.random()<h*3)m2=.5;}   // driven backwards hard, the heels catch and you go down
-      if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar(2.4/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
+      if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
     if(!this.isPlayer&&!this.remote&&(this.blindT>simTime||this.blindOff)){const bo=this.blindOff||(this.blindOff=V()),pa=this.blindPrev||(this.blindPrev=V());   // blinded: their aim wanders
       if(this.blindT>simTime){if(Math.random()<h*3)bo.set(rand(-.35,.35),rand(-.3,.3),rand(-.1,.1));}else bo.set(0,0,0);
@@ -4142,13 +4179,13 @@ function grabStep(A,arm,held,h,fist){
     if(d>.08){G.vx+=_v.x*2.2*h;G.vz+=_v.z*2.2*h;A.vel.addScaledVector(_v,-3*h);A.dragT=simTime+.15;if(Math.random()<h*3)G.clang=Math.max(G.clang,.2);}
     arm.pos.copy(_gp);arm.vel.set(0,0,0);return true;}
   const R=arm.grab.R,P=R.P[arm.grab.n];if(!P||R.dead){arm.grab=null;return false;}
-  _v.subVectors(arm.tgtW,P);const d=_v.length();if(d>1.8){arm.grab=null;return false;}
+  _v.subVectors(arm.tgtW,P);const d=_v.length();if(d>2.3){arm.grab=null;return false;}
   // drag that limb toward the hand by giving it speed, not by moving it: the rest of the body comes along through its joints,
   // its weight holds you back, and when you let go it carries on and flops down instead of stopping dead
-  {const Q=R.Q[arm.grab.n],vmax=4*H,k=Math.min(1,d*9)*vmax/Math.max(d,1e-4);const dx=_v.x*k,dy=_v.y*k,dz=_v.z*k;
+  {const Q=R.Q[arm.grab.n],vmax=6*H,k=Math.min(1,d*9)*vmax/Math.max(d,1e-4);const dx=_v.x*k,dy=_v.y*k,dz=_v.z*k;
     const vx=P.x-Q.x,vy=P.y-Q.y,vz=P.z-Q.z,a=.22;Q.x=P.x-(vx+(dx-vx)*a);Q.y=P.y-(vy+(dy-vy)*a);Q.z=P.z-(vz+(dz-vz)*a);}
   R.sleep=false;R.age=0;if(!arm.grab.who)arm.grab.who=fighters.find(f=>f.ragdoll===R)||-1;if(arm.grab.who!==-1){arm.grab.who.lastHitBy=A;arm.grab.who.lastHitT=simTime;}
-  A.dragT=simTime+.15;A.dragBody=simTime+.15;if(d>.35){_v.subVectors(P,arm.tgtW).setY(0).normalize();A.vel.addScaledVector(_v,(d-.35)*24*h);const va=-A.vel.dot(_v);if(va>0&&d>.6)A.vel.addScaledVector(_v,va*Math.min(1,(d-.6)*5));}   // a limp body is a dead weight: it holds you back
+  A.dragT=simTime+.15;A.dragBody=simTime+.15;if(d>.35){_v.subVectors(P,arm.tgtW).setY(0).normalize();A.vel.addScaledVector(_v,(d-.45)*14*h);const va=-A.vel.dot(_v);if(va>0&&d>.9)A.vel.addScaledVector(_v,va*Math.min(1,(d-.9)*3));}   // the body's weight holds you back, but you can haul it   // a limp body is a dead weight: it holds you back
   arm.pos.copy(P);arm.vel.set(0,0,0);return true;}
 // let go mid-swing and they keep going: a body hauled hard toward the fire goes in
 function grabRelease(A,arm){const G=arm.grab,tv=arm.tgtV;if(!G||!tv||NET.mode==='client')return;_v.copy(tv).setY(0).addScaledVector(A.vel,.6);const sp=_v.length();if(sp<1.6)return;_v.setLength(Math.min(sp*1.15,5.5));_v.y=Math.min(1.8,sp*.3);
