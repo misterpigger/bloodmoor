@@ -204,6 +204,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
       <button class="map eng" data-eng="physics" role="radio" aria-checked="false"><b>Rigid body</b><span>Real weight, solid blades and limbs</span></button>
+      <button class="map" id="fullBtn" role="switch" aria-checked="false"><b>Full-body physics</b><span>Experimental: every standing body is a ragdoll held up by its muscles</span></button>
     </div>
     <div class="mp">
       <div class="mprow"><button class="map" id="hostBtn"><b>Host for friends</b><span>Get a room code to share</span></button>
@@ -308,7 +309,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=80;
+const BUILD=81;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2117,7 +2118,7 @@ const WEAPONS={
   arming:{id:'arming',name:'Arming sword',kind:'blade',len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:1,make:()=>makeBlade(.78,.024,.15)},
   longsword:{id:'longsword',name:'Longsword',kind:'blade',len:1.0,grip2:-.12,weight:1.1,cut:1.1,thrust:1.1,sever:1.1,pen:.25,hitFrom:.22,tier:2,make:()=>makeBlade(.95,.025,.24)},
   greatsword:{id:'greatsword',name:'Greatsword',kind:'blade',len:1.28,grip2:-.24,weight:1.75,cut:1.1,thrust:1.0,sever:1.5,pen:.3,hitFrom:.2,tier:3,make:makeGreatsword},
-  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,cut:1.2,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
+  axe:{id:'axe',name:'Bearded axe',kind:'axe',len:1.0,grip2:-.38,weight:1.45,gc:.7,cut:1.2,thrust:.2,sever:1.5,pen:.45,hitFrom:.6,tier:2,make:makeAxe},
   mace:{id:'mace',name:'Flanged mace',kind:'blunt',len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:2,make:makeMace},
   fists:{id:'fists',name:'Fists',kind:'fist',len:.2,grip2:0,weight:.45,cut:1.0,thrust:1.0,sever:0,pen:.55,hitFrom:0,tier:0,make:()=>{const g=new THREE.Group();scene.add(g);return g;}},
   // improvised: what comes to hand. A severed limb (held by the ankle or wrist), a plank torn off the bridge, a stave or board from a smashed barrel or crate
@@ -2326,6 +2327,8 @@ const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck',
   ['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['LeftFoot','LeftToeBase'],['LeftLeg','LeftToeBase'],
   ['RightUpLeg','RightLeg'],['RightLeg','RightFoot'],['RightFoot','RightToeBase'],['RightLeg','RightToeBase']];
 const RD_MINS=[['LeftArm','LeftHand','LeftForeArm',.5],['RightArm','RightHand','RightForeArm',.5],['LeftUpLeg','LeftFoot','LeftLeg',.75],['RightUpLeg','RightFoot','RightLeg',.75]];
+let FULLBODY=/[?&]fullbody/.test(location.search)||(()=>{try{return localStorage.getItem('bloodmoor-fullbody')==='1';}catch(e){return false;}})();
+const FB_K={Hips:.22,Spine1:.14,Spine2:.12,Neck:.11,Head:.09,HeadTop_End:.09,LeftArm:.14,RightArm:.14,LeftForeArm:.09,RightForeArm:.09,LeftUpLeg:.2,RightUpLeg:.2,LeftLeg:.16,RightLeg:.16};   // muscle: how hard each point is pulled to its animated place per 1/120 s
 const RD_R={Hips:.13,Spine1:.14,Spine2:.14,Neck:.07,Head:.11,HeadTop_End:.09,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};
 const _rv=V(),_ru=V(),_rq=new THREE.Quaternion(),_rinv=new THREE.Matrix4();
 class Ragdoll{
@@ -2460,7 +2463,7 @@ function wepParts(def){
   const L=def.len;
   if(def.kind==='blade'){const big=def.id==='greatsword',m=big?2.3:def.id==='longsword'?1.45:1.05,w=big?.032:.026,g=big?.42:def.id==='longsword'?.24:.15,b0=.04,b1=b0+(L-b0)*.6;
     return [['box',[w,(b1-b0)/2,.0055],[0,(b0+b1)/2,0],m*.29],['box',[w*.8,(L-b1)/2,.0045],[0,(b1+L)/2,0],m*.16],['box',[big?.19:.125,.013,.016],[0,.032,0],m*.15],['cap',[g/2-.01,.018],[0,-g/2+.01,0],m*.1],['ball',[.032],[0,-g+.01,0],m*.3]];}
-  if(def.kind==='axe')return [['cap',[.63,.02],[0,.33,0],.6],['box',[.085,.13,.012],[.08,.865,0],1.0]];
+  if(def.kind==='axe')return [['cap',[.63,.022],[0,.33,0],.55],['box',[.085,.13,.014],[.08,.865,0],1.3]];   // the weight is in the head, well out from the hands
   if(def.kind==='blunt')return [['cap',[.4,.018],[0,.19,0],.5],['ball',[.066],[0,.67,0],.95]];
   if(def.kind==='spear')return [['cap',[.99,.019],[0,.625,0],1.55],['box',[.03,.11,.006],[0,L-.11,0],.3]];
   return null;
@@ -2594,7 +2597,7 @@ class Sword{
       cd.setTranslation(p[0],p[1],p[2]).setMass(m).setFriction(.35).setRestitution(.05).setCollisionGroups(GR_HELD);
       const c=PW.createCollider(cd,this.rb);PHC.set(c.handle,{s:this});this.cols.push(c);M+=m;cy+=m*p[1];cx+=m*p[0];}
     cy/=M;cx/=M;let I=0;for(const [t,d,p,m] of parts){const ext=t==='box'?Math.max(d[0],d[1])*2:t==='cap'?d[0]*2:d[0];I+=m*((p[1]-cy)**2+(p[0]-cx)**2+ext*ext/12);}
-    this.M=M;this.comY=cy;this.comX=cx;this.I=Math.max(I,.004);this.lever=twoH(this.def)?1+Math.abs(this.def.grip2||0)/.12:1;   // hands spread along the haft give the wrists leverage
+    this.M=M;this.comY=cy;this.comX=cx;this.I=Math.max(I,.004);this.lever=twoH(this.def)?1+Math.abs(this.def.grip2||0)/.3:1;   // hands spread along the haft give the wrists leverage
     this.v=V();this.w=V();this.com=V();this.v0=V();this.w0=V();this.com0=V();this.grp=GR_HELD;
   }
   setGroup(g){if(g===GR_HELD)g=grpHeld(this.owner||(this.flying&&this.age<.35?this.thrower:null));if(!this.rb||this.grp===g)return;this.grp=g;for(const c of this.cols)c.setCollisionGroups(g);}
@@ -2742,7 +2745,8 @@ class Sword{
         const dl=_wl3.length();if(dl>1e-7){_wl3.multiplyScalar(1/dl);_wl1.subVectors(this.T,this.Tp);const vn=_wl1.dot(_wl3);if(vn<0)_wl1.addScaledVector(_wl3,-vn);   // momentum into the limit is absorbed by the wrist
           this.T.copy(this.H).addScaledVector(_wl2,this.len);this.Tp.copy(this.T).sub(_wl1);this.axis.copy(_wl2);this.tipVel.copy(_wl1).multiplyScalar(1/h);
           this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis)).normalize();}}}
-    if(spin){const of1=this.owner;this.tipVel.x+=spin*(this.T.z-of1.pos.z);this.tipVel.z-=spin*(this.T.x-of1.pos.x);}   // turning with the body adds to the blade's speed, as it did when the body dragged it round
+    if(spin){const of1=this.owner,sp2=clamp(spin,-3.5,3.5)*(this.def.kind==='spear'?.55:this.len>1.3?.75:1);this.tipVel.x+=sp2*(this.T.z-of1.pos.z);this.tipVel.z-=sp2*(this.T.x-of1.pos.x);}
+    this.selfClear();   // turning with the body adds to the blade's speed, as it did when the body dragged it round
     // swing arc: how far the tip has travelled in one committed direction
     const sp=this.tipVel.length();
     if(sp>2.2){_e.copy(this.tipVel).multiplyScalar(1/sp);if(_e.dot(this.lastDir)>.5)this.arc+=sp*h;else{this.arc=sp*h;if(sp>5)this.swings++;}this.lastDir.lerp(_e,.1).normalize();}
@@ -2750,6 +2754,12 @@ class Sword{
     const pw=clamp(.3+this.arc*.75,.3,1.15)*clamp((sp-2.5)/9,0,1);
     this.power=Math.max(pw,this.power-h*1.6);
   }
+  // the shaft or blade never passes through its own wielder's body: pushed out sideways round the torso
+  selfClear(){const o=this.owner;if(!o||this.free||!o.caps)return;const c=o.caps.find(c=>c.zone==='torso'&&c.on);if(!c)return;_wl1.subVectors(c.b,c.a);const L2=_wl1.lengthSq()||1e-6;let moved=false;
+    for(const k of [.3,.5,.7,.9]){_wl2.copy(this.H).addScaledVector(this.axis,this.len*k);const u=clamp(_wl3.subVectors(_wl2,c.a).dot(_wl1)/L2,0,1);_wl3.copy(c.a).addScaledVector(_wl1,u);
+      _e.subVectors(_wl2,_wl3);const d=_e.length(),R=c.r+.05;if(d>=R)continue;if(d<1e-4){o.right(_e);}else _e.multiplyScalar(1/d);const push=Math.min(.25,(R-d)/k);
+      this.T.addScaledVector(_e,push);this.Tp.addScaledVector(_e,push);moved=true;}
+    if(moved){_e.subVectors(this.T,this.H).normalize();this.axis.copy(_e);this.T.copy(this.H).addScaledVector(_e,this.len);}}
   constrain(h){
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;this.axis.copy(_e).multiplyScalar(1/d);this.T.copy(this.H).addScaledVector(this.axis,this.len);
     _rp.copy(this.edge).addScaledVector(this.axis,-this.edge.dot(this.axis));const pe0=_rp.lengthSq()>1e-6;if(pe0)_rp.normalize();const peX=_rp.x,peY=_rp.y,peZ=_rp.z;
@@ -2982,13 +2992,40 @@ class Fighter{
       let ang=Math.acos(clamp(_wl1.dot(_wl2),-1,1));if(ang<1e-4)continue;const mx=BODY_MAXA[bn];if(ang>mx){_wl2.lerp(_wl1,1-mx/ang).normalize();}
       _bq.setFromUnitVectors(_wl1,_wl2);b.matrixWorld.decompose(_pp,_bq2,_ps);setWorldQuat(b,_bq.multiply(_bq2));}
   }
+  fullBody(dt){
+    if(!FULLBODY||!this.alive||this.ragdoll||dt<=0){this.ar=null;return;}
+    const B=this.bones;this.root.updateMatrixWorld(true);
+    const T=this.arT||(this.arT={}),Tp=this.arTp||(this.arTp={});for(const n of RD_NAMES){if(!B[n])continue;(T[n]||(T[n]=V())).setFromMatrixPosition(B[n].matrixWorld);}
+    let A=this.ar;if(A&&(A.sev!==this.sevNames.length||A.P.Hips.distanceToSquared(T.Hips)>.5||dt>.2))A=null;
+    if(!A){A=this.ar=new Ragdoll(B,RD_NAMES,V(),null,null);A.sev=this.sevNames.length;for(const n of A.names){A.Q[n].copy(A.P[n]);(Tp[n]||(Tp[n]=V())).copy(T[n]);}return;}
+    const str=this.pbd?this.pbd.str:1,pin=new Set();
+    for(const sd of ['Left','Right'])pin.add(sd+'Foot').add(sd+'ToeBase');
+    if(this.sword&&this.mainArm){const m=this.mainArm==='R'?'Right':'Left';pin.add(m+'Hand').add(m+'HandMiddle1');if(twoH(this.sword.def)||this.sword.def.kind==='spear'){const o=m==='Right'?'Left':'Right';pin.add(o+'Hand').add(o+'HandMiddle1');}}
+    if(!this.sword){for(const sd of ['Left','Right'])pin.add(sd+'Hand').add(sd+'HandMiddle1');}
+    const ns=Math.max(1,Math.ceil(dt*120)),dk=SHIP&&this.pos.y>-.1?SHIP:null,gx=dk?9.8*dk.pitch*.6:0,gz=dk?9.8*dk.roll*.6:0;
+    for(let si=1;si<=ns;si++){const a=si/ns,h=dt/ns;
+      for(const n of A.names){const P=A.P[n],Q=A.Q[n],t1=T[n],t0=Tp[n];if(!t1||!t0)continue;
+        _wl1.lerpVectors(t0,t1,a);_wl2.subVectors(t1,t0).multiplyScalar(1/ns);
+        if(pin.has(n)){Q.copy(_wl1).sub(_wl2);P.copy(_wl1);continue;}
+        const vx=(P.x-Q.x)*.9,vy=(P.y-Q.y)*.9,vz=(P.z-Q.z)*.9;Q.copy(P);
+        P.x+=vx+_wl2.x*.9;P.y+=vy+_wl2.y*.9-9.8*h*h*(1-str)*.6;P.z+=vz+_wl2.z*.9;Q.addScaledVector(_wl2,.9);   // most of the body's travel is carried; the rest lags as momentum
+        if(dk){P.x+=gx*h*h*.8;P.z+=gz*h*h*.8;}
+        const k=(FB_K[n]||.12)*(.45+.55*str*str);P.x+=(_wl1.x-P.x)*k;P.y+=(_wl1.y-P.y)*k;P.z+=(_wl1.z-P.z)*k;}
+      for(let it=0;it<2;it++){for(const [x,y,l] of A.links){const Pa=A.P[x],Pb=A.P[y];_wl3.subVectors(Pb,Pa);const d=_wl3.length()||1e-6,fa=pin.has(x),fb=pin.has(y);if(fa&&fb)continue;const k=(d-l)/d;
+          if(fa)Pb.addScaledVector(_wl3,-k);else if(fb)Pa.addScaledVector(_wl3,k);else{Pa.addScaledVector(_wl3,k*.5);Pb.addScaledVector(_wl3,-k*.5);}}}}
+    for(const n of A.names)if(T[n])(Tp[n]||(Tp[n]=V())).copy(T[n]);
+    // never wander far from the pose: past 25 cm a point is drawn back hard
+    for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length();if(d>.25){A.P[n].copy(t).addScaledVector(_wl1,.25/d);}}
+    A.apply();this.root.updateMatrixWorld(true);}
+  // a blow lands on the full body: the struck point and its neighbours are driven
+  fbHit(n,dir,dv){const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];for(const m of A.names){const w=m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-dv*w/120);}}
   // an elbow: the IK's bend point is a weight carried by the body, sprung to where the arm wants it, so it swings and is knocked about
-  physPole(side,t,dt){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
+  physPole(side,t,dt,held){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
     const str=this.pbd?this.pbd.str:1,k=70*str*str+12,c=2*Math.sqrt(k)*.4,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,P.tp).multiplyScalar(1/Math.max(dt,1e-3));P.p.addScaledVector(_wl1,dt*.7);
     const dk=SHIP&&this.pos.y>-.1?SHIP:null;
     for(let i=0;i<ns;i++){P.v.x+=(k*(t.x-P.p.x)+c*(_wl1.x*.3-P.v.x)+(dk?9.8*dk.pitch*1.5:0))*h;P.v.y+=(k*(t.y-P.p.y)+c*(_wl1.y*.3-P.v.y)-9.8*(1-str)*.6)*h;P.v.z+=(k*(t.z-P.p.z)+c*(_wl1.z*.3-P.v.z)+(dk?9.8*dk.roll*1.5:0))*h;P.p.addScaledVector(P.v,h);}
-    P.tp.copy(t);_wl2.subVectors(P.p,t);if(_wl2.length()>.5)_wl2.setLength(.5);return t.add(_wl2);}
-  armHit(side,dir,dv){const P=this.poles&&this.poles[side];if(P)P.v.addScaledVector(dir,dv);}
+    P.tp.copy(t);_wl2.subVectors(P.p,t);const lim=held?.12:.4;if(_wl2.length()>lim)_wl2.setLength(lim);return t.add(_wl2);}
+  armHit(side,dir,dv){const P=this.poles&&this.poles[side];if(P)P.v.addScaledVector(dir,dv);if(this.ar)this.fbHit((side==='L'?'Left':'Right')+'ForeArm',_wl3.copy(dir).normalize(),dv);}
   // the off hand when a weapon is held in one: a mass on a spring to its guard spot, carrying the body's motion, so it swings and is flung
   freeHand(t,dt){const F=this.offH||(this.offH={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||F.p.distanceToSquared(t)>1){F.p.copy(t);F.v.set(0,0,0);F.tp.copy(t);return;}
     const k=110*(this.pbd?this.pbd.str*this.pbd.str:1),c=2*Math.sqrt(110)*.42,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,F.tp).multiplyScalar(1/Math.max(dt,1e-3));
@@ -2997,7 +3034,7 @@ class Fighter{
     for(let i=0;i<ns;i++){F.v.x+=(k*(t.x-F.p.x)+c*(_wl1.x*(1-BODY_CARRY)-F.v.x)+(dk?9.8*dk.pitch:0))*h;F.v.y+=(k*(t.y-F.p.y)+c*(_wl1.y*(1-BODY_CARRY)-F.v.y))*h;F.v.z+=(k*(t.z-F.p.z)+c*(_wl1.z*(1-BODY_CARRY)-F.v.z)+(dk?9.8*dk.roll:0))*h;F.p.addScaledVector(F.v,h);}
     F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.35)_wl2.setLength(.35);t.add(_wl2);}
   // a blow (or anything) pushing a body part: the struck mass gets the push, its neighbours some of it; drop weakens the muscles
-  bodyHit(bone,dir,dv,drop=0){const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
+  bodyHit(bone,dir,dv,drop=0){if(this.ar)this.fbHit(bone==='Spine'||bone==='Hips'?'Spine1':bone,_wl3.copy(dir).normalize(),dv*.8);const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
     for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}
     if(this.offH&&(n==='Spine2'||n==='Spine1'))this.offH.v.addScaledVector(_v,dv*.8);
     if(this.pel&&(n==='Spine1'||n==='Spine2')){const cy=Math.cos(this.yaw),sy=Math.sin(this.yaw),k=dv*(n==='Spine1'?.35:.2);this.pel.vx+=(-_v.x*cy+_v.z*sy)*k;this.pel.vz+=(_v.x*sy+_v.z*cy)*k;}
@@ -3094,7 +3131,7 @@ class Fighter{
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
     let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
     if(!legs)spd=0;
-    if(run&&wish.lengthSq()>0)this.useStamina(6.5*h);
+    if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
     const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
@@ -3123,13 +3160,13 @@ class Fighter{
     else if(this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<8?this.lastHitBy:null,'burned alive',null);return;}}
     // stamina: every fast swing costs, heavier weapons cost more
     const ts=this.sword?this.sword.tipVel.length():0,w=this.sword?this.sword.def.weight:1;
-    if(ts>7)this.useStamina((ts-7)*.3*w*h);
-    if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*1.0*w);this.sword.swings=0;}
+    if(ts>9)this.useStamina((ts-9)*.22*w*h);
+    if(this.sword&&this.sword.swings>0){this.useStamina(this.sword.swings*.75*w);this.sword.swings=0;}
     if(this.commit&&ts>3)this.useStamina(.8*h);
     // as in Half Sword there's no bar: you feel it. Blood loss lowers how much wind you have and how fast it comes back,
     // and you only really get it back standing still
     {const lu=this.lung||0,cap=(35+65*clamp(this.hp/100,0,1))*(1-.4*lu),mv=Math.hypot(this.vel.x,this.vel.z);   // a pierced lung: less wind, and it comes back slowly
-      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?34:27)*(.55+.45*clamp(this.hp/100,0,1))*(mv>3?.45:mv>.8?.85:1)*(1-.5*lu)*h);
+      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?34:27)*(.55+.45*clamp(this.hp/100,0,1))*(mv>3?.6:mv>.8?.9:1)*(1-.5*lu)*h);
       if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2);}   // coughing blood
       if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
@@ -3564,7 +3601,7 @@ class Fighter{
       const sgn=this.mainArm==='R'?1:-1;
       const shM=this.mainArm==='R'?this.shR:this.shL,shO=this.mainArm==='R'?this.shL:this.shR;
       _t1.copy(shM).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,.55*sgn).addScaledVector(_f,-.2);
-      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');
+      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt,true);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');
       B[main+'ForeArm'].getWorldPosition(_wl1);B[main+'Hand'].getWorldPosition(_wl2);(this.foreF||(this.foreF=V())).subVectors(_wl2,_wl1).normalize();
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
       const clutch=this.clutchT>simTime&&this.clutchP;
@@ -3575,7 +3612,7 @@ class Fighter{
           _hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();gripHand(B,offS,_t2,_hv,_r.clone().multiplyScalar(sgn).add(Y_AXIS).normalize(),_t1,this.armLen,1.3);}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
         else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
-        if(!one&&_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.08){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
+        if(!one&&_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.08){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,true);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
       s.sync();
       if(this.rec){const R=this.rec,u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);if(w>0)for(const n of [offS+'Arm',offS+'ForeArm',offS+'Hand',main+'Arm',main+'ForeArm',main+'Hand']){const b=B[n],q=R.q.get(b);if(q)b.quaternion.slerp(q,w);}}   // just up: both arms ease from where they were to the grip instead of snapping
     } else if(!this.sword&&this.alive){
@@ -3587,6 +3624,7 @@ class Fighter{
 }
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
+    this.fullBody(dt);
   }
   startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
     if(this.ai&&!this.isPlayer)this.ai.cd=Math.max(this.ai.cd||0,d*.6);if(NET.mode==='host')netEv(['q',this.id,part,r3(d)]);if(this.isPlayer)tell(this,part==='neck'?'Your throat is cut':'You clutch the wound','red');}
@@ -4637,6 +4675,7 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
+{const fb=document.getElementById('fullBtn');const show=()=>{fb.classList.toggle('on',FULLBODY);fb.setAttribute('aria-checked',FULLBODY?'true':'false');};show();fb.addEventListener('click',()=>{FULLBODY=!FULLBODY;try{localStorage.setItem('bloodmoor-fullbody',FULLBODY?'1':'0');}catch(e){}show();});}
 try{localStorage.removeItem('bloodmoor-hybrid');}catch(e){}
 function startGame(){
   if(NET.mode==='client')return;   // the host starts matches; a friend's own menu choice mustn't change their HUD
