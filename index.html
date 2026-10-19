@@ -181,7 +181,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
       <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
-      <dt><kbd>G</kbd></dt><dd>Hold with a fist held to open that hand and grab: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
+      <dt><kbd>G</kbd></dt><dd>Tap to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small" id="buildTag" style="opacity:.6"></p>
@@ -308,7 +308,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=74;
+const BUILD=75;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -619,7 +619,7 @@ function tryHouse(cx,cz,rot,w,d,floors){
   // thatched houses in the inner rows can catch fire from the ring and burn down: they get their own meshes so they can fall
   const burn=st.thatch&&Math.hypot(cx,cz)<48&&HOUSES.length<10;let B=null;if(burn)GEO_TARGET=B={};
   const fl0=flames.length,hs=house(cx,cz,rot,w,d,floors,st);GEO_TARGET=null;
-  if(burn){const grp=batchGroup(B);world.add(grp);HOUSES.push({grp,x:cx,z:cz,rot,...hs,st:'whole',t:0,fx:[],torch:flames.slice(fl0)});}
+  if(burn){const grp=batchGroup(B);world.add(grp);HOUSES.push({grp,x:cx,z:cz,rot,...hs,pv:st.pv,st:'whole',t:0,fx:[],torch:flames.slice(fl0)});}
   return true;
 }
 function streetRow(ox,oz,ax,az,px,pz,s0,s1,off){
@@ -740,17 +740,9 @@ function houseIgnite(i,net=true){const H=HOUSES[i];if(!H||H.st!=='whole')return;
   H.smoke=[];for(let k=0;k<12;k++){const sp=new THREE.Sprite(smokeSpriteMat.clone());sp.material.opacity=0;sp.renderOrder=6;world.add(sp);H.smoke.push({sp,t:k/12*4});}
   for(let k=0;k<3;k++)houseFlame(H,houseLocal(H,(Math.random()-.5)*H.W*.8,1.3+Math.random()*1.5,(Math.random()<.5?-1:1)*(hd+.1)),1.2+Math.random()*.6);
   sfx('crackle',V(H.x,2,H.z),1,.8,0,false);}
-function houseCollapse(i,net=true){const H=HOUSES[i];if(!H||H.st==='down'||H.st==='collapsing')return;H.st='collapsing';H.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['HC',i]);
-  dropFlames(H.torch);const P=V(H.x,1.5,H.z);sThud(P,1.6);sfx('crush',P,1,.6,0,false);sfx('crush',P,.8,.5,.25,false);spawnDust(V(H.x,.4,H.z),20,2,.8);
-  // burning beams pitched out across the street in front (the door side faces the street)
-  H.beams=[];const fwd=V(Math.sin(H.rot),0,Math.cos(H.rot));
-  for(let k=0;k<3;k++){const along=(k-1)*H.W*.32+(Math.random()-.5)*.6,out=H.D/2+1.2+Math.random()*2.2,c=houseLocal(H,along,.14,out),ang=H.rot+(Math.random()-.5)*.9,L=3+Math.random()*1.2;
-    const m=new THREE.Mesh(boxUV(.24,.24,L,1),charMat);m.position.copy(c);m.rotation.y=ang;m.castShadow=m.receiveShadow=true;m.visible=false;world.add(m);
-    const ex=Math.abs(Math.sin(ang))*L/2+.15,ez=Math.abs(Math.cos(ang))*L/2+.15;const box=addBox(c.x-Math.max(ex,.2),c.x+Math.max(ex,.2),c.z-Math.max(ez,.2),c.z+Math.max(ez,.2),.45);gridRemove(box);
-    H.beams.push({m,box,c,L,ang,fx:[],burn:22,laid:false});}
-  if(NET.mode==='client')return;
-  for(const f of fighters){if(!f.alive||f.ragdoll)continue;const d=V(f.pos.x-H.x,0,f.pos.z-H.z),lz=d.dot(fwd),lx=Math.abs(d.x*Math.cos(H.rot)-d.z*Math.sin(H.rot));
-    if(lz>H.D/2-.2&&lz<H.D/2+4&&lx<H.W/2+.6){f.damage(14,null,'crushed by a falling house');if(f.alive){f.burn=Math.max(f.burn,2.5);f.knockdown(rand(1.5,2.5),fwd.clone().multiplyScalar(2).setY(.3),f.chest);tell(f,'The house falls on you','red');}}}}
+function houseCollapse(i,net=true,seed){const H=HOUSES[i];if(!H||H.st==='down'||H.st==='collapsing')return;H.st='down';H.t=0;mapDirty=true;seed=seed||((Math.random()*1e6)|0);if(NET.mode==='host'&&net)netEv(['HC',i,seed]);
+  dropFlames(H.torch);dropFlames(H.fx);const P=V(H.x,1.5,H.z);sThud(P,1.6);sfx('crush',P,1,.6,0,false);sfx('crush',P,.8,.5,.25,false);spawnDust(V(H.x,.6,H.z),30,2.5,1.2);
+  world.remove(H.grp);gridRemove(H.box);H.beams=[];houseBreak(H,seed);}   // it comes apart into pieces (rubble)
 function villageStep(h){if(!HOUSES.length||NET.mode==='client')return;const mt=simTime-CD_END;
   for(let i=0;i<HOUSES.length;i++){const H=HOUSES[i];
     if(H.st==='whole'&&state==='playing'&&!zone.off){const d=Math.hypot(H.x-zone.c.x,H.z-zone.c.z),hr=Math.max(H.hw,H.hd);if(zone.r-(d+hr)<3&&d-hr<zone.r+6)houseIgnite(i);}
@@ -810,6 +802,135 @@ function sinkStep(h){const S=SINK;if(S.st==='none'||NET.mode==='client')return;c
 function sinkVisual(dt){const S=SINK;if(S.st==='none'||!S.chunks)return;for(let i=S.chunks.length-1;i>=0;i--){const c=S.chunks[i];c.t+=dt;c.vy-=9.8*dt;c.m.position.y+=c.vy*dt;c.m.rotation.x+=c.w.x*dt;c.m.rotation.z+=c.w.z*dt;if(c.m.position.y<S.water){if(c.t<4&&!c.sp){c.sp=1;spawnDust(V(c.m.position.x,S.water+.1,c.m.position.z),5,.6,.8);}if(c.m.position.y<S.water-3){world.remove(c.m);S.chunks.splice(i,1);}}}
   if(S.grp&&S.grp.water)S.grp.water.position.y=S.water+Math.sin(simTime*.9)*.03;}
 function sinkWall(p,r){const S=SINK;if(S.st!=='open'||p.y>-.05)return;const dx=p.x-S.x,dz=p.z-S.z,d=Math.hypot(dx,dz),m=S.r-r-.02;if(d>m&&d<S.r+1){p.x=S.x+dx/d*m;p.z=S.z+dz/d*m;}}
+// ---- rubble: the pieces of a building that comes down. Each is a box that falls, tumbles and lands on its corners, gets knocked
+// flat by the landing and comes to rest lying properly on the ground (never balanced on an edge or hanging in the air). While it
+// moves fast it crushes whoever it hits; once it lies still a big piece is something to climb over, a burning one sets you alight,
+// and a few beams are left loose to pick up and swing. Host and friends run the same pieces from the same seed; only the host deals damage
+const RUBBLE=[];let rubSeed=1;const rrand=()=>{rubSeed=(rubSeed*16807)%2147483647;return (rubSeed-1)/2147483646;};
+const _rbq=new THREE.Quaternion(),_rbv=V(),_rbc=V(),_rbw=V(),_rbax=[V(1,0,0),V(0,1,0),V(0,0,1)];
+function rubbleAdd(o){const r=Object.assign({vel:V(),w:V(),rest:false,slow:0,hit:new Set(),mass:30,cause:'crushed',burn:0,fx:null},o);r.m.position.copy(r.pos);r.m.quaternion.copy(r.q);r.m.castShadow=r.m.receiveShadow=true;if(!r.m.parent)world.add(r.m);RUBBLE.push(r);return r;}
+function rubbleClear(){for(const r of RUBBLE){world.remove(r.m);if(r.fx)dropFlames(r.fx);}RUBBLE.length=0;}
+function rubbleStep(h){if(!RUBBLE.length)return;
+  for(const r of RUBBLE){if(r.rest)continue;
+    if(r.settle){r.settle.t+=h;const u=Math.min(1,r.settle.t/.35);r.q.slerpQuaternions(r.settle.q0,r.settle.q1,u*u*(3-2*u));r.pos.y+=(r.settle.y-r.pos.y)*Math.min(1,h*14);r.m.position.copy(r.pos);r.m.quaternion.copy(r.q);if(u>=1){r.rest=true;rubbleRest(r);}continue;}
+    r.vel.y-=9.8*h;r.pos.addScaledVector(r.vel,h);
+    const wl=r.w.length();if(wl>1e-5){_rbq.setFromAxisAngle(_rbw.copy(r.w).multiplyScalar(1/wl),wl*h);r.q.premultiply(_rbq).normalize();}
+    // the lowest corner against the ground
+    let lo=1e9,lc=null;for(let i=0;i<8;i++){_rbc.set(i&1?r.half.x:-r.half.x,i&2?r.half.y:-r.half.y,i&4?r.half.z:-r.half.z).applyQuaternion(r.q);if(_rbc.y<lo){lo=_rbc.y;lc=_rbc.clone();}}
+    const gy=groundY(r.pos.x,r.pos.z,r.pos.y+1);
+    if(r.pos.y+lo<gy){r.pos.y=gy-lo;
+      _rbv.copy(r.w).cross(lc).add(r.vel);   // speed of that corner
+      if(_rbv.y<-.4&&!r.landed){r.landed=true;rubbleLand(r);}
+      if(_rbv.y<0){r.vel.y=-_rbv.y*.18;const sz=Math.max(r.half.x,r.half.y,r.half.z);
+        _rbw.copy(lc).cross(V(0,1,0)).multiplyScalar(-_rbv.y*.9/(sz*sz+.05));r.w.add(_rbw);}   // landing on a corner knocks it over toward its face
+      r.vel.x*=.86;r.vel.z*=.86;r.w.multiplyScalar(.93);
+      if(r.vel.lengthSq()<.25&&r.w.lengthSq()<.5){r.slow+=h;if(r.slow>.25)rubbleSettle(r,gy);}else r.slow=0;}
+    if(r.pos.y<-30){r.rest=true;}
+    r.m.position.copy(r.pos);r.m.quaternion.copy(r.q);
+    if(NET.mode!=='client'&&r.mass>8&&r.vel.lengthSq()>6.25)rubbleHits(r);}
+  for(const r of RUBBLE)if(r.fx&&!r.rest)for(const e of r.fx){_rbc.copy(r.offs||V()).applyQuaternion(r.q).add(r.pos);e.x=_rbc.x;e.y=_rbc.y+.1;e.z=_rbc.z;e.f.position.set(e.x,e.y+.18*e.base,e.z);e.h.position.set(e.x,e.y,e.z);}}
+// come to rest on whichever face is nearest to down, lying flat on the ground
+function rubbleSettle(r,gy){let best=0,bd=-1,sg=1;for(let i=0;i<3;i++){const a=_rbv.copy(_rbax[i]).applyQuaternion(r.q),d=Math.abs(a.y);if(d>bd){bd=d;best=i;sg=a.y>=0?1:-1;}}
+  const a=_rbax[best].clone().applyQuaternion(r.q).multiplyScalar(sg),q1=new THREE.Quaternion().setFromUnitVectors(a,V(0,1,0)).multiply(r.q);
+  const hy=[r.half.x,r.half.y,r.half.z][best];r.settle={t:0,q0:r.q.clone(),q1,y:gy+hy};r.vel.set(0,0,0);r.w.set(0,0,0);}
+function rubbleLand(r){const big=r.mass>40;if(big){sThud(r.pos,Math.min(1.6,r.mass/80));spawnDust(V(r.pos.x,.2,r.pos.z),big?10:4,Math.max(r.half.x,r.half.z),.5);}
+  if(r.mass>60&&Math.random()<.6)sfx('crush',r.pos,Math.min(1,r.mass/150),.7+Math.random()*.3,0,false);}
+function rubbleRest(r){if(r.fx&&r.burn<=0)dropFlames(r.fx);
+  const e=[0,0];for(let i=0;i<8;i++){_rbc.set(i&1?r.half.x:-r.half.x,i&2?r.half.y:-r.half.y,i&4?r.half.z:-r.half.z).applyQuaternion(r.q);e[0]=Math.max(e[0],Math.abs(_rbc.x));e[1]=Math.max(e[1],Math.abs(_rbc.z));}
+  const top=r.pos.y+Math.min(r.half.x,r.half.y,r.half.z)*1.0;
+  if(Math.max(e[0],e[1])>.7&&top>.25){const b=addBox(r.pos.x-e[0]*.85,r.pos.x+e[0]*.85,r.pos.z-e[1]*.85,r.pos.z+e[1]*.85,Math.min(top+.1,2.4));r.box=b;}   // something to climb over or go round
+  if(r.loot&&NET.mode!=='client'){const def=WEAPONS[r.loot];if(def){world.remove(r.m);r.gone=true;const s=new Sword(def),ax=V(1,0,0).applyQuaternion(r.q).setY(0).normalize();s.reset(r.pos.clone().addScaledVector(ax,-def.len/2).setY(.1),ax);s.edge.set(0,1,0);s.free=true;s.age=0;if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}}
+function rubbleHits(r){const R=Math.max(r.half.x,r.half.y,r.half.z)+.3,sp=r.vel.length();
+  for(const f of fighters){if(!f.alive||r.hit.has(f.id))continue;const p=f.ragdoll?f.ragdoll.P.Hips:f.chest;if(!p)continue;
+    // distance from the body to the piece, in the piece's own frame
+    _rbc.subVectors(p,r.pos).applyQuaternion(_rbq.copy(r.q).invert());const dx=Math.max(0,Math.abs(_rbc.x)-r.half.x),dy=Math.max(0,Math.abs(_rbc.y)-r.half.y-.5),dz=Math.max(0,Math.abs(_rbc.z)-r.half.z);
+    if(dx*dx+dy*dy+dz*dz>.3*.3)continue;r.hit.add(f.id);
+    const dmg=clamp(r.mass*sp*.035,6,140);f.damage(dmg,null,r.cause);if(f.isPlayer)shake(Math.min(1,dmg/50));
+    if(f.alive){if(!f.ragdoll)f.knockdown(rand(1.5,3),r.vel.clone().multiplyScalar(.4).setY(.2),f.chest.clone());tell(f,dmg>40?'Crushed!':'Struck by falling timber','red');}}}
+function rubbleBurnStep(h){if(NET.mode==='client')return;for(const r of RUBBLE){if(!r.rest||r.burn<=0||r.gone)continue;r.burn-=h;if(r.burn<=0){if(r.fx)dropFlames(r.fx);continue;}
+  for(const f of fighters){if(!f.alive||f.ragdoll||f.pos.y>.8)continue;if(Math.abs(f.pos.x-r.pos.x)<r.half.x+.6&&Math.abs(f.pos.z-r.pos.z)<Math.max(r.half.z,r.half.x)+.6)f.burn=Math.max(f.burn,1.5);}}}
+// a burning house comes apart: walls in panels that topple outward (mostly one way: it leans before it goes), the thatch in slabs,
+// the frame in beams flying loose
+function houseBreak(H,seed){rubSeed=seed||1;const dir=rrand()*6.283,lean=V(Math.cos(dir),0,Math.sin(dir));const wallH=H.H-H.rh,pm0=MATS['plaster'+(H.pv||0)],pmat=pm0.userData.sooty||(pm0.userData.sooty=(()=>{const m=pm0.clone();m.color=new THREE.Color(0x5a5048);return m;})());   // smoke-blackened
+  const loc=(lx,y,lz)=>houseLocal(H,lx,y,lz),hq=new THREE.Quaternion().setFromAxisAngle(Y_AXIS,H.rot);
+  const piece=(w,hh,d,mat,lx,ly,lz,extraQ,o)=>{const m=new THREE.Mesh(boxUV(w,hh,d,1),mat);const q=hq.clone();if(extraQ)q.multiply(extraQ);return rubbleAdd(Object.assign({m,half:V(w/2,hh/2,d/2),pos:loc(lx,ly,lz),q,mass:w*hh*d*400,cause:'crushed by a falling house'},o||{}));};
+  const tip=(r,outLocal,k)=>{const out=V(outLocal.x,0,outLocal.z).applyQuaternion(hq).normalize().lerp(lean,.55).normalize();r.vel.copy(out).multiplyScalar((.5+rrand()*1.2)*k).setY(rrand()*.8);r.w.copy(V(0,1,0).cross(out)).multiplyScalar(-(1.2+rrand()*1.6)*k).add(V(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(.8));};
+  const W=H.W,D=H.D;
+  for(const sd of [-1,1]){const n=Math.max(2,Math.round(W/2.2));for(let i=0;i<n;i++){const pw=W/n-.05,lx=-W/2+(i+.5)*W/n;const r=piece(pw,wallH*(.75+rrand()*.25),.25,pmat,lx,wallH/2,sd*D/2);tip(r,V(0,0,sd),1);}}
+  for(const sd of [-1,1]){const n=Math.max(1,Math.round(D/2.4));for(let i=0;i<n;i++){const pd=D/n-.05,lz=-D/2+(i+.5)*D/n;const r=piece(.25,wallH*(.7+rrand()*.3),pd,pmat,sd*W/2,wallH/2,lz);tip(r,V(sd,0,0),1);}}
+  const sl=Math.hypot(D/2,H.rh),ang=Math.atan2(H.rh,D/2);
+  for(const sd of [-1,1])for(let i=0;i<2;i++){const lx=(i-.5)*W/2,r=piece(W/2-.1,.3,sl,MATS.thatch,lx,wallH+H.rh/2,sd*D/4,new THREE.Quaternion().setFromAxisAngle(V(1,0,0),sd*ang),{burn:14+rrand()*8});
+    tip(r,V(rrand()-.5,0,sd),.8);r.vel.y=-1;r.fx=[];r.offs=V(0,.2,0);houseFlame({fx:r.fx},r.pos.clone(),1.6+rrand());}
+  for(let i=0;i<7;i++){const L=2+rrand()*Math.max(1,W-2),r=piece(.22,.22,L,charMat,(rrand()-.5)*W*.6,wallH*(.4+rrand()*.6),(rrand()-.5)*D*.6,new THREE.Quaternion().setFromAxisAngle(Y_AXIS,rrand()*3),{burn:i<3?16+rrand()*8:0,loot:i===5||i===6?'plank':null,mass:60});
+    tip(r,V(rrand()-.5,0,rrand()-.5),1.4);if(r.burn>0){r.offs=V(0,.1,0);r.fx=[];houseFlame({fx:r.fx},r.pos.clone(),1+rrand()*.5);}}}
+// ---- the bell tower in the square: a stone shaft, a timber belfry with its bell, a shingled spire, eighteen metres in all.
+// Partway into a match the belfry catches fire. It burns for half a minute and gives every warning: smoke, the bell clanging as the
+// frame shifts, burning shingles and beams dropping, creaks and grinding, dust from the base. Then it comes down, one of two ways,
+// at random: the shaft snaps somewhere up its height and the top tips over in a random direction, coming apart as it falls, or the
+// base gives way and the whole thing crumbles and spills out round itself. Anything under it is crushed; the stone left lying is cover
+const TOWER={st:'none'};
+function sBell(p,v){if(!AC)return;const vol=distVol(p)*v;if(vol<.005)return;const t=AC.currentTime,f0=196*(1+(Math.random()-.5)*.02);
+  for(const [r,a,d] of [[.5,.5,4.5],[1,1,3.5],[1.19,.45,2.6],[1.5,.35,2],[2,.3,1.6],[2.74,.2,1.1],[3.76,.12,.7]]){const o=AC.createOscillator();o.type='sine';o.frequency.value=f0*r;const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol*a*.22,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);}}
+function buildTower(x,z){const T={st:'whole',x,z,t:0,at:rand(60,100),burnFor:rand(28,36),parts:[],fx:[],smoke:[],tollT:3,emberT:2,creakT:0,warned:false};Object.assign(TOWER,T);TOWER.parts=[];TOWER.fx=[];TOWER.smoke=[];
+  const S=3.6,hs=S/2,wt=.5,ch=1.6,stoneM=MATS.stone;
+  const part=(geo,mat,half,pos,q,mass,kind)=>{const m=new THREE.Mesh(geo,mat);m.position.copy(pos);if(q)m.quaternion.copy(q);m.castShadow=m.receiveShadow=true;world.add(m);TOWER.parts.push({m,half,pos:pos.clone(),q:(q||new THREE.Quaternion()).clone(),mass,kind});};
+  // the stone shaft: five courses, each side two blocks, with a doorway on the north side of the ground course
+  for(let c=0;c<5;c++){const y=c*ch+ch/2;for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]])for(const k of [-1,1]){if(c===0&&sz===1&&k===1)continue;
+      const along=k*(S/4+(sz?0:-wt/4)),len=sz?S/2:S/2-wt/2,px=x+(sz?along:sx*(hs-wt/2)),pz=z+(sz?sz*(hs-wt/2):along);
+      const g=sz?boxUV(len-.02,ch-.02,wt,1.5):boxUV(wt,ch-.02,len-.02,1.5);part(g,stoneM,sz?V(len/2,ch/2,wt/2):V(wt/2,ch/2,len/2),V(px,y,pz),null,260,'stone');}}
+  // a string course and the belfry floor
+  part(boxUV(S+.3,.25,S+.3,1.5),MATS.beam,V((S+.3)/2,.125,(S+.3)/2),V(x,8.12,z),null,160,'wood');
+  // four corner posts, cross braces, louvred sides and the bell
+  for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]])part(boxUV(.3,4.4,.3,1),MATS.beam,V(.15,2.2,.15),V(x+sx*(hs-.15),10.45,z+sz*(hs-.15)),null,90,'wood');
+  for(const [sx,sz] of [[0,-1],[0,1],[-1,0],[1,0]]){const q=new THREE.Quaternion().setFromAxisAngle(Y_AXIS,sx?Math.PI/2:0);part(boxUV(S-.3,1.1,.12,1),MATS.wood,V((S-.3)/2,.55,.06),V(x+sx*(hs-.1),9,z+sz*(hs-.1)),q,40,'wood');}
+  {const g=new THREE.CylinderGeometry(.45,.75,1.1,14,1,true);const m=new THREE.Mesh(g,std({color:0x6b5a3a,metalness:.85,roughness:.35,side:THREE.DoubleSide}));m.position.set(x,11,z);m.castShadow=true;world.add(m);TOWER.parts.push({m,half:V(.7,.55,.7),pos:V(x,11,z),q:new THREE.Quaternion(),mass:220,kind:'bell'});}
+  part(boxUV(S+.2,.25,.25,1),MATS.beam,V((S+.2)/2,.125,.125),V(x,11.7,z),null,50,'wood');
+  // the spire, in two pieces
+  {const g=new THREE.ConeGeometry(2.75,3.2,4,1,true);g.rotateY(Math.PI/4);part(g,MATS.tile,V(1.95,1.6,1.95),V(x,14.3,z),null,180,'roof');
+   const g2=new THREE.ConeGeometry(1.1,2.6,4);g2.rotateY(Math.PI/4);part(g2,MATS.tile,V(.78,1.3,.78),V(x,17.2,z),null,60,'roof');}
+  part(new THREE.CylinderGeometry(.03,.03,1.2,4),MATS.iron,V(.05,.6,.05),V(x,19,z),null,4,'iron');
+  TOWER.box=addBox(x-hs,x+hs,z-hs,z+hs,18);}
+function towerIgnite(net=true){const T=TOWER;if(T.st!=='whole')return;T.st='burning';T.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['BT',1]);
+  for(let k=0;k<7;k++){const p=V(T.x+(Math.random()-.5)*3,8.5+Math.random()*4.5,T.z+(Math.random()-.5)*3);houseFlame(T,p,2+Math.random()*1.8);}
+  for(let k=0;k<14;k++){const sp=new THREE.Sprite(smokeSpriteMat.clone());sp.material.opacity=0;sp.renderOrder=6;world.add(sp);T.smoke.push({sp,t:k/14*5});}
+  sfx('crackle',V(T.x,10,T.z),1,.7,0,false);sBell(V(T.x,11,T.z),1);note('The bell tower is on fire','red');}
+function towerCollapse(seed,net=true){const T=TOWER;if(T.st==='down'||T.st==='falling')return;T.st='falling';T.t=0;mapDirty=true;if(NET.mode==='host'&&net)netEv(['BT',2,seed]);
+  rubSeed=seed;const mode=rrand()<.55?'tip':'crumble',th=rrand()*6.283,dir=V(Math.cos(th),0,Math.sin(th)),hb=mode==='tip'?1.6*(1+Math.floor(rrand()*3)):1.6*Math.floor(rrand()*2);
+  T.mode=mode;gridRemove(T.box);if(T.box.phys&&PW){try{PW.removeCollider(T.box.phys,false);}catch(e){}}
+  const P0=V(T.x,hb,T.z).addScaledVector(dir,1.8),axis=V(0,1,0).cross(dir).normalize().negate();
+  sfx('crush',V(T.x,hb+1,T.z),1,.45,0,false);sfx('crush',V(T.x,hb+1,T.z),1,.6,.3,false);sThud(V(T.x,hb,T.z),2);spawnDust(V(T.x,hb+.5,T.z),40,2.5,1.5);sBell(V(T.x,11,T.z),1.2);
+  T.rig=[];T.P0=P0;T.axis=axis;T.phi=.02;T.phiV=0;T.sep=.45+rrand()*.4;
+  for(const p of T.parts){const above=p.pos.y>hb+.01;if(!above)continue;
+    const brk=p.pos.y<hb+1.65&&p.kind==='stone';   // the course at the break bursts out
+    if(mode==='crumble'||brk){const out=V(p.pos.x-T.x,0,p.pos.z-T.z);if(out.lengthSq()<.01)out.set(rrand()-.5,0,rrand()-.5);out.normalize();
+        const r=rubbleAdd({m:p.m,half:p.half,pos:p.pos.clone(),q:p.q.clone(),mass:p.mass,cause:'crushed by the bell tower'});
+        r.vel.copy(out).multiplyScalar((brk?1.5:.6)+rrand()*(mode==='crumble'?2.6:1.5)).add(dir.clone().multiplyScalar(mode==='crumble'?rrand()*1.2:0));r.vel.y=rrand()*.6;r.w.set(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(mode==='crumble'?3:2);p.r=r;}
+    else T.rig.push({p,pos0:p.pos.clone(),q0:p.q.clone()});}
+  if(mode==='crumble'){T.rig.length=0;}
+  // the flames go with the timbers they're on
+  for(const e of T.fx){let best=null,bd=1e9;for(const p of T.parts){if(p.kind==='stone')continue;const d=(p.pos.x-e.x)**2+(p.pos.y-e.y)**2+(p.pos.z-e.z)**2;if(d<bd){bd=d;best=p;}}if(best){best.fl=(best.fl||[]);best.fl.push(e);}}
+  note(mode==='tip'?'The bell tower is coming down!':'The bell tower is collapsing!','red');}
+function towerStep(h){const T=TOWER;if(T.st==='none')return;const host=NET.mode!=='client';
+  if(T.st==='whole'&&host&&state==='playing'&&!RUN&&simTime-CD_END>T.at)towerIgnite();
+  if(T.st==='whole'&&host&&state==='playing'&&!zone.off&&Math.hypot(T.x-zone.c.x,T.z-zone.c.z)>zone.r-4)towerIgnite();   // the ring reaches it
+  if(T.st==='burning'){T.t+=h;const left=T.burnFor-T.t,P=V(T.x,11,T.z);
+    if((T.tollT-=h)<=0){T.tollT=left<8?rand(.6,1.6):rand(2.5,5.5);sBell(P,left<8?1.1:.8);}   // the bell swings as the frame shifts
+    if((T.emberT-=h)<=0){T.emberT=rand(.8,2.2);const wood=Math.random()<.35;const L=wood?1+Math.random():.4,m=new THREE.Mesh(boxUV(wood?.16:.35,wood?.16:.05,L,1),wood?charMat:MATS.tile);
+      const r=rubbleAdd({m,half:V(wood?.08:.175,wood?.08:.025,L/2),pos:V(T.x+(Math.random()-.5)*3.4,9+Math.random()*4,T.z+(Math.random()-.5)*3.4),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*3,Math.random()*3,0)),mass:wood?10:2,burn:wood?8:0,cause:'struck by falling timber'});
+      r.vel.set((Math.random()-.5)*3,0,(Math.random()-.5)*3);r.w.set(Math.random()*4,Math.random()*4,Math.random()*4);if(wood){r.fx=[];r.offs=V();houseFlame({fx:r.fx},r.pos.clone(),.9);}}   // burning bits come down first
+    if(left<9){if(!T.warned){T.warned=true;note('The bell tower is about to fall!','red');}if((T.creakT-=h)<=0){T.creakT=rand(.5,1.4);sfx('crush',V(T.x,3,T.z),.45,.35+Math.random()*.15,0,false);spawnDust(V(T.x+(Math.random()-.5)*4,.2,T.z+(Math.random()-.5)*4),6,1,.4);if(Math.random()<.4&&TOWER.parts.length){const p=TOWER.parts[(Math.random()*20)|0];if(p&&p.m)p.m.position.x+=(Math.random()-.5)*.02;}}}
+    if(host&&left<=0)towerCollapse((Math.random()*1e6)|0);}
+  if(T.st==='falling'){T.t+=h;
+    if(T.rig&&T.rig.length){const L=Math.max(3,(19-T.P0.y)/2);T.phiV+=1.5*9.8/L*Math.sin(T.phi+.05)*h;T.phi+=T.phiV*h;_rbq.setFromAxisAngle(T.axis,T.phi);
+      for(const g of T.rig){g.p.pos.copy(g.pos0).sub(T.P0).applyQuaternion(_rbq).add(T.P0);g.p.q.copy(_rbq).multiply(g.q0);g.p.m.position.copy(g.p.pos);g.p.m.quaternion.copy(g.p.q);
+        if(g.p.fl)for(const e of g.p.fl){e.f.position.copy(g.p.pos);e.h.position.copy(g.p.pos);}}
+      if(T.phi>T.sep){for(const g of T.rig){const rr=V().subVectors(g.p.pos,T.P0),w=T.axis.clone().multiplyScalar(T.phiV);const r=rubbleAdd({m:g.p.m,half:g.p.half,pos:g.p.pos.clone(),q:g.p.q.clone(),mass:g.p.mass,cause:'crushed by the bell tower'});
+          r.vel.copy(w).cross(rr).add(V(rrand()-.5,rrand()*.5,rrand()-.5).multiplyScalar(1.5));r.w.copy(w).add(V(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(2.5));g.p.r=r;}T.rig.length=0;sfx('crush',T.P0,1,.5,0,false);}}
+    for(const p of T.parts)if(p.r&&p.fl){r2fx(p);}
+    if(T.t>12)T.st='down';}}
+function r2fx(p){if(!p.r.fx){p.r.fx=p.fl;p.r.offs=V();p.r.burn=20;p.fl=null;}}
+function towerVisual(dt){const T=TOWER;if(T.st!=='burning'&&!(T.st==='falling'||T.st==='down')||!T.smoke)return;const on=T.st==='burning'||T.t<10;
+  for(const q of T.smoke){q.t+=dt;if(q.t>5){q.t-=5;q.x=(Math.random()-.5)*2.5;q.z=(Math.random()-.5)*2.5;}const u=q.t/5;q.sp.position.set(T.x+(q.x||0)+u*2.5,(T.st==='burning'?12:2)+u*14,T.z+(q.z||0)+u*1.2);q.sp.scale.setScalar(2+u*7);q.sp.material.opacity=on?.55*(1-u)*Math.min(1,u*6):Math.max(0,q.sp.material.opacity-dt*.2);}}
 // ---- the tavern: a timbered hall with a bar, a hearth, tables and benches you can stand on, and a gallery up a stair whose
 // rail gives way when a body is driven through it. A brawl: everyone starts bare-handed and fights with what's lying about
 const TAV={rails:[],spots:[]};
@@ -905,9 +1026,9 @@ const seaMat=new THREE.ShaderMaterial({fog:true,uniforms:THREE.UniformsUtils.mer
       h*=A;dx*=A;dz*=A;p.y+=h;vH=h/max(A,.3);vN=normalize((modelMatrix*vec4(-dx,1.,-dz,0.)).xyz);vec4 w=modelMatrix*vec4(p,1.);vW=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
     }`,
-  fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;uniform float uSL,uSW;varying vec3 vN;varying vec3 vW;varying float vH;
+  fragmentShader:`uniform vec3 uDeep,uShal,uSky,uSun;uniform float uSL,uSW,uTime;varying vec3 vN;varying vec3 vW;varying float vH;
     #include <fog_pars_fragment>
-    void main(){float u=vW.x/uSL,u4=u*u*u*u,hw=u4<1.?uSW*sqrt(1.-u4)+.1:-1.,ed=abs(vW.z)-hw;if(ed<0.&&abs(u)<1.04)discard;   /* the hull keeps the sea out */vec3 n=normalize(vN),v=normalize(cameraPosition-vW);float fr=pow(1.-max(dot(n,v),0.),4.);
+    void main(){float u=vW.x/uSL,u4=u*u*u*u,sh=.55+.55*u4,sa=(sh-vW.y)/(sh+1.15),hw=u4<1.&&sa<1.?(uSW*sqrt(1.-u4)+.08)*sqrt(1.-clamp(sa,0.,1.)*clamp(sa,0.,1.)):-1.,ed=abs(vW.z)-hw;if(ed<0.)discard;   /* inside the hull at this height: the hull keeps the sea out (its sides curve in toward the keel) */vec3 n=normalize(vN),v=normalize(cameraPosition-vW);float fr=pow(1.-max(dot(n,v),0.),4.);
       vec3 c=mix(uDeep,uShal,clamp(vH*.7+.4,0.,1.));c=mix(c,uSky,fr*.75);c+=vec3(1.)*pow(max(dot(reflect(-uSun,n),v),0.),90.)*.6;
       c+=vec3(.85)*smoothstep(.75,1.05,vH)*.3;   // foam on the crests
       if(hw>0.)c=mix(c,vec3(.78,.82,.84),(1.-smoothstep(0.,.6,ed))*.55*(.6+.4*sin(vW.x*3.1+uTime*2.3)));   // and where it slaps the hull
@@ -961,28 +1082,32 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   {const g=new THREE.PlaneGeometry(900,900,220,220);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,seaMat);m.position.y=-1.7;m.frustumCulled=false;world.add(m);SHIP.sea=m;}
   DUST.p.material.uniforms.uCol.value.setRGB(.82,.86,.9);   // spray, not sand
   flushBatch();}
+function shipMotion(S,t){const sm=S.storm||0,P=S.ph||(S.ph=[0,1,2,3,4,5,6,7].map(()=>Math.random()*6.283)),g=.75+.3*Math.sin(t*.113+P[6])+.2*Math.sin(t*.271+P[7]);
+  const roll=(.075+.11*sm)*g*(.55*Math.sin(t*.57+P[0])+.3*Math.sin(t*.94+P[1])+.18*Math.sin(t*1.63+P[2]))+.12*S.swell*Math.sin(t*.8);
+  const pitch=(.05+.08*sm)*g*(.5*Math.sin(t*.41+P[3])+.32*Math.sin(t*.79+P[4])+.2*Math.sin(t*1.37+P[5]))+.06*S.swell*Math.sin(t*.6+1);return [roll,pitch];}
 function splash(p){sfx('fall',p,1,.55,0,false);sfx('fallArmoured',p,.5,.5,.06,false);spawnDust(V(p.x,-1,p.z),14,1.6,1.4);}
 function shipStep(h){const S=SHIP;if(!S||NET.mode==='client')return;
   {const mt=state==='playing'?simTime-CD_END:0;const st=clamp((mt-15)/200,0,1);S.storm=window.__storm!=null?window.__storm:st;if(NET.mode==='host'&&(S.stT=(S.stT||0)-h)<=0){S.stT=3;netEv(['ST',r3(S.storm)]);}}   // the sea gets up as the fight goes on: in about three and a half minutes it's a gale
   S.swT-=h;if(S.swT<=0&&state==='playing'&&simTime>CD_END){S.swT=rand(12,20)*(1-.55*(S.storm||0));S.swell=1;netEv(['SW']);   // a big swell: everyone on deck is thrown off balance toward the low side
     for(const f of fighters)if(f.alive&&!f.ragdoll){const d=V((Math.random()-.5)*.4,0,Math.sign(S.roll)||1).normalize();const mv=Math.hypot(f.vel.x,f.vel.z);f.shove(d,rand(.9,1.35)*(1+.5*(S.storm||0))*(f.crouch?.35:1)*(1+Math.min(1,mv/4)*.5+(f.commit?.25:0)));f.stagger=Math.max(f.stagger,f.crouch?.2:.55);}tell(player,'A swell lifts the ship','sm');}
-  const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6;
+  const az=9.8*S.roll*.6,ax=9.8*S.pitch*.6,[r1,p1]=shipMotion(S,S.t+.05),[r0,p0]=shipMotion(S,S.t-.05),wr=(r1-r0)*10,wp=(p1-p0)*10;   // tilt, and how fast it's tilting
+  for(const sw of freeSwords){if(sw.flying||!sw.free||sw.H.y>.25||!shipIn(sw.H.x,sw.H.z))continue;for(const q of [sw.H,sw.T]){q.z+=az*h*h*.55;q.x+=ax*h*h*.55;}}   // loose weapons slide downhill
   for(const f of fighters){
-    if(f.ragdoll){const R=f.ragdoll;for(const n of R.names)R.P[n].z+=az*h*h*.3;R.sleep=false;
+    if(f.ragdoll){const R=f.ragdoll;for(const n of R.names){R.P[n].z+=az*h*h*.2;R.P[n].x+=ax*h*h*.2;}R.sleep=false;   /* bodies slide too */
       const P=R.P.Hips;if(P&&!shipIn(P.x,P.z)&&P.y<-.9&&!f.splashed){f.splashed=true;splash(P);if(f.alive)f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'thrown overboard');}continue;}
-    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.03:.12+.5*mv*mv+.12*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.9*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
-      f.vel.z+=az*h;f.vel.x+=ax*h;f.balV.z+=az*h*k;f.balV.x+=ax*h*k*.6;}
+    if(!f.alive)continue;if(f.pos.y>-.05){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),k=(f.crouch?.03:.18+.25*mv*mv+.08*mv+(f.commit?.14:0)+(f.stagger>0?.1:0)+(f.kickT>=0?.2:0))*(1+.9*(S.storm||0));   // the faster you go the more the deck throws your weight about   // braced and low you ride it; running, swinging or kicking you don't
+      f.vel.z+=az*h;f.vel.x+=ax*h;const pz=clamp((az*.8+wr*14)*k*12,-5,5),px=clamp((ax*.8+wp*10)*k*12,-5,5);f.balV.z+=pz*h;f.balV.x+=px*h;}   // the deck moving under your feet throws your weight off them: you step to catch it
       // losing your footing: the steeper the deck and the faster you're going (or swinging, kicking, spent, lame), the likelier
       // a step lands wrong. Most are a stagger toward the low side; the worse it is, the more often you go down. Crouched you hardly ever do
-      if(f.pos.y>-.05&&f.pos.y<.6&&state==="playing"&&simTime>CD_END){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),sm=S.storm||0,tilt=Math.min(1,Math.abs(S.roll)/.3),legF=Math.max(f.limbF('legL'),f.limbF('legR'));
+      if(f.pos.y>-.05&&f.pos.y<.6&&state==="playing"&&simTime>CD_END){const mv=Math.min(1,Math.hypot(f.vel.x,f.vel.z)/4.3),sm=S.storm||0,tilt=Math.min(1,Math.hypot(S.roll,S.pitch*1.3)/.3),legF=Math.max(f.limbF('legL'),f.limbF('legR'));
         let dg=tilt*(.15+1.2*mv*mv+(f.commit?.45:0)+(f.kickT>=0?.6:0)+(f.stamina<25?.4:0)+.8*legF)*(.4+.9*sm);if(f.crouch)dg*=.1;
-        if(Math.random()<h*.45*dg){const d=V((Math.random()-.5)*.6,0,Math.sign(S.roll)||1).normalize();
-          if(Math.random()<clamp(dg*.45,.12,.75)){f.knockdown(rand(1,1.6),d.clone().multiplyScalar(2+mv*1.5).setY(.3),f.chest.clone());tell(f,'You lose your footing','red');}
+        if(Math.random()<h*.3*dg){const d=V(S.pitch*1.3+(Math.random()-.5)*.1,0,S.roll+(Math.random()-.5)*.1).normalize();
+          if(Math.random()<clamp(dg*.45,.12,.75)){f.knockdown(rand(1,1.6),d.clone().multiplyScalar(.8+mv*.8).setY(.2),f.chest.clone());tell(f,"You lose your footing","red");}
           else{f.shove(d,.8+mv);f.stagger=Math.max(f.stagger,.5);}}}   // the deck tilting under you: you slide and lean toward the low side and have to catch yourself
     if(!shipIn(f.pos.x,f.pos.z)&&f.pos.y<-.5&&!f.splashed){f.splashed=true;splash(f.pos);f.die(f.lastHitBy&&simTime-f.lastHitT<10?f.lastHitBy:null,'went over the side');}}}
 function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.swell-dt*.22);
-  const sm=S.storm||0;S.roll=(.07+.12*sm+.12*S.swell)*Math.sin(S.t*(.55+.12*sm))+(.02+.03*sm)*Math.sin(S.t*1.31);S.pitch=(.03+.04*sm)*Math.sin(S.t*.37+1)+.05*S.swell*Math.sin(S.t*.85);seaMat.uniforms.uAmp.value=.65+1.0*sm+.35*S.swell;   // waves and roll grow together
-  if(S.sea){S.sea.rotation.set(S.pitch,0,-S.roll);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(S.pitch,0,-S.roll);
+  const sm=S.storm||0;[S.roll,S.pitch]=shipMotion(S,S.t);seaMat.uniforms.uAmp.value=.65+1.0*sm+.35*S.swell;   // waves and roll grow together
+  if(S.sea){S.sea.rotation.set(-S.roll,0,S.pitch);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(-S.roll,0,S.pitch);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
 function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
   addGeo('stone',new THREE.CylinderGeometry(1.1,1.15,.9,18,1,true),T(x,.45,z));
@@ -1013,7 +1138,7 @@ function buildWorld(){
   const roads=new THREE.Mesh(mergeGeometries(rg.map(g=>g.index?g.toNonIndexed():g)),roadMat);roads.receiveShadow=true;world.add(roads);
 
   // plaza: the well stands over the cistern
-  SINK.well=well(3.5,-2.5,true);buildSink();
+  well(3.5,-2.5);buildTower(0,-9.5);
   for(let i=0;i<4;i++){const a=Math.PI/4+i*Math.PI/2;brazier(Math.cos(a)*7.2,Math.sin(a)*7.2);}
   const cl=['cloth1','cloth2','cloth3'];
   for(let i=0;i<5;i++){const a=.35+i*1.25;const r=11.5;stall(Math.cos(a)*r,Math.sin(a)*r,-a+Math.PI/2,cl[i%3]);}
@@ -1133,7 +1258,7 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
   const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
-function clearWorld(){PIT=null;SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
+function clearWorld(){PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;SHIP=null;sky.rotation.set(0,0,0);if(typeof DUST!=='undefined')DUST.p.material.uniforms.uCol.value.setRGB(.62,.53,.4);torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -1502,7 +1627,14 @@ function sClang(p,power=1){netEv(['c',r3v(p),power]);if(sfx(power>.55?'clash':'b
 function sHit(p,power=1,sever=false){netEv(['h',r3v(p),power,sever]);if(sfx(sever?'hack':Math.random()<.6?'slash':'pierce',p,.85*clamp(power+.2,.45,1.3),1,0,false)){if(sever)sfx('crush',p,.6,.8,.04,false);return;}if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.7;if(v<.01)return;const t=AC.currentTime;
   noiseBurst(t,.14,'lowpass',900,.8,v);const o=AC.createOscillator();o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(38,t+.16);const g=AC.createGain();g.gain.setValueAtTime(v*.9,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);o.connect(g);g.connect(master);o.start(t);o.stop(t+.2);
   if(sever){noiseBurst(t+.01,.12,'bandpass',1600,2,v*.9);noiseBurst(t+.05,.25,'bandpass',500,1,v*.5);}}
-function sSwing(p,speed,kind){netEv(['w',r3v(p),speed,kind||0]);if(sfx(kind==='axe'?'swingCleaver':kind==='blunt'?'swingHammer':kind==='fist'?'swingPunch':'swingSword',p,.5*clamp((speed-8)/8,.35,1),clamp(.9+speed*.006,.92,1.04),0,false))return;/* a heavy, low whoosh, scaled to how hard the swing is */if(!AC)return;const v=distVol(p)*clamp((speed-4)/10,0,1)*.4;if(v<.01)return;const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=2;f.frequency.setValueAtTime(400,t);f.frequency.exponentialRampToValueAtTime(1500,t+.18);const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(v,t+.06);g.gain.exponentialRampToValueAtTime(.001,t+.3);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+.35);}
+function sSwing(p,speed,kind){netEv(['w',r3v(p),speed,kind||0]);if(!AC)return;
+  // only a really hard swing makes any sound, and it's air, not a sample: a soft, low rush of noise that rises a little and dies away.
+  // Heavier weapons sound deeper and longer, fists barely at all
+  const hard=kind==='fist'?11:17;if(speed<hard)return;const v=distVol(p)*clamp((speed-hard)/10,.15,1)*(kind==='fist'?.05:.11);if(v<.004)return;
+  const deep=kind==='axe'||kind==='blunt'?.7:kind==='fist'?1.3:1,t=AC.currentTime,L=(.22+.1/deep);const s=AC.createBufferSource();s.buffer=noiseBuf;
+  const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=.9;f.frequency.setValueAtTime(220*deep,t);f.frequency.exponentialRampToValueAtTime(520*deep,t+L*.45);f.frequency.exponentialRampToValueAtTime(260*deep,t+L);
+  const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1400;const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+L*.4);g.gain.exponentialRampToValueAtTime(.0001,t+L);
+  s.connect(f);f.connect(lp);lp.connect(g);g.connect(master);s.start(t,Math.random()*2);s.stop(t+L+.05);}
 
 // ================================================================ character rig helpers
 const BONE_CHILD={Hips:'Spine',Spine:'Spine1',Spine1:'Spine2',Spine2:'Neck',Neck:'Head',Head:'HeadTop_End',
@@ -2854,6 +2986,7 @@ class Fighter{
     if(this.fallT!=null&&this.pos.y<-.05&&Math.hypot(this.pos.x-PIT.x,this.pos.z-PIT.z)>PIT.r-.32){this.fallT=null;this.pitFall();return;}   // the lip catches you: over you go
     if(this.fallT!=null){if(!(this.pos.y<-.02||inPit(this.pos.x,this.pos.z,0))){this.fallT=null;}   // caught yourself on the lip
       else if(simTime-this.fallT>.38){this.fallT=null;this.pitFall();return;}}
+    if(TOWER.st==='burning'&&TOWER.burnFor-TOWER.t<10&&!this.isPlayer&&!this.remote){const dx=this.pos.x-TOWER.x,dz=this.pos.z-TOWER.z,d=Math.hypot(dx,dz);if(d<12&&d>1e-3){const k=(12-d)/12*2.2;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     if((SINK.st==='open'||SINK.st==='cracking')&&!this.isPlayer&&!this.remote){const dx=this.pos.x-SINK.x,dz=this.pos.z-SINK.z,d=Math.hypot(dx,dz),m=SINK.r+1.4;if(d<m&&d>1e-3){const k=(m-d)/1.4*(SINK.st==='cracking'?3:1.8);wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     if(PIT&&!this.isPlayer&&!this.remote){const dx=this.pos.x-PIT.x,dz=this.pos.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r+1.3;   // bots keep back from the edge
       if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
@@ -2928,7 +3061,7 @@ class Fighter{
       const guide=this.guideDir(tgt,V());
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else this.sword.step(h,tgt,guide,cm,str);
-      if(ts>(this.commit?11:15)&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55);}if(ts<5)this._sw=false;
+      if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55);}if(ts<5)this._sw=false;
     }
   }
   kickCheck(){
@@ -3001,7 +3134,7 @@ class Fighter{
     arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);
     _v.subVectors(arm.pos,sh);if(_v.length()>reach*1.32){_v.setLength(reach*1.32);arm.pos.copy(sh).add(_v);_v.normalize();const vn=arm.vel.dot(_v);if(vn>0)arm.vel.addScaledVector(_v,-vn);}
     arm.held=held;if(held&&c.y<-.2)this.stoop=true;   // reaching low bends the body down to it
-    const gw=this.isPlayer?!!input.keys.KeyG:this.remote?!!(this.rin&&(this.rin.k&128)):false;arm.open=held&&gw;   // G opens the hand: it grabs instead of punching
+    const gw=this.isPlayer?!!this.grabMode:this.remote?!!(this.rin&&(this.rin.k&128)):false;arm.open=held&&gw;   // G opens the hand: it grabs instead of punching
     if(grabStep(this,arm,held&&gw,h,held))return;
     arm.cd-=h;const sp=arm.vel.length();if(gw)return;
     if(sp>5.5&&!arm.wh){arm.wh=true;sSwing(arm.pos,sp+2,'fist');this.useStamina(2+sp*.4);}if(sp<3)arm.wh=false;
@@ -3817,7 +3950,8 @@ function resolveHit(A,B,cap,t,P,pv){
   A.hitCd.set(B.id,simTime+.3);
   const dir=_rel.clone().normalize();
   const along=Math.abs(dir.dot(s.axis));
-  const isThrust=along>.7&&t>.8&&W.thrust>.5;
+  const shortB=W.len<.45&&W.kind==='blade';   // a knife or a broken bottle: the point leads anywhere along it, and it goes in
+  const isThrust=along>(shortB?.6:.7)&&t>(shortB?.5:.8)&&W.thrust>.5;
   _e.copy(dir).addScaledVector(s.axis,-dir.dot(s.axis));const perp=_e.length();if(perp>1e-4)_e.multiplyScalar(1/perp);
   const align=Math.abs(_e.dot(s.edge));
   let mode;
@@ -3882,7 +4016,7 @@ function resolveHit(A,B,cap,t,P,pv){
     if(B.alive&&!glance&&dmg>4){   // where it landed decides what it does: the wound bleeds, a limb loses its use, a hand goes to the hurt
       if(B.limbs[cap.zone]&&cap.zone!=='head')B.injureLimb(cap.zone,A);
       const art=cap.zone==='neck',stab=mode==='thrust'||mode==='poke';
-      B.addBleed((mode==='cut'?.035:stab?.028:.005)*dmg*(art?3:1),art?30:cap.zone==='torso'?12:8);
+      B.addBleed((mode==='cut'?.035:stab?.028:.005)*dmg*(art?3:1)*(W.len<.45&&W.kind==='blade'?1.5:1),art?30:cap.zone==='torso'?12:8);   // a short blade's cuts are shallow but they open and bleed
       if(cap.zone==='neck'&&dmg>6)B.startClutch('neck',dmg*1.4);
       else if(cap.zone==='torso'&&stab&&dmg>12)B.startClutch(cap.ba==='Hips'?'belly':'chest',dmg);
       else if(cap.zone==='torso'&&dmg>28)B.startClutch(cap.ba==='Hips'?'belly':'chest',dmg*.6);}
@@ -3925,9 +4059,10 @@ function resolveHit(A,B,cap,t,P,pv){
   else if(glance||mode==='flat'||mode==='haft'){reflectTip(s,_v.copy(dir).negate(),.3);s.Tp.lerp(s.T,.5);s.Hv.multiplyScalar(.3);A.stagger=Math.max(A.stagger,.15);}
   else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
-  if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>8||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
+  if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:8)||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
     const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,dmg>25&&cap.zone==='torso'?.46:.22);   // a strong thrust runs the body through
-    if(embed(s,B,cap,t*s.len,E,ax?.8:1.5,{rip:ax?5:4+dmg*.15})){B.stagger=Math.max(B.stagger,.5);if(!ax)B.addBleed(1.1,10);tell(A,ax?'The axe bites deep':'Run through','red');}}
+    if(shortB&&!ax){E.copy(P).addScaledVector(s.axis,Math.min(.2,s.len*.55));}   // a knife goes in to the hilt and sticks: you have to wrench it out
+    if(embed(s,B,cap,t*s.len,E,ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15})){B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax)B.addBleed(shortB?1.4:1.1,10);tell(A,ax?'The axe bites deep':shortB?'Stabbed':'Run through','red');}}
   s.arc=0;
 }
 // ---- contacts from the solver: every hit, clash and bounce below is a real collision between bodies
@@ -4319,6 +4454,7 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyC')player.slideReq=true;
     if(e.code==='Space'){player.crouch=false;player.jumpReq=true;}
     if(e.code==='KeyF')player.kickReq=true;
+    if(e.code==='KeyG'&&!e.repeat&&!player.sword){player.grabMode=!player.grabMode;toast(player.grabMode?'Open hands: grab':'Fists: punch');}   // tap G: open hands to grab, tap again for fists
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
     if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
     if(inYard()){const d=/^Digit([1-7])$/.exec(e.code);if(d){if(NET.mode==='client')NET.yw=+d[1]-1;else yardArm(player,+d[1]-1);}
@@ -4571,7 +4707,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
-  villageStep(h);sinkStep(h);tavernStep(h);shipStep(h);
+  villageStep(h);towerStep(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 // bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
@@ -4599,7 +4735,7 @@ function logic(dt){
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
-  propVisual(dt);grateVisual();villageVisual(dt);sinkVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -5146,7 +5282,7 @@ function netTick(dt){
 setInterval(()=>{if(NET.mode==='client')clientSendInput();},33);
 function clientSendInput(){
   if(NET.host&&NET.host.open&&player&&state!=='attract'){const k=input.keys,p=player;
-    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb?32:0)|(input.rmb?64:0)|(k.KeyG?128:0),
+    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb?32:0)|(input.rmb?64:0)|(p.grabMode?128:0),
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
@@ -5218,7 +5354,7 @@ function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;
     const f=new Fighter(String(r.n).slice(0,24),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?.12:-.12,y:.25,z:.27};}
     fighters.push(f);NET.puppets.set(r.i,f);if(me){NET.myId=r.i;player=f;}}}
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
-function clientFrame(dt){
+function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(a,1/120);rubbleStep(hh);towerStep(hh);a-=hh;}}   /* falling buildings run on friends' screens too */
   simTime+=dt;   // local clock for effects (spurts, clutching) on a friend's screen
   const S=NET.cur;if(!S)return;
   if(S.gr&&PIT&&PIT.grate){const G=PIT.grate;G.C.set(S.gr[0],S.gr[1],S.gr[2]);G.phi=S.gr[3];G.mode=S.gr[4]?'moved':'rest';G.x=G.C.x-PIT.x;G.z=G.C.z-PIT.z;}const P=NET.prev||S;
@@ -5267,7 +5403,7 @@ function clientFrame(dt){
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);grateVisual();villageVisual(dt);sinkVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -5285,7 +5421,7 @@ function clientEvents(ev){
     case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
-    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)SHIP.swell=1;break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false);break;
+    case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)SHIP.swell=1;break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false,e[2]);break;case 'BT':if(e[1]===1)towerIgnite(false);else towerCollapse(e[2],false);break;
     case 'm':if(e[1]===NET.myId)hitMarker(!!e[2]);break;
     case 'u':if(e[1]===NET.myId){hudHurt(e[2]);shake(Math.min(.9,e[2]/40));}break;
     case 'ck':if(e[1]===NET.myId)applyKick(P(e[2]),e[3]);break;
@@ -5331,6 +5467,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={SINK,sinkStage,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
