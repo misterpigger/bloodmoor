@@ -308,7 +308,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=77;
+const BUILD=78;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2473,7 +2473,7 @@ const ARM_PARTS={R:[6,7],L:[4,5]},ARM_IDX=[4,5,6,7];
 // how each weapon is held: two-handed weapons keep the off hand on the haft; one-handed ones leave it free in a guarding fist
 const THROW_T=.2;   // seconds from letting go of Q to the weapon leaving the hand
 // muscle stiffness of the physical body (per mass), how far each bone may be turned off its pose, and which mass a bone's blow lands on
-const BODY_CARRY=.85,BODY_K={Spine1:320,Spine2:240,Neck:190,Head:160,HeadTop_End:160},BODY_MAXA={Spine:.35,Spine1:.45,Spine2:.5,Neck:.6,Head:.7};
+const BODY_CARRY=.72,BODY_K={Spine1:210,Spine2:150,Neck:115,Head:95,HeadTop_End:95},BODY_MAXA={Spine:.45,Spine1:.55,Spine2:.6,Neck:.7,Head:.8};   // softer muscles: blows and the deck move the body visibly, and it comes back
 const BODY_MAP={Hips:'Spine1',Spine:'Spine1',Spine1:'Spine1',Spine2:'Spine2',Neck:'Neck',Head:'Head',HeadTop_End:'HeadTop_End'};
 const _bq=new THREE.Quaternion(),_bq2=new THREE.Quaternion();
 const TWO_HANDED={longsword:1,greatsword:1,axe:1,spear:1,legLimb:1,plank:1},twoH=d=>!!TWO_HANDED[d.id];
@@ -2964,12 +2964,13 @@ class Fighter{
     _wl1.subVectors(D.T.Spine,D.Tp.Spine);_wl2.copy(_wl1).multiplyScalar(1/dt);const bv=D.bv||(D.bv=_wl2.clone());
     for(const n of D.n)D.P[n].addScaledVector(_wl1,BODY_CARRY);bv.copy(_wl2);   // (velocities below are relative to that carried frame)
     D.drop=Math.max(0,D.drop-dt*.9);D.buckle=Math.max(0,D.buckle-dt*1.5);
-    const str=(.7+.3*clamp(this.stamina/100,0,1))*(1-D.drop)*(this.stagger>0?.85:1);D.str=str;
+    const lgw=Math.max(this.limbF('legL'),this.limbF('legR')),str=(.7+.3*clamp(this.stamina/100,0,1))*(.72+.28*clamp(this.hp/100,0,1))*(1-.2*lgw)*(1-D.drop)*(this.stagger>0?.82:1);D.str=str;
+    const dk=SHIP&&this.pos.y>-.1?SHIP:null,dax=dk?(9.8*dk.pitch*.6+(dk.pitchV||0)*6)*3.2:0,daz=dk?(9.8*dk.roll*.6+(dk.rollV||0)*8)*3.2:0;   // the deck moving under you: the weight up top swings
     const K=BODY_K,Z=.4,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;
     for(let si=1;si<=ns;si++){const a=si/ns;
       for(const n of D.n){const P=D.P[n],Vv=D.V[n],k=K[n]*str*str,c=2*Math.sqrt(K[n])*Z;
         _wl1.lerpVectors(D.Tp[n],D.T[n],a);_wl2.subVectors(D.T[n],D.Tp[n]).multiplyScalar(1/dt).addScaledVector(bv,-BODY_CARRY);
-        Vv.x+=(k*(_wl1.x-P.x)+c*(_wl2.x-Vv.x))*h;Vv.y+=(k*(_wl1.y-P.y)+c*(_wl2.y-Vv.y)-9.8*(1-str))*h;Vv.z+=(k*(_wl1.z-P.z)+c*(_wl2.z-Vv.z))*h;P.addScaledVector(Vv,h);}
+        Vv.x+=(k*(_wl1.x-P.x)+c*(_wl2.x-Vv.x)+dax)*h;Vv.y+=(k*(_wl1.y-P.y)+c*(_wl2.y-Vv.y)-9.8*(1-str))*h;Vv.z+=(k*(_wl1.z-P.z)+c*(_wl2.z-Vv.z)+daz)*h;P.addScaledVector(Vv,h);}
       _wl3.lerpVectors(D.Tp.Spine,D.T.Spine,a);let prev=_wl3;   // segments keep their length, from the lower back up
       for(const n of D.n){const P=D.P[n];_wl1.subVectors(P,prev);const d=_wl1.length()||1e-6;_wl2.copy(prev).addScaledVector(_wl1,D.L[n]/d);
         P.copy(_wl2);prev=P;}}
@@ -2981,9 +2982,17 @@ class Fighter{
       let ang=Math.acos(clamp(_wl1.dot(_wl2),-1,1));if(ang<1e-4)continue;const mx=BODY_MAXA[bn];if(ang>mx){_wl2.lerp(_wl1,1-mx/ang).normalize();}
       _bq.setFromUnitVectors(_wl1,_wl2);b.matrixWorld.decompose(_pp,_bq2,_ps);setWorldQuat(b,_bq.multiply(_bq2));}
   }
+  // the off hand when a weapon is held in one: a mass on a spring to its guard spot, carrying the body's motion, so it swings and is flung
+  freeHand(t,dt){const F=this.offH||(this.offH={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||F.p.distanceToSquared(t)>1){F.p.copy(t);F.v.set(0,0,0);F.tp.copy(t);return;}
+    const k=110*(this.pbd?this.pbd.str*this.pbd.str:1),c=2*Math.sqrt(110)*.42,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,F.tp).multiplyScalar(1/Math.max(dt,1e-3));
+    F.p.addScaledVector(_wl1,dt*BODY_CARRY);
+    const dk=SHIP&&this.pos.y>-.1?SHIP:null;
+    for(let i=0;i<ns;i++){F.v.x+=(k*(t.x-F.p.x)+c*(_wl1.x*(1-BODY_CARRY)-F.v.x)+(dk?9.8*dk.pitch:0))*h;F.v.y+=(k*(t.y-F.p.y)+c*(_wl1.y*(1-BODY_CARRY)-F.v.y))*h;F.v.z+=(k*(t.z-F.p.z)+c*(_wl1.z*(1-BODY_CARRY)-F.v.z)+(dk?9.8*dk.roll:0))*h;F.p.addScaledVector(F.v,h);}
+    F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.35)_wl2.setLength(.35);t.add(_wl2);}
   // a blow (or anything) pushing a body part: the struck mass gets the push, its neighbours some of it; drop weakens the muscles
   bodyHit(bone,dir,dv,drop=0){const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
     for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}
+    if(this.offH&&(n==='Spine2'||n==='Spine1'))this.offH.v.addScaledVector(_v,dv*.8);
     D.drop=Math.min(.75,D.drop+drop);}
   cacheBody(){const B=this.bones;B.Spine2.getWorldPosition(this.chest);B.RightArm.getWorldPosition(this.shR);B.LeftArm.getWorldPosition(this.shL);B.Head.getWorldPosition(this.headPos);}
   frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p),pu=Math.max(p,-.3),cu=Math.cos(pu),su=Math.sin(pu);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cu).addScaledVector(_f,-su);}   // looking down lowers the guard but never tips it back behind the body
@@ -3276,7 +3285,7 @@ class Fighter{
   shove(dirWorld,dv){if(!this.alive||this.ragdoll)return;_v.copy(dirWorld).setY(0);const l=_v.length();if(l<1e-6)return;this.balV.addScaledVector(_v,Math.min(dv,5)/l);}
   addFlinch(dirWorld,amt){
     _v.copy(dirWorld).setY(0);if(_v.lengthSq()<1e-6)return;
-    if(this.pb&&!this.ragdoll){_v.normalize();this.physKick(3,_v,amt*4.5);this.physKick(0,_v,amt*5.5);this.physKick(2,_v,amt*2);return;}
+    if(this.pb&&!this.ragdoll){_v.normalize();this.physKick(3,_v,amt*4.5);this.physKick(0,_v,amt*5.5);this.physKick(2,_v,amt*2);}
     this.bodyHit('Spine2',_v.clone(),amt*9,amt*.35);   // the upper body is knocked along the blow; its muscles bring it back
   }
   // ---------------- AI
@@ -3532,7 +3541,7 @@ class Fighter{
     if(this.rec){const R=this.rec;R.t+=dt;const u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);
       if(w<=0||!this.alive)this.rec=null;else{for(const [b,q] of R.q)b.quaternion.slerp(q,w);B.Hips.position.lerp(R.hp,w);}}
     this.root.updateMatrixWorld(true);
-    if(!this.pb&&this.alive)this.bodyStep(dt);
+    if(this.alive&&!this.ragdoll)this.bodyStep(dt);   // always on, in both engines: the body is a weight its muscles hold up
     if(PW){this.updateCaps();this.physTargets(dt,PART_VIS);this.physVisual();this.root.updateMatrixWorld(true);}
     this.cacheBody();
     if(this.sword&&this.mainArm){
@@ -3548,7 +3557,7 @@ class Fighter{
       if(!offLimb.sev&&!offLimb.dead&&clutch){this.clutchAt(_t2);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);_hv.copy(_f).negate();gripHand(B,offS,_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);}   // the free hand goes to the wound
       else if(!offLimb.sev&&!offLimb.dead){const one=s.def.kind!=='fist'&&(!twoH(s.def)||this.throwHold||this.throwT>=0);
         if(one){   // one-handed weapon: the off hand stays up in a loose guarding fist by the chest
-          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);
+          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);
           _hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();gripHand(B,offS,_t2,_hv,_r.clone().multiplyScalar(sgn).add(Y_AXIS).normalize(),_t1,this.armLen,1.3);}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
         else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
@@ -4109,14 +4118,14 @@ function resolveHit(A,B,cap,t,P,pv){
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
     if(cap.zone==='legL'||cap.zone==='legR'){B.crouchAmt=Math.min(1,B.crouchAmt+.55);B.stagger=Math.max(B.stagger,.4);if(B.pbd)B.pbd.buckle=Math.min(1,B.pbd.buckle+.3+dmg*.02);}   // the knee gives
-    if(!phys){
-    const bl=mode==='blunt'?1.5:1,f0=clamp(speed*.045*bl+dmg*.004,.08,.85);   // where it lands decides how the body takes it
-    if(cap.zone==='head'||cap.zone==='neck')B.bodyHit(cap.zone==='head'?'Head':'Neck',dir,Math.min(8,speed*.42*bl),Math.min(.5,speed*.03*bl));   // the head snaps; a moment dazed
+    {
+    const bl=mode==='blunt'?1.5:1,f0=clamp(speed*.06*bl+dmg*.006,.1,1.1);   // where it lands decides how the body takes it
+    if(cap.zone==='head'||cap.zone==='neck')B.bodyHit(cap.zone==='head'?'Head':'Neck',dir,Math.min(11,speed*.6*bl),Math.min(.5,speed*.03*bl));   // the head snaps; a moment dazed
     else if(cap.zone==='torso'){const low=_wl3.subVectors(P,cap.a).dot(_wl1.subVectors(cap.b,cap.a))/Math.max(1e-6,cap.a.distanceToSquared(cap.b))<.45&&cap.ba==='Hips';
       B.bodyHit(low?'Spine1':'Spine2',dir,f0*(low?9:7),f0*(low?.6:.4));if(low)B.bodyHit('Head',_wl2.copy(dir).negate().setY(-.8),f0*3);}   // a gut blow folds the body over it
     else if(cap.zone==='armL'||cap.zone==='armR'){const fa=B.fists&&B.fists[cap.zone==='armL'?'L':'R'];if(!B.sword&&fa&&fa.init)fa.vel.addScaledVector(dir,Math.min(9,speed*.5));B.bodyHit('Spine2',dir,f0*2.5);}   // the arm is flung
     else B.bodyHit('Spine1',dir,f0*3);
-    if(B.sword){B.sword.Hv.addScaledVector(dir,speed*.18);}}
+    if(B.sword&&!phys){B.sword.Hv.addScaledVector(dir,speed*.18);}}
     const heavy=W.weight*speed*(mode==='blunt'?1.5:1);
     if(!B.ragdoll&&(heavy>16&&(cap.zone==='head'||B.stamina<15)&&Math.random()<.6||(cap.zone==='legL'||cap.zone==='legR')&&heavy>13&&Math.random()<.35||W.kind==='fist'&&cap.zone==='head'&&speed>5&&(B.stamina<30||Math.random()<.12))){B.knockdown(rand(1.3,2.3),imp,P);tell(A,'Knocked down','gold');}
     if(!B.isPlayer)B.ai.phase='guard';
