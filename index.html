@@ -328,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=88;
+const BUILD=89;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -3184,14 +3184,16 @@ class Fighter{
     D.lastPos.copy(this.pos);
     // most of the pelvis's travel is carried straight up the body; the rest is felt as sway (the body's own momentum)
     _wl1.subVectors(D.T.Spine,D.Tp.Spine);_wl2.copy(_wl1).multiplyScalar(1/dt);const bv=D.bv||(D.bv=_wl2.clone());
-    for(const n of D.n)D.P[n].addScaledVector(_wl1,BODY_CARRY);bv.copy(_wl2);   // (velocities below are relative to that carried frame)
+    // on the move the neck and back are set: the run's bounce is carried up the body instead of shaking the head loose (a blow still loosens it for a moment)
+    D.rl=Math.max(0,(D.rl||0)-dt*1.6);const mv=clamp(Math.hypot(this.vel.x,this.vel.z)/4,0,1)*(1-D.rl),CARRY=BODY_CARRY+(1-BODY_CARRY)*.95*mv;D.mv=mv;
+    for(const n of D.n)D.P[n].addScaledVector(_wl1,CARRY);bv.copy(_wl2);   // (velocities below are relative to that carried frame)
     D.drop=Math.max(0,D.drop-dt*.9);D.buckle=Math.max(0,D.buckle-dt*1.5);
     const lgw=Math.max(this.limbF('legL'),this.limbF('legR')),str=(.7+.3*clamp(this.stamina/100,0,1))*(.72+.28*clamp(this.hp/100,0,1))*(1-.2*lgw)*(1-D.drop)*(this.stagger>0?.82:1);D.str=str;
     const dk=SHIP&&this.pos.y>-.1?SHIP:null,dax=dk?(9.8*dk.pitch*.6+(dk.pitchV||0)*6)*3.2:0,daz=dk?(9.8*dk.roll*.6+(dk.rollV||0)*8)*3.2:0;   // the deck moving under you: the weight up top swings
     const K=BODY_K,Z=.4,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;
     for(let si=1;si<=ns;si++){const a=si/ns;
-      for(const n of D.n){const P=D.P[n],Vv=D.V[n],k=K[n]*str*str,c=2*Math.sqrt(K[n])*Z;
-        _wl1.lerpVectors(D.Tp[n],D.T[n],a);_wl2.subVectors(D.T[n],D.Tp[n]).multiplyScalar(1/dt).addScaledVector(bv,-BODY_CARRY);
+      for(const n of D.n){const P=D.P[n],Vv=D.V[n],k=K[n]*str*str*(1+3*mv),c=2*Math.sqrt(K[n]*(1+3*mv))*(Z+.45*mv);
+        _wl1.lerpVectors(D.Tp[n],D.T[n],a);_wl2.subVectors(D.T[n],D.Tp[n]).multiplyScalar(1/dt).addScaledVector(bv,-CARRY);
         Vv.x+=(k*(_wl1.x-P.x)+c*(_wl2.x-Vv.x)+dax)*h;Vv.y+=(k*(_wl1.y-P.y)+c*(_wl2.y-Vv.y)-9.8*(1-str))*h;Vv.z+=(k*(_wl1.z-P.z)+c*(_wl2.z-Vv.z)+daz)*h;P.addScaledVector(Vv,h);}
       _wl3.lerpVectors(D.Tp.Spine,D.T.Spine,a);let prev=_wl3;   // segments keep their length, from the lower back up
       for(const n of D.n){const P=D.P[n];_wl1.subVectors(P,prev);const d=_wl1.length()||1e-6;_wl2.copy(prev).addScaledVector(_wl1,D.L[n]/d);
@@ -3248,7 +3250,7 @@ class Fighter{
     F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.35)_wl2.setLength(.35);t.add(_wl2);}
   // a blow (or anything) pushing a body part: the struck mass gets the push, its neighbours some of it; drop weakens the muscles
   bodyHit(bone,dir,dv,drop=0){if(this.ar)this.fbHit(bone==='Spine'||bone==='Hips'?'Spine1':bone,_wl3.copy(dir).normalize(),dv*.8);const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
-    for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}
+    for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}D.rl=Math.min(1,(D.rl||0)+dv*.2);
     if(this.offH&&(n==='Spine2'||n==='Spine1'))this.offH.v.addScaledVector(_v,dv*.8);
     if(this.pel&&(n==='Spine1'||n==='Spine2')){const cy=Math.cos(this.yaw),sy=Math.sin(this.yaw),k=dv*(n==='Spine1'?.35:.2);this.pel.vx+=(-_v.x*cy+_v.z*sy)*k;this.pel.vz+=(_v.x*sy+_v.z*cy)*k;}
     D.drop=Math.min(.75,D.drop+drop);}
@@ -3755,6 +3757,9 @@ class Fighter{
     // the body leans the way its weight has been pushed
     {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
+    // a runner holds the head steady: the run clip's nodding neck is mostly taken out on the move, using the neck and head as they sit standing
+    if(B.Neck&&B.Head){const C=this._calm||(this._calm={Neck:B.Neck.quaternion.clone(),Head:B.Head.quaternion.clone()}),sp=Math.hypot(this.vel.x,this.vel.z),k=clamp((sp-.4)/3,0,1)*.75;
+      for(const n of ['Neck','Head']){if(sp<.4)C[n].slerp(B[n].quaternion,1-Math.exp(-2*dt));else if(k>0)B[n].quaternion.slerp(C[n],k);}}
     // eyes on the opponent: the head (and for bots a little of the neck) turns toward the nearest fighter, as a fighter never looks away from a blade
     if(this.alive&&B.Head&&!(this.isPlayer&&camMode==='fp')){if(!this._lkT||simTime>this._lkT){this._lkT=simTime+.4+Math.random()*.3;let best=null,bd=64;for(const o of fighters){if(o===this||!o.alive)continue;const d=o.pos.distanceToSquared(this.pos);if(d<bd){bd=d;best=o;}}this._lkF=best;}
       let ty=0,tp=0;const o=this._lkF;if(o){const dx=o.pos.x-this.pos.x,dz=o.pos.z-this.pos.z,fx=Math.sin(this.yaw),fz=Math.cos(this.yaw);ty=clamp(Math.atan2(fx*dz-fz*dx,fx*dx+fz*dz),-1.1,1.1);if(Math.abs(ty)>1.05)ty=0;tp=clamp(Math.atan2((o.ragdoll||o.downed?.2:1.55)-1.6,Math.hypot(dx,dz)),-.5,.2);}
