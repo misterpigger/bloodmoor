@@ -328,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=87;
+const BUILD=88;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2334,7 +2334,8 @@ const ARMOR={
   bascinet:{id:'bascinet',slot:'head',name:'Visored bascinet',prot:.55,helm:3,tier:2},
   greathelm:{id:'greathelm',slot:'head',name:'Great helm',prot:.62,helm:2,tier:3},
   mail:{id:'mail',slot:'body',name:'Mail hauberk',prot:.35,tier:1},
-  plate:{id:'plate',slot:'body',name:'Plate cuirass',prot:.58,tier:3},
+  brigandine:{id:'brigandine',slot:'body',name:'Brigandine',prot:.48,tier:2},
+  plate:{id:'plate',slot:'body',name:'Plate harness',prot:.58,tier:3},
   vambraces:{id:'vambraces',slot:'arms',name:'Vambraces',prot:.42,tier:1},
   greaves:{id:'greaves',slot:'legs',name:'Greaves',prot:.42,tier:1},
 };
@@ -2421,6 +2422,15 @@ function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const
 const steelFitMat=steelMat.clone();steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;
 const faulMat=steelDark.clone();{const pre=faulMat.onBeforeCompile;steelDetail(faulMat,'faul');const pre2=faulMat.onBeforeCompile;faulMat.onBeforeCompile=(sh,r)=>{pre2.call(faulMat,sh,r);
   sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat lame=fract(vSP.y/.045);diffuseColor.rgb*=.55+.45*smoothstep(.0,.12,lame)*smoothstep(1.,.9,lame);');};faulMat.customProgramCacheKey=()=>'faul';faulMat.side=THREE.DoubleSide;}   // overlapping lames
+// a brigandine: small steel plates riveted inside a dyed cloth coat, the rows of brass rivet heads showing on the outside
+const brigMat=std({color:0x7a2418,roughness:.86,metalness:0});{const L=new THREE.TextureLoader(),d=L.load('assets/tex/cloth_d.jpg'),n=L.load('assets/tex/cloth_n.jpg');d.colorSpace=THREE.SRGBColorSpace;for(const x of [d,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(6,6);x.anisotropy=MAXANI;}Object.assign(brigMat,{map:d,normalMap:n});
+  brigMat.onBeforeCompile=sh=>{sh.vertexShader='varying vec3 vBP;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBP=position;');
+    sh.fragmentShader='varying vec3 vBP;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+      float rw=vBP.y/.042,ro=mod(floor(rw),2.)*.5;vec2 rc=vec2((vBP.x+(vBP.z>0.?0.:.011))/.038+ro,rw);vec2 rf=fract(rc)-.5;float rv=1.-smoothstep(.1,.16,length(rf*vec2(.038,.042))/.038*1.);
+      float plate=smoothstep(.0,.06,abs(fract(rc.y)-.5)-.44);diffuseColor.rgb*=1.-.25*plate;   // the seams between the plates show through the cloth
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.46,.2),rv);`)
+     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.32,rv);')
+     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.92,rv);');};brigMat.customProgramCacheKey=()=>'brig';brigMat.side=THREE.DoubleSide;}
 const helmSlitMat=steelMat.clone();{steelDetail(helmSlitMat,'slit');const pre=helmSlitMat.onBeforeCompile;helmSlitMat.onBeforeCompile=(sh,r)=>{pre.call(helmSlitMat,sh,r);
   sh.vertexShader=sh.vertexShader.replace('varying vec3 vSP;','varying vec3 vSP;uniform vec3 uEye;varying float vSl;').replace('vSP=position;','vSP=position;vSl=step(abs(position.y-uEye.y),.011)*step(uEye.z-.06,position.z)*step(abs(position.x-uEye.x),.085);');
   sh.fragmentShader=sh.fragmentShader.replace('varying vec3 vSP;','varying vec3 vSP;varying float vSl;').replace('#include <color_fragment>','#include <color_fragment>\nif(vSl>.5)discard;');
@@ -2431,10 +2441,17 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
   switch(def.id){
     case 'plate':return [
       S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.032+.02*Math.max(0,z)/.12*Math.max(0,1-Math.abs(y-(J.Spine2.y-.02))/.25),smooth:60,bodySmooth:30,minK:.8,rim:.007,fallback:'Spine'},steelFitMat,['Spine','Spine1','Spine2']),
-      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.045,smooth:8,rim:.004,fallback:'Hips'},faulMat,['Hips','Spine'])];
+      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.045,smooth:8,rim:.004,fallback:'Hips'},faulMat,['Hips','Spine']),
+      // spaulders: lames over the shoulder and down the top of the upper arm
+      S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
+    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005},brigMat,torso.concat(['LeftShoulder','RightShoulder','LeftUpLeg','RightUpLeg']))];
     case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['LeftHand','RightHand','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.027,smooth:3,rim:.003},mailMat,null)];
-    case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm'])];
-    case 'greaves':return [S('greave',{keep:(v,P,w)=>w(v,['LeftLeg','RightLeg'])>.55&&w(v,['LeftFoot','RightFoot'])<.05&&P.getY(v)>.12,off:.015,smooth:8,rim:.004,fallback:'LeftLeg'},steelFitMat,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg'])];
+    case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
+      S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
+      S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
+    case 'greaves':return [S('greave',{keep:(v,P,w)=>w(v,['LeftLeg','RightLeg'])>.55&&w(v,['LeftFoot','RightFoot'])<.05&&P.getY(v)>.12,off:.015,smooth:8,rim:.004,fallback:'LeftLeg'},steelFitMat,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg']),
+      S('poleyn',{keep:(v,P,w)=>w(v,['LeftLeg','RightLeg'])>.2&&w(v,['LeftUpLeg','RightUpLeg'])>.2&&P.getY(v)<hy-.2,off:.032,smooth:6,rim:.004,fallback:'LeftLeg'},steelFitMat,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg']),   // a cop over the knee
+      S('sabaton',{keep:(v,P,w)=>w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.6&&P.getY(v)>.035,off:.022,smooth:5,rim:.003,fallback:'LeftFoot'},faulMat,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])];   // lames over the foot
   }
   // helmets: a skull shell grown from the head, then shaped per type
   const cx=M.hx,cz=M.hz;
@@ -4078,7 +4095,7 @@ function playerLootCandidate(){
     _t3.subVectors(p,camera.position).normalize();const s=d+(1-_t3.dot(_t1))*2;if(s<bs){bs=s;best=it;}}
   return best;
 }
-const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','mail',9],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
+const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
 function rollLoot(){const tot=LOOT_TABLE.reduce((s,r)=>s+r[2],0);let x=Math.random()*tot;for(const r of LOOT_TABLE){x-=r[2];if(x<=0)return r;}return LOOT_TABLE[0];}
 function spawnMapLoot(n){
   for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2)&&(!SHIP||shipIn(x,z,.6));}
@@ -4688,7 +4705,7 @@ let camMode='tp';
 let state='loading',player=null,score=0,deathT=0,placement=0,multi={n:0,t:-99};
 const input={keys:{},lmb:false,rmb:false,locked:false,mx:.5,my:.5};
 const BOT_WEAPONS=['arming','longsword','axe','mace','spear','arming','longsword'];
-function botLoad(){const armor=[];if(Math.random()<.55)armor.push(pick(['kettle','nasal','kettle','bascinet']));if(Math.random()<.3)armor.push('mail');if(Math.random()<.15)armor.push('vambraces');if(Math.random()<.12)armor.push('greaves');return {weapon:pick(BOT_WEAPONS),armor};}
+function botLoad(){const armor=[];if(Math.random()<.55)armor.push(pick(['kettle','nasal','kettle','bascinet']));if(Math.random()<.3)armor.push(Math.random()<.25?'brigandine':'mail');if(Math.random()<.15)armor.push('vambraces');if(Math.random()<.12)armor.push('greaves');return {weapon:pick(BOT_WEAPONS),armor};}
 function clearMatch(){
   if(mapDirty&&NET.mode!=='client')loadMap(curMap);   // a burned village, a fallen scaffold or bridge, smashed barrels: the next match starts on the map as built
   villageStep.spark=false;
