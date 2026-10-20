@@ -328,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=91;
+const BUILD=92;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -884,7 +884,7 @@ function rubbleStep(h){if(!RUBBLE.length)return;
     const wl=r.w.length();if(wl>1e-5){_rbq.setFromAxisAngle(_rbw.copy(r.w).multiplyScalar(1/wl),wl*h);r.q.premultiply(_rbq).normalize();}
     // the lowest corner against the ground
     let lo=1e9,lc=null;for(let i=0;i<8;i++){_rbc.set(i&1?r.half.x:-r.half.x,i&2?r.half.y:-r.half.y,i&4?r.half.z:-r.half.z).applyQuaternion(r.q);if(_rbc.y<lo){lo=_rbc.y;lc=_rbc.clone();}}
-    const gy=Math.max(groundY(r.pos.x,r.pos.z,r.pos.y+1),heapAt(r.pos.x,r.pos.z)*.6);
+    const hk=HEAP.get(heapKey(r.pos.x,r.pos.z)),gy=hk!=null?Math.max(groundY(r.pos.x,r.pos.z,r.pos.y+1),hk*.6):groundY(r.pos.x,r.pos.z,r.pos.y+1);   // (an empty heap cell used to floor everything at 0, so nothing could fall into a hole)
     if(r.pos.y+lo<gy){r.pos.y=gy-lo;
       _rbv.copy(r.w).cross(lc).add(r.vel);   // speed of that corner
       if(_rbv.y<-.4&&!r.landed){r.landed=true;rubbleLand(r);}
@@ -1094,6 +1094,25 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const [x,z] of [[-W+.3,-1.6],[-W+.3,-9.6],[W-.3,-9],[-10,-D+.3],[-3,-D+.3],[3,-D+.3],[10,-D+.3],[-8,D-.3],[0,D-.3],[8,D-.3]])addFlame(x,z>D-1?gh+1.6:2.6,z,.85,true);
   addFlame(bx,2.9,-5.5,.75,true);addFlame(bx,2.9,2,.75,true);
   for(const cx of [-4,4]){addGeo('beam',new THREE.TorusGeometry(.55,.04,5,16),T(cx,Hc-1.5,-2.5,0,Math.PI/2));addGeo('iron',boxUV(.02,1.4,.02,1),T(cx,Hc-.75,-2.5));addFlame(cx,Hc-1.42,-2.5,.6,true);}
+  // the hall lived in: shelves of crockery along the long walls, hams and bunches of herbs hung from the beams, firewood stacked by
+  // the hearth, sacks and a stack of kegs in the corners, a hanging cloth on each end wall, plates and bowls on the tables, rushes on the floor
+  for(const [z,x0] of [[-D+.18,-4.9],[-D+.18,1.7],[D-.18,-6],[D-.18,3]]){addGeo('beam',boxUV(3.2,.05,.3,1),T(x0+1.6,1.75,z));for(const sx of [.2,3])addGeo('beam',boxUV(.05,.22,.28,1),T(x0+sx,1.62,z));
+    for(let k=0;k<7;k++){const t=k%3;if(t===0)addGeo('winDark',new THREE.CylinderGeometry(.06,.08,.2,8),T(x0+.35+k*.42,1.88,z));else if(t===1)addGeo('woodLight',new THREE.CylinderGeometry(.13,.13,.02,12),T(x0+.35+k*.42,1.92,z-(z>0?-.08:.08),0,Math.PI/2*.85));else addGeo('propWood',new THREE.CylinderGeometry(.09,.06,.08,10),T(x0+.35+k*.42,1.82,z));}}
+  for(let x=-W+1;x<W;x+=2.4){if(Math.abs(x)<2)continue;for(const z of [-6,-3.5,4.5]){const r=(Math.sin(x*12.9+z*7.3)+1)/2;if(r<.45)continue;const hy=Hc-.32;
+    addGeo('iron',boxUV(.01,.45,.01,1),T(x,hy-.22,z));if(r>.75)addGeo('propWood',new THREE.SphereGeometry(.16,8,6).scale(1,1.6,1),T(x,hy-.6,z));else addGeo('leaf2',new THREE.ConeGeometry(.12,.38,6).rotateX(Math.PI),T(x,hy-.6,z));}}
+  for(let i=0;i<6;i++)addGeo('bark',new THREE.CylinderGeometry(.07,.07,.9,6),T(-W+.45+(i%3)*.15,.08+Math.floor(i/3)*.13,hz+2.4,0,Math.PI/2,0));   // firewood by the hearth
+  addBox(-W,-W+.8,hz+2,hz+2.9,.4);
+  for(const [x,z] of [[-W+.6,D-1],[-W+1.1,D-.8],[W-.7,-D+1.6]])addGeo('cloth3',new THREE.SphereGeometry(.32,8,6).scale(1,1.15,.85),T(x,.32,z));   // sacks
+  for(const [x,z,y] of [[W-.55,D-.9,.35],[W-1.25,D-.9,.35],[W-.9,D-.9,.95]]){addGeo('propWood',new THREE.CylinderGeometry(.33,.33,.62,12),T(x,y,z,0,0,Math.PI/2));for(const o of [-.22,.22])addGeo('iron',new THREE.CylinderGeometry(.34,.34,.03,12),T(x+o,y,z,0,0,Math.PI/2));}
+  addBox(W-1.6,W,D-1.3,D,1.3);
+  addGeo('cloth1',wallPlane(2.6,3.2,2.6,3.2),T(W-.05,2.7,-4,-Math.PI/2));addGeo('cloth2',wallPlane(2.6,3.2,2.6,3.2),T(-W+.05,2.9,6,Math.PI/2));
+  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){for(const [ox,oz] of [[-.75,-.2],[.05,.22],[.8,.15]])addGeo('woodLight',new THREE.CylinderGeometry(.12,.1,.025,12),T(tx+ox,.815,tz+oz));
+    addGeo('propWood',new THREE.CylinderGeometry(.1,.06,.07,10),T(tx-.1,.84,tz-.25));}
+  {const c=mkCanvas(128,128),x=c.getContext('2d');let sd=3;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let i=0;i<120;i++){x.strokeStyle=`hsl(${36+r()*10},${22+r()*15}%,${18+r()*16}%)`;x.lineWidth=1.2;x.beginPath();const a=r()*6.28,cx=10+r()*108,cy=10+r()*108,L=14+r()*30;x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*L,cy+Math.sin(a)*L);x.stroke();}
+    const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const m=std({map:t,alphaTest:.4,roughness:1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
+    const g=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);const im=new THREE.InstancedMesh(g,m,260);let sd2=5;const rr=()=>{sd2=(sd2*16807)%2147483647;return (sd2-1)/2147483646;};const M4=new THREE.Matrix4(),q=new THREE.Quaternion();let n=0;
+    for(let i=0;i<900&&n<260;i++){const x=(rr()-.5)*2*(W-.3),z=(rr()-.5)*2*(D-.3);const edge=Math.min(W-Math.abs(x),D-Math.abs(z));if(rr()>clamp(1.1-edge/2,.04,1))continue;const s=.35+rr()*.4;q.setFromAxisAngle(Y_AXIS,rr()*6.3);M4.compose(V(x,.012+rr()*.004,z),q,V(s,1,s));im.setMatrixAt(n++,M4);}
+    im.count=n;im.receiveShadow=true;world.add(im);}   // rushes strewn on the boards, thickest along the walls
   flushBatch();}
 function tavernLoot(){for(const [id,x,y,z] of TAV.spots){const def=WEAPONS[id];if(!def)continue;const s=new Sword(def);const a=Math.random()*6.28,d=V(Math.cos(a),0,Math.sin(a));
   s.reset(V(x-d.x*def.len*.4,y+.04,z-d.z*def.len*.4),d);if(def.kind==='blade')s.edge.set(-d.z,0,d.x);else s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}   // knives lie flat
@@ -1273,7 +1292,7 @@ function onRoad(x,z){
 function buildWorld(){
   // ground
   const gg=new THREE.PlaneGeometry(500,500);gg.rotateX(-Math.PI/2);const uv=gg.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*500/7,uv.getY(i)*500/7);
-  const ground=new THREE.Mesh(gg,holeMat(std({map:TX.ground,roughness:1})));ground.receiveShadow=true;world.add(ground);
+  const ground=new THREE.Mesh(gg,weather(holeMat(std({map:TX.ground,roughness:1})),'ground'));ground.receiveShadow=true;world.add(ground);
   const roadMat=holeMat(std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,roughness:.82,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2}));
   const road=(cx,cz,w,l,rot)=>{const g=wallPlane(w,l,2.2,2.2);g.rotateX(-Math.PI/2);g.rotateY(rot);g.translate(cx,.015,cz);return g;};
   const rg=[road(0,0,7.4,150,0),road(0,0,7.4,150,Math.PI/2),road(0,36,6.4,78,Math.PI/2),road(0,-36,6.4,78,Math.PI/2),road(36,0,6.4,78,0),road(-36,0,6.4,78,0)];
@@ -1308,6 +1327,8 @@ function buildWorld(){
     if(!isFree(x,z,.6))continue;addGeo('wood',boxUV(.14,2.6,.14,1),T(x,1.3,z));addGeo('iron',new THREE.CylinderGeometry(.16,.08,.22,8,1,true),T(x,2.65,z));addFlame(x,2.7,z,1,lightBudget.n++<lightBudget.max+2);addCircle(x,z,.25,2.7);}
   // trees outside the wall
   for(let i=0;i<90;i++){const a=srand()*Math.PI*2,r=MAP+6+srand()*50;tree(Math.cos(a)*r,Math.sin(a)*r,1+srand()*.8);}
+  // stones in the dirt, and weeds and long grass along every wall, fence and doorstep where feet don't wear it away
+  clutter(2200,(x,z)=>isFree(x,z,.25),(x,z)=>!isFree(x,z,.9)?1:(Math.abs(x)<4||Math.abs(z)<4)?0:.12,41);
   flushBatch();
 
   // palisade (instanced logs)
@@ -1516,7 +1537,7 @@ function buildPit(){
     for(const sx of [-1,1])addGeo('wood',boxUV(.2,.2,2*PIT.bw+.3,1),T(PIT.x+sx*(PIT.r+.45),-.1,PIT.z));   // sleepers bedded in the ground at each end
     PIT.planks=[];PIT.p0=PIT.x-L/2+.1;let sd=77;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
     for(let k=0;k<Math.round(L/.19);k++){const m=new THREE.Mesh(boxUV(.17,.05,2*PIT.bw*(.94+r()*.06),1),MATS.woodPale);const x=PIT.p0+k*.19;m.position.set(x,-.025+r()*.008,PIT.z+(r()-.5)*.04);m.rotation.y=(r()-.5)*.03;
-      PIT.planks.push(propAdd('plank',m,x,PIT.z,PIT.bw,0,7+r()*4,null));}}
+      PIT.planks.push(propAdd('plank',m,x,PIT.z,PIT.bw,0,3+r()*2.5,null));}}   // old, dry boards: a couple of good blows splits one
   // the yard walls, with a gate, and the wooden fences inside them
   for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
     addGeo('lime',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
@@ -1558,7 +1579,7 @@ function buildYard(){
     const gx=x-sx*1.35,gz=z-sz*1.35;addGeo('wood',boxUV(2*W-2,.14,1.3,1.5),T(gx,wallH-1.5,gz,ry));
     addGeo('wood',boxUV(2*W-2,.1,.08,1.5),T(gx-sx*.6,wallH-.55,gz-sz*.6,ry));
     for(let k=-W+2;k<=W-2;k+=2.2){const px=ry?gx-sx*.6:k,pz=ry?k:gz-sz*.6;addGeo('wood',boxUV(.12,2.4,.12,1),T(px,wallH-1.5+.2,pz));addGeo('wood',boxUV(.1,.1,1.5,1),T(ry?gx:k,wallH-1.62,ry?k:gz,ry));}
-    addGeo('tile',boxUV(2*W-2,.08,1.9,2),T(gx-sx*.2,wallH+.55,gz-sz*.2,ry,ry?0:sz*.42,ry?-sx*.42:0));}
+    addGeo('tile',boxUV(2*W-2,.08,1.9,2),T(gx-sx*.2,wallH+.55,gz-sz*.2,ry,(ry?sx:sz)*.42,0));}   // (the side walls' roofs used to be tipped about the wrong axis, so they hung off the wall at an angle)
   addBox(-W-1,W+1,W-.8,W+1,wallH);addBox(-W-1,W+1,-W-1,-W+.8,wallH);addBox(W-.8,W+1,-W-1,W+1,wallH);addBox(-W-1,-W+.8,-W-1,W+1,wallH);
   for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
   // the gatehouse in the north wall: an iron-banded door under a little tiled roof
@@ -1748,7 +1769,7 @@ const MUS_ENV={organ:[.25,.35],psaltery:[.16,.45],bell:[.004,.9]};   // [attack,
 const MUS={buf:{},on:true,vol:.34,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{},st:''};
 try{if(localStorage.getItem('bloodmoor-music')==='off')MUS.on=false;}catch(e){}
 const CH={D:[50,53,57],Bb:[46,50,53],C:[48,52,55],G:[43,46,50],A:[45,49,52],F:[41,45,48],Gm:[43,46,50],E:[40,44,47],
-  Am:[45,48,52],GM:[43,47,50],DM:[50,54,57],Eb:[51,55,58],Cm:[48,51,55]};   // (D, G mean D minor and G minor; GM and DM are the major chords)
+  Am:[45,48,52],GM:[43,47,50],Em:[40,43,47],DM:[50,54,57],Eb:[51,55,58],Cm:[48,51,55]};   // (D, G mean D minor and G minor; GM and DM are the major chords)
 // how many slots a melody note lasts: up to the next note (null holds it), at most max
 function melLen(mel,i,max=8){let k=1;while(k<max&&mel[(i+k)%mel.length]==null)k++;return k;}
 // a chord's notes moved into the octave starting at lo, lowest first
@@ -1774,17 +1795,41 @@ const THEMES={
       if(st%2===0){const p=[0,2,1,2,0,2,1,2],n=ch[p[st/2]]+12+(st===8?12:0);mNote('strumstick',n,t,st%4===0?.2:.12,sd*2.2,'strings');}
       if(I>=2&&st%4===2)mNote('pluck',chordUp(ch,69)[(st/4|0)%3],t,.17,sd*4,'strings');
       if(st%2===0){const i=bar*8+st/2,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.23,sd*2*melLen(this.mel,i)*.95,'lead');}}},
-  // The Pit: D Phrygian, slow. An organ drone, a big bell tolling, a heartbeat on the war drum, the bowed psaltery singing over the shaft.
-  pit:{bpm:66,prog:['D','Eb','D','C','D','Eb','Bb','A'],
-    mel:[74,null,null,null, 75,null,null,74, 77,null,75,74, 72,null,null,null, 81,null,null,79, 79,null,77,75, 77,null,74,null, 73,null,null,null],   // a note a beat
-    mix:I=>[1,I>=2?1:0,I>=1?1:.4,I>=3?1:.65],
+  // The Pit (Build 92, rewritten: the old one's high bowed psaltery and tolling bell grated): D minor, a driving low pulse. A harp
+  // ostinato in the bass, war drum and low drum like footsteps closing in, a soft organ drone, and the recorder low and sparse
+  // only when it's close.
+  pit:{bpm:92,prog:['D','D','Bb','A','D','D','Gm','A'],
+    ost:[50,50,53,50,52,50,48,45],
+    mel:[69,null,null,null,70,null,69,null, 67,null,null,null,65,null,64,null, 62,null,null,null,65,null,69,null, 69,null,null,null,73,null,null,null],
+    mix:I=>[.8,1,I>=1?1:.5,I>=2?1:0],
     play(st,t,sd,ch,I,bar){
-      if(st===0||st===8){mNote('organ',ch[0]-12,t,.24,sd*8.4,'pad');mNote('organ',ch[2]-12,t,.12,sd*8.4,'pad');}
-      if(st===0&&(bar%2===0||I>=3))mNote('bell',62,t,.3,sd*12,'pad');
-      if(st===0)mHit('wardrum',t,.7);if(st===3)mHit('wardrum',t,.38);
-      if(I>=3&&(st===8||st===11))mHit('drum-low',t,st===8?.45:.28);
-      if(st%4===0){const p=[0,2,0,1],n=ch[p[st/4]]+12;mNote('harp',n,t,.15,sd*5,'strings');}
-      if(st%4===0){const i=bar*4+st/4,m=this.mel[i%this.mel.length];if(m)mNote('psaltery',m,t,.32,sd*4*melLen(this.mel,i,4)*.95,'lead');}}},
+      if(st===0){mNote('organ',ch[0]-12,t,.14,sd*16,'pad');mNote('organ',ch[2]-12,t,.07,sd*16,'pad');}
+      if(st===0)mHit('wardrum',t,.62);if(st===8)mHit('wardrum',t,.4);if(st===6||st===14)mHit('drum-low',t,.32);
+      if(I>=2&&(st===4||st===12))mHit('darbuka-tek',t,.22);if(I>=3&&st%2===1&&st>8)mHit('darbuka-ka',t,.12);
+      if(st%2===0){const root=ch[0]-50,n=this.ost[st/2]+root;mNote('harp',n,t,st%4===0?.24:.16,sd*1.6,'strings');}   // the bass figure follows the chord
+      if(st%4===0){const i=bar*4+st/4,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.2,sd*4*melLen(this.mel,i,4)*.95,'lead');}}},
+  // Mutiny: a capstan shanty in D dorian, "Drunken Sailor" (traditional, public domain): stamped drum on the beat, a clap on the
+  // off-beat, strummed chords oom-pah, the recorder carrying the tune, a bell for the ship's watch at the turn of each verse.
+  sea:{bpm:112,prog:['D','D','C','C','D','D','C','D'],
+    mel:[69,69,69,69, 69,62,65,69, 67,67,67,67, 67,60,64,67, 69,69,69,69, 69,71,72,74, 72,69,67,64, 62,null,62,null],   // a note a beat
+    mix:I=>[.6,1,1,I>=1?1:.6],
+    play(st,t,sd,ch,I,bar){
+      if(st===0){mNote('organ',ch[0]-12,t,.12,sd*16,'pad');}
+      if(st===0||st===8)mHit('drum-low',t,.7);if(st===4||st===12)mHit('tambourine-hit',t,.2);if(I>=2&&(st===4||st===12))mHit('darbuka-tek',t,.3);
+      if(I>=3&&st===14)mHit('drum-high',t,.3);if(st===0&&bar%8===0)mNote('bell',74,t,.16,sd*10,'pad');
+      if(st%8===0)mNote('strumstick',ch[0],t,.22,sd*3,'strings');   // oom
+      if(st%8===4)chordUp(ch,57).forEach((n,k)=>mNote('strumstick',n,t+k*.012,.13,sd*2.5,'strings'));   // pah
+      if(st%4===0){const i=bar*4+st/4,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.24,sd*4*melLen(this.mel,i,4)*.9,'lead');}}},
+  // The Tavern: a fast reel in G for a brawl. Stomped drum, a backbeat, strummed chords, plucked arpeggios, the recorder's tune in eighths.
+  tavern:{bpm:126,prog:['GM','GM','C','DM','GM','Em','C','GM'],
+    mel:[67,71,74,71,67,71,74,79, 78,76,74,71,72,74,76,74, 72,76,79,76,72,76,79,76, 74,78,81,78,76,74,72,71,
+         67,71,74,71,67,71,74,79, 79,78,76,74,71,74,76,71, 72,74,76,72,74,71,69,66, 67,71,74,null,67,null,null,null],
+    mix:I=>[.5,1,1,1],
+    play(st,t,sd,ch,I,bar){
+      if(st===0||st===8||(I>=2&&st===10))mHit('drum-low',t,st===10?.4:.6);if(st===4||st===12)mHit('drum-high',t,.38);if(st===4||st===12)mHit('tambourine-hit',t,.14);
+      if(st%8===0)mNote('strumstick',ch[0]-12+12,t,.2,sd*3,'strings');if(st%8===4)chordUp(ch,59).forEach((n,k)=>mNote('strumstick',n,t+k*.01,.12,sd*2.5,'strings'));
+      if(I>=2&&st%4===2)mNote('pluck',chordUp(ch,74)[(st/4|0)%3],t,.1,sd*2,'strings');
+      if(st%2===0){const i=bar*8+st/2,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.2,sd*2*melLen(this.mel,i)*.85,'lead');}}},
   // One on one (duels and tournament bouts): G minor, a war drum and a frame drum trading footwork, harp arpeggios, the psaltery when it's close.
   duel:{bpm:96,prog:['Gm','Gm','Eb','DM','Gm','Bb','Cm','DM'],
     mel:[74,null,null,72, 70,null,69,70, 79,null,null,77, 78,null,null,null, 79,null,81,82, 77,null,74,null, 75,null,74,72, 74,null,78,null],
@@ -1827,8 +1872,9 @@ function musicTheme(){
   if(state==='attract'||state==='dead'||state==='won'||state==='loading')return 'menu';
   const m=NET.mode==='client'?NET.mode2:MODE;
   if(m==='yard')return 'drill';
-  if(curMap==='tavern')return 'drill';   // a jig for a tavern brawl
-  if(curMap==='pit'||curMap==='ship')return 'pit';   // the slow tolling one: over the shaft, or a ship's bell in a rising storm
+  if(curMap==='tavern')return 'tavern';   // a reel for a tavern brawl
+  if(curMap==='ship')return 'sea';   // a shanty on the longship
+  if(curMap==='pit')return 'pit';
   if(m==='duel'||m==='tourney')return 'duel';
   if(curMap==='colosseum')return 'arena';
   return 'battle';}
@@ -2852,19 +2898,28 @@ function propBreak(p,dir,by){if(p.broken)return;p.broken=true;mapDirty=true;worl
   if(p.scaf)scafCheck(dir);
   if(p.kind==='plank'&&by)tell(by,'The plank gives way','sm');
   if(p.kind==='plank'&&PIT&&PIT.planks&&!PIT.down){const P=PIT.planks;let run=0,maxRun=0,n=0;for(const q of P){if(q.broken){n++;run++;maxRun=Math.max(maxRun,run);}else run=0;}
-    PIT.integ-=.07;if(maxRun>=6||n>=P.length*.55||PIT.integ<=0)bridgeCollapse(dir);}}
-// the whole bridge gives way, the way Half Sword's grate does: it goes as one piece. The end that has lost its footing drops, it tips
-// over the other rim, slides off and crashes down the shaft, and ends up wedged across it, leaning from the floor against the far
-// wall, boards and all. Whoever was on it goes with it; down there it's something to stand on, not a way out.
+    PIT.integ-=.1;if(maxRun>=4||n>=P.length*.4||PIT.integ<=0)bridgeCollapse(dir);}}
+// weight on the bridge wears it: running, landing and bodies lying on it crack the boards under them (host only), and it creaks as it goes
+function bridgeLoad(h){if(!PIT||PIT.down||!PIT.planks||NET.mode==='client')return;
+  for(const f of fighters){const x=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.x:f.pos.x,z=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.z:f.pos.z;if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r)continue;
+    const sp=Math.hypot(f.vel.x,f.vel.z),load=f.ragdoll?(f.alive?1.1:.8):sp>3?.9:sp>1?.3:.08,arm=Object.values(f.armor||{}).filter(Boolean).length;
+    const k=Math.round((x-PIT.p0)/.19);for(const j of [k-1,k,k+1]){const p=PIT.planks[j];if(!p||p.broken)continue;p.hp-=h*load*(1+.25*arm)*(j===k?1:.4);PIT.integ-=h*load*.004;
+      if(p.hp<1.5&&Math.random()<h*2){sThud(V(p.x,0,p.z),.25);p.jig=.15;}
+      if(p.hp<=0)propBreak(p,null,null);}}}
+// the whole bridge gives way and comes apart, like the bridge in Half Sword's pit: the beams snap where it's weakest and swing down,
+// the boards still on them tear loose and tumble into the shaft one by one, a few landing whole enough to pick up. Every machine
+// runs the same pieces from the same seed (event B).
 function bridgeCollapse(dir){if(!PIT||PIT.down)return;PIT.down=true;mapDirty=true;if(NET.mode==='host')netEv(['B']);
-  sThud(V(PIT.x,0,PIT.z),1.4);sfx('crush',V(PIT.x,0,PIT.z),1,.7,0,false);
-  const g=new THREE.Group();g.position.set(PIT.x,0,PIT.z);world.add(g);
-  for(const m of PIT.beams||[]){world.remove(m);m.position.x-=PIT.x;m.position.z-=PIT.z;g.add(m);}
-  let lb=0,rb=0;for(const q of PIT.planks){if(q.broken){if(q.x<PIT.x)lb++;else rb++;continue;}q.broken=true;world.remove(q.mesh);q.mesh.position.x-=PIT.x;q.mesh.position.z-=PIT.z;g.add(q.mesh);
-    if(q.phys&&PW){try{PW.removeCollider(q.phys,false);}catch(e){}const k=physStatics.indexOf(q.phys);if(k>=0)physStatics.splice(k,1);q.phys=null;}}
-  GR.L=PIT.r*2+1.1;GR.W=PIT.bw*2;
-  const G=grateNew();G.x=0;G.z=0;G.y=0;G.C.set(PIT.x,0,PIT.z);G.mesh=g;G.bridge=true;G.mode='tip';G.piv=lb>rb?1:rb>lb?-1:(Math.random()<.5?1:-1);G.th=0;G.thv=.3;G.e=0;G.slip=0;   // it pivots on the sounder end
-  PIT.grate=G;if(PW&&R)G.col=PW.createCollider(R.ColliderDesc.cuboid(GR.L/2,.05,GR.W/2).setTranslation(G.C.x,G.C.y-.05,G.C.z).setCollisionGroups(GR_WORLD).setFriction(.75).setRestitution(.05));}
+  sThud(V(PIT.x,0,PIT.z),1.4);sfx('crush',V(PIT.x,0,PIT.z),1,.7,0,false);spawnDust(V(PIT.x,0,PIT.z),12,PIT.r,.4);
+  rubSeed=9137;let bx=0,bn=0;for(const q of PIT.planks)if(q.broken){bx+=q.x;bn++;}const cx=bn?bx/bn:PIT.x;   // it snaps where the gap is
+  const L=PIT.r*2+1.1;
+  for(const m of PIT.beams||[]){world.remove(m);const z=m.position.z;for(const sd of [-1,1]){const x0=sd<0?PIT.x-L/2:cx,x1=sd<0?cx:PIT.x+L/2,len=Math.max(.3,x1-x0);
+      const g=boxUV(len,.16,.12,1);const mm=new THREE.Mesh(g,m.material);rubbleAdd({m:mm,pos:V((x0+x1)/2,-.11,z),q:new THREE.Quaternion(),half:V(len/2,.08,.06),
+        vel:V(sd*.3,-.4,(rrand()-.5)*.3),w:V((rrand()-.5)*.6,(rrand()-.5)*.4,sd*(1.4+rrand())),mass:18,cause:'crushed'});}}   // the halves hinge down into the shaft
+  for(const q of PIT.planks){if(q.broken)continue;q.broken=true;if(q.phys&&PW){try{PW.removeCollider(q.phys,false);}catch(e){}const k=physStatics.indexOf(q.phys);if(k>=0)physStatics.splice(k,1);q.phys=null;}
+    const d=Math.abs(q.x-cx);rubbleAdd({m:q.mesh,pos:q.mesh.position.clone(),q:q.mesh.quaternion.clone(),half:V(.085,.025,PIT.bw*.97),
+      vel:V((q.x-cx)*.4+(rrand()-.5)*.6,-.2-rrand()*.8+Math.min(.6,d*.25),(rrand()-.5)*.8),w:V((rrand()-.5)*7,(rrand()-.5)*3,(rrand()-.5)*7),mass:3,loot:rrand()<.25?'plank':null});}
+  if(PIT.grate)PIT.grate=null;}
 function propHitTest(){if(!PROPS.length)return;
   const test=(s,A)=>{if(!s||s.def.kind==='fist')return;const sp=s.tipVel.length();if(sp<4)return;
     for(const p of PROPS){if(p.broken)continue;if((p.x-s.H.x)**2+(p.z-s.H.z)**2>(s.len+p.r+.3)**2)continue;
@@ -5169,7 +5224,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
-  villageStep(h);towerStep(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);
+  villageStep(h);towerStep(h);bridgeLoad(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 // bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
@@ -5454,7 +5509,7 @@ const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
 //  kick, toss   how often they kick and throw their weapon (1 = as any bot)      fav  the swing (an ATTACKS name) they reach for
 // Playing one, you start a battle royale, the gauntlet and the yard with their weapon; duels and the tournament still hand both sides the
 // same kit, and brawl maps (the Tavern) still start everyone bare-handed. Nobody meets a copy of a character a human is playing.
-const CHARS=[
+const CHARS_ALL=[
   {id:'anselm',name:'Brother Anselm',tag:'Penitent monk · bare hands',bio:'Left the cloister and kept his vow never to carry a blade. His fists took no such vow.',
    look:{o:3,h:0,bd:2,hc:4,sk:1,b:3,hd:2,ft:0,mk:0},pal:['#3e2f22','#2a1e14','#2e241a',0],kit:['fists',[]],style:{skill:.6,aggr:1.2,kick:2.2,fav:'thrust'}},
   {id:'gerold',name:'Gerold the Ox',tag:'Woodcutter · greatsword',bio:'Twenty years felling oaks. He swings at men the same way, and he doesn\'t stop to check.',
@@ -5491,6 +5546,9 @@ const CHARS=[
   {id:'pip',name:'Pip the Fool',tag:'Court jester · arming sword',bio:'Juggles, tumbles, and with those ears hears everything you plan to do next.',
    look:{o:3,h:1,bd:2,hc:3,sk:1,b:3,hd:0,ft:1,mk:0,sh:7},pal:['#c0261c','#e0c060','#1a1a1a',1],kit:['arming',[]],voice:1.35,style:{skill:.7,aggr:1.5,react:-.05,kick:3,fav:'fromLeft'}},
 ];
+// the odd-shaped characters (look.sh) are shelved for now: kept here, off the card and out of the cast, back with ?odd
+const ODD_CHARS=/[?&]odd\b/.test(location.search);
+const CHARS=CHARS_ALL.filter(c=>ODD_CHARS||!c.look.sh);
 const CHAR_BY=Object.fromEntries(CHARS.map(c=>[c.id,c]));
 const kitNames=kit=>[WEAPONS[kit[0]].name,...kit[1].map(a=>ARMOR[a].name)];
 const headOnly=kit=>kit[1].filter(a=>ARMOR[a].slot==='head');   // a battle royale starts them with their helmet; the rest is loot
@@ -6009,6 +6067,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
