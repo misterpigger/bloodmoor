@@ -328,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=90;
+const BUILD=91;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -676,16 +676,63 @@ function buildChurch(cx,cz){
   addBox(cx-w/2,cx+w/2,cz-l/2-tw+.4,cz+l/2,h+rh);
   addFlame(cx-1.4,2.4,cz+l/2+.3,1,true);addFlame(cx+1.4,2.4,cz+l/2+.3,1,false);
 }
+// a tree: a tapering trunk forking into boughs, the crown built of clumps of leaf cards (crossed planes cut out by a painted
+// spray of leaves) round a dark inner mass, so it reads as foliage with sky through it instead of a lumpy ball
 function tree(x,z,s=1){
-  addGeo('bark',new THREE.CylinderGeometry(.16*s,.28*s,3.2*s,7),T(x,1.6*s,z));
-  const n=4+((srand()*3)|0);
-  for(let i=0;i<n;i++){const g=new THREE.IcosahedronGeometry(1.4*s*(.7+srand()*.5),1);const p=g.attributes.position;for(let k=0;k<p.count;k++){const f=1+(srand()-.5)*.35;p.setXYZ(k,p.getX(k)*f,p.getY(k)*f,p.getZ(k)*f);}g.computeVertexNormals();
-    addGeo(srand()<.5?'leaf':'leaf2',g,T(x+(srand()-.5)*2.2*s,(3.4+srand()*1.6)*s,z+(srand()-.5)*2.2*s,srand()*6));}
+  const th=3.4*s;addGeo('bark',new THREE.CylinderGeometry(.13*s,.3*s,th,8),T(x,th/2,z));
+  const boughs=3+((srand()*2)|0),tops=[];
+  for(let b=0;b<boughs;b++){const a=b/boughs*6.283+srand(),L=(1.6+srand()*.8)*s,el=.6+srand()*.4,ox=Math.cos(a)*Math.cos(el)*L,oy=Math.sin(el)*L,oz=Math.sin(a)*Math.cos(el)*L;
+    const g=new THREE.CylinderGeometry(.05*s,.11*s,L,6);g.translate(0,L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),V(ox,oy,oz).normalize());
+    addGeo('bark',g,new THREE.Matrix4().compose(V(x,th*.85,z),q,V(1,1,1)));tops.push([x+ox,th*.85+oy,z+oz]);}
+  tops.push([x,th+1.3*s,z]);
+  for(const [cx,cy,cz] of tops){addGeo('leaf',new THREE.IcosahedronGeometry(.9*s,1),T(cx,cy,cz));   // the shaded heart of each clump
+    for(let i=0;i<7;i++){const w=(1.5+srand()*.9)*s,g=new THREE.PlaneGeometry(w,w*.85);g.rotateY(srand()*3.14);g.rotateX((srand()-.5)*1.1);
+      addGeo(srand()<.5?'leafCard':'leafCard2',g,T(cx+(srand()-.5)*1.4*s,cy+(srand()-.5)*1*s,cz+(srand()-.5)*1.4*s));}}
   addCircle(x,z,.35*s,4);
 }
+{const c=mkCanvas(256,256),g=c.getContext('2d');let sd=11;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  for(let i=0;i<420;i++){const x=128+(r()-.5)*230*Math.sqrt(r()),y=128+(r()-.5)*220*Math.sqrt(r()),a=r()*6.28,L=10+r()*12,l=28+r()*26;
+    g.fillStyle=`hsl(${85+r()*35},${35+r()*25}%,${l}%)`;g.save();g.translate(x,y);g.rotate(a);g.beginPath();g.ellipse(0,0,L/2,L/5,0,0,6.283);g.fill();g.restore();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+  MATS.leafCard=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x9fb27a});MATS.leafCard2=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x7f9a62});}
 function barrel(x,z){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*6;const b=new THREE.Mesh(new THREE.CylinderGeometry(.33,.3,.9,14),MATS.propWood);b.position.y=.45;g.add(b);
   for(const y of [.2,.72]){const r=new THREE.Mesh(new THREE.TorusGeometry(.335,.02,4,16),MATS.iron);r.position.y=y;r.rotation.x=Math.PI/2;g.add(r);}propAdd('barrel',g,x,z,.34,.9,30,addCircle(x,z,.36,1));}
 function crate(x,z,s=.8){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*1.5;const b=new THREE.Mesh(boxUV(s,s,s,1),MATS.propWood);b.position.y=s/2;g.add(b);propAdd('crate',g,x,z,s*.55,s,18+s*10,addCircle(x,z,s*.6,1));}
+// ---- yard furniture: things a castle's practice yard would have lying about between the ring and the walls
+function weaponRack(x,z,ry){const c=Math.cos(ry),sn=Math.sin(ry),P=(u,y,v)=>[x+u*c+v*sn,y,z-u*sn+v*c];
+  for(const u of [-1,1]){const [px,,pz]=P(u*.95,0,0);addGeo('wood',boxUV(.09,1.55,.09,1),T(px,.78,pz,ry));const [fx,,fz]=P(u*.95,0,.18);addGeo('wood',boxUV(.07,.07,.5,1),T(fx,.04,fz,ry));}
+  for(const y of [.42,1.28]){const [rx,,rz]=P(0,0,0);addGeo('wood',boxUV(2.05,.07,.07,1),T(rx,y,rz,ry));}
+  for(let i=0;i<5;i++){const u=-.75+i*.37,[sx,,sz]=P(u,0,.17),L=2.1+(i%2)*.15;addGeo('woodLight',new THREE.CylinderGeometry(.017,.02,L,6),T(sx,L/2*.97,sz,ry,-.17));const [hx,,hz]=P(u,0,.17-L*.17);addGeo('iron',new THREE.ConeGeometry(.024,.16,6),T(hx,L*.985+.06,hz,ry,-.17));}
+  for(const u of [-.55,.6]){const [bx,,bz]=P(u,0,-.15);addGeo('iron',boxUV(.04,.82,.006,1),T(bx,.66,bz,ry,.12));addGeo('iron',boxUV(.2,.02,.03,1),T(bx,.24,bz-.0,ry,.12));}
+  const hc=Math.abs(c),hs=Math.abs(sn);addBox(x-1.05*hc-.3*hs,x+1.05*hc+.3*hs,z-1.05*hs-.3*hc,z+1.05*hs+.3*hc,1.6);}
+function pell(x,z){addGeo('wood',new THREE.CylinderGeometry(.11,.13,1.85,9),T(x,.92,z,srand()*6));for(const y of [.95,1.2,1.4])addGeo('beam',new THREE.CylinderGeometry(.118,.118,.05,9),T(x,y,z));   // hacked rings where the blows land
+  addGeo('dirt',new THREE.CylinderGeometry(.3,.38,.06,10),T(x,.02,z));addCircle(x,z,.18,1.9);}
+function archeryButt(x,z,ry){addGeo('thatch',new THREE.CylinderGeometry(.62,.62,.34,18),T(x,.85,z,ry,Math.PI/2-.2));
+  const f=new THREE.CircleGeometry(.6,24);addGeo('target',f,T(x+Math.sin(ry)*.18,.85+.035,z+Math.cos(ry)*.18,ry,-.2));
+  for(const u of [-.45,.45])addGeo('wood',boxUV(.07,1.3,.07,1),T(x+Math.cos(ry)*u-Math.sin(ry)*.25,.6,z-Math.sin(ry)*u-Math.cos(ry)*.25,ry,.25));addCircle(x,z,.6,1.5);}
+function trough(x,z,ry){addGeo('wood',boxUV(1.8,.5,.6,1),T(x,.25,z,ry));addGeo('winDark',new THREE.PlaneGeometry(1.66,.46).rotateX(-Math.PI/2),T(x,.44,z,ry));
+  const hc=Math.abs(Math.cos(ry)),hs=Math.abs(Math.sin(ry));addBox(x-.9*hc-.3*hs,x+.9*hc+.3*hs,z-.9*hs-.3*hc,z+.9*hs+.3*hc,.5);}
+function leanTo(x,z,w,ry){const c=Math.cos(ry),sn=Math.sin(ry),P=(u,v)=>[x+u*c+v*sn,z-u*sn+v*c];   // a shed roof against a wall: v toward the yard
+  for(const u of [-w/2,0,w/2]){const [px,pz]=P(u,1.6);addGeo('wood',boxUV(.14,2.3,.14,1),T(px,1.15,pz,ry));addCircle(px,pz,.12,2.3);}
+  {const [bx,bz]=P(0,1.6);addGeo('wood',boxUV(w+.3,.16,.16,1),T(bx,2.32,bz,ry));}
+  {const [rx,rz]=P(0,.75);addGeo('tile',boxUV(w+.6,.08,2.2,2),T(rx,2.62,rz,ry,-.32));}
+  for(let i=0;i<4;i++){const [kx,kz]=P(-w/2+.4+i*(w-.8)/3,.75);addGeo('wood',boxUV(.1,.1,2,1),T(kx,2.5,kz,ry,-.32));}}
+{const c=mkCanvas(128,128),g=c.getContext('2d');g.fillStyle='#d8c9a2';g.fillRect(0,0,128,128);for(const [r,col] of [[60,'#e8dcc0'],[50,'#2a2420'],[40,'#e8dcc0'],[30,'#7a1c16'],[20,'#e8dcc0'],[10,'#c8a020']]){g.fillStyle=col;g.beginPath();g.arc(64,64,r,0,6.3);g.fill();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;MATS.target=std({map:t,roughness:1,side:THREE.DoubleSide});}
+// ground clutter: loose stones over the whole floor and tufts of grass where feet don't go (along walls and fence lines).
+// Instanced, no collision; ok(x,z) says where clutter may go, near(x,z) gives 0..1 for how close to an edge it is
+const CLUT={};
+function clutter(n,ok,near,seed=5){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  if(!CLUT.rock){const g=new THREE.DodecahedronGeometry(1,0),p=g.attributes.position;for(let i=0;i<p.count;i++){const k=.75+((Math.sin(p.getX(i)*13.1+p.getY(i)*7.7+p.getZ(i)*5.3)+1)*.2);p.setXYZ(i,p.getX(i)*k,p.getY(i)*k*.6,p.getZ(i)*k);}g.computeVertexNormals();CLUT.rock=g;
+    CLUT.rockM=std({map:TX.lime,color:0xb8ad98,roughness:.95});
+    const c=mkCanvas(128,128),x=c.getContext('2d');for(let i=0;i<70;i++){const bx=64+(r()-.5)*90,h=50+r()*70,lean=(r()-.5)*40;x.strokeStyle=`hsl(${55+r()*30},${30+r()*25}%,${26+r()*22}%)`;x.lineWidth=2+r()*2;x.beginPath();x.moveTo(bx,128);x.quadraticCurveTo(bx+lean*.3,128-h*.5,bx+lean,128-h);x.stroke();}
+    const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;CLUT.tuftM=std({map:t,alphaTest:.45,side:THREE.DoubleSide,roughness:1,color:0xb0a070});
+    const a=new THREE.PlaneGeometry(1,1).translate(0,.5,0),b=a.clone().rotateY(Math.PI/2),c2=a.clone().rotateY(Math.PI/4);CLUT.tuft=mergeGeometries([a,b,c2]);}
+  const rocks=new THREE.InstancedMesh(CLUT.rock,CLUT.rockM,n),tufts=new THREE.InstancedMesh(CLUT.tuft,CLUT.tuftM,n);let nr=0,nt=0;const m=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
+  for(let i=0;i<n*6&&(nr<n||nt<n);i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const ne=near(x,z);
+    if(nt<n&&ne>.2&&r()<ne){const s=.22+r()*.3;e.set(0,r()*6.3,0);q.setFromEuler(e);m.compose(V(x,0,z),q,V(s,s*(.7+r()*.6),s));tufts.setMatrixAt(nt++,m);}
+    else if(nr<n&&r()<.6){const s=.025+r()*r()*.11;e.set(r()*.6,r()*6.3,r()*.6);q.setFromEuler(e);m.compose(V(x,s*.2,z),q,V(s,s,s));rocks.setMatrixAt(nr++,m);}}
+  rocks.count=nr;tufts.count=nt;rocks.receiveShadow=tufts.receiveShadow=true;rocks.castShadow=true;world.add(rocks);world.add(tufts);}
 function hay(x,z){addGeo('thatch',new THREE.CylinderGeometry(.6,.6,1.3,14),T(x,.6,z,srand()*6,0,Math.PI/2));addCircle(x,z,.75,1.2);}
 function cart(x,z,r){
   const add=(k,g,m)=>addGeo(k,g,T(x,0,z,r).multiply(m));
@@ -1376,6 +1423,26 @@ MATS.woodLight=std({map:TX.wood,bumpMap:TX.woodb,bumpScale:1.5,color:0xd6b08a,ro
 {const w=paleWoodMaps(512);TX.palewood=tex(w.map);TX.palewoodn=tex(w.normal,false);}
 MATS.woodPale=std({map:TX.palewood,normalMap:TX.palewoodn,roughness:.92});   // weathered fence timber
 MATS.propWood=std({map:TX.palewood,normalMap:TX.palewoodn,color:0xa07c58,roughness:.9});   // barrels and crates: weathered, mid-brown
+// weathering, worked out from world position so it never tiles: walls darken and stain toward the ground and vary in tone over
+// metres; the fighting floor gets broad lighter and darker patches, a trodden, darker middle and dustier edges
+const WN=`float wh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float wn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(wh(i),wh(i+vec2(1,0)),f.x),mix(wh(i+vec2(0,1)),wh(i+vec2(1,1)),f.x),f.y);}
+float wfbm(vec2 p){return wn(p)*.5+wn(p*2.03+7.1)*.3+wn(p*4.1+3.3)*.2;}`;
+function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);
+  sh.vertexShader='varying vec3 vWW;\n'+sh.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWW=(modelMatrix*vec4(transformed,1.)).xyz;');
+  sh.fragmentShader='varying vec3 vWW;\n'+WN+'\n'+sh.fragmentShader.replace('#include <map_fragment>',kind==='ground'?`#include <map_fragment>
+    { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);
+      diffuseColor.rgb*=mix(.74,1.12,big)*mix(.88,1.07,mid);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.8,.72),smoothstep(.55,.8,big)*.5);   // damp, darker brown patches
+      float trod=smoothstep(14.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.14*trod;   // the middle is packed down by feet
+      float scuff=smoothstep(.62,.8,wn(vWW.xz*2.3+vec2(3.,9.)))*smoothstep(16.,4.,r);diffuseColor.rgb*=1.-.08*scuff; }`:`#include <map_fragment>
+    { float h=vWW.y-max(0.,uWBase),tone=wfbm(vec2(vWW.x+vWW.z,vWW.y)*.35);diffuseColor.rgb*=mix(.86,1.08,tone);
+      float st=wn(vec2((vWW.x+vWW.z)*3.1,vWW.y*.4));float base=smoothstep(1.4,0.,h)*(.55+.45*st);
+      diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.62,.58,.5),base*.6);   // damp and splashed dirt at the foot of the wall
+      float streak=smoothstep(.55,.9,wn(vec2((vWW.x+vWW.z)*2.2,vWW.y*.15+3.)))*smoothstep(0.,2.5,h);diffuseColor.rgb*=1.-.12*streak; }`);   // rain streaks
+  sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;};
+  const k0=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>k0+'|w'+kind;return m;}
+for(const k of ['lime','limeDark','stone','stoneLight','plaster0','plaster1','plaster2','woodPale','wood','tile'])if(MATS[k])weather(MATS[k],'wall');
+for(const k of ['gravel','sand'])if(MATS[k])weather(MATS[k],'ground');
 // photo-scanned surfaces (CC0, Poly Haven; see CREDITS.md). They replace the drawn ones as they arrive; if they can't load, the drawn ones stay.
 // Each set is colour, normal and a packed map (red = ambient occlusion, green = roughness). rep = tiles per unit of the geometry's UVs.
 const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
@@ -1420,6 +1487,7 @@ function buildArena(){
     const c=Math.abs(Math.cos(ry)),sn=Math.abs(Math.sin(ry));addBox(x-1.7*c-.3,x+1.7*c+.3,z-1.7*sn-.3,z+1.7*sn+.3,1.1);}
   for(let i=0;i<6;i++){const a=i/6*6.283+rand(0,.8),rr=rand(5,26),x=Math.cos(a)*rr,z=Math.sin(a)*rr;if(!isFree(x,z,1.6))continue;const t=i%3;if(t===0){hay(x,z);hay(x+1.3,z+.4);}else if(t===1){barrel(x,z);barrel(x+.75,z+.2);crate(x-.2,z+.9);}else{addGeo('woodLight',boxUV(2.2,.1,.1,1),T(x,1.5,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x-1,.8,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x+1,.8,z));addBox(x-1.1,x+1.1,z-.2,z+.2,1.6);}}
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=70+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  clutter(500,(x,z)=>Math.hypot(x,z)<Rr-.4,(x,z)=>clamp(1-(Rr-Math.hypot(x,z)-.4)/1.2,0,1),23);
   buildCrowd(r0,wallH,dr,dy,tiers);
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
@@ -1464,6 +1532,8 @@ function buildPit(){
   const F=W-1.6;fence(-F,F,-2.4,F);fence(2.4,F,F,F);fence(-F,-F,F,-F);fence(-F,-F,-F,F);fence(F,-F,F,F);fence(-2.4,F,-2.4,W-.05);fence(2.4,F,2.4,W-.05);
   for(const [x,z] of [[-W+2.7,-W+2.7],[W-2.7,-W+2.7],[-W+2.7,W-2.7],[W-2.7,W-2.7]])brazier(x,z);   // inside the fence, where they can be reached
   barrel(-W+2.4,4);barrel(-W+2.4,4.8);crate(W-2.4,-5);crate(W-2.4,-4.1,.7);hay(-6,-W+2.4);
+  weaponRack(-W+.85,-6,Math.PI/2);weaponRack(W-.85,6,-Math.PI/2);
+  clutter(800,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.5&&Math.hypot(x-PIT.x,z-PIT.z)>PIT.r+.7,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.5)/1.4,0,1),clamp(1-f/.5,0,1)*.7);},17);
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
@@ -1501,6 +1571,10 @@ function buildYard(){
   // odds and ends between fence and wall
   for(const [x,z] of [[-W+2.4,6],[-W+2.4,6.8],[W-2.4,-7],[-6,-W+2.3]])barrel(x,z);crate(W-2.3,5);crate(W-2.3,5.9,.7);hay(5,-W+2.4);hay(6.3,-W+2.2);
   for(const [x,z] of [[-F+1,-F+1],[F-1,-F+1],[-F+1,F-1],[F-1,F-1]])brazier(x,z);
+  // practice gear round the ring: racks of spears and swords, pells hacked by drills, an archery butt, a trough, a shed against the west wall
+  weaponRack(-15.4,-4,Math.PI/2);weaponRack(15.4,2.4,-Math.PI/2);for(const x of [-9,7.5,10])pell(x,15.6);archeryButt(15.2,-9.5,-Math.PI/2);trough(-15.3,-9.5,Math.PI/2);
+  leanTo(-16.9,1.4,4.6,Math.PI/2);crate(-16.3,.5);crate(-16.3,1.35,.7);barrel(-16.4,2.6);
+  clutter(900,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.9,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.9)/1.6,0,1),clamp(1-f/.5,0,1)*.7);});
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
 }
@@ -1563,16 +1637,16 @@ LIGHTS.tavern={fog:0x1a120b,dens:.012,top:0x1a120b,mid:0x1a120b,hor:0x1a120b,glo
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
-  arena:{entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
-  colosseum:{entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
+  colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(i+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
-  pit:{entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
+  pit:{shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
 function applyLighting(k){
   const L=LIGHTS[k];
-  {const r=L.shR||32,m=L.shMap||2048;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.updateProjectionMatrix();   // a tight, fine shadow map where the fighting is
+  {const r=(MAPS[curMap]&&MAPS[curMap].shR)||L.shR||32,m=L.shMap||2048;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.updateProjectionMatrix();   // a tight, fine shadow map where the fighting is
     if(moon.shadow.mapSize.x!==m){moon.shadow.mapSize.set(m,m);if(moon.shadow.map){moon.shadow.map.dispose();moon.shadow.map=null;}}moon.shadow.normalBias=m>2048?.025:.04;}scene.fog.color.setHex(L.fog);scene.fog.density=L.dens;sky.visible=!L.bg;if(L.bg){scene.background=L.bg;scene.backgroundIntensity=.85;}else{if(!scene.background||!scene.background.isColor)scene.background=new THREE.Color();scene.background.setHex(L.fog);}
   const u=sky.material.uniforms;u.top.value.setHex(L.top);u.mid.value.setHex(L.mid);u.hor.value.setHex(L.hor);u.glowCol.value.setHex(L.glow);u.glowDir.value.set(...L.glowDir).normalize();u.stars.value=L.stars;
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
