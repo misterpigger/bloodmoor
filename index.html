@@ -328,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=89;
+const BUILD=90;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1697,7 +1697,7 @@ const THEMES={
       if(st===0||st===8||(I>=3&&st===14))mHit('wardrum',t,st===14?.45:.75);
       if(st===0||st===10)mHit('darbuka-doum',t,.55);if(st===2||st===6||st===12)mHit('darbuka-tek',t,.6);
       if(I>=3&&(st===3||st===11||st===15))mHit('darbuka-ka',t,.45);if(I>=3&&(st===4||st===12))mHit('tambourine-hit',t,.16);
-      if(st%2===0){const p=[0,2,1,2,0,2,1,2],n=ch[p[st/2]]+12+(st===8?12:0);mNote('strumstick',n,t,st%4===0?.26:.17,sd*2.2,'strings');}
+      if(st%2===0){const p=[0,2,1,2,0,2,1,2],n=ch[p[st/2]]+12+(st===8?12:0);mNote('strumstick',n,t,st%4===0?.2:.12,sd*2.2,'strings');}
       if(I>=2&&st%4===2)mNote('pluck',chordUp(ch,69)[(st/4|0)%3],t,.17,sd*4,'strings');
       if(st%2===0){const i=bar*8+st/2,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.23,sd*2*melLen(this.mel,i)*.95,'lead');}}},
   // The Pit: D Phrygian, slow. An organ drone, a big bell tolling, a heartbeat on the war drum, the bowed psaltery singing over the shaft.
@@ -1749,6 +1749,7 @@ const STINGS={
 function sting(name){if(!AC||!MUS.lay.sting)return;const S=STINGS[name],t=AC.currentTime+.08;S.play(t);MUS.next=Math.max(MUS.next,t+S.len);}
 // which theme fits what's happening: the menu (also after a match), or one for the mode and map being fought on
 function musicTheme(){
+  if(window.__musTheme)return window.__musTheme;   // tests
   if(state==='attract'||state==='dead'||state==='won'||state==='loading')return 'menu';
   const m=NET.mode==='client'?NET.mode2:MODE;
   if(m==='yard')return 'drill';
@@ -1757,17 +1758,31 @@ function musicTheme(){
   if(m==='duel'||m==='tourney')return 'duel';
   if(curMap==='colosseum')return 'arena';
   return 'battle';}
+// the music runs through a hall: a synthetic reverb (the dry samples sounded small and plinky), a gentle compressor to glue it,
+// the organ pad's low end thinned so it doesn't turn to mud under the drums, and each layer sent to the hall by its own amount
+function hallIR(sec,pre){const sr=AC.sampleRate,n=Math.floor(sr*(sec+pre)),b=AC.createBuffer(2,n,sr);for(let c=0;c<2;c++){const d=b.getChannelData(c);let lp=0;
+  for(let i=Math.floor(sr*pre);i<n;i++){const t=i/sr-pre,x=(Math.random()*2-1)*Math.pow(1-t/sec,2.2)*Math.exp(-t*2.1);const k=.35+.6*Math.exp(-t*1.5);lp+=(x-lp)*k;d[i]=lp;}}   // darker as it dies away
+  return b;}
+const MUS_SEND={pad:.4,strings:.32,lead:.38,drums:.14,sting:.34};
 function loadMusic(){if(MUS.loading||!AC)return;MUS.loading=true;MUS.gain=AC.createGain();MUS.gain.gain.value=MUS.on?MUS.vol:0;MUS.gain.connect(AC.destination);
-  for(const L of ['drums','strings','lead','pad','sting']){const g=AC.createGain();g.gain.value=L==='sting'?1:0;g.connect(MUS.gain);MUS.lay[L]=g;}
+  const comp=AC.createDynamicsCompressor();comp.threshold.value=-20;comp.knee.value=12;comp.ratio.value=2.5;comp.attack.value=.02;comp.release.value=.3;comp.connect(MUS.gain);
+  const verb=AC.createConvolver();verb.buffer=hallIR(2.4,.018);const vret=AC.createGain();vret.gain.value=.9;verb.connect(vret);vret.connect(comp);
+  const air=AC.createBiquadFilter();air.type='highshelf';air.frequency.value=7000;air.gain.value=-4;air.connect(comp);   // take the fizz off the samples
+  for(const L of ['drums','strings','lead','pad','sting']){const g=AC.createGain();g.gain.value=L==='sting'?1:0;let out=g;
+    if(L==='pad'){const lo=AC.createBiquadFilter();lo.type='lowshelf';lo.frequency.value=180;lo.gain.value=-7;g.connect(lo);out=lo;}
+    out.connect(air);const sd=AC.createGain();sd.gain.value=MUS_SEND[L];out.connect(sd);sd.connect(verb);MUS.lay[L]=g;}
   const get=(name)=>fetch('music/'+name+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{MUS.buf[name]=buf;}).catch(()=>{});
   for(const inst in MUS_INST)for(const k of MUS_INST[inst])get(inst+'-'+k);for(const n of MUS_HITS)get(n);}
 function mNote(inst,note,t,vol,dur,layer){const keys=MUS_INST[inst];let k=keys[0];for(const q of keys)if(Math.abs(q-note)<Math.abs(k-note))k=q;const b=MUS.buf[inst+'-'+k];if(!b)return;
+  if(layer==='lead'&&MUS.theme!=='menu'&&(MUS.bar>>3)%4===3)return;   // every fourth phrase the tune rests and the band carries it, so it doesn't loop in your ear
+  if(layer!=='pad'&&layer!=='sting'){t+=Math.random()*.012;vol*=.86+Math.random()*.24;}   // played, not sequenced: a little late or early, a little harder or softer
   const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain(),env=MUS_ENV[inst]||[.012,.12];
   g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+env[0]);if(dur)g.gain.setTargetAtTime(0,t+dur,env[1]);
   s.connect(g);g.connect(MUS.lay[layer]);s.start(t);s.stop(t+(dur||2)+2);}
 function mHitNow(name,vol){if(!AC||!MUS.buf[name])return;const s=AC.createBufferSource();s.buffer=MUS.buf[name];const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(AC.destination);s.start();}
-function mHit(name,t,vol,layer='drums'){const b=MUS.buf[name];if(!b)return;const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.96+Math.random()*.08;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay[layer]);s.start(t);}
+function mHit(name,t,vol,layer='drums'){const b=MUS.buf[name];if(!b)return;if(layer==='drums'){t+=Math.random()*.008;vol*=.85+Math.random()*.25;}const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.985+Math.random()*.03;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay[layer]);s.start(t);}
 function musicIntensity(){
+  if(window.__musInt!=null)return window.__musInt;   // tests
   if(state==='attract'||state==='loading')return 0;if(state==='dead')return 0;if(state==='won')return 1;
   let i=1;const alive=fighters.filter(f=>f.alive).length;
   if(zone.off)i=2;else{if(zone.state==='shrink'||zone.phase>=2)i=2;if(alive<=4)i=3;}
@@ -1785,7 +1800,8 @@ function musicTick(){
       if(MUS.theme==='menu'){set(L.pad,1);set(L.strings,0);set(L.drums,.5);set(L.lead,.9);}
       else if(T.mix){const m=T.mix(I);set(L.pad,m[0]);set(L.strings,m[1]);set(L.drums,m[2]);set(L.lead,m[3]);}
       else{set(L.pad,1);set(L.strings,I>=1?1:0);set(L.drums,I>=1?1:.0);set(L.lead,I>=3?1:I>=2?.55:0);}}
-    playStep(T,st,t,sd);MUS.step++;if(st===15)MUS.bar++;MUS.next+=sd;}
+    playStep(T,st,t,sd);if(MUS.theme!=='menu'&&MUS.int>=2&&MUS.bar%8===7&&st>=12)mHit(st%2?'darbuka-tek':'drum-high',t,.18+(st-12)*.07);   // a fill into the next phrase
+    MUS.step++;if(st===15)MUS.bar++;MUS.next+=sd;}
 }
 function playStep(T,st,t,sd){
   const chord=CH[T.prog[MUS.bar%T.prog.length]],I=MUS.int,menu=MUS.theme==='menu';
@@ -5919,6 +5935,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
