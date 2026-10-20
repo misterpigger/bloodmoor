@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=97;
+const BUILD=98;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2455,12 +2455,16 @@ function dressMH(model,look,pal,mats){
   const shell=(key,opt,mt,hair)=>{const g=fitShell(body,key,opt);const sm=new THREE.SkinnedMesh(g,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';if(hair)sm.userData.hair=true;body.parent.add(sm);return sm;};
   const dyedCloth=(dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}return mt;};
   const legW=['LeftLeg','RightLeg','LeftFoot','RightFoot'],handW=['LeftHand','RightHand'],headW=['Neck','Head'];
-  if(o===1||o===4)cloth(C.shirt,true,.0035);
-  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.012,smooth:4,rim:.004},dyedCloth(true,.004));   // a knee-length dyed tunic, sleeves to the elbow
-  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.02,smooth:6,rim:.005},lm);}   // a sleeveless leather jerkin over the shirt
+  if(o===1||o===4){const ha=Math.abs(M.J.LeftHand.x),sh=Math.abs(M.J.LeftArm.x);
+    shell('shirt',{keep:(v,P,w)=>w(v,['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftUpLeg','RightUpLeg'])>.5&&w(v,headW)<.25&&w(v,handW)<.2&&P.getY(v)>hy-.14,
+      off:(x,y,z)=>{const ax=Math.abs(x);if(ax>sh-.02){const u=clamp((ax-sh)/(ha-sh),0,1);return .014+.02*Math.sin(Math.PI*Math.min(1,u*1.08))**.7;}   // sleeves: full in the forearm, gathered at the cuff
+        return .016+.016*clamp(1-Math.abs(y-(hy+.05))/.09,0,1);},   // the body: bagging over the belt
+      smooth:12,bodySmooth:2,minK:.95,rim:.003,shape:convexTorso(0,.35,.2,.6)},dyedCloth(true,.006));}
+  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14}},dyedCloth(true,.006));   // a knee-length dyed tunic, sleeves to the elbow
+  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06}},lm).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
-    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['LeftHand','RightHand'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.019,smooth:5,rim:.006});
+    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['LeftHand','RightHand'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07}});
     const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   cloth(o===2||o===3?C.hose:C.braies,true,o===2||o===3?.0012:.003);
@@ -2471,7 +2475,7 @@ function dressMH(model,look,pal,mats){
   // footwear: low leather turnshoes, or boots to below the knee
   const ftw=look.ft|0;
   if(ftw){const bm2=leatherMat.clone();bm2.color.setHex(ftw===2?0x6a4a36:0x7a5840);
-    shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.011:.007,smooth:5,rim:.003,bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
+    shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.013:.01,smooth:14,minK:.95,rim:.003,shape:footShape(.13,M.J.LeftToeBase.z-.03),bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
   if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';body.parent.add(bm);}
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol);
     for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
@@ -2493,7 +2497,7 @@ function tabard(body,her,pal,mats){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ny=
   const bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
   const torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'],mt=tabardMat(her,pal,mats,hy,ny);
   const g=fitShell(body,'tabard',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso)>.55&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.2&&w(v,['Neck','Head'])<.3&&y>hy-.07&&y<ny-.03;},
-    off:.078,smooth:30,bodySmooth:24,minK:.9,rim:.004,shape:convexTorso(0,.4),bones:torso,fallback:'Spine'});
+    off:.08,smooth:30,bodySmooth:24,minK:.9,rim:.004,shape:convexTorso(0,.4,.22,.5,4),bones:torso,fallback:'Spine'});
   const add=geo=>{const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};add(g);
   // the flaps: hang from the hips, weighted toward the thighs at the hem so a step carries them
   const ck='flaps|'+body.name;let fg=FIT_CACHE.get(ck);
@@ -2768,14 +2772,23 @@ function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))re
     for(let g=0;g<G;g++){const mn=(typeof off==='function'?off(gpos[g*3],gpos[g*3+1],gpos[g*3+2]):off)*(o.minK||.75);const dx=tmp[g*3]-sb[g*3],dy=tmp[g*3+1]-sb[g*3+1],dz=tmp[g*3+2]-sb[g*3+2],dn=dx*gn[g*3]+dy*gn[g*3+1]+dz*gn[g*3+2];const push=Math.max(0,mn-dn);
       q[g*3]=tmp[g*3]+gn[g*3]*push;q[g*3+1]=tmp[g*3+1]+gn[g*3+1]*push;q[g*3+2]=tmp[g*3+2]+gn[g*3+2]*push;}}
   if(o.shape)for(let g=0;g<G;g++)o.shape(q,g,gpos);
+  if(o.skirt){const y0=o.skirt.y0,fl=o.skirt.flare||.05,sb=[];let ymin=9;for(let g=0;g<G;g++)if(gpos[g*3+1]<y0)ymin=Math.min(ymin,q[g*3+1]);   // a skirt: below y0 every slice becomes one flared ellipse round both legs
+    const nb=Math.max(1,Math.ceil((y0-ymin)/.02)+1),bin=y=>Math.min(nb-1,Math.max(0,Math.floor((y0-y)/.02)));for(let i=0;i<nb;i++)sb.push({x0:9,x1:-9,z0:9,z1:-9});
+    for(let g=0;g<G;g++){if(gpos[g*3+1]>=y0+.04)continue;const a=sb[bin(Math.min(q[g*3+1],y0))];a.x0=Math.min(a.x0,q[g*3]);a.x1=Math.max(a.x1,q[g*3]);a.z0=Math.min(a.z0,q[g*3+2]);a.z1=Math.max(a.z1,q[g*3+2]);}
+    let rx=0,rz=0,cx=0,cz=0;const R=sb.map((a,i)=>{if(a.x1>a.x0){cx=(a.x0+a.x1)/2;cz=(a.z0+a.z1)/2;rx=Math.max(rx,(a.x1-a.x0)/2);rz=Math.max(rz,(a.z1-a.z0)/2);}return {cx,cz,rx:rx+fl*i*.02,rz:rz+fl*i*.02};});   // never narrower going down, flaring
+    for(let g=0;g<G;g++){const y=gpos[g*3+1];if(y>=y0)continue;const t=clamp((y0-y)/.07,0,1),r=R[bin(q[g*3+1])],dx=(q[g*3]-r.cx)/r.rx,dz=(q[g*3+2]-r.cz)/r.rz,l=Math.hypot(dx,dz)||1;
+      q[g*3]+=(r.cx+dx/l*r.rx-q[g*3])*t;q[g*3+2]+=(r.cz+dz/l*r.rz-q[g*3+2])*t;}}
   if(o.rim)for(let g=0;g<G;g++)if(rim[g])for(let a=0;a<3;a++)q[g*3+a]+=gn[g*3+a]*o.rim;   // a rolled edge
   // the new geometry: kept vertices only, weights limited to the bones the piece rides on
   const used=[...new Set(tris)],map=new Map(used.map((v,i)=>[v,i])),m=used.length;
   const pos=new Float32Array(m*3),uv=new Float32Array(m*2),si=new Uint16Array(m*4),sw=new Float32Array(m*4),gid=new Int32Array(m);
   const allow=o.bones?new Set(o.bones.map(b=>bi[b]).filter(x=>x!=null)):null,fb=bi[o.fallback||'Spine2'];
   used.forEach((v,i)=>{const g=grp[v];gid[i]=g;pos[i*3]=q[g*3];pos[i*3+1]=q[g*3+1];pos[i*3+2]=q[g*3+2];if(UV){uv[i*2]=UV.getX(v);uv[i*2+1]=UV.getY(v);}
-    let s=0;const w=[];for(let k=0;k<4;k++){const b=SI.getComponent(v,k),x=SW.getComponent(v,k);if(x>0&&(!allow||allow.has(b))){w.push([b,x]);s+=x;}}
-    if(!w.length){w.push([fb,1]);s=1;}for(let k=0;k<4;k++){si[i*4+k]=w[k]?w[k][0]:0;sw[i*4+k]=w[k]?w[k][1]/s:0;}});
+    let s=0;let w=[];for(let k=0;k<4;k++){const b=SI.getComponent(v,k),x=SW.getComponent(v,k);if(x>0&&(!allow||allow.has(b))){w.push([b,x]);s+=x;}}
+    if(!w.length){w.push([fb,1]);s=1;}
+    if(o.skirt&&gpos[g*3+1]<o.skirt.y0){const tw=clamp((o.skirt.y0-gpos[g*3+1])/.12,0,1)*(o.skirt.hold||.85),side=gpos[g*3]>0?1:0,m=new Map();   // the hem rides both thighs and the hips, a little more its own side's leg
+      for(const [b,x] of w)m.set(b,(m.get(b)||0)+x/s*(1-tw));for(const [nm,x] of [['Hips',.45],['LeftUpLeg',side?.36:.19],['RightUpLeg',side?.19:.36]])if(bi[nm]!=null)m.set(bi[nm],(m.get(bi[nm])||0)+x*tw);
+      w=[...m].sort((a,b)=>b[1]-a[1]).slice(0,4);s=w.reduce((t,x)=>t+x[1],0);}for(let k=0;k<4;k++){si[i*4+k]=w[k]?w[k][0]:0;sw[i*4+k]=w[k]?w[k][1]/s:0;}});
   const idx=tris.map(v=>map.get(v));
   if(o.extra)o.extra(pos,idx,gid,q);
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
@@ -2808,14 +2821,26 @@ const helmSlitMat=steelMat.clone();{steelDetail(helmSlitMat,'slit');const pre=he
   sh.uniforms.uEye=helmSlitMat.userData.uEye;};helmSlitMat.userData.uEye={value:V(0,1.68,.1)};helmSlitMat.customProgramCacheKey=()=>'slit';helmSlitMat.side=THREE.DoubleSide;}   // the sight slit is cut through
 // a breastplate is one smooth convex dome, not the body underneath: per 2 cm slice the front is replaced by an ellipse spanning the
 // slice's width and its deepest point (smoothed over height), with a low medial ridge; the back keeps its own line, eased a little
-function convexTorso(ridge=0,backK=.3){let S=null;return (q,g)=>{const G=q.length/3;
+// footwear is one smooth upper over the toes: per 2 cm slice along each foot, its top becomes an arch across the slice's width
+function footShape(top=.13,zs=.07){let S=null;return (q,g)=>{const G=q.length/3;
+  if(!S){S=new Map();for(let i=0;i<G;i++){const y=q[i*3+1];if(y>top)continue;const k=(q[i*3]>0?1:-1)*1000+Math.floor(q[i*3+2]/.02);let a=S.get(k);if(!a)S.set(k,a={x0:9,x1:-9,y0:9,y1:-9});
+    a.x0=Math.min(a.x0,q[i*3]);a.x1=Math.max(a.x1,q[i*3]);a.y0=Math.min(a.y0,y);a.y1=Math.max(a.y1,y);}}
+  if(!S.toe){S.toe={};for(const sd of [1,-1]){const b={x0:9,x1:-9,y0:9,y1:-9,z1:-9};for(let i=0;i<G;i++){if(q[i*3+1]>top||Math.sign(q[i*3])!==sd||q[i*3+2]<zs)continue;b.x0=Math.min(b.x0,q[i*3]);b.x1=Math.max(b.x1,q[i*3]);b.y0=Math.min(b.y0,q[i*3+1]);b.y1=Math.max(b.y1,q[i*3+1]);b.z1=Math.max(b.z1,q[i*3+2]);}S.toe[sd]=b;}}
+  {const b=S.toe[Math.sign(q[g*3])||1],z=q[g*3+2];if(b&&b.x1>b.x0&&q[g*3+1]<=top&&z>zs){   // the toe box: the forefoot projected onto one smooth half-ellipsoid
+    const c=V((b.x0+b.x1)/2,b.y0+(b.y1-b.y0)*.4,zs),r=V((b.x1-b.x0)/2+.007,(b.y1-b.y0)*.6+.008,b.z1-zs+.014),d=V((q[g*3]-c.x)/r.x,(q[g*3+1]-c.y)/r.y,(z-c.z)/r.z),l=d.length()||1,t=clamp((z-zs)/.035,0,1);
+    q[g*3]+=(c.x+d.x/l*r.x-q[g*3])*t;q[g*3+1]+=(Math.max(q[g*3+1],c.y+d.y/l*r.y)-q[g*3+1])*t;q[g*3+2]+=(c.z+d.z/l*r.z-z)*t;}}
+  const y=q[g*3+1];if(y>top)return;const a=S.get((q[g*3]>0?1:-1)*1000+Math.floor(q[g*3+2]/.02));if(!a||a.x1<=a.x0)return;const mid=(a.y0+a.y1)/2;if(y<mid)return;
+  const cx=(a.x0+a.x1)/2,dx=Math.min(1,Math.abs(q[g*3]-cx)/((a.x1-a.x0)/2+.002)),yt=mid+(a.y1-mid)*Math.pow(Math.max(0,1-dx*dx),.35);q[g*3+1]=Math.max(y,yt);};}
+function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2){let S=null;return (q,g)=>{const G=q.length/3;
   if(!S){let y0=9,y1=-9;for(let i=0;i<G;i++){y0=Math.min(y0,q[i*3+1]);y1=Math.max(y1,q[i*3+1]);}const nb=Math.max(1,Math.ceil((y1-y0)/.02)),A=Array.from({length:nb},()=>({x0:9,x1:-9,z0:9,z1:-9}));
-    const bin=y=>Math.min(nb-1,Math.max(0,Math.floor((y-y0)/.02)));for(let i=0;i<G;i++){const a=A[bin(q[i*3+1])];a.x0=Math.min(a.x0,q[i*3]);a.x1=Math.max(a.x1,q[i*3]);a.z0=Math.min(a.z0,q[i*3+2]);a.z1=Math.max(a.z1,q[i*3+2]);}
+    const bin=y=>Math.min(nb-1,Math.max(0,Math.floor((y-y0)/.02)));for(let i=0;i<G;i++){if(Math.abs(q[i*3])>lim)continue;const a=A[bin(q[i*3+1])];a.x0=Math.min(a.x0,q[i*3]);a.x1=Math.max(a.x1,q[i*3]);a.z0=Math.min(a.z0,q[i*3+2]);a.z1=Math.max(a.z1,q[i*3+2]);}
     const sm=k=>A.map((_,i)=>{let s=0,c=0;for(let j=Math.max(0,i-3);j<=Math.min(nb-1,i+3);j++)if(A[j].x1>A[j].x0){s+=k(A[j]);c++;}return c?s/c:0;});
-    S={bin,cx:sm(a=>(a.x0+a.x1)/2),rx:sm(a=>(a.x1-a.x0)/2),zf:sm(a=>a.z1),zb:sm(a=>a.z0),zc:sm(a=>(a.z0+a.z1)/2)};}
-  const i=S.bin(q[g*3+1]),x=q[g*3],z=q[g*3+2],cz=S.zc[i],dx=Math.min(1,Math.abs(x-S.cx[i])/(S.rx[i]+.004)),e=Math.sqrt(Math.max(0,1-dx*dx));
-  if(z>cz){const zt=cz+(S.zf[i]-cz)*Math.pow(e,.8)+ridge*Math.max(0,1-Math.abs(x-S.cx[i])/.09)**2;q[g*3+2]=Math.max(zt,cz+(z-cz)*.25);}
-  else{const zt=cz-(cz-S.zb[i])*Math.pow(e,.7);q[g*3+2]=z+(zt-z)*backK;}};}
+    const ext=(k,f)=>A.map((_,i)=>{let m=null;for(let j=Math.max(0,i-2);j<=Math.min(nb-1,i+2);j++)if(A[j].x1>A[j].x0){const v=k(A[j]);m=m==null?v:f(m,v);}return m??0;});   // the deepest point near each slice, not the average (that let a bust poke through)
+    const zf=ext(a=>a.z1,Math.max),zb=ext(a=>a.z0,Math.min),sm2=v=>v.map((_,i)=>{let s=0,c=0;for(let j=Math.max(0,i-2);j<=Math.min(nb-1,i+2);j++){s+=v[j];c++;}return s/c;});
+    S={bin,cx:sm(a=>(a.x0+a.x1)/2),rx:sm(a=>(a.x1-a.x0)/2),zf:sm2(zf).map((v,i)=>Math.max(v,A[i].z1>-9?A[i].z1:v)),zb:sm2(zb).map((v,i)=>Math.min(v,A[i].z0<9?A[i].z0:v)),zc:sm(a=>(a.z0+a.z1)/2)};}
+  if(Math.abs(q[g*3])>lim)return;const i=S.bin(q[g*3+1]),x=q[g*3],z=q[g*3+2],cz=S.zc[i],dx=Math.min(1,Math.abs(x-S.cx[i])/(S.rx[i]+.004)),e=Math.sqrt(Math.max(0,1-dx*dx));
+  if(z>cz){const zt=cz+(S.zf[i]-cz)*Math.pow(Math.max(0,1-Math.pow(dx,sq)),.5)+ridge*Math.max(0,1-Math.abs(x-S.cx[i])/.09)**2;q[g*3+2]=Math.max(zt,z);}   // fill across the hollows, never in
+  else{const zt=cz-(cz-S.zb[i])*Math.pow(e,pw);q[g*3+2]=Math.min(z,z+(zt-z)*backK);}};}
 const FINISHABLE=new Set();
 const plumeMat=std({color:0xffffff,roughness:.85,side:THREE.DoubleSide});
 for(const m of [steelMat,steelDark,mailMat,steelFitMat,faulMat,helmSlitMat])FINISHABLE.add(m);
@@ -2824,12 +2849,12 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
   const S=(key,o,mat,bones)=>[fitShell(body,key,Object.assign({bones},o)),mat];
   switch(def.id){
     case 'plate':return [
-      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:.034,smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4),fallback:'Spine'},steelFitMat,['Spine','Spine1','Spine2']),
-      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.045,smooth:8,rim:.004,fallback:'Hips'},faulMat,['Hips','Spine']),
+      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4,.22,.5,6),fallback:'Spine'},steelFitMat,['Spine','Spine1','Spine2']),
+      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3)},brigMat,torso.concat(['LeftShoulder','RightShoulder','LeftUpLeg','RightUpLeg']))];
-    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['LeftHand','RightHand','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.027,smooth:3,rim:.003},mailMat,null)];
+    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06}},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['LeftHand','RightHand','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1}},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
       S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
@@ -3583,14 +3608,14 @@ class Fighter{
   // ---------------- armor
   equip(def){
     const old=this.unequip(def.slot);const groups=[];
-    const fit=fitArmor(this,def);if(fit){this.armor[def.slot]={def,groups:fit,fit:true};if(def.slot==='head'){this.helmet=def.helm;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}return old;}
+    const fit=fitArmor(this,def);if(fit){this.armor[def.slot]={def,groups:fit,fit:true};if(def.slot==='body')this.model.traverse(o=>{if(o.userData.underBody)o.visible=false;});if(def.slot==='head'){this.helmet=def.helm;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}return old;}
     for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();const ft=(this.model.userData.mh&&ARMOR_FIT_MH[bn])||ARMOR_FIT[bn]||1;if(Array.isArray(ft))att.scale.set(100*ft[0],100*ft[1],100*ft[2]);else att.scale.setScalar(100*ft);const of=(this.model.userData.mh?ARMOR_OFF_MH:ARMOR_OFF)[bn];if(of)att.position.set(...of);att.add(g);this.bones[bn].add(att);groups.push(att);}
     this.armor[def.slot]={def,groups};
     if(def.id==='mail')this.setMail(1);
     if(def.slot==='head'){this.helmet=def.helm;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}
     return old;
   }
-  unequip(slot){const a=this.armor[slot];if(!a)return null;for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head'){this.helmet=-1;this.model.traverse(o=>{if(o.userData.hair)o.visible=true;});}return a.def;}
+  unequip(slot){const a=this.armor[slot];if(!a)return null;if(slot==='body')this.model.traverse(o=>{if(o.userData.underBody)o.visible=true;});for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head'){this.helmet=-1;this.model.traverse(o=>{if(o.userData.hair)o.visible=true;});}return a.def;}
   setMail(v){for(const m of this.mats)if(!m.userData.noMail)m.userData.U.uBodyMail.value=v;}
   prot(zone){
     const a=this.armor,p=s=>a[s]?a[s].def.prot:0,mail=a.body&&a.body.def.id==='mail';
@@ -5871,7 +5896,7 @@ function buildPreview(){
 function dressPreview(){if(!prev.scene)return;const ry=prev.model?prev.model.rotation.y:0;if(prev.model)prev.scene.remove(prev.model);prev.mats=[];
   const me=ME();prev.model=SkeletonUtils.clone(GLTF.scene);dressModel(prev.model,me.look,me.pal,prev.mats);prev.model.rotation.y=ry;prev.scene.add(prev.model);
   const kitA=me.kit?me.kit[1]:[[],['mail','nasal','vambraces'],['plate','greathelm','vambraces','greaves']][prev.show|0];
-  for(const a of kitA){const def=ARMOR[a];fitArmor({model:prev.model,look:me.look,pal:me.pal},def);   // a character is shown in their armour; your own fighter in what Show picks
+  for(const a of kitA){const def=ARMOR[a];fitArmor({model:prev.model,look:me.look,pal:me.pal},def);if(def.slot==='body')prev.model.traverse(o=>{if(o.userData.underBody)o.visible=false;});   // a character is shown in their armour; your own fighter in what Show picks
     if(def.slot==='head')prev.model.traverse(o=>{if(o.userData.hair)o.visible=false;});if(a==='mail')for(const m of prev.mats)if(m.userData.U.uBodyMail&&!m.userData.noMail)m.userData.U.uBodyMail.value=1;}
   {const wd=WEAPONS[me.kit&&WEAPONS[me.kit[0]]&&me.kit[0]!=='fists'?me.kit[0]:'longsword'],w={mesh:wd.make(me.look.ws|0)};if(w.mesh.parent)w.mesh.parent.remove(w.mesh);weaponFinish(w,me.look);   // the weapon, point down, leaning by the right leg
    w.mesh.rotation.set(0,0,Math.PI-.12);w.mesh.position.set(-.34,wd.len*.97,.12);w.mesh.traverse(o=>{o.castShadow=false;});prev.model.add(w.mesh);}
