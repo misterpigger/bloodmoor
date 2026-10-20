@@ -1,0 +1,22 @@
+name: fetch-models
+on:
+  push:
+    branches: [fetch-models]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/fetch_polyhaven_models.py /tmp/models
+        env:
+          IDS: rock_07 rock_09 rock_moss_set_01 rock_moss_set_02 root_cluster_01 shrub_01 shrub_02 shrub_03 shrub_04 stone_01 stone_fire_pit tree_small_02 tree_stump_01 tree_stump_02 pine_tree_01 pine_sapling_medium treasure_chest wine_barrel_01 wine_bottles_01 wooden_barrels_01 wooden_bowl_01 wooden_bucket_01 wooden_bucket_02 wooden_candlestick wooden_crate_01 wooden_crate_02 wooden_lantern_01 wooden_stool_01 wooden_stool_02 wooden_table_02 round_wooden_table_01 wicker_basket_01 sand_rocks_small_01 spinning_wheel_01 wooden_axe ornate_medieval_mace ornate_war_hammer ornate_medieval_dagger ship_pinnace weed_plant_02 nettle_plant wooden_ladder sledgehammer_01 rusted_spade_01
+      - name: Commit the models to the models-raw2 branch
+        run: |
+          cd /tmp/models
+          git init -q -b models-raw2
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "Poly Haven CC0 models (1k glTF), fetched by workflow"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" models-raw2

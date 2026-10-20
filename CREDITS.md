@@ -95,3 +95,39 @@ Gear materials (since Build 58), released under **CC0 1.0**, fetched by `tools/f
 - [three.js](https://threejs.org) (MIT)
 - [Rapier](https://rapier.rs) physics, `@dimforge/rapier3d-compat` (Apache-2.0), only loaded for the Rigid body engine
 - [PeerJS](https://peerjs.com) (MIT) for browser-to-browser multiplayer
+
+## 3D models
+
+Scanned and modelled props and scenery from [Poly Haven](https://polyhaven.com), released under **CC0 1.0**. They were downloaded by `tools/fetch_polyhaven_models.py` (run on GitHub's servers by `.github/workflows/fetch-models.yml`) and optimised with glTF-Transform (WebP textures at 512 or 1024 px, meshopt geometry, simplified where heavy) into `assets/models/*.glb`.
+
+- Wooden Table 01: [WoodenTable_01](https://polyhaven.com/a/WoodenTable_01)
+- Dead Tree Trunk: [dead_tree_trunk](https://polyhaven.com/a/dead_tree_trunk)
+- Dutch Ship Large 01: [dutch_ship_large_01](https://polyhaven.com/a/dutch_ship_large_01)
+- Kite Shield: [kite_shield](https://polyhaven.com/a/kite_shield)
+- Large Castle Door: [large_castle_door](https://polyhaven.com/a/large_castle_door)
+- Modular Fort 01: [modular_fort_01](https://polyhaven.com/a/modular_fort_01)
+- Nettle Plant: [nettle_plant](https://polyhaven.com/a/nettle_plant)
+- Rock 07: [rock_07](https://polyhaven.com/a/rock_07)
+- Rock 09: [rock_09](https://polyhaven.com/a/rock_09)
+- Rock Moss Set 01: [rock_moss_set_01](https://polyhaven.com/a/rock_moss_set_01)
+- Rock Moss Set 02: [rock_moss_set_02](https://polyhaven.com/a/rock_moss_set_02)
+- Shrub 02: [shrub_02](https://polyhaven.com/a/shrub_02)
+- Shrub 03: [shrub_03](https://polyhaven.com/a/shrub_03)
+- Shrub 04: [shrub_04](https://polyhaven.com/a/shrub_04)
+- Spinning Wheel 01: [spinning_wheel_01](https://polyhaven.com/a/spinning_wheel_01)
+- Stone Fire Pit: [stone_fire_pit](https://polyhaven.com/a/stone_fire_pit)
+- Treasure Chest: [treasure_chest](https://polyhaven.com/a/treasure_chest)
+- Tree Stump 01: [tree_stump_01](https://polyhaven.com/a/tree_stump_01)
+- Tree Stump 02: [tree_stump_02](https://polyhaven.com/a/tree_stump_02)
+- Weed Plant 02: [weed_plant_02](https://polyhaven.com/a/weed_plant_02)
+- Wicker Basket 01: [wicker_basket_01](https://polyhaven.com/a/wicker_basket_01)
+- Wine Barrel 01: [wine_barrel_01](https://polyhaven.com/a/wine_barrel_01)
+- Wine Bottles 01: [wine_bottles_01](https://polyhaven.com/a/wine_bottles_01)
+- Wooden Bowl 01: [wooden_bowl_01](https://polyhaven.com/a/wooden_bowl_01)
+- Wooden Bucket 01: [wooden_bucket_01](https://polyhaven.com/a/wooden_bucket_01)
+- Wooden Bucket 02: [wooden_bucket_02](https://polyhaven.com/a/wooden_bucket_02)
+- Wooden Crate 01: [wooden_crate_01](https://polyhaven.com/a/wooden_crate_01)
+- Wooden Crate 02: [wooden_crate_02](https://polyhaven.com/a/wooden_crate_02)
+- Wooden Ladder: [wooden_ladder](https://polyhaven.com/a/wooden_ladder)
+- Wooden Lantern 01: [wooden_lantern_01](https://polyhaven.com/a/wooden_lantern_01)
+- Wooden Stool 02: [wooden_stool_02](https://polyhaven.com/a/wooden_stool_02)

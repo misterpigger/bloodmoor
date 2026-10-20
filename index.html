@@ -308,6 +308,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -328,7 +329,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=92;
+const BUILD=93;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -696,8 +697,12 @@ function tree(x,z,s=1){
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
   MATS.leafCard=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x9fb27a});MATS.leafCard2=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x7f9a62});}
 function barrel(x,z){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*6;const b=new THREE.Mesh(new THREE.CylinderGeometry(.33,.3,.9,14),MATS.propWood);b.position.y=.45;g.add(b);
-  for(const y of [.2,.72]){const r=new THREE.Mesh(new THREE.TorusGeometry(.335,.02,4,16),MATS.iron);r.position.y=y;r.rotation.x=Math.PI/2;g.add(r);}propAdd('barrel',g,x,z,.34,.9,30,addCircle(x,z,.36,1));}
-function crate(x,z,s=.8){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*1.5;const b=new THREE.Mesh(boxUV(s,s,s,1),MATS.propWood);b.position.y=s/2;g.add(b);propAdd('crate',g,x,z,s*.55,s,18+s*10,addCircle(x,z,s*.6,1));}
+  for(const y of [.2,.72]){const r=new THREE.Mesh(new THREE.TorusGeometry(.335,.02,4,16),MATS.iron);r.position.y=y;r.rotation.x=Math.PI/2;g.add(r);}
+  const old=[...g.children];placeModel('wine_barrel_01',{parent:g,fit:[.68,.92,.68],onload:()=>old.forEach(o=>o.visible=false)});   // the real barrel replaces the drawn one when it loads
+  propAdd('barrel',g,x,z,.34,.9,30,addCircle(x,z,.36,1));}
+function crate(x,z,s=.8){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*1.5;const b=new THREE.Mesh(boxUV(s,s,s,1),MATS.propWood);b.position.y=s/2;g.add(b);
+  placeModel(srand()<.5?'wooden_crate_01':'wooden_crate_02',{parent:g,fit:[s*1.15,s*.8,s*.8],onload:()=>b.visible=false});
+  propAdd('crate',g,x,z,s*.55,s,18+s*10,addCircle(x,z,s*.6,1));}
 // ---- yard furniture: things a castle's practice yard would have lying about between the ring and the walls
 function weaponRack(x,z,ry){const c=Math.cos(ry),sn=Math.sin(ry),P=(u,y,v)=>[x+u*c+v*sn,y,z-u*sn+v*c];
   for(const u of [-1,1]){const [px,,pz]=P(u*.95,0,0);addGeo('wood',boxUV(.09,1.55,.09,1),T(px,.78,pz,ry));const [fx,,fz]=P(u*.95,0,.18);addGeo('wood',boxUV(.07,.07,.5,1),T(fx,.04,fz,ry));}
@@ -733,6 +738,28 @@ function clutter(n,ok,near,seed=5){let sd=seed;const r=()=>{sd=(sd*16807)%214748
     if(nt<n&&ne>.2&&r()<ne){const s=.22+r()*.3;e.set(0,r()*6.3,0);q.setFromEuler(e);m.compose(V(x,0,z),q,V(s,s*(.7+r()*.6),s));tufts.setMatrixAt(nt++,m);}
     else if(nr<n&&r()<.6){const s=.025+r()*r()*.11;e.set(r()*.6,r()*6.3,r()*.6);q.setFromEuler(e);m.compose(V(x,s*.2,z),q,V(s,s,s));rocks.setMatrixAt(nr++,m);}}
   rocks.count=nr;tufts.count=nt;rocks.receiveShadow=tufts.receiveShadow=true;rocks.castShadow=true;world.add(rocks);world.add(tufts);}
+// ---- real 3D models (CC0, Poly Haven, see CREDITS.md): photo-scanned props and scenery in assets/models, optimised to GLB with
+// WebP textures and meshopt geometry. placeModel puts a group in the world straight away and fills it when the model arrives;
+// opts: x,y,z, ry, s (uniform scale), h (scale to this height), fit [w,h,d] (stretch the bounding box to these), node (one piece of
+// a kit), ground (sit its base on y, default true), parent. If a model can't load, fallback(group) builds the old shape instead.
+const MDL={},MDL_LOADER=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+function mdl(id){return MDL[id]||(MDL[id]=MDL_LOADER.loadAsync('assets/models/'+id+'.glb').then(g=>{g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;
+  const m=o.material;if(m&&m.map)m.map.anisotropy=MAXANI;}});return g.scene;}));}
+function placeModel(id,o={},fallback=null){const g=new THREE.Group();g.position.set(o.x||0,o.y||0,o.z||0);g.rotation.y=o.ry||0;(o.parent||world).add(g);const key=mapKey;
+  mdl(id).then(sc=>{if(key!==mapKey&&!o.parent)return;let src=sc;if(o.node){src=null;sc.traverse(n=>{if(!src&&n.name===o.node)src=n;});if(!src)return;}
+    const c=src.clone(true);c.position.set(0,0,0);c.rotation.set(0,0,0);c.scale.set(1,1,1);c.updateMatrixWorld(true);
+    const bb=new THREE.Box3().setFromObject(c),sz=bb.getSize(V()),ct=bb.getCenter(V());const sc3=V(1,1,1);
+    if(o.fit)sc3.set(o.fit[0]/sz.x,o.fit[1]/sz.y,o.fit[2]/sz.z);else if(o.h)sc3.setScalar(o.h/sz.y);else if(o.s)sc3.setScalar(o.s);
+    const w=new THREE.Group();w.add(c);c.position.set(-ct.x,o.ground===false?-ct.y:-bb.min.y,-ct.z);w.scale.copy(sc3);if(o.rx)w.rotation.x=o.rx;if(o.rz)w.rotation.z=o.rz;g.add(w);
+    if(o.onload)o.onload(g);}).catch(()=>{if(fallback)fallback(g);});
+  return g;}
+// a run of castle wall from the scanned fort kit: n pieces of one kit wall laid end to end, centred on (x,z), running along x when
+// alongX, each stretched to fit; fallback(g) draws the old wall if the kit can't load
+function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;for(let i=0;i<n;i++){const o=-len/2+seg*(i+.5);
+    placeModel('modular_fort_01',{node:'modular_fort_01_'+node,x:alongX?x+o:x,z:alongX?z:z+o,ry:alongX?Math.PI/2:0,fit:[thick,H,seg+.02]},i===0?fallback:null);}}
+// a few models scattered round: picks from a list, random turn and size, kept where ok(x,z) allows
+function scatterModels(list,n,ok,seed,smin=.8,smax=1.3){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
+  for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;placeModel(list[(r()*list.length)|0],{x,z,ry:r()*6.28,s:smin+r()*(smax-smin)});k++;}}
 function hay(x,z){addGeo('thatch',new THREE.CylinderGeometry(.6,.6,1.3,14),T(x,.6,z,srand()*6,0,Math.PI/2));addCircle(x,z,.75,1.2);}
 function cart(x,z,r){
   const add=(k,g,m)=>addGeo(k,g,T(x,0,z,r).multiply(m));
@@ -1061,9 +1088,9 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   barrel(W-.6,6.2);barrel(W-.6,7);barrel(W-1.4,7.3);barrel(W-.7,-9.6);barrel(W-1.5,-9.9);barrel(-W+.6,-9.6);
   for(const z of [-7,-5.4,-3.6,-2,0,1.8,3.6])TAV.spots.push([z<-6?'knife':z>3?'cleaver':z===-2?'bottle':z===0||z===-5.4?'knife':'mug',bx,1.17,z]);
   // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both. Open floor in the middle
-  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){addGeo('wood',boxUV(2.2,.08,.95,1),T(tx,.76,tz));for(const sx of [-.95,.95])for(const sz of [-.35,.35])addGeo('wood',boxUV(.09,.72,.09,1),T(tx+sx,.36,tz+sz));
+  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){placeModel('WoodenTable_01',{x:tx,z:tz,fit:[2.2,.8,.95]},g=>{const add=(geo,x,y,z)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.2,.08,.95,1),0,.76,0);for(const sx of [-.95,.95])for(const sz of [-.35,.35])add(boxUV(.09,.72,.09,1),sx,.36,sz);});
     addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);FLOORS.push({x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8});
-    for(const sz of [-.85,.85]){addGeo('wood',boxUV(2.1,.07,.32,1),T(tx,.41,tz+sz));for(const sx of [-.85,.85])addGeo('wood',boxUV(.07,.42,.24,1),T(tx+sx,.21,tz+sz));FLOORS.push({x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44});}
+    for(const sz of [-.85,.85]){placeModel('wooden_stool_02',{x:tx,z:tz+sz,fit:[2.1,.45,.34]},g=>{const add=(geo,x,y)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,0);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.1,.07,.32,1),0,.41);for(const sx of [-.85,.85])add(boxUV(.07,.42,.24,1),sx,.21);});FLOORS.push({x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44});}
     addFlame(tx+.3,.8,tz,.24,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
   // the gallery along the north wall, 2.6 m up, reached by a stair against the west wall, with a rail along its edge
   const gh=2.6,gz0=D-2.6;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
@@ -1105,9 +1132,13 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const [x,z] of [[-W+.6,D-1],[-W+1.1,D-.8],[W-.7,-D+1.6]])addGeo('cloth3',new THREE.SphereGeometry(.32,8,6).scale(1,1.15,.85),T(x,.32,z));   // sacks
   for(const [x,z,y] of [[W-.55,D-.9,.35],[W-1.25,D-.9,.35],[W-.9,D-.9,.95]]){addGeo('propWood',new THREE.CylinderGeometry(.33,.33,.62,12),T(x,y,z,0,0,Math.PI/2));for(const o of [-.22,.22])addGeo('iron',new THREE.CylinderGeometry(.34,.34,.03,12),T(x+o,y,z,0,0,Math.PI/2));}
   addBox(W-1.6,W,D-1.3,D,1.3);
-  addGeo('cloth1',wallPlane(2.6,3.2,2.6,3.2),T(W-.05,2.7,-4,-Math.PI/2));addGeo('cloth2',wallPlane(2.6,3.2,2.6,3.2),T(-W+.05,2.9,6,Math.PI/2));
+  for(const [x,z,ry] of [[W-.08,-4,-Math.PI/2],[W-.08,-2.6,-Math.PI/2],[-W+.08,6,Math.PI/2],[-W+.08,7.4,Math.PI/2]])placeModel('kite_shield',{x,y:2.6,z,ry,h:1.05,ground:false});   // shields hung on the end walls
   for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){for(const [ox,oz] of [[-.75,-.2],[.05,.22],[.8,.15]])addGeo('woodLight',new THREE.CylinderGeometry(.12,.1,.025,12),T(tx+ox,.815,tz+oz));
-    addGeo('propWood',new THREE.CylinderGeometry(.1,.06,.07,10),T(tx-.1,.84,tz-.25));}
+    placeModel('wooden_bowl_01',{x:tx-.1,y:.8,z:tz-.25,h:.07,ry:tx});if((tx*7|0)%2)placeModel('wooden_lantern_01',{x:tx+.9,y:.8,z:tz-.2,h:.32,ry:tz});}
+  // real pieces round the room: a spinning wheel by the hearth, a chest, baskets and buckets in the corners, bottles along the bar
+  placeModel('spinning_wheel_01',{x:-W+1.6,z:hz+3.6,h:1.05,ry:.6});placeModel('treasure_chest',{x:-W+.6,z:D-2.6,h:.55,ry:Math.PI/2});addBox(-W,-W+1.1,D-3.1,D-2.1,.6);
+  for(const [id,x,z,h] of [['wicker_basket_01',W-2.4,D-.6,.32],['wooden_bucket_01',W-.5,-D+2.2,.42],['wooden_bucket_02',-W+.7,-D+.8,.38],['wicker_basket_01',-5,D-.5,.3]])placeModel(id,{x,z,h,ry:x*3});
+  for(let i=0;i<5;i++)placeModel('wine_bottles_01',{x:W-1.8+(i%2?.05:-.05),y:1.13,z:-6+i*2.6,h:.32,ry:i});
   {const c=mkCanvas(128,128),x=c.getContext('2d');let sd=3;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let i=0;i<120;i++){x.strokeStyle=`hsl(${36+r()*10},${22+r()*15}%,${18+r()*16}%)`;x.lineWidth=1.2;x.beginPath();const a=r()*6.28,cx=10+r()*108,cy=10+r()*108,L=14+r()*30;x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*L,cy+Math.sin(a)*L);x.stroke();}
     const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const m=std({map:t,alphaTest:.4,roughness:1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
     const g=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);const im=new THREE.InstancedMesh(g,m,260);let sd2=5;const rr=()=>{sd2=(sd2*16807)%2147483647;return (sd2-1)/2147483646;};const M4=new THREE.Matrix4(),q=new THREE.Quaternion();let n=0;
@@ -1180,7 +1211,8 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
    const m=new THREE.Mesh(g,hullMat);m.castShadow=m.receiveShadow=true;world.add(m);}
   // the deck
   {const sh=new THREE.Shape();const N=40;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SL+2*SL*i/N;sh.lineTo(x,-shipHalfW(x));}
-   const g=new THREE.ShapeGeometry(sh);g.rotateX(Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/1.6,uv.getY(i)/1.6);const m=new THREE.Mesh(g,MATS.woodLight);m.position.y=.004;m.receiveShadow=true;world.add(m);}
+   const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/1.6,uv.getY(i)/1.6);const dm=MATS.woodLight.clone();dm.side=THREE.DoubleSide;dm.color.setHex(0xb89a78);const m=new THREE.Mesh(g,dm);   // (it was turned face-down, so from above you saw through it to the hull)
+  m.position.y=.004;m.receiveShadow=true;world.add(m);}
   // gunwale rail: low, so a body driven into it can go over the top
   for(const sd of [1,-1])for(let x=-SL+.45;x<=SL-.45;x+=.24){const z=sd*(shipHalfW(x)-.1);if(Math.abs(z)<.15)continue;addCircle(x,z,.14,.55);}
   for(const sx of [1,-1])for(let z=-.6;z<=.6;z+=.3)addCircle(sx*(SL-.35),z,.15,.55);
@@ -1211,7 +1243,7 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   addGeo('beam',boxUV(1.6,.32,.7,1),T(0,.16,0));addBox(-.8,.8,-.35,.35,.32);FLOORS.push({x0:-.8,x1:.8,z0:-.35,z1:.35,h:.34});
   // the crew's sea chests along both sides: something to stand on, and to trip over when the deck heaves
   for(const sd of [1,-1])for(let x=-SL+4.5;x<=SL-4.5;x+=2.7){if(Math.abs(x)<1.4)continue;const z=sd*(shipHalfW(x)-.62),xx=x+(sd>0?0:1.35);if(Math.random()<.2)continue;
-    addGeo('wood',boxUV(.62,.4,.44,1),T(xx,.2,z));addGeo('iron',boxUV(.64,.03,.46,1),T(xx,.33,z));addGeo('beam',boxUV(.66,.05,.48,1),T(xx,.42,z));
+    placeModel('treasure_chest',{x:xx,z,ry:Math.PI/2,fit:[.44,.44,.66]},g=>{for(const [geo,mat,y] of [[boxUV(.62,.4,.44,1),MATS.wood,.2],[boxUV(.64,.03,.46,1),MATS.iron,.33],[boxUV(.66,.05,.48,1),MATS.beam,.42]]){const m=new THREE.Mesh(geo,mat);m.rotation.y=-Math.PI/2;m.position.y=y;g.add(m);}});
     addBox(xx-.31,xx+.31,z-.22,z+.22,.4);FLOORS.push({x0:xx-.31,x1:xx+.31,z0:z-.22,z1:z+.22,h:.45});}
   // stores lashed round the mast, coils of rope
   barrel(2,1.3);barrel(2.5,-1.2);barrel(-2.2,1.5);barrel(-9,-1.8);
@@ -1224,7 +1256,8 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   addGeo('beam',new THREE.ConeGeometry(.15,.55,5),T(SL+.35,3.95,0,0,0,Math.PI/2+.35));for(const sz of [-.12,.12])addGeo('glassLit',new THREE.SphereGeometry(.04,6,5),T(SL+.12,4.32,sz));
   // the sea
   {const sea=new THREE.Group();sea.position.y=-1.7;const g=new THREE.PlaneGeometry(240,240,240,240);g.rotateX(-Math.PI/2);{const P=g.attributes.position,I=g.index.array,keep=[];for(let i=0;i<I.length;i+=3){let cx=0,cz=0;for(let k=0;k<3;k++){cx+=P.getX(I[i+k]);cz+=P.getZ(I[i+k]);}if(Math.hypot(cx/3,cz/3)<119.5)keep.push(I[i],I[i+1],I[i+2]);}g.setIndex(keep);}   /* a disc, so it meets the outer ring without overlapping */const m=new THREE.Mesh(g,seaMat);m.frustumCulled=false;sea.add(m);   // fine near the ship, where you see the waves' shape
-   const r=new THREE.RingGeometry(119,600,240,24);r.rotateX(-Math.PI/2);const m2=new THREE.Mesh(r,seaMat);m2.frustumCulled=false;sea.add(m2);world.add(sea);SHIP.sea=sea;}
+   const r=new THREE.RingGeometry(119,600,240,24);r.rotateX(-Math.PI/2);const m2=new THREE.Mesh(r,seaMat);m2.frustumCulled=false;sea.add(m2);world.add(sea);SHIP.sea=sea;
+    for(const [x,z,ry,h] of [[160,-95,2.2,32],[-250,170,-.6,30]])placeModel('dutch_ship_large_01',{parent:sea,x,y:-4.5,z,ry,h});}   // other ships on the horizon, riding the same sea
   DUST.p.material.uniforms.uCol.value.setRGB(.82,.86,.9);   // spray, not sand
   flushBatch();}
 // the ship's attitude from the water under it: heave from the mean, pitch from bow against stern, roll from one side against the
@@ -1328,7 +1361,9 @@ function buildWorld(){
   // trees outside the wall
   for(let i=0;i<90;i++){const a=srand()*Math.PI*2,r=MAP+6+srand()*50;tree(Math.cos(a)*r,Math.sin(a)*r,1+srand()*.8);}
   // stones in the dirt, and weeds and long grass along every wall, fence and doorstep where feet don't wear it away
-  clutter(2200,(x,z)=>isFree(x,z,.25),(x,z)=>!isFree(x,z,.9)?1:(Math.abs(x)<4||Math.abs(z)<4)?0:.12,41);
+  scatterModels(['wooden_bucket_01','wooden_bucket_02','wicker_basket_01','tree_stump_01','tree_stump_02','rock_moss_set_01','rock_07','shrub_02','shrub_03','shrub_04','nettle_plant','weed_plant_02','wooden_crate_02'],120,(x,z)=>isFree(x,z,.8)&&!isFree(x,z,1.8)&&Math.abs(x)>4&&Math.abs(z)>4,29,.7,1.1);
+  placeModel('stone_fire_pit',{x:9,z:9,h:.3});
+  clutter(1600,(x,z)=>isFree(x,z,.25),()=>0,41);
   flushBatch();
 
   // palisade (instanced logs)
@@ -1508,6 +1543,7 @@ function buildArena(){
     const c=Math.abs(Math.cos(ry)),sn=Math.abs(Math.sin(ry));addBox(x-1.7*c-.3,x+1.7*c+.3,z-1.7*sn-.3,z+1.7*sn+.3,1.1);}
   for(let i=0;i<6;i++){const a=i/6*6.283+rand(0,.8),rr=rand(5,26),x=Math.cos(a)*rr,z=Math.sin(a)*rr;if(!isFree(x,z,1.6))continue;const t=i%3;if(t===0){hay(x,z);hay(x+1.3,z+.4);}else if(t===1){barrel(x,z);barrel(x+.75,z+.2);crate(x-.2,z+.9);}else{addGeo('woodLight',boxUV(2.2,.1,.1,1),T(x,1.5,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x-1,.8,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x+1,.8,z));addBox(x-1.1,x+1.1,z-.2,z+.2,1.6);}}
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=70+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  scatterModels(['rock_07','rock_09','rock_moss_set_02','weed_plant_02'],14,(x,z)=>{const r=Math.hypot(x,z);return r>Rr-2.2&&r<Rr-.8&&isFree(x,z,.8);},53,.5,.9);
   clutter(500,(x,z)=>Math.hypot(x,z)<Rr-.4,(x,z)=>clamp(1-(Rr-Math.hypot(x,z)-.4)/1.2,0,1),23);
   buildCrowd(r0,wallH,dr,dy,tiers);
   addMountains(0x8d99ae,0xa9b4c6);
@@ -1540,10 +1576,9 @@ function buildPit(){
       PIT.planks.push(propAdd('plank',m,x,PIT.z,PIT.bw,0,3+r()*2.5,null));}}   // old, dry boards: a couple of good blows splits one
   // the yard walls, with a gate, and the wooden fences inside them
   for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
-    addGeo('lime',boxUV(len,wallH,.8,2.5),T(x,wallH/2,z,ry));
-    for(let k=-7;k<=7;k++){const o=k*len/15.5;addGeo('lime',boxUV(.9,.6,.95,1),T(x+(ry?0:o),wallH+.3,z+(ry?o:0),ry));}}
+    kitWall('wall_thin_straight_01',x,z,!ry,len,wallH+.6,1.1,4,g=>{const m=new THREE.Mesh(boxUV(len,wallH,.8,2.5),MATS.lime);m.rotation.y=ry;m.position.y=wallH/2;g.add(m);});}   // scanned castle wall
   addBox(-W-1,W+1,W,W+1.2,wallH);addBox(-W-1,W+1,-W-1.2,-W,wallH);addBox(W,W+1.2,-W-1,W+1,wallH);addBox(-W-1.2,-W,-W-1,W+1,wallH);
-  addGeo('wood',boxUV(3.2,3.3,.25,1.5),T(0,1.65,W-.05));for(const y of [.8,2.5])addGeo('iron',boxUV(3.3,.12,.32,1),T(0,y,W-.05));
+  placeModel('large_castle_door',{x:0,z:W-.05,ry:Math.PI,fit:[3.2,3.3,.3]},g=>{const m=new THREE.Mesh(boxUV(3.2,3.3,0.25,1.5),MATS.wood);m.position.y=1.65;g.add(m);for(const y of [.8,2.5]){const b=new THREE.Mesh(boxUV(3.3000000000000003,.12,0.31,1),MATS.iron);b.position.y=y;g.add(b);}});
   const fence=(x0,z0,x1,z1)=>{const L=Math.hypot(x1-x0,z1-z0),ry=-Math.atan2(z1-z0,x1-x0),n=Math.max(1,Math.round(L/2.2));
     for(let k=0;k<=n;k++){const t=k/n;addGeo('woodPale',boxUV(.14,1.25,.14,1),T(x0+(x1-x0)*t,.62,z0+(z1-z0)*t));}
     for(const y of [.45,1.05])addGeo('woodPale',boxUV(L,.1,.07,1.5),T((x0+x1)/2,y,(z0+z1)/2,ry));
@@ -1554,6 +1589,10 @@ function buildPit(){
   for(const [x,z] of [[-W+2.7,-W+2.7],[W-2.7,-W+2.7],[-W+2.7,W-2.7],[W-2.7,W-2.7]])brazier(x,z);   // inside the fence, where they can be reached
   barrel(-W+2.4,4);barrel(-W+2.4,4.8);crate(W-2.4,-5);crate(W-2.4,-4.1,.7);hay(-6,-W+2.4);
   weaponRack(-W+.85,-6,Math.PI/2);weaponRack(W-.85,6,-Math.PI/2);
+  scatterModels(['rock_moss_set_01','rock_moss_set_02','rock_07','rock_09','shrub_03','shrub_04','weed_plant_02','nettle_plant'],18,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z));return e>.5&&e<1.5&&Math.abs(x)>3;},91,.5,.9);
+  for(const [x,z] of [[-W+.6,-11],[W-.6,11]])placeModel('kite_shield',{x,y:2.2,z,ry:x<0?Math.PI/2:-Math.PI/2,h:1.1,ground:false});
+  for(let i=0;i<10;i++){const a=i/10*6.283+.2,r=24+(i%3)*6;placeModel(i%2?'tree_stump_01':'tree_stump_02',{x:Math.cos(a)*r,z:Math.sin(a)*r,s:.9+(i%3)*.2,ry:a});}
+  placeModel('dead_tree_trunk',{x:-22,z:9,ry:.7,s:1.2});
   clutter(800,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.5&&Math.hypot(x-PIT.x,z-PIT.z)>PIT.r+.7,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.5)/1.4,0,1),clamp(1-f/.5,0,1)*.7);},17);
   for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
   addMountains(0x8d99ae,0xa9b4c6);
@@ -1574,16 +1613,16 @@ function buildYard(){
   {const gg=new THREE.PlaneGeometry(170,170);gg.rotateX(-Math.PI/2);scaleUV(gg,170/6.5,170/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
   // high limestone curtain walls with a crenellated top and a timber gallery along the inside, square towers at the corners
   for(const [x,z,ry,sx,sz] of [[0,W,0,0,1],[0,-W,0,0,-1],[W,0,Math.PI/2,1,0],[-W,0,Math.PI/2,-1,0]]){
-    addGeo('lime',boxUV(2*W+2,wallH,1.6,6),T(x,wallH/2,z,ry));
-    for(let k=-W+1;k<=W-1;k+=1.6){const px=ry?x+sx*.55:k,pz=ry?k:z+sz*.55;addGeo('lime',boxUV(.85,1,.5,1.5),T(px,wallH+.5,pz,ry));}
+    kitWall('wall_thick_straight_01',x,z,!ry,2*W+2,wallH+.8,1.9,3,g=>{const m=new THREE.Mesh(boxUV(2*W+2,wallH,1.6,6),MATS.lime);m.rotation.y=ry;m.position.set(-x+x,wallH/2,0);g.add(m);});   // scanned castle wall (the old flat lime box is the fallback)
     const gx=x-sx*1.35,gz=z-sz*1.35;addGeo('wood',boxUV(2*W-2,.14,1.3,1.5),T(gx,wallH-1.5,gz,ry));
     addGeo('wood',boxUV(2*W-2,.1,.08,1.5),T(gx-sx*.6,wallH-.55,gz-sz*.6,ry));
     for(let k=-W+2;k<=W-2;k+=2.2){const px=ry?gx-sx*.6:k,pz=ry?k:gz-sz*.6;addGeo('wood',boxUV(.12,2.4,.12,1),T(px,wallH-1.5+.2,pz));addGeo('wood',boxUV(.1,.1,1.5,1),T(ry?gx:k,wallH-1.62,ry?k:gz,ry));}
     addGeo('tile',boxUV(2*W-2,.08,1.9,2),T(gx-sx*.2,wallH+.55,gz-sz*.2,ry,(ry?sx:sz)*.42,0));}   // (the side walls' roofs used to be tipped about the wrong axis, so they hung off the wall at an angle)
   addBox(-W-1,W+1,W-.8,W+1,wallH);addBox(-W-1,W+1,-W-1,-W+.8,wallH);addBox(W-.8,W+1,-W-1,W+1,wallH);addBox(-W-1,-W+.8,-W-1,W+1,wallH);
-  for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
+  for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]])placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x,z,fit:[5.6,wallH+4,5.6]});
+  if(false)for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
   // the gatehouse in the north wall: an iron-banded door under a little tiled roof
-  addGeo('wood',boxUV(3.6,4.2,.3,1.5),T(0,2.1,W-.95));for(const y of [.9,2.1,3.3])addGeo('iron',boxUV(3.7,.14,.36,1),T(0,y,W-.95));
+  placeModel('large_castle_door',{x:0,z:W-.95,ry:Math.PI,fit:[3.6,4.2,.35]},g=>{const m=new THREE.Mesh(boxUV(3.6,4.2,0.3,1.5),MATS.wood);m.position.y=2.1;g.add(m);for(const y of [.9,2.1,3.3]){const b=new THREE.Mesh(boxUV(3.7,.12,0.36,1),MATS.iron);b.position.y=y;g.add(b);}});
   addGeo('lime',boxUV(5.2,1.1,1.2,1.5),T(0,4.75,W-1.1));for(const sd of [-1,1])addGeo('tile',boxUV(5.8,.1,1.6,2),T(0,5.65,W-1.55+sd*.0-.3,0,.5));
   // heraldic banners hanging from the north gallery
   const cl=['cloth1','cloth2','cloth3'];for(let i=0;i<12;i++){const x=-W+3.2+i*(2*W-6.4)/11;if(Math.abs(x)<3)continue;addGeo(cl[i%3],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.05,W-2.05,Math.PI));}
@@ -1595,6 +1634,12 @@ function buildYard(){
   // practice gear round the ring: racks of spears and swords, pells hacked by drills, an archery butt, a trough, a shed against the west wall
   weaponRack(-15.4,-4,Math.PI/2);weaponRack(15.4,2.4,-Math.PI/2);for(const x of [-9,7.5,10])pell(x,15.6);archeryButt(15.2,-9.5,-Math.PI/2);trough(-15.3,-9.5,Math.PI/2);
   leanTo(-16.9,1.4,4.6,Math.PI/2);crate(-16.3,.5);crate(-16.3,1.35,.7);barrel(-16.4,2.6);
+  // real scanned pieces: heater shields hung on the walls, buckets and baskets by the trough and shed, a ladder against the gallery,
+  // mossy rocks and shrubs at the foot of the walls
+  for(const [x,z,ry] of [[-W+.85,-9.5,Math.PI/2],[-W+.85,8,Math.PI/2],[W-.85,-4,-Math.PI/2],[W-.85,9,-Math.PI/2],[-8,-W+.85,0],[8,-W+.85,0]])placeModel('kite_shield',{x,y:2.4,z,ry,h:1.1,ground:false});
+  for(const [id,x,z,h] of [['wooden_bucket_01',-15.3,-8.3,.42],['wooden_bucket_02',-14.9,-10.8,.36],['wicker_basket_01',-16.5,3.5,.3],['wooden_bucket_01',15.8,-11,.42],['wicker_basket_01',16,4.2,.3]])placeModel(id,{x,z,h,ry:x+z});
+  placeModel('wooden_ladder',{x:W-1.2,z:-12,ry:-Math.PI/2,h:3.2,rz:0});
+  scatterModels(['rock_moss_set_01','rock_moss_set_02','rock_07','rock_09','shrub_02','shrub_03','shrub_04','weed_plant_02','nettle_plant'],26,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z));return e>.9&&e<2.6&&Math.abs(x)>3&&isFree(x,z,.6);},77,.6,1.1);
   clutter(900,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.9,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.9)/1.6,0,1),clamp(1-f/.5,0,1)*.7);});
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
@@ -6067,6 +6112,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
