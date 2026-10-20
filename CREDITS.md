@@ -79,6 +79,14 @@ Photo-scanned surfaces and the daylight sky are from [Poly Haven](https://polyha
 - Ground gravel: [Rocky Trail](https://polyhaven.com/a/rocky_trail)
 - Arena sand: [Gravelly Sand](https://polyhaven.com/a/gravelly_sand)
 - Stone walls: [Castle Wall Slates](https://polyhaven.com/a/castle_wall_slates)
+- Village and Arena surfaces (since Build 94), fetched by `tools/fetch_polyhaven_textures.py` (run on GitHub's servers from the `fetch-models` branch) and resized to 1024 px (packed map 512 px):
+  - House plaster (`plaster_*`): [Plastered Wall 03](https://polyhaven.com/a/plastered_wall_03)
+  - Timber framing and boards (`timber_*`): [Rough Wood](https://polyhaven.com/a/rough_wood)
+  - Thatch (`thatch_*`): [Riet 01](https://polyhaven.com/a/riet_01)
+  - Roof tiles (`rooftile_*`): [Clay Roof Tiles](https://polyhaven.com/a/clay_roof_tiles)
+  - Village stone (`stone_*`): [Medieval Blocks 05](https://polyhaven.com/a/medieval_blocks_05)
+  - Street cobbles (`cobble_*`): [Cobblestone Floor 04](https://polyhaven.com/a/cobblestone_floor_04)
+  - Arena ashlar (`ashlar_*`): [Large Sandstone Blocks](https://polyhaven.com/a/large_sandstone_blocks)
 - Sky: [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky)
 
 Gear materials (since Build 58), released under **CC0 1.0**, fetched by `tools/fetch_cc0_2.py` (on the `cc0-fetch` branch) and resized to 512 px and repacked:
