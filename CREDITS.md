@@ -86,6 +86,9 @@ Photo-scanned surfaces and the daylight sky are from [Poly Haven](https://polyha
   - Roof tiles (`rooftile_*`): [Clay Roof Tiles](https://polyhaven.com/a/clay_roof_tiles)
   - Village stone (`stone_*`): [Medieval Blocks 05](https://polyhaven.com/a/medieval_blocks_05)
   - Street cobbles (`cobble_*`): [Cobblestone Floor 04](https://polyhaven.com/a/cobblestone_floor_04)
+  - Slate roofs (`slate_*`, since Build 95, ridge row cropped): [Roof Slates 03](https://polyhaven.com/a/roof_slates_03)
+  - Tavern floor and ship deck (`floor_*`, since Build 95): [Wooden Planks](https://polyhaven.com/a/wooden_planks)
+  - Tavern panelling and ceiling (`boards_*`, since Build 95): [Old Planks 02](https://polyhaven.com/a/old_planks_02)
   - Arena ashlar (`ashlar_*`): [Large Sandstone Blocks](https://polyhaven.com/a/large_sandstone_blocks)
 - Sky: [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky)
 

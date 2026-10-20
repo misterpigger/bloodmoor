@@ -329,7 +329,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=94;
+const BUILD=95;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -491,6 +491,8 @@ const MATS={
   dirt:std({color:0x0b0806,roughness:1}),
 };
 MATS.ashlar=std({map:TX.stone,color:0xd8c8a8,roughness:.95});
+MATS.slate=std({map:TX.tile,color:0x6a6e72,roughness:.8,side:THREE.DoubleSide});
+MATS.floorPlank=std({map:TX.wood,color:0x8a6a50,roughness:.85,side:THREE.DoubleSide});MATS.boards=std({map:TX.wood,color:0x7a5a40,roughness:.9});
 MATS.cobble=std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,roughness:.82,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
 for(let v=0;v<3;v++)MATS['plaster'+v]=std({map:TX['plaster'+v],bumpMap:TX['plaster'+v+'b'],bumpScale:1.6,roughness:.95});
 
@@ -592,14 +594,15 @@ function house(x,z,rot,w,d,floors,st){
   const fh=2.7;let h0=0,W=w,D=d;
   const face=(px,pz,ry)=>{const M=T(px,0,pz,ry);return (k,g,u,y,o,rz=0)=>add(k,g,M.clone().multiply(T(u,y,o,0,0,rz)));};   // draw in a wall's own frame: u along it, o out of it
   for(let f=0;f<floors;f++){
-    const jet=f>0?.35:0;W=w+jet*2;D=d+jet*2;
-    const stoneF=f===0&&st.stone,mk=stoneF?'stone':'plaster'+st.pv;
+    const jet=f>0&&!st.allStone?.35:0;W=w+jet*2;D=d+jet*2;
+    const stoneF=(f===0&&st.stone)||st.allStone,mk=stoneF?'stone':'plaster'+st.pv;
     add(mk,wallPlane(W,fh),T(0,h0+fh/2,D/2));
     add(mk,wallPlane(W,fh),T(0,h0+fh/2,-D/2,Math.PI));
     add(mk,wallPlane(D,fh),T(W/2,h0+fh/2,0,Math.PI/2));
     add(mk,wallPlane(D,fh),T(-W/2,h0+fh/2,0,-Math.PI/2));
     if(f===0&&!st.stone)add('stone',boxUV(W+.18,.48,D+.18,1.2),T(0,.24,0));   // plinth
-    if(f>0){add('beam',boxUV(W,.2,D),T(0,h0+.05,0));for(let i=-W/2+.4;i<W/2;i+=.9)add('beam',boxUV(.14,.14,D+.1),T(i,h0-.06,0));}
+    if(f>0&&st.allStone)add('stone',boxUV(W+.12,.16,D+.12,1.2),T(0,h0+.02,0));   // string course
+    if(f>0&&!st.allStone){add('beam',boxUV(W,.2,D),T(0,h0+.05,0));for(let i=-W/2+.4;i<W/2;i+=.9)add('beam',boxUV(.14,.14,D+.1),T(i,h0-.06,0));}
     const nw=Math.max(1,Math.floor(W/2.3)),wins=[];for(let i=0;i<nw;i++)wins.push(-W/2+(i+.5)*W/nw);
     // the frame (not on stone storeys)
     if(!stoneF)for(const [px,pz,ry,Lw,fr] of [[0,D/2,0,W,1],[0,-D/2,Math.PI,W,1],[W/2,0,Math.PI/2,D,0],[-W/2,0,-Math.PI/2,D,0]]){
@@ -624,34 +627,53 @@ function house(x,z,rot,w,d,floors,st){
       const fa=face(0,side*D/2,side>0?0:Math.PI),u=side>0?wx:-wx;
       const lit=Math.random()<.42;
       fa(lit?'winLit':'winDark',new THREE.BoxGeometry(.62,.82,.06),u,h0+1.45,.01);
-      fa('beam',boxUV(.86,.1,.16,1),u,h0+1.0,.06);fa('beam',boxUV(.86,.11,.12,1),u,h0+1.91,.05);   // sill, lintel
-      for(const e of [-1,1])fa('beam',boxUV(.1,.92,.12,1),u+e*.36,h0+1.45,.05);
+      const fk=stoneF&&st.allStone?'stone':'beam';fa(fk,boxUV(.86,.1,.16,1),u,h0+1.0,.06);fa(fk,boxUV(.86,.11,.12,1),u,h0+1.91,.05);   // sill, lintel
+      for(const e of [-1,1])fa(fk,boxUV(.1,.92,.12,1),u+e*.36,h0+1.45,.05);
       fa('beam',boxUV(.045,.82,.05,1),u,h0+1.45,.06);fa('beam',boxUV(.62,.045,.05,1),u,h0+1.5,.06);   // mullion and transom
       if(Math.random()<.6){fa('wood',boxUV(.34,.86,.05,1),u-.56,h0+1.45,.05);fa('wood',boxUV(.34,.86,.05,1),u+.56,h0+1.45,.05);}
     }
     h0+=fh;
   }
   // door: frame, planks, a stone step
+  if(!st.noDoor){
   add('wood',boxUV(1.05,2.05,.12,1),T(st.door,1.02,d/2+.04));
   add('beam',boxUV(1.45,.2,.22,1),T(st.door,2.15,d/2+.07));
   for(const e of [-1,1])add('beam',boxUV(.16,2.2,.18,1),T(st.door+e*.62,1.1,d/2+.07));
   add('stone',boxUV(1.5,.16,.55,1),T(st.door,.08,d/2+.3));
   add('iron',new THREE.BoxGeometry(.05,.05,.06),T(st.door+.35,1.0,d/2+.12));
-  for(const y of [.45,1.6])add('iron',new THREE.BoxGeometry(.7,.04,.02),T(st.door-.1,y,d/2+.105));   // strap hinges
-  // roof (ridge along local X): slabs with real thickness so the eaves read
-  const L=W+(st.thatch?1.1:.9),S=D,rh=S/2*(st.thatch?1.15:0.95),ov=st.thatch?.6:.45;
-  const sl=Math.hypot(S/2,rh)+ov,a=Math.atan2(rh,S/2);
-  const rk=st.thatch?'thatch':'tile',th=st.thatch?.34:.11;
+  for(const y of [.45,1.6])add('iron',new THREE.BoxGeometry(.7,.04,.02),T(st.door-.1,y,d/2+.105));}   // strap hinges
+  // roof, drawn in its own frame M whose X runs along the ridge: L0 is the wall length under the ridge, S the span.
+  // Gable-fronted houses (st.gf) turn it a quarter so the gable faces the street.
+  const M=st.gf?T(0,0,0,Math.PI/2):new THREE.Matrix4(),L0=st.gf?D:W,S=st.gf?W:D;
+  const A=(k,g,m)=>add(k,g,M.clone().multiply(m)),F=(px,pz,ry)=>{const MM=M.clone().multiply(T(px,0,pz,ry));return (k,g,u,y,o,rz=0)=>add(k,g,MM.clone().multiply(T(u,y,o,0,0,rz)));};
+  const gk=st.allStone?'stone':'plaster'+st.pv,rk=st.thatch?'thatch':st.slate?'slate':'tile';
+  const L=L0+(st.thatch?1.1:.9),rh=S/2*(st.thatch?1.15:st.slate?1.35:0.95),ov=st.thatch?.6:.45;
+  const sl=Math.hypot(S/2,rh)+ov,a=Math.atan2(rh,S/2),th=st.thatch?.34:.11;
   const cy=h0+rh/2-ov*Math.sin(a)/2,cz=S/4+ov*Math.cos(a)/2;
-  for(const sd of [1,-1])add(rk,boxUV(L,th,sl,2.4),T(0,cy+Math.cos(a)*th/2,sd*(cz+Math.sin(a)*th/2),0,sd*a));
-  add('plaster'+st.pv,gableTri(S,rh),T(W/2,h0,0,Math.PI/2));
-  add('plaster'+st.pv,gableTri(S,rh),T(-W/2,h0,0,-Math.PI/2));
-  for(const e of [-1,1]){const fa=face(e*W/2,0,e*Math.PI/2);   // gable frame: tie beam, king post, collar
-    fa('beam',boxUV(S+.04,.17,.11,1),0,h0+.085,.035);fa('beam',boxUV(.15,rh-.15,.1,1),0,h0+rh/2-.05,.035);fa('beam',boxUV(S*.5,.13,.09,1),0,h0+rh*.5,.03);
-    if(!st.thatch){const bl=Math.hypot(S/2,rh)+ov*.6;for(const sd of [-1,1])fa('wood',boxUV(.22,bl,.05,1),sd*(S/4+ov*.3*Math.cos(a)),h0+rh/2-ov*.3*Math.sin(a)+.02,(L-W)/2-.03,sd*(Math.PI/2-a));}}   // barge boards
-  if(st.thatch){const r=new THREE.CylinderGeometry(.26,.26,L+.05,10,1);r.rotateZ(Math.PI/2);add('thatch',r,T(0,h0+rh+.14,0));}   // rounded thatch ridge
-  else{const r=new THREE.CylinderGeometry(.13,.13,L,8,1,false,0,Math.PI);r.rotateZ(Math.PI/2);r.rotateX(-Math.PI/2);add('tile',r,T(0,h0+rh+th*.9,0));add('beam',boxUV(L+.2,.14,.14),T(0,h0+rh-.05,0));}
-  if(st.chimney){add('stone',boxUV(.75,2.6,.75,1.2),T(W/4,h0+rh*.55+.2,-S/6));add('stone',boxUV(.9,.14,.9,1.2),T(W/4,h0+rh*.55+1.55,-S/6));add('dirt',boxUV(.42,.05,.42),T(W/4,h0+rh*.55+1.63,-S/6));}
+  for(const sd of [1,-1])A(rk,boxUV(L,th,sl,2.4),T(0,cy+Math.cos(a)*th/2,sd*(cz+Math.sin(a)*th/2),0,sd*a));
+  A(gk,gableTri(S,rh),T(L0/2,h0,0,Math.PI/2));
+  A(gk,gableTri(S,rh),T(-L0/2,h0,0,-Math.PI/2));
+  for(const e of [-1,1]){const fa=F(e*L0/2,0,e*Math.PI/2);
+    if(!st.allStone){fa('beam',boxUV(S+.04,.17,.11,1),0,h0+.085,.035);fa('beam',boxUV(.15,rh-.15,.1,1),0,h0+rh/2-.05,.035);fa('beam',boxUV(S*.5,.13,.09,1),0,h0+rh*.5,.03);}   // gable frame: tie beam, king post, collar
+    if(rh>1.7&&(st.gf?e<0:Math.random()<.5)){const lit=Math.random()<.4,u=st.allStone?0:-.55;fa(lit?'winLit':'winDark',new THREE.BoxGeometry(.48,.62,.06),u,h0+rh*.32+.25,.01);   // attic window
+      fa(st.allStone?'stone':'beam',boxUV(.66,.1,.14,1),u,h0+rh*.32-.1,.05);fa(st.allStone?'stone':'beam',boxUV(.66,.1,.12,1),u,h0+rh*.32+.6,.05);}
+    if(!st.thatch){const bl=Math.hypot(S/2,rh)+ov*.6;for(const sd of [-1,1])fa('wood',boxUV(.22,bl,.05,1),sd*(S/4+ov*.3*Math.cos(a)),h0+rh/2-ov*.3*Math.sin(a)+.02,(L-L0)/2-.03,sd*(Math.PI/2-a));}}   // barge boards
+  if(st.thatch){const r=new THREE.CylinderGeometry(.26,.26,L+.05,10,1);r.rotateZ(Math.PI/2);A('thatch',r,T(0,h0+rh+.14,0));}   // rounded thatch ridge
+  else{const r=new THREE.CylinderGeometry(.13,.13,L,8,1,false,0,Math.PI);r.rotateZ(Math.PI/2);r.rotateX(-Math.PI/2);A(st.slate?'iron':'tile',r,T(0,h0+rh+th*.9,0));A('beam',boxUV(L+.2,.14,.14),T(0,h0+rh-.05,0));}
+  // dormers on the street side of a long roof: a small gabled box standing out of the slope with a window
+  if(!st.gf&&!st.thatch&&st.dormers)for(let i=0;i<st.dormers;i++){const dx=(i+.5)/st.dormers*L0-L0/2,zf=S/2*.5,yb=h0+rh*(1-zf/(S/2)),dh=1.05,dw=1.35,dd=1.9;
+    A(gk,boxUV(dw,dh+.5,dd,1.2),T(dx,yb+(dh-.5)/2,zf-dd/2));
+    A(Math.random()<.4?'winLit':'winDark',new THREE.BoxGeometry(.6,.62,.05),T(dx,yb+.5,zf+.01));A('beam',boxUV(.78,.09,.12,1),T(dx,yb+.15,zf+.04));A('beam',boxUV(.09,.75,.1,1),T(dx,yb+.5,zf+.04));
+    const da=Math.atan2(.5,dw/2),dsl=Math.hypot(dw/2,.5)+.18;for(const sd of [-1,1])A(rk,boxUV(dsl,.08,dd+.25,2.4),T(dx+sd*(dw/4+.04),yb+dh+.25,zf-dd/2+.12,0,0,-sd*da));
+    A(gk,gableTri(dw,.5),T(dx,yb+dh,zf));}
+  if(st.chimney){A('stone',boxUV(.75,2.6,.75,1.2),T(L0/4,h0+rh*.55+.2,-S/6));A('stone',boxUV(.9,.14,.9,1.2),T(L0/4,h0+rh*.55+1.55,-S/6));A('dirt',boxUV(.42,.05,.42),T(L0/4,h0+rh*.55+1.63,-S/6));}
+  // a lean-to shed against the west gable: plank walls, a sloping roof, its own collider
+  let shed=null;if(st.lean){const sw=2.1,sdp=Math.min(d*.75,4),hi=2.55,lo=1.85,x0=-w/2-sw;
+    for(const zz of [-sdp/2,sdp/2])add('wood',boxUV(sw,lo+.2,.07,1),T(x0+sw/2,(lo+.2)/2,zz));
+    add('wood',boxUV(.07,lo,sdp,1),T(x0+.035,lo/2,0));for(let k=0;k<4;k++)add('beam',boxUV(.1,lo,.1,1),T(x0+.05,lo/2,-sdp/2+k*sdp/3));
+    const ra=Math.atan2(hi-lo,sw),rl=Math.hypot(sw,hi-lo)+.4;add(st.thatch?'thatch':'tile',boxUV(rl,.1,sdp+.35,2.4),T(x0+sw/2-.2*Math.cos(ra),(hi+lo)/2+.05,0,0,0,ra));
+    const c=[[x0,-sdp/2],[x0,sdp/2],[-w/2,-sdp/2],[-w/2,sdp/2]].map(([lx,lz])=>V(lx,0,lz).applyMatrix4(base));
+    shed=addBox(Math.min(...c.map(v=>v.x)),Math.max(...c.map(v=>v.x)),Math.min(...c.map(v=>v.z)),Math.max(...c.map(v=>v.z)),hi);}
   // torch by door
   if(st.torch){
     const tp=V(st.door+(st.door>0?-.9:.9),2.25,d/2+.25).applyMatrix4(base);
@@ -660,7 +682,7 @@ function house(x,z,rot,w,d,floors,st){
   }
   // collider
   const s=Math.abs(Math.sin(rot))>.5;const hw=(s?D:W)/2+.05,hd=(s?W:D)/2+.05;
-  return {box:addBox(x-hw,x+hw,z-hd,z+hd,h0+rh),hw,hd,H:h0+rh,rh,W,D};
+  return {box:addBox(x-hw,x+hw,z-hd,z+hd,h0+rh),shed,hw,hd,H:h0+rh,rh,W,D};
 }
 
 function tryHouse(cx,cz,rot,w,d,floors){
@@ -669,8 +691,20 @@ function tryHouse(cx,cz,rot,w,d,floors){
   if(Math.abs(cx)+hw>MAP-3||Math.abs(cz)+hd>MAP-3)return false;
   if(overlapsAny(cx-hw-.6,cx+hw+.6,cz-hd-.6,cz+hd+.6))return false;
   const st={stone:srand()<.4,pv:(srand()*3)|0,thatch:srand()<.38,chimney:srand()<.6,door:(srand()-.5)*(w-2.2),torch:srand()<.55,light:srand()<.5};
+  // variety: all-stone houses with steep slate roofs, gable-fronted houses, dormers, lean-to sheds, cross wings
+  const v=srand(),v2=srand(),v3=srand();
+  if(st.stone&&!st.thatch&&v<.45){st.allStone=true;st.slate=true;}
+  else if(!st.thatch&&v<.3)st.gf=true;
+  if(!st.thatch&&!st.gf&&floors>1&&w>5.6&&v2<.55)st.dormers=w>7?2:1;
+  const burn=st.thatch&&Math.hypot(cx,cz)<48&&HOUSES.length<10;
+  // the shed needs room on the west gable (local -x)
+  if(!burn&&v3<.35){const ox=-(w/2+1.05),wx=cx+ox*Math.cos(rot),wz=cz-ox*Math.sin(rot),ex=(s?2:1.05)+.3,ez=(s?1.05:2)+.3;if(!overlapsAny(wx-ex,wx+ex,wz-ez,wz+ez))st.lean=true;}
+  // a cross wing: the east end of a long tiled house rises a storey higher with its gable to the street
+  if(!burn&&!st.thatch&&!st.gf&&w>6.2&&v3>.7){const ww=3.2,w1=w-ww,c=Math.cos(rot),sn=Math.sin(rot);
+    const main={...st,door:(srand()-.5)*Math.max(.1,w1-2.2),dormers:0,chimney:st.chimney},wing={...st,gf:true,slate:st.allStone||st.slate||srand()<.5,lean:false,dormers:0,chimney:false,noDoor:srand()<.5,door:0,torch:false};
+    house(cx-ww/2*c,cz+ww/2*sn,rot,w1,d,floors,main);house(cx+w1/2*c,cz-w1/2*sn,rot,ww,d,Math.min(3,floors+1),wing);return true;}
   // thatched houses in the inner rows can catch fire from the ring and burn down: they get their own meshes so they can fall
-  const burn=st.thatch&&Math.hypot(cx,cz)<48&&HOUSES.length<10;let B=null;if(burn)GEO_TARGET=B={};
+  let B=null;if(burn)GEO_TARGET=B={};
   const fl0=flames.length,hs=house(cx,cz,rot,w,d,floors,st);GEO_TARGET=null;
   if(burn){const grp=batchGroup(B);world.add(grp);HOUSES.push({grp,x:cx,z:cz,rot,...hs,pv:st.pv,st:'whole',t:0,fx:[],torch:flames.slice(fl0)});}
   return true;
@@ -678,7 +712,7 @@ function tryHouse(cx,cz,rot,w,d,floors){
 function streetRow(ox,oz,ax,az,px,pz,s0,s1,off){
   let s=s0+srand()*1.5;
   while(s<s1){
-    const w=5+srand()*3.2,d=5+srand()*2.2,floors=srand()<.8?2:1;
+    const w=5+srand()*3.2,d=5+srand()*2.2,fr=srand(),floors=fr<.14?3:fr<.8?2:1;
     if(s+w>s1)break;
     const along=s+w/2,po=off+d/2+(floors>1?.35:0);
     const cx=ox+ax*along+px*po,cz=oz+az*along+pz*po;
@@ -1090,9 +1124,13 @@ function towerVisual(dt){const T=TOWER;if(!T.smoke||!T.smoke.length)return;const
 // rail gives way when a body is driven through it. A brawl: everyone starts bare-handed and fights with what's lying about
 const TAV={rails:[],spots:[]};
 function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
-  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(-Math.PI/2);scaleUV(g,W,D);const m=new THREE.Mesh(g,MATS.woodLight);m.receiveShadow=true;world.add(m);}
+  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(-Math.PI/2);scaleUV(g,W,D);const m=new THREE.Mesh(g,MATS.floorPlank);m.receiveShadow=true;world.add(m);}
   addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,D,Math.PI));addGeo('plaster1',wallPlane(2*W,Hc),T(0,Hc/2,-D));addGeo('plaster1',wallPlane(2*D,Hc),T(W,Hc/2,0,-Math.PI/2));addGeo('plaster1',wallPlane(2*D,Hc),T(-W,Hc/2,0,Math.PI/2));
-  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(Math.PI/2);scaleUV(g,W/2,D/2);addGeo('plaster0',g,T(0,Hc,0));}
+  {const g=new THREE.PlaneGeometry(2*W,2*D);g.rotateX(Math.PI/2);scaleUV(g,W,D);addGeo('boards',g,T(0,Hc,0));}   // a boarded ceiling between the joists
+  // panelling to waist height round the walls with a capping rail (not across the door or the hearth)
+  for(const [ax,az,ry,L,o,skip] of [[0,-D+.07,0,2*W,0,[[-1,1]]],[0,D-.07,Math.PI,2*W,0,[]],[-W+.07,0,Math.PI/2,2*D,1,[[-7.5,-4.5]]],[W-.07,0,-Math.PI/2,2*D,1,[]]]){
+    const cuts=[-L/2,...skip.flat(),L/2];for(let i=0;i<cuts.length;i+=2){const u0=cuts[i],u1=cuts[i+1],len=u1-u0,mid=(u0+u1)/2;if(len<.2)continue;
+      const x=o?ax:mid,z=o?mid:az;addGeo('boards',boxUV(len,1.25,.05,2),T(x,.625,z,ry));addGeo('beam',boxUV(len,.09,.12,1),T(x+(o?Math.sign(-ax)*.03:0),1.28,z+(o?0:Math.sign(-az)*.03),ry));}}
   for(let x=-W+1;x<W;x+=2.4)addGeo('beam',boxUV(.24,.3,2*D,1),T(x,Hc-.15,0));for(const z of [-D+.1,D-.1])addGeo('beam',boxUV(2*W,.26,.2,1),T(0,Hc-.13,z));
   for(let x=-W+.1;x<=W;x+=3.2)for(const z of [-D+.06,D-.06])addGeo('beam',boxUV(.2,Hc,.12,1),T(x,Hc/2,z));
   for(let z=-D+.1;z<=D;z+=3.1)for(const x of [-W+.06,W-.06])addGeo('beam',boxUV(.12,Hc,.2,1),T(x,Hc/2,z));
@@ -1126,7 +1164,7 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
     addFlame(tx+.3,.8,tz,.24,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
   // the gallery along the north wall, 2.6 m up, reached by a stair against the west wall, with a rail along its edge
   const gh=2.6,gz0=D-2.6;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
-  addGeo('woodLight',boxUV(2*W,.12,2.6,1.5),T(0,gh-.06,gz0+1.3));for(let x=-W+.4;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.6,1),T(x,gh-.2,gz0+1.3));
+  addGeo('floorPlank',boxUV(2*W,.12,2.6,1.5),T(0,gh-.06,gz0+1.3));for(let x=-W+.4;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.6,1),T(x,gh-.2,gz0+1.3));
   addGeo('beam',boxUV(2*W,.2,.14,1),T(0,gh-.1,gz0+.07));   // the gallery's edge beam
   for(const x of [-W+1.65,-8.5,-3,2.5,8,W-.3]){addGeo('beam',boxUV(.2,gh,.2,1),T(x,gh/2,gz0+.1));addCircle(x,gz0+.1,.14,gh-.15);}
   // the stair: sixteen solid steps with risers and nosings, a stringer, newel posts, a handrail on balusters
@@ -1243,7 +1281,7 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
    const m=new THREE.Mesh(g,hullMat);m.castShadow=m.receiveShadow=true;world.add(m);}
   // the deck
   {const sh=new THREE.Shape();const N=40;for(let i=0;i<=N;i++){const x=-SL+2*SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SL+2*SL*i/N;sh.lineTo(x,-shipHalfW(x));}
-   const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/1.6,uv.getY(i)/1.6);const dm=MATS.woodLight.clone();dm.side=THREE.DoubleSide;dm.color.setHex(0xb89a78);const m=new THREE.Mesh(g,dm);   // (it was turned face-down, so from above you saw through it to the hull)
+   const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/1.6,uv.getY(i)/1.6);const m=new THREE.Mesh(g,MATS.floorPlank);   // scanned planking (double-sided: the deck shape faces up)   // (it was turned face-down, so from above you saw through it to the hull)
   m.position.y=.004;m.receiveShadow=true;world.add(m);}
   // gunwale rail: low, so a body driven into it can go over the top
   for(const sd of [1,-1])for(let x=-SL+.45;x<=SL-.45;x+=.24){const z=sd*(shipHalfW(x)-.1);if(Math.abs(z)<.15)continue;addCircle(x,z,.14,.55);}
@@ -1270,8 +1308,12 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   {const pts=[];for(let x=-SL+.5;x<=SL-.5;x+=1)pts.push(V(x,-1.18-.06*(1-(x/SL)**2),0));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.1,5),T(0,0,0));}
   // shrouds from the masthead down to each side, and the yard's braces
   for(const sd of [1,-1])for(const x of [-1.6,-.5,.6]){const a=V(0,11.6,0),b=V(x,.6,sd*(shipHalfW(x)+.05)),d=V().subVectors(b,a),L=d.length();const g=new THREE.CylinderGeometry(.015,.015,L,4);g.translate(0,-L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,-1,0),d.normalize());const m=new THREE.Matrix4().compose(a,q,V(1,1,1));addGeo('beam',g,m);}
-  // deck planking seams, and the mast step
-  for(let z=-SW+.3;z<SW-.2;z+=.42){let x0=null;for(let x=-SL+.4;x<=SL-.4;x+=.25){const inn=shipHalfW(x)-.18>Math.abs(z);if(inn&&x0==null)x0=x;if((!inn||x>SL-.6)&&x0!=null){if(x-x0>.5)addGeo('beam',boxUV(x-x0,.012,.025,1),T((x+x0)/2,.01,z));x0=null;}}}
+  // inside the bulwarks: ribs from the deck to the gunwale, a capping rail along the top, a stringer at knee height; and the mast step
+  {const sheer=x=>gunY+.55*Math.pow(x/SL,4);
+    for(let x=-SL+1.2;x<=SL-1.2;x+=1.1)for(const sd of [1,-1]){const h=sheer(x);addGeo('beam',boxUV(.1,h,.09,1),T(x,h/2,sd*(shipHalfW(x)-.05)));}
+    for(let x=-SL+.6;x<SL-.6;x+=.8)for(const sd of [1,-1]){const x1=Math.min(x+.8,SL-.6),xm=(x+x1)/2,dz=sd*(shipHalfW(x1)-shipHalfW(x)),dy=sheer(x1)-sheer(x),len=Math.hypot(x1-x,dz,dy)+.02;
+      addGeo('beam',boxUV(len,.07,.16,1),T(xm,sheer(xm)+.03,sd*(shipHalfW(xm)-.02),-Math.atan2(dz,x1-x),0,Math.atan2(dy,Math.hypot(x1-x,dz))));
+      addGeo('beam',boxUV(len,.06,.05,1),T(xm,.3,sd*(shipHalfW(xm)-.08),-Math.atan2(dz,x1-x)));}}
   addGeo('beam',boxUV(1.6,.32,.7,1),T(0,.16,0));addBox(-.8,.8,-.35,.35,.32);FLOORS.push({x0:-.8,x1:.8,z0:-.35,z1:.35,h:.34});
   // the crew's sea chests along both sides: something to stand on, and to trip over when the deck heaves
   for(const sd of [1,-1])for(let x=-SL+4.5;x<=SL-4.5;x+=2.7){if(Math.abs(x)<1.4)continue;const z=sd*(shipHalfW(x)-.62),xx=x+(sd>0?0:1.35);if(Math.random()<.2)continue;
@@ -1538,6 +1580,8 @@ const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   plaster:{mats:{plaster0:{rep:.75,ns:1.1,col:0xf4ecdc},plaster1:{rep:.75,ns:1.1,col:0xf0d8ae},plaster2:{rep:.75,ns:1.1,col:0xd8d2c6}}},   // village houses (rep: the geometry's UV unit / the scan's real size)
   timber:{mats:{beam:{rep:3,ns:1.2,col:0x6a5644},wood:{rep:2,ns:1.1,col:0xb09a82}}},thatch:{mats:{thatch:{rep:1.5,ns:1.4,col:0xe6c088}}},
   ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2}}},
+  slate:{mats:{slate:{rep:.8,ns:1.3,col:0x8e949c}}},
+  floor:{mats:{floorPlank:{rep:1,ns:1.3,col:0xf0e0d0}}},boards:{mats:{boards:{rep:1,ns:1.2,col:0xe0c8b0}}},
   rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
@@ -1651,6 +1695,18 @@ function buildPit(){
   weaponRack(-W+.85,-6,Math.PI/2);weaponRack(W-.85,6,-Math.PI/2);
   scatterModels(['rock_moss_set_01','rock_moss_set_02','rock_07','rock_09','shrub_03','shrub_04','weed_plant_02','nettle_plant'],18,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z));return e>.5&&e<1.5&&Math.abs(x)>3;},91,.5,.9);
   for(const [x,z] of [[-W+.6,-11],[W-.6,11]])placeModel('kite_shield',{x,y:2.2,z,ry:x<0?Math.PI/2:-Math.PI/2,h:1.1,ground:false});
+  // a town crowding round the walls: roofs, a gabled hall, a church-like tower and a watchtower over the skyline; banners and torches on the walls
+  {const b={pv:0,thatch:false,chimney:true,door:0,torch:false,light:false,noDoor:true};
+    house(-7,W+6,0,10,6,3,{...b,pv:1,dormers:2});house(5,W+5.5,0,7,5.5,2,{...b,thatch:true});house(13,W+7,0,6,6,4,{...b,stone:true,allStone:true,slate:true,gf:true});
+    house(-W-5.5,6,Math.PI/2,9,6,2,{...b,pv:2,gf:true});house(-W-6,-6,Math.PI/2,8,6,3,{...b,stone:true,allStone:true,slate:true});
+    house(W+5.5,-4,-Math.PI/2,11,6,2,{...b,pv:0,dormers:2});house(W+6,8,-Math.PI/2,6,6,3,{...b,pv:1,gf:true,slate:true});
+    house(-4,-W-6,Math.PI,12,7,2,{...b,thatch:true});house(9,-W-6.5,Math.PI,6.5,6.5,5,{...b,stone:true,allStone:true,slate:true,gf:true});
+    placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x:-W-1,z:-W-1,fit:[4.6,wallH+5.5,4.6]});placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x:W+1,z:W+1,fit:[4.6,wallH+5.5,4.6]});
+    const cl=['cloth1','cloth2','cloth3'];let i=0;
+    for(const [x,z,ry] of [[-9,-W+.25,0],[-3,-W+.25,0],[3,-W+.25,0],[9,-W+.25,0],[-W+.25,-9,Math.PI/2],[-W+.25,9,Math.PI/2],[W-.25,-9,-Math.PI/2],[W-.25,0,-Math.PI/2],[W-.25,9,-Math.PI/2]]){
+      addGeo(cl[i++%3],wallPlane(1.1,2.4,1.1,2.4),T(x,wallH-1.5,z,ry));addGeo('wood',new THREE.CylinderGeometry(.035,.035,1.35,6).rotateZ(Math.PI/2),T(x,wallH-.28,z,ry));}
+    for(const [x,z,ry] of [[-6,W-.22,Math.PI],[6,W-.22,Math.PI],[-W+.22,0,Math.PI/2],[W-.22,-4.5,-Math.PI/2],[0,-W+.22,0]]){const f=V(Math.sin(ry),0,Math.cos(ry));
+      addGeo('iron',boxUV(.06,.42,.3,1),T(x+f.x*.14,2.45,z+f.z*.14,ry,-.5));addFlame(x+f.x*.3,2.62,z+f.z*.3,.75,lightBudget.n++<lightBudget.max);}}
   for(let i=0;i<10;i++){const a=i/10*6.283+.2,r=24+(i%3)*6;placeModel(i%2?'tree_stump_01':'tree_stump_02',{x:Math.cos(a)*r,z:Math.sin(a)*r,s:.9+(i%3)*.2,ry:a});}
   placeModel('dead_tree_trunk',{x:-22,z:9,ry:.7,s:1.2});
   clutter(800,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.5&&Math.hypot(x-PIT.x,z-PIT.z)>PIT.r+.7,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.5)/1.4,0,1),clamp(1-f/.5,0,1)*.7);},17);
@@ -1684,6 +1740,11 @@ function buildYard(){
   // the gatehouse in the north wall: an iron-banded door under a little tiled roof
   placeModel('large_castle_door',{x:0,z:W-.95,ry:Math.PI,fit:[3.6,4.2,.35]},g=>{const m=new THREE.Mesh(boxUV(3.6,4.2,0.3,1.5),MATS.wood);m.position.y=2.1;g.add(m);for(const y of [.9,2.1,3.3]){const b=new THREE.Mesh(boxUV(3.7,.12,0.36,1),MATS.iron);b.position.y=y;g.add(b);}});
   addGeo('lime',boxUV(5.2,1.1,1.2,1.5),T(0,4.75,W-1.1));for(const sd of [-1,1])addGeo('tile',boxUV(5.8,.1,1.6,2),T(0,5.65,W-1.55+sd*.0-.3,0,.5));
+  // the castle beyond the walls: a stone keep with a slate roof, a hall, a tall round tower and roofs over the side walls, so the skyline isn't empty
+  {const b={pv:0,thatch:false,chimney:true,door:0,torch:false,light:false,noDoor:true};
+    house(-6,W+9,0,12,8,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(9,W+6,0,9,6,4,{...b,pv:1,gf:true,slate:true});
+    house(-W-6,-3,Math.PI/2,10,6,4,{...b,pv:2});house(W+6,5,-Math.PI/2,9,6,4,{...b,stone:true,allStone:true,slate:true});house(W+5.5,-9,-Math.PI/2,7,5.5,3,{...b,pv:1,thatch:true});
+    placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x:15,z:W+9,fit:[6.5,19,6.5]});}
   // heraldic banners hanging from the north gallery
   const cl=['cloth1','cloth2','cloth3'];for(let i=0;i<12;i++){const x=-W+3.2+i*(2*W-6.4)/11;if(Math.abs(x)<3)continue;addGeo(cl[i%3],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.05,W-2.05,Math.PI));}
   // the fenced ring the fights happen in, open on the south side
