@@ -82,6 +82,20 @@ body.sim #banner{top:5%;animation:fadeq 3s ease-out forwards}body.sim #banner b{
 .seg{display:flex;gap:3px}
 .seg button{flex:1 1 auto;min-width:0;overflow:hidden;font:500 12px var(--f-ui);padding:4px 3px;white-space:nowrap;background:rgba(236,220,184,.05);border:1px solid rgba(236,220,184,.25);color:var(--parch-dim);cursor:pointer}
 .seg button[aria-checked=true]{border-color:var(--ember);color:var(--parch);background:rgba(255,155,61,.12)}
+/* character picker: step through the roster, or make your own */
+.chsel{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;align-items:center;gap:6px}
+.charr{height:42px;font:400 28px/1 var(--f-display);background:rgba(236,220,184,.05);border:1px solid rgba(236,220,184,.25);color:var(--parch);cursor:pointer;padding:0 0 4px}
+.charr:hover{border-color:var(--ember)}.charr:focus-visible{outline:2px solid var(--ember);outline-offset:1px}
+.chname{text-align:center;display:flex;flex-direction:column;gap:2px;min-width:0}
+.chname b{font:400 24px/1.05 var(--f-display);color:var(--parch)}
+.chname span{font-size:12px;letter-spacing:.06em;color:var(--ember)}
+#chInfo{display:flex;flex-direction:column;gap:8px}
+.chbio{margin:0;font-size:13px;line-height:1.45;color:var(--parch-dim)}
+.chkit{display:flex;flex-wrap:wrap;gap:4px}
+.chkit span{font-size:11px;letter-spacing:.04em;padding:2px 7px;border:1px solid rgba(236,220,184,.3);color:var(--parch)}
+.fcard .lnk{align-self:flex-start;font:600 12px var(--f-ui);background:none;border:none;border-bottom:1px solid rgba(236,220,184,.35);color:var(--parch-dim);padding:0 0 1px;cursor:pointer}
+.fcard .lnk:hover{color:var(--parch)}.fcard .lnk:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.fcustom{display:flex;flex-direction:column;gap:inherit}
 @media (max-width:1100px){.fcard{display:none}}
 @media (max-height:900px){#fprev{width:64%;align-self:center}.fcard{gap:7px;padding:12px 14px}}
 
@@ -216,7 +230,10 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
   </div>
   <aside class="fcard" aria-label="Your fighter">
     <div class="eyebrow">Your fighter</div>
+    <div class="chsel"><button class="charr" id="chPrev" aria-label="Previous fighter">‹</button><div class="chname" aria-live="polite"><b id="chName">Your own</b><span id="chTag"></span></div><button class="charr" id="chNext" aria-label="Next fighter">›</button></div>
     <canvas id="fprev" width="480" height="560" aria-label="Preview of your fighter"></canvas>
+    <div id="chInfo" class="hide"><p id="chBio" class="chbio"></p><div id="chKit" class="chkit" aria-label="Signature kit"></div><button class="lnk" id="chCopy">Start your own fighter from this look</button></div>
+    <div id="custom" class="fcustom">
     <label class="frow">Name <input id="fname" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Nameless"></label>
     <div class="frow">Coat <div class="sw" data-k="0" role="radiogroup" aria-label="Coat colour"></div></div>
     <div class="frow">Trim <div class="sw" data-k="1" role="radiogroup" aria-label="Trim colour"></div></div>
@@ -231,6 +248,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
     <div class="frow">Marks <div class="seg" data-look="mk" role="radiogroup" aria-label="Face marks"><button data-v="0" role="radio">None</button><button data-v="1" role="radio">Scar</button><button data-v="2" role="radio">War paint</button></div></div>
     <div class="frow">Hue <div class="sw" data-look="hc" role="radiogroup" aria-label="Hair colour"></div></div>
     <div class="frow">Skin <div class="sw" data-look="sk" role="radiogroup" aria-label="Skin tone"></div></div>
+    </div>
   </aside>
 </div>
 
@@ -310,7 +328,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=85;
+const BUILD=86;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1637,27 +1655,108 @@ function sfx(k,p,vol=1,rate=1,delay=0,net=true){
   src.start(AC.currentTime+delay);return true;}
 // ---- music: a score written here, played on recordings of real instruments (Versilian Community Sample Library, CC0)
 // The battle theme gets louder and busier as the ring closes, the field thins out, or an enemy gets close.
-const MUS_INST={organ:[38,42,46,50,54,58,62,66,70],harp:[46,50,54,58,62,66,70,74,78],strumstick:[52,57,62,67,71,76],recorder:[65,70,74,78,82]};
-const MUS={buf:{},on:true,vol:.34,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{}};
+// Each arena and mode has its own theme (musicTheme): the Arena, the Pit and Mutiny, one-on-one bouts, and the training yard and Tavern; the village keeps the battle theme.
+// Winning or losing a match plays a short phrase (STINGS) before the menu theme comes back.
+const MUS_INST={organ:[38,42,46,50,54,58,62,66,70],harp:[46,50,54,58,62,66,70,74,78],strumstick:[52,57,62,67,71,76],recorder:[65,70,74,78,82],
+  psaltery:[70,74,78,82,86,90],pluck:[70,74,78,82,86,90],bell:[72,76,79,83,86,89]};   // bowed and plucked psaltery, tubular bells
+const MUS_HITS=['drum-low','drum-high','tambourine-hit','wardrum','darbuka-doum','darbuka-tek','darbuka-ka'];
+const MUS_ENV={organ:[.25,.35],psaltery:[.16,.45],bell:[.004,.9]};   // [attack, release] in seconds; others [.012, .12]
+const MUS={buf:{},on:true,vol:.34,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{},st:''};
 try{if(localStorage.getItem('bloodmoor-music')==='off')MUS.on=false;}catch(e){}
-const CH={D:[50,53,57],Bb:[46,50,53],C:[48,52,55],G:[43,46,50],A:[45,49,52],F:[41,45,48],Gm:[43,46,50],E:[40,44,47]};
+const CH={D:[50,53,57],Bb:[46,50,53],C:[48,52,55],G:[43,46,50],A:[45,49,52],F:[41,45,48],Gm:[43,46,50],E:[40,44,47],
+  Am:[45,48,52],GM:[43,47,50],DM:[50,54,57],Eb:[51,55,58],Cm:[48,51,55]};   // (D, G mean D minor and G minor; GM and DM are the major chords)
+// how many slots a melody note lasts: up to the next note (null holds it), at most max
+function melLen(mel,i,max=8){let k=1;while(k<max&&mel[(i+k)%mel.length]==null)k++;return k;}
+// a chord's notes moved into the octave starting at lo, lowest first
+const chordUp=(ch,lo)=>ch.map(n=>{while(n<lo)n+=12;while(n>=lo+12)n-=12;return n;}).sort((a,b)=>a-b);
 const THEMES={
   menu:{bpm:64,prog:['D','C','Bb','C','D','F','G','A'],
     mel:[74,null,null,null,72,null,70,null, 69,null,null,null,null,null,null,null, 70,null,72,null,74,null,null,null, 72,null,null,null,null,null,null,null,
          74,null,77,null,76,null,74,null, 72,null,null,null,69,null,null,null, 70,null,null,null,74,null,72,null, 73,null,null,null,null,null,null,null]},
   battle:{bpm:118,prog:['D','D','Bb','C','D','D','G','A'],
     mel:[74,null,77,76,74,null,72,74, 76,null,77,79,81,null,79,77, 77,null,74,null,70,72,74,null, 76,null,72,null,67,null,null,null,
-         74,null,77,76,74,null,72,74, 76,77,79,null,81,79,77,76, 74,null,79,null,77,76,74,null, 73,null,76,null,81,null,null,null]}};
+         74,null,77,76,74,null,72,74, 76,77,79,null,81,79,77,76, 74,null,79,null,77,76,74,null, 73,null,76,null,81,null,null,null]},
+  // New themes play themselves (play) and set their layers per bar (mix: [pad, strings, drums, lead] for intensity I).
+  // The Arena: A minor over the descending Andalusian chords; a war drum and a darbuka beating maqsum, strumstick eighths, the recorder up top.
+  arena:{bpm:124,prog:['Am','GM','F','E','Am','GM','F','E'],
+    mel:[76,null,76,77,79,null,77,76, 74,null,74,76,77,null,76,74, 72,null,72,74,76,null,77,76, 80,null,81,null,80,77,76,null,
+         81,null,81,83,84,null,83,81, 79,null,79,81,83,null,81,79, 77,76,77,79,81,null,77,null, 80,81,83,81,80,null,76,null],
+    mix:I=>[1,I>=1?1:0,I>=2?1:I>=1?.6:0,I>=3?1:I>=2?.55:0],
+    play(st,t,sd,ch,I,bar){
+      if(st===0){mNote('organ',ch[0]-12,t,.28,sd*16,'pad');mNote('organ',ch[2]-12,t,.15,sd*16,'pad');mNote('organ',ch[1],t,.09,sd*16,'pad');}
+      if(st===0||st===8||(I>=3&&st===14))mHit('wardrum',t,st===14?.45:.75);
+      if(st===0||st===10)mHit('darbuka-doum',t,.55);if(st===2||st===6||st===12)mHit('darbuka-tek',t,.6);
+      if(I>=3&&(st===3||st===11||st===15))mHit('darbuka-ka',t,.45);if(I>=3&&(st===4||st===12))mHit('tambourine-hit',t,.16);
+      if(st%2===0){const p=[0,2,1,2,0,2,1,2],n=ch[p[st/2]]+12+(st===8?12:0);mNote('strumstick',n,t,st%4===0?.26:.17,sd*2.2,'strings');}
+      if(I>=2&&st%4===2)mNote('pluck',chordUp(ch,69)[(st/4|0)%3],t,.17,sd*4,'strings');
+      if(st%2===0){const i=bar*8+st/2,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.23,sd*2*melLen(this.mel,i)*.95,'lead');}}},
+  // The Pit: D Phrygian, slow. An organ drone, a big bell tolling, a heartbeat on the war drum, the bowed psaltery singing over the shaft.
+  pit:{bpm:66,prog:['D','Eb','D','C','D','Eb','Bb','A'],
+    mel:[74,null,null,null, 75,null,null,74, 77,null,75,74, 72,null,null,null, 81,null,null,79, 79,null,77,75, 77,null,74,null, 73,null,null,null],   // a note a beat
+    mix:I=>[1,I>=2?1:0,I>=1?1:.4,I>=3?1:.65],
+    play(st,t,sd,ch,I,bar){
+      if(st===0||st===8){mNote('organ',ch[0]-12,t,.24,sd*8.4,'pad');mNote('organ',ch[2]-12,t,.12,sd*8.4,'pad');}
+      if(st===0&&(bar%2===0||I>=3))mNote('bell',62,t,.3,sd*12,'pad');
+      if(st===0)mHit('wardrum',t,.7);if(st===3)mHit('wardrum',t,.38);
+      if(I>=3&&(st===8||st===11))mHit('drum-low',t,st===8?.45:.28);
+      if(st%4===0){const p=[0,2,0,1],n=ch[p[st/4]]+12;mNote('harp',n,t,.15,sd*5,'strings');}
+      if(st%4===0){const i=bar*4+st/4,m=this.mel[i%this.mel.length];if(m)mNote('psaltery',m,t,.32,sd*4*melLen(this.mel,i,4)*.95,'lead');}}},
+  // One on one (duels and tournament bouts): G minor, a war drum and a frame drum trading footwork, harp arpeggios, the psaltery when it's close.
+  duel:{bpm:96,prog:['Gm','Gm','Eb','DM','Gm','Bb','Cm','DM'],
+    mel:[74,null,null,72, 70,null,69,70, 79,null,null,77, 78,null,null,null, 79,null,81,82, 77,null,74,null, 75,null,74,72, 74,null,78,null],
+    mix:I=>[1,1,I>=2?1:.45,I>=3?1:.5],
+    play(st,t,sd,ch,I,bar){
+      if(st===0){mNote('organ',ch[0]-12,t,.22,sd*16,'pad');mNote('organ',ch[1],t,.08,sd*16,'pad');}
+      if(st===0)mHit('wardrum',t,.7);if(st===6||st===10)mHit('drum-low',t,.45);if(I>=3&&st===12)mHit('drum-high',t,.4);if(I>=3&&st===14)mHit('tambourine-hit',t,.14);
+      if(st%2===0){const a=chordUp(ch,62),p=[0,1,2,1,0,2,1,2],n=a[p[st/2]]+(st>=8&&st<12?12:0);mNote('harp',n,t,st%4===0?.19:.12,sd*3,'strings');}
+      if(I>=3&&st>=8)mNote('strumstick',ch[0]+12,t,st%2?.06:.09,sd*1.1,'strings');   // a tremolo under the second half of the bar
+      if(st%4===0){const i=bar*4+st/4,m=this.mel[i%this.mel.length];if(m)mNote('psaltery',m,t,.3,sd*4*melLen(this.mel,i,4)*.95,'lead');}}},
+  // The training yard: a G mixolydian dance. Frame drums skipping, strummed chords, plucked psaltery, the recorder's tune.
+  drill:{bpm:104,prog:['GM','F','GM','GM','C','F','GM','DM'],
+    mel:[74,76,74,71,67,null,71,74, 77,null,76,74,72,null,69,72, 71,null,74,null,79,null,77,76, 74,null,null,null,67,69,71,72,
+         76,null,72,76,79,null,76,72, 77,null,72,77,81,null,79,77, 79,null,74,71,74,null,76,77, 78,76,74,null,69,null,71,null],
+    mix:I=>[.8,1,I>=1?.9:.45,1],
+    play(st,t,sd,ch,I,bar){
+      if(st===0){mNote('organ',ch[0]-12,t,.16,sd*16,'pad');mNote('organ',ch[2],t,.07,sd*16,'pad');}
+      if(st===0||st===6||st===8)mHit('drum-low',t,st?.5:.7);if(st===4||st===12||(I>=3&&st===14))mHit('drum-high',t,.42);if(I>=2&&(st===2||st===10))mHit('tambourine-hit',t,.13);
+      if(st%4===0)chordUp(ch,55).forEach((n,k)=>mNote('strumstick',n,t+k*.014,.14,sd*3.5,'strings'));
+      if(st%4===2)mNote('pluck',chordUp(ch,72)[(st/4|0)%3],t,.16,sd*3,'strings');
+      if(st%2===0){const i=bar*8+st/2,m=this.mel[i%this.mel.length];if(m)mNote('recorder',m,t,.21,sd*2*melLen(this.mel,i)*.95,'lead');}}}};
+// short phrases for the end of a match; len is how long the menu theme waits
+const STINGS={
+  victory:{len:4.8,play(t){   // a recorder fanfare in D major, a drum roll, bells and the full chord
+    mHit('wardrum',t,.85,'sting');mNote('bell',74,t,.32,1.8,'sting');
+    [[69,0,.2],[74,.2,.2],[78,.4,.2],[81,.6,.85],[79,1.6,.2],[78,1.8,.2],[76,2.0,.2],[78,2.2,2]].forEach(([n,d,l])=>mNote('recorder',n,t+d,.26,l,'sting'));
+    for(let k=0;k<8;k++)mHit('drum-high',t+1.4+k*.1,.15+k*.04,'sting');
+    mHit('wardrum',t+2.2,.9,'sting');mHit('drum-low',t+2.2,.7,'sting');mHit('tambourine-hit',t+2.2,.25,'sting');
+    for(const n of [38,45,50,54])mNote('organ',n,t+2.2,.16,2.2,'sting');
+    mNote('bell',86,t+2.2,.3,2.4,'sting');mNote('bell',78,t+2.25,.24,2.4,'sting');
+    [74,78,81,86].forEach((n,k)=>mNote('pluck',n,t+2.2+k*.07,.16,1.8,'sting'));}},
+  defeat:{len:5.4,play(t){   // a funeral bell over a low D minor, the psaltery falling to rest
+    for(const [n,v] of [[38,.24],[45,.16],[53,.08]])mNote('organ',n,t,v,4.6,'sting');
+    [[0,.42],[1.7,.32],[3.4,.24]].forEach(([d,v])=>{mNote('bell',62,t+d,v,2.6,'sting');mHit('wardrum',t+d,.38,'sting');});
+    [[77,.3,1.2],[76,1.5,.9],[74,2.4,.9],[73,3.3,.7],[74,4.0,1.4]].forEach(([n,d,l])=>mNote('psaltery',n,t+d,.42,l,'sting'));}}};
+function sting(name){if(!AC||!MUS.lay.sting)return;const S=STINGS[name],t=AC.currentTime+.08;S.play(t);MUS.next=Math.max(MUS.next,t+S.len);}
+// which theme fits what's happening: the menu (also after a match), or one for the mode and map being fought on
+function musicTheme(){
+  if(state==='attract'||state==='dead'||state==='won'||state==='loading')return 'menu';
+  const m=NET.mode==='client'?NET.mode2:MODE;
+  if(m==='yard')return 'drill';
+  if(curMap==='tavern')return 'drill';   // a jig for a tavern brawl
+  if(curMap==='pit'||curMap==='ship')return 'pit';   // the slow tolling one: over the shaft, or a ship's bell in a rising storm
+  if(m==='duel'||m==='tourney')return 'duel';
+  if(curMap==='colosseum')return 'arena';
+  return 'battle';}
 function loadMusic(){if(MUS.loading||!AC)return;MUS.loading=true;MUS.gain=AC.createGain();MUS.gain.gain.value=MUS.on?MUS.vol:0;MUS.gain.connect(AC.destination);
-  for(const L of ['drums','strings','lead','pad']){const g=AC.createGain();g.gain.value=0;g.connect(MUS.gain);MUS.lay[L]=g;}
+  for(const L of ['drums','strings','lead','pad','sting']){const g=AC.createGain();g.gain.value=L==='sting'?1:0;g.connect(MUS.gain);MUS.lay[L]=g;}
   const get=(name)=>fetch('music/'+name+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{MUS.buf[name]=buf;}).catch(()=>{});
-  for(const inst in MUS_INST)for(const k of MUS_INST[inst])get(inst+'-'+k);for(const n of ['drum-low','drum-high','tambourine-hit'])get(n);}
+  for(const inst in MUS_INST)for(const k of MUS_INST[inst])get(inst+'-'+k);for(const n of MUS_HITS)get(n);}
 function mNote(inst,note,t,vol,dur,layer){const keys=MUS_INST[inst];let k=keys[0];for(const q of keys)if(Math.abs(q-note)<Math.abs(k-note))k=q;const b=MUS.buf[inst+'-'+k];if(!b)return;
-  const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain();
-  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+(inst==='organ'?.25:.012));if(dur)g.gain.setTargetAtTime(0,t+dur,inst==='organ'?.35:.12);
+  const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain(),env=MUS_ENV[inst]||[.012,.12];
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+env[0]);if(dur)g.gain.setTargetAtTime(0,t+dur,env[1]);
   s.connect(g);g.connect(MUS.lay[layer]);s.start(t);s.stop(t+(dur||2)+2);}
 function mHitNow(name,vol){if(!AC||!MUS.buf[name])return;const s=AC.createBufferSource();s.buffer=MUS.buf[name];const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(AC.destination);s.start();}
-function mHit(name,t,vol){const b=MUS.buf[name];if(!b)return;const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.96+Math.random()*.08;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay.drums);s.start(t);}
+function mHit(name,t,vol,layer='drums'){const b=MUS.buf[name];if(!b)return;const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=.96+Math.random()*.08;const g=AC.createGain();g.gain.value=vol;s.connect(g);g.connect(MUS.lay[layer]);s.start(t);}
 function musicIntensity(){
   if(state==='attract'||state==='loading')return 0;if(state==='dead')return 0;if(state==='won')return 1;
   let i=1;const alive=fighters.filter(f=>f.alive).length;
@@ -1665,19 +1764,22 @@ function musicIntensity(){
   if(player&&player.alive)for(const f of fighters){if(f===player||!f.alive)continue;if(f.pos.distanceToSquared(player.pos)<30){i=Math.max(i,zone.off?3:2);break;}}
   return i;}
 function musicTick(){
-  if(!AC||!MUS.gain)return;const want=state==='attract'||state==='dead'||state==='won'?'menu':'battle';
+  if(!AC||!MUS.gain)return;const want=musicTheme();
   const now=AC.currentTime;
+  if(state!==MUS.st){const was=MUS.st;MUS.st=state;if(was==='playing'&&(state==='won'||state==='dead'))sting(state==='won'?'victory':'defeat');}
   if(want!==MUS.theme){MUS.theme=want;MUS.step=0;MUS.bar=0;MUS.next=Math.max(MUS.next,now+.1);}
   const T=THEMES[MUS.theme],sd=60/T.bpm/4;
   if(MUS.next<now-.1)MUS.next=now+.05;   // after a stall, pick up from now instead of firing a burst of old notes
   while(MUS.next<now+.25){const t=MUS.next,st=MUS.step%16;
     if(st===0){MUS.int=musicIntensity();const I=MUS.int,L=MUS.lay,set=(g,v)=>g.gain.setTargetAtTime(v,t,.8);
       if(MUS.theme==='menu'){set(L.pad,1);set(L.strings,0);set(L.drums,.5);set(L.lead,.9);}
+      else if(T.mix){const m=T.mix(I);set(L.pad,m[0]);set(L.strings,m[1]);set(L.drums,m[2]);set(L.lead,m[3]);}
       else{set(L.pad,1);set(L.strings,I>=1?1:0);set(L.drums,I>=1?1:.0);set(L.lead,I>=3?1:I>=2?.55:0);}}
     playStep(T,st,t,sd);MUS.step++;if(st===15)MUS.bar++;MUS.next+=sd;}
 }
 function playStep(T,st,t,sd){
   const chord=CH[T.prog[MUS.bar%T.prog.length]],I=MUS.int,menu=MUS.theme==='menu';
+  if(T.play){T.play(st,t,sd,chord,I,MUS.bar);return;}
   if(st===0){mNote('organ',chord[0]-12,t,.32,sd*16*1.02,'pad');mNote('organ',chord[2]-12,t,.18,sd*16*1.02,'pad');if(!menu||MUS.bar%2===0)mNote('organ',chord[1],t,.12,sd*16,'pad');}
   if(menu){ // harp arpeggios under a slow recorder line
     if(st%2===0){const arp=[chord[0],chord[1],chord[2],chord[0]+12,chord[1]+12,chord[2]+12,chord[0]+12,chord[2]];mNote('harp',arp[st/2],t,.22,sd*6,'strings');MUS.lay.strings.gain.setTargetAtTime(1,t,.5);}
@@ -1786,6 +1888,7 @@ const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_P
 const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1,b:0,hd:0,ft:1,mk:0};
 function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Number.isInteger(v)&&v>=0&&v<=max?v:null;
   const o={o:n(l.o,4),h:n(l.h,3),bd:n(l.bd,3)??(l.bd?1:0),hc:n(l.hc,4),sk:n(l.sk,3),hd:n(l.hd,2)??0,ft:n(l.ft,2)??0,mk:n(l.mk,2)??0};const b=n(l.b,3);if(b!==null)o.b=b;
+  const sh=n(l.sh,SHAPES.length-1);if(sh)o.sh=sh;   // sh: an exaggerated shape (SHAPES), for the odd characters
   return o.o===null||o.h===null||o.hc===null||o.sk===null?null:o;}
 function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:(q()*4)|0,bd:[0,1,1,2,3][(q()*5)|0],hc:q()<.12?4:(q()*4)|0,sk:(q()*4)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.82?0:q()<.6?1:2};}
 const BL_N=10;
@@ -1941,10 +2044,55 @@ function hairMat(col){const m=std({color:col,roughness:.62,metalness:0,side:THRE
         float thick=(.52-.3*vLayer)*(.65+.45*r2);if(r<vLayer*.7||dist>thick)discard;   // strands thin out toward the tips; some are short
         diffuseColor.rgb*=.55+.5*vLayer+.15*(r2-.5); }`);};
   m.customProgramCacheKey=()=>'bm-hair';return m;}
+// ---- odd shapes for the funny characters: a look's sh picks one. Only the body's bind-pose mesh is reshaped (and the eyes with a bigger or
+// smaller head), so the skeleton, animation, grip and handling are untouched; hair, cloth and armour are grown from the reshaped body as usual.
+//  head   scale the head about the top of the neck      belly  push the gut out, mostly forward
+//  hands  scale both hands                              forearms  thicken the forearms
+//  nose   enlarge the nose                              ears   stick the ears out
+// The fighter's head and gut hit capsules grow or shrink to match (see Fighter constructor).
+const SHAPES=[null,{head:1.85},{belly:1.8},{hands:1.8,forearms:1.9},{nose:2.5},{head:.6},{belly:1.3,head:1.2},{ears:1}];
+const SHAPE_GEO=new Map();
+function shapeBody(body,eyes,sh){const S=SHAPES[sh];if(!S)return;const key=body.name+'~'+sh;
+  if(!SHAPE_GEO.has(key)){
+    const J={},bi={};body.skeleton.bones.forEach((b,i)=>{const nm=b.name.replace('mixamorig','').replace(':','');bi[nm]=i;const e=new THREE.Matrix4().copy(body.skeleton.boneInverses[i]).invert().elements;J[nm]=V(e[12],e[13],e[14]);});
+    const g=body.geometry.clone(),P=g.attributes.position,SI=g.attributes.skinIndex,SW=g.attributes.skinWeight,n=P.count,O=P.array.slice();
+    const set=names=>new Set(names.filter(x=>x in bi).map(x=>bi[x]));
+    const W=(v,st)=>{let w=0;for(let k=0;k<4;k++)if(st.has(SI.getComponent(v,k)))w+=SW.getComponent(v,k);return w;};
+    const HEAD=set(['Head','HeadTop_End','LeftEye','RightEye']),SPINE=set(['Spine']),SPINE1=set(['Spine1']),HIPS=set(['Hips']);
+    const HAND={L:set(Object.keys(bi).filter(x=>x.startsWith('LeftHand'))),R:set(Object.keys(bi).filter(x=>x.startsWith('RightHand')))},FORE={L:set(['LeftForeArm']),R:set(['RightForeArm'])};
+    // eye height and the face's front, from the eyes (as bodyMarks does)
+    let ey=J.Head.y+.09,ec=0,ez=-9;if(eyes){const E=eyes.geometry.attributes.position;ey=0;for(let i=0;i<E.count;i++){ey+=E.getY(i);ez=Math.max(ez,E.getZ(i));ec++;}ey/=ec;}
+    const hv=[];for(let v=0;v<n;v++)if(W(v,HEAD)>.9)hv.push(v);
+    // the nose tip: the most forward head point on the middle line, below the eyes
+    let tip=null;for(const v of hv){const x=O[v*3],y=O[v*3+1],z=O[v*3+2];if(Math.abs(x-J.Head.x)<.012&&y<ey-.008&&y>ey-.07&&(!tip||z>tip.z))tip=V(x,y,z);}
+    // each ear: the widest head point at eye height, behind the eyes
+    const ear={};for(const v of hv){const x=O[v*3],y=O[v*3+1],z=O[v*3+2];if(y<ey-.045||y>ey+.01||z>ez-.05)continue;const sd=x>J.Head.x?'L':'R';if(!ear[sd]||Math.abs(x-J.Head.x)>Math.abs(ear[sd].x-J.Head.x))ear[sd]=V(x,y,z);}
+    const yb=J.Spine.y+.03;
+    const scaleAbout=(q,c,k)=>{q.x+=k*(q.x-c.x);q.y+=k*(q.y-c.y);q.z+=k*(q.z-c.z);};
+    const q=V(),o=V();
+    const warp=(v,src,dst,morph)=>{o.set(src[v*3],src[v*3+1],src[v*3+2]);q.copy(o);let k=0;
+      if(S.head){const w=W(v,HEAD);if(w>0){k=w*(S.head-1);if(!morph)scaleAbout(q,J.Head,k);}}
+      if(morph)return k;   // morph deltas only follow the head's scale
+      if(S.belly){const dz=o.z-J.Spine.z,front=clamp((dz+.08)/.12,0,1);   // a round belly: the gut swelled about a point just in front of the spine, less at the back
+        const w=Math.min(1,W(v,SPINE)+.8*W(v,SPINE1)+.5*W(v,HIPS))*Math.exp(-(((o.y-yb)/.14)**2))*front*front*(3-2*front);if(w>0)scaleAbout(q,V(J.Spine.x,yb,J.Spine.z+.03),w*S.belly*.55);}
+      for(const sd of ['L','R']){const side=sd==='L'?'Left':'Right';
+        if(S.hands){const w=W(v,HAND[sd]);if(w>0)scaleAbout(q,J[side+'Hand'],w*(S.hands-1));}
+        if(S.forearms){const w=W(v,FORE[sd]);if(w>0){const A=J[side+'ForeArm'],B=J[side+'Hand'],ab=B.clone().sub(A),t=clamp(o.clone().sub(A).dot(ab)/ab.lengthSq(),0,1);
+          const c=A.clone().addScaledVector(ab,t),taper=Math.pow(Math.sin(Math.PI*Math.min(1,.08+t*1.05)),.5);q.addScaledVector(o.clone().sub(c),w*(S.forearms-1)*taper);}}}
+      if(S.nose&&tip){const d=o.distanceTo(tip),R=.045;if(d<R&&o.z>tip.z-.045&&o.y<ey-.012){const f=(1-d/R)**2*Math.min(1,(ey-.012-o.y)/.012);scaleAbout(q,V(tip.x,tip.y+.008,tip.z-.03),f*(S.nose-1));}}
+      if(S.ears)for(const sd of ['L','R']){const e=ear[sd];if(!e)continue;const d=o.distanceTo(e),R=.04;if(d<R){const f=(1-d/R)**1.5,dir=Math.sign(e.x-J.Head.x);q.x+=dir*f*S.ears*.035;scaleAbout(q,e,f*S.ears*.6);q.z-=f*S.ears*.012;}}
+      dst[v*3]=q.x;dst[v*3+1]=q.y;dst[v*3+2]=q.z;return k;};
+    for(let v=0;v<n;v++)warp(v,O,P.array,false);P.needsUpdate=true;
+    if(S.head)for(const M of g.morphAttributes.position||[]){const A=M.array;for(let v=0;v<n;v++){const k=warp(v,O,null,true);if(k){A[v*3]*=1+k;A[v*3+1]*=1+k;A[v*3+2]*=1+k;}}M.needsUpdate=true;}
+    g.computeBoundingSphere();
+    let eg=null;if(eyes&&S.head){eg=eyes.geometry.clone();const E=eg.attributes.position;for(let i=0;i<E.count;i++){q.set(E.getX(i),E.getY(i),E.getZ(i));scaleAbout(q,J.Head,S.head-1);E.setXYZ(i,q.x,q.y,q.z);}E.needsUpdate=true;eg.computeBoundingSphere();}
+    SHAPE_GEO.set(key,{g,eg});}
+  const r=SHAPE_GEO.get(key);body.geometry=r.g;body.name=key;delete body.userData.marks;if(eyes&&r.eg)eyes.geometry=r.eg;}
 function dressMH(model,look,pal,mats){
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
   for(const m of drop)m.removeFromParent();
+  if(look.sh){let eyes=null;model.traverse(m=>{if(m.isMesh&&m.name===want.replace('Body','Eyes'))eyes=m;});shapeBody(body,eyes,look.sh);}
   const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
   const skin=std({map:T.d,normalMap:T.n,normalScale:new THREE.Vector2(.9,.9),color:new THREE.Color().setRGB(.45*tone[0],.275*tone[1],.2*tone[2]),roughness:.5});
   tintMaterial(skin,2,pal,mats);
@@ -2964,8 +3112,10 @@ class Fighter{
     this.sword=new Sword(WEAPONS[load.weapon]);this.sword.owner=this;this.sword.setGroup(GR_HELD);this.pb=null;
     this.chest=V(x,1.35,z);this.shR=V(x,1.45,z);this.shL=V(x,1.45,z);this.headPos=V(x,1.65,z);
     this.caps=CAPS.map(c=>({a:V(),b:V(),r:c[2],zone:c[3],sever:c[4],req:c[5],ba:c[0],bb:c[1],on:true}));
+    {const shp=SHAPES[this.look.sh];if(shp)for(const c of this.caps){if(c.zone==='head'&&shp.head)c.r*=Math.min(1.5,shp.head);if(c.ba==='Hips'&&shp.belly)c.r*=1+.22*shp.belly;}}   // a big head is a big target
+    this.voice=load.voice||1;   // pitch of grunts and cries (a character's voice)
     this.ragdoll=null;this.kills=0;this.lastHitBy=null;this.lastHitT=-99;this.hitCd=new Map();this.clashCd=0;
-    this.ai={target:null,retarget:0,phase:'guard',pt:0,atk:null,cd:rand(.5,1.5),strafe:Math.random()<.5?1:-1,strafeT:rand(1,3),skill:rand(.3,.72),react:rand(.12,.3),aggr:rand(.6,1.4),block:0,blockDelay:0,threatCd:0,stuck:0,lastPos:V(x,0,z),detour:0,detourDir:V(),wander:V(rand(-30,30),0,rand(-30,30)),loot:null,lootT:rand(0,1),throwT:-1,punchT:rand(.3,1),lastSide:'L',holdR:0,holdL:0};
+    this.ai={target:null,retarget:0,phase:'guard',pt:0,atk:null,cd:rand(.5,1.5),strafe:Math.random()<.5?1:-1,strafeT:rand(1,3),skill:rand(.3,.72),react:rand(.12,.3),aggr:rand(.6,1.4),block:0,blockDelay:0,threatCd:0,stuck:0,lastPos:V(x,0,z),detour:0,detourDir:V(),wander:V(rand(-30,30),0,rand(-30,30)),loot:null,lootT:rand(0,1),throwT:-1,punchT:rand(.3,1),lastSide:'L',holdR:0,holdL:0,kick:1,toss:1,fav:null};
     this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;this.root.updateMatrixWorld(true);
     this.cacheBody();
     {const ht=this.handTarget(V());this.sword.reset(ht,this.guideDir(ht,V()));}
@@ -3203,7 +3353,7 @@ class Fighter{
     // and you only really get it back standing still
     {const lu=this.lung||0,cap=(35+65*clamp(this.hp/100,0,1))*(1-.4*lu),mv=Math.hypot(this.vel.x,this.vel.z);   // a pierced lung: less wind, and it comes back slowly
       if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?34:27)*(.55+.45*clamp(this.hp/100,0,1))*(mv>3?.6:mv>.8?.9:1)*(1-.5*lu)*h);
-      if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2);}   // coughing blood
+      if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2*this.voice);}   // coughing blood
       if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
     if(legs&&onGround){
@@ -3228,7 +3378,7 @@ class Fighter{
       const guide=this.guideDir(tgt,V());
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else this.sword.step(h,tgt,guide,cm,str);
-      if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55);}if(ts<5)this._sw=false;
+      if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55,this.voice);}if(ts<5)this._sw=false;
     }
   }
   kickCheck(){
@@ -3348,7 +3498,7 @@ class Fighter{
     const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()<1e-4)this.fwd(f);f.normalize();
     let roll=0;if(P.Neck&&P.Spine1&&P.LeftArm&&P.RightArm){const up=V().subVectors(P.Neck,P.Spine1),sd=V().subVectors(P.LeftArm,P.RightArm),fr=V().crossVectors(sd,up).normalize();if(fr.y>.35)roll=.55+hurt*.4;}
     Rg.rise={t:0,rollT:roll,rollS:Math.random()<.5?1:-1,a:.6+hurt*1.3,b:.5+hurt*.9,c:.35+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
-    Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5);}}
+    Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}}
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
     const rf=this.ragdoll.rise&&this.ragdoll.rise.f;if(rf)this.yaw=Math.atan2(rf.x,rf.z);
@@ -3382,7 +3532,7 @@ class Fighter{
     // as in Half Sword: a man with no hands left to fight with, or bleeding out, runs from whoever is after him
     const beaten=!this.mainArm||(this.hp<22&&this.bleed>.05)||(this.hp<12);
     if(beaten&&tg&&!this.dummy&&!(RUN&&RUN.mode==='yard')){_v.subVectors(this.pos,tg.pos).setY(0);const d=_v.length()||1;wish.copy(_v).multiplyScalar(1/d);
-      if(d<9){run=this.stamina>8;this.faceDir(wish,h,5);this.ctrlT.x=.05;this.ctrlT.y=-.1;this.ctrlT.z=.3;if(Math.random()<h*.25&&simTime>(this.gruntT||0)){this.gruntT=simTime+2.5;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5);}return run;}}
+      if(d<9){run=this.stamina>8;this.faceDir(wish,h,5);this.ctrlT.x=.05;this.ctrlT.y=-.1;this.ctrlT.z=.3;if(Math.random()<h*.25&&simTime>(this.gruntT||0)){this.gruntT=simTime+2.5;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}return run;}}
     if(!this.armed()&&this.mainArm){
       if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
       const lpd=A.loot?Math.hypot(lootPos(A.loot,_t2).x-this.pos.x,_t2.z-this.pos.z):99;
@@ -3397,7 +3547,7 @@ class Fighter{
       const tgPunching=!tg.sword&&(tg.fists.R.phase==='charge'||tg.fists.L.phase==='charge');
       if(tgPunching&&d<1.1&&Math.random()<A.skill*.02)wish.addScaledVector(_v,-1);
       if(d<1.08&&A.punchT<=0&&this.stamina>14&&this.stagger<=0){const sd=A.lastSide==='R'?'L':'R';A.lastSide=sd;this.fistHold[sd]=true;A['hold'+sd]=rand(.06,.55)/A.aggr;A.punchT=rand(.25,.8)/A.aggr;}
-      if(d<1.2&&this.kickCd<=0&&this.stamina>40&&Math.random()<.003)this.kickReq=true;
+      if(d<1.2&&this.kickCd<=0&&this.stamina>40&&Math.random()<.003*A.kick)this.kickReq=true;
       return run;
     }
     if(!this.sword){
@@ -3442,8 +3592,8 @@ class Fighter{
       if(pointThreat&&A.block<=0&&A.phase==='guard'&&A.threatCd<=0&&Math.random()<A.skill){A.threatCd=.5;A.block=.55;A.blockDelay=A.react*.5;}
       if(A.block<=0&&ts>4.5&&d<reach+1.8&&A.threatCd<=0&&A.phase!=='strike'&&!(A.phase==='windup'&&A.pt>.2&&(kind==='blunt'||kind==='axe'))){A.threatCd=.55;if(Math.random()<A.skill){A.block=.42+A.react;A.blockDelay=A.react;if(A.phase==='windup')A.phase='guard';}}
       if(tg.stagger>.25&&A.phase==='guard'&&d<desired+.7)A.cd=Math.min(A.cd,0);   // riposte
-      if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005)this.kickReq=true;
-      if(A.throwT<0&&(kind==='spear'||kind==='axe')&&d>4&&d<9&&!tg.ragdoll&&this.stamina>40&&Math.random()<(kind==='spear'?.0015:.0006))A.throwT=0;
+      if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005*A.kick)this.kickReq=true;
+      if(A.throwT<0&&(kind==='spear'||kind==='axe')&&d>4&&d<9&&!tg.ragdoll&&this.stamina>40&&Math.random()<(kind==='spear'?.0015:.0006)*A.toss)A.throwT=0;
       if(A.block>0){A.block-=h;A.blockDelay-=h;if(A.blockDelay<=0&&tg.sword){
           _t2.subVectors(tg.sword.pointAt(.7,_t3),this.chest);const lx=_t2.dot(_r),ly=_t2.y;
           this.ctrlT.x=clamp(lx*.9,-.5,.5);this.ctrlT.y=clamp(ly*.85+.12,-.4,.55);this.ctrlT.z=.36;}
@@ -3453,6 +3603,7 @@ class Fighter{
         if(A.phase==='guard'){if(cautious&&A.cd>0)A.cd+=h*.4;this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.06;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.05;this.ctrlT.z=kind==='spear'?.34:.42;
           if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
+            if(A.fav&&!low&&Math.random()<.35)atk=ATTACKS.find(a=>a.n===A.fav)||atk;   // a character's favourite swing
             A.atk=atk;A.phase='windup';A.pt=0;A.feint=kind!=='fist'&&!low&&Math.random()<A.skill*.38;}}
         else if(A.phase==='windup'){const s=A.atk.s,ovh=(kind==='axe'||kind==='blunt'||(this.sword&&this.sword.def.weight>=1.4))&&s[1]>.45;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=ovh?.62:s[1];this.ctrlT.z=A.atk.thrust?.28:ovh?.3:.4;
           const hv=kind==='blunt'||kind==='axe'||(this.sword&&this.sword.def.weight>=1.5),tol=hv?.16:.08;const ready=(A.pt>.42/A.aggr+.1&&Math.abs(this.ctrl.x-s[0])<tol&&Math.abs(this.ctrl.y-s[1])<tol)||A.pt>(hv?.8:1.2);
@@ -3760,7 +3911,7 @@ class Fighter{
     if(this.hp<50)this.hp=Math.min(50,this.hp+2.2*h);   // get away and catch your breath: you come back to about half, no further
     for(const k in this.limbs){const L=this.limbs[k];if(k==='head'||L.sev||L.dead)continue;const mx=LIMB_HP[k];if(L.hp<mx)L.hp=Math.min(mx,L.hp+.9*h);}}
   damage(dmg,by,cause){if(dmg>.5)this.hurtT=simTime;
-    if(!this.alive)return;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
+    if(!this.alive)return;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.75,this.voice);}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
@@ -3798,7 +3949,7 @@ class Fighter{
   }
   die(by,cause,imp,impP){
     if(!this.alive)return;this.alive=false;this.deathT=simTime;
-    sfx(this.id%2?'humanRoughDeath':'humanDeath',this.headPos,.85);sfx(this.armor.body?'fallArmoured':'fall',this.chest,.8,1,.35);
+    sfx(this.id%2?'humanRoughDeath':'humanDeath',this.headPos,.85,this.voice);sfx(this.armor.body?'fallArmoured':'fall',this.chest,.8,1,.35);
     if(!by&&this.lastHitBy&&simTime-this.lastHitT<12)by=this.lastHitBy;
     if(this.ragdoll){const R=this.ragdoll;R.rise=null;R.tone=0;R.reflex=0;R.sleep=false;R.age=Math.min(R.age,1);this.knocked=0;this.rec=null;}   // slain while down or getting up: the muscles let go (a dead body used to finish standing up)
     if(!this.ragdoll){this.makeRagdoll(cause==='beheaded'?null:imp,impP,cause==='beheaded'?.15:imp?.6:1);
@@ -4537,6 +4688,8 @@ function spawnMatch(withPlayer){
   clearMatch();score=0;if(!withPlayer)RUN=null;
   const names=[...NAMES].sort(()=>Math.random()-.5);const pals=[...PALETTES].sort(()=>Math.random()-.5);
   const M=MAPS[curMap];const n=withPlayer?M.fighters:7;const spots=[];
+  const me=withPlayer?ME():null,rcs=withPlayer&&NET.mode==='host'?NET.conns.filter(q=>q.hello):[];
+  const cast=charDraw(new Set([me&&me.ch,...rcs.map(q=>q.ch)].filter(Boolean)));let nc=Math.min(cast.length,Math.ceil((n-1)/2));
   for(let i=0;i<n;i++){
     let x=0,z=0,ok=false;
     for(let k=0;k<300&&!ok;k++){
@@ -4545,7 +4698,11 @@ function spawnMatch(withPlayer){
     }
     spots.push([x,z]);
     const isP=withPlayer&&i===0;const rc=withPlayer&&NET.mode==='host'&&i>=1?NET.conns.filter(q=>q.hello)[i-1]:null;
-    const f=new Fighter(isP?(PROFILE.name.trim()||'You'):rc?rc.name:names[i],isP,x,z,isP?PROFILE.pal.slice():rc&&rc.pal?rc.pal.slice():pals[i%pals.length],isP?{weapon:'arming',armor:[],look:PROFILE.look}:rc?{weapon:'arming',armor:[],look:rc.look}:botLoad());
+    const c=!isP&&!rc&&nc>0?cast[--nc]:null,kit=isP?me.kit:rc?(CHAR_BY[rc.ch]||{}).kit:c?c.kit:null,wp=kit?kit[0]:null,vc=isP?CHAR_BY[me.ch]:rc?CHAR_BY[rc.ch]:c;
+    const f=new Fighter(isP?me.name:rc?rc.name:c?c.name:names[i],isP,x,z,isP?me.pal:rc&&rc.pal?rc.pal.slice():c?c.pal.slice():pals[i%pals.length],
+      isP||rc?{weapon:wp&&wp!=='fists'?wp:'arming',armor:[],look:isP?me.look:rc.look,voice:vc&&vc.voice}:c?{weapon:wp==='fists'?'arming':wp,armor:headOnly(c.kit),look:c.look,voice:c.voice}:botLoad());
+    if(wp==='fists')bareHands(f);
+    if(c)applyStyle(f,c);
     if(rc){f.remote=rc;rc.f=f;}
     if(!withPlayer)f.yaw=Math.atan2(-x,-z);
     fighters.push(f);
@@ -5137,7 +5294,7 @@ function fighterDetail(f,dt){
   // voices: the downed groan and choke, the dying gurgle, the winded pant
   if(!headOff&&f.bones.Head&&f.pos.distanceToSquared(camera.position)<600){
     if(f.alive&&f.downed){f._vT=(f._vT??1+Math.random()*2)-dt;if(f._vT<0){f._vT=2.5+Math.random()*3.5;f.bones.Head.getWorldPosition(_fd);
-      if(hp<25&&Math.random()<.5)sGurgle(_fd,.8);else sfx(f.id%2?'humanRoughHurt':'humanHurt',_fd,.26,.72+Math.random()*.08,0,false);}}
+      if(hp<25&&Math.random()<.5)sGurgle(_fd,.8);else sfx(f.id%2?'humanRoughHurt':'humanHurt',_fd,.26,(.72+Math.random()*.08)*(f.voice||1),0,false);}}
     if(f._gurT&&simTime>f._gurT){f._gurT=0;if(Math.random()<.65){f.bones.Head.getWorldPosition(_fd);sGurgle(_fd,1);}}
     if(f.alive&&!f.isPlayer&&!f.ragdoll&&fat>.5&&AC){f._bT=(f._bT??0)-dt;if(f._bT<0){f._bT=lerp(1.5,.7,fat)*(.9+Math.random()*.2);f.bones.Head.getWorldPosition(_fd);const v=distVol(_fd)*.07*fat;if(v>.01)noiseBurst(AC.currentTime,.3,'bandpass',950,1.1,v);}}}
 }
@@ -5160,13 +5317,74 @@ window.__det={PRINTS,DRAGS,DUST,FLY,BRUISES,dentArmor,knockHelmet,armorPreview:d
 function clearDetails(){for(const F of FLY)scene.remove(F.g);FLY.length=0;BRUISES.length=0;for(const M of [PRINTS,DRAGS]){for(let i=0;i<M.n;i++)M.m.setMatrixAt(i,_zero);M.m.instanceMatrix.needsUpdate=true;}DUST.life.fill(0);DUST.al.fill(0);}
 const perf={t:0,n:0,pr:Math.min(devicePixelRatio,1.5)};
 
+// ================================================================ characters
+// Ready-made fighters (Build 86): pick one on the fighter card, or meet them as opponents in every mode (about half the bots in a battle royale
+// and behind the menu, the whole tournament field, a duel's opponent, a champion leading each gauntlet wave from wave 3). Each has a look
+// (the card's keys; b = body: 0 athletic, 1 heavy, 2 strong, 3 lean; sh = an odd shape, see SHAPES), team colours from the card's swatches,
+// a signature kit [weapon, armour], a voice (pitch of their grunts, 1 = normal) and a style for when a bot plays them:
+//  skill, aggr  as on Fighter.ai      react  added to the reaction time in seconds (negative is quicker)
+//  kick, toss   how often they kick and throw their weapon (1 = as any bot)      fav  the swing (an ATTACKS name) they reach for
+// Playing one, you start a battle royale, the gauntlet and the yard with their weapon; duels and the tournament still hand both sides the
+// same kit, and brawl maps (the Tavern) still start everyone bare-handed. Nobody meets a copy of a character a human is playing.
+const CHARS=[
+  {id:'anselm',name:'Brother Anselm',tag:'Penitent monk · bare hands',bio:'Left the cloister and kept his vow never to carry a blade. His fists took no such vow.',
+   look:{o:3,h:0,bd:2,hc:4,sk:1,b:3,hd:2,ft:0,mk:0},pal:['#3e2f22','#2a1e14','#2e241a',0],kit:['fists',[]],style:{skill:.6,aggr:1.2,kick:2.2,fav:'thrust'}},
+  {id:'gerold',name:'Gerold the Ox',tag:'Woodcutter · greatsword',bio:'Twenty years felling oaks. He swings at men the same way, and he doesn\'t stop to check.',
+   look:{o:4,h:1,bd:3,hc:3,sk:0,b:1,hd:0,ft:2,mk:0},pal:['#6a2a1a','#1a1a1a','#2b2a22',0],kit:['greatsword',['nasal']],voice:.9,style:{skill:.5,aggr:1.25,kick:1.5,fav:'overhead'}},
+  {id:'ingvar',name:'Ingvar Red-Axe',tag:'Northern raider · bearded axe',bio:'Came south on a longship and never found a reason to leave. Throws his axe when he gets bored.',
+   look:{o:0,h:3,bd:3,hc:2,sk:0,b:2,hd:0,ft:2,mk:2},pal:['#6e1712','#c9a227','#241c18',1],kit:['axe',[]],style:{skill:.58,aggr:1.45,toss:3,fav:'diagR'}},
+  {id:'roland',name:'Sir Roland',tag:'Landless knight · longsword',bio:'Sir Roland of Vey: a good name, a better sword and no land at all. Fights cleanly and expects the same.',
+   look:{o:2,h:2,bd:2,hc:1,sk:1,b:0,hd:0,ft:2,mk:0},pal:['#1d3768','#c9a227','#24262b',1],kit:['longsword',['bascinet','plate','vambraces','greaves']],style:{skill:.78,aggr:.9,react:-.03,kick:.4,fav:'thrust'}},
+  {id:'tobin',name:'Tobin Quickstep',tag:'Street duellist · arming sword',bio:'Fast hands, faster feet, a scar from the one time they weren\'t, and no idea when to stop talking.',
+   look:{o:1,h:1,bd:0,hc:0,sk:2,b:3,hd:0,ft:1,mk:1},pal:['#2f5130','#d8d0bc','#2b2a22',1],kit:['arming',['kettle']],voice:1.1,style:{skill:.66,aggr:1.3,react:-.04,fav:'fromLeft'}},
+  {id:'wat',name:'Old Wat',tag:'Levy veteran · spear',bio:'Thirty winters in the levy. He keeps you on the end of his spear and waits for you to make a mistake.',
+   look:{o:3,h:2,bd:1,hc:4,sk:1,b:1,hd:1,ft:1,mk:0},pal:['#556b2f','#3a2a1a','#3a2e22',0],kit:['spear',['kettle','mail']],style:{skill:.76,aggr:.75,toss:1.6,fav:'thrust'}},
+  {id:'kasimir',name:'Black Kasimir',tag:'Mercenary in plate · mace',bio:'Nobody has seen his face. He never hurries; in that much steel, he never has to.',
+   look:{o:2,h:0,bd:0,hc:0,sk:2,b:2,hd:0,ft:2,mk:1},pal:['#2a2a2a','#a02020','#1e1e1e',0],kit:['mace',['greathelm','plate','vambraces','greaves']],voice:.85,style:{skill:.7,aggr:.85,kick:1.3,fav:'overhead'}},
+  {id:'yusuf',name:'Yusuf of Toledo',tag:'Wanderer · arming sword',bio:'Has fought in every arena from Toledo to the Rhine and kept notes on all of them. Reads a guard like a page.',
+   look:{o:3,h:1,bd:1,hc:0,sk:3,b:0,hd:0,ft:1,mk:0},pal:['#c8a060','#5a2a1a','#3a3028',1],kit:['arming',['nasal','mail']],style:{skill:.8,aggr:1,react:-.04,kick:.6,fav:'diagL'}},
+  {id:'emeric',name:'Emeric Horseless',tag:'Marcher rider · bearded axe',bio:'Lost his horse at the river and his temper soon after. Comes in wild and keeps coming.',
+   look:{o:4,h:3,bd:1,hc:0,sk:1,b:3,hd:0,ft:2,mk:0},pal:['#5a3a6a','#e0c060','#24262b',1],kit:['axe',['nasal','mail']],style:{skill:.52,aggr:1.55,toss:1.5,kick:1.2,fav:'fromRight'}},
+  {id:'cuthbert',name:'Captain Cuthbert',tag:'Sellsword captain · longsword',bio:'Fights for whoever pays best and kicks whoever is down.',
+   look:{o:2,h:2,bd:3,hc:1,sk:0,b:0,hd:0,ft:2,mk:1},pal:['#40506a','#a02020','#2a2e34',1],kit:['longsword',['kettle','mail','vambraces']],style:{skill:.7,aggr:1.05,kick:2.5,fav:'low'}},
+  // the odd ones: an exaggerated shape (look.sh), loud colours and a voice to match
+  {id:'barnaby',name:'Big Head Barnaby',tag:'Village genius · mace',bio:'His mother always said he had a big brain. No helmet in the land will fit it, so he goes without.',
+   look:{o:1,h:1,bd:2,hc:2,sk:0,b:3,hd:0,ft:1,mk:0,sh:1},pal:['#d4a017','#6a2c8a','#3a2a5a',1],kit:['mace',[]],voice:1.45,style:{skill:.45,aggr:1.35,kick:1.2,fav:'overhead'}},
+  {id:'gutbert',name:'Gutbert the Vast',tag:'Glutton · severed leg',bio:'Came for the feast and stayed for the fighting. Swings a leg like a drumstick and won\'t say whose it was.',
+   look:{o:1,h:0,bd:1,hc:3,sk:0,b:1,hd:0,ft:0,mk:0,sh:2},pal:['#b8342a','#e0c060','#5a3a2a',0],kit:['legLimb',[]],voice:.8,style:{skill:.42,aggr:.9,kick:.5,fav:'overhead'}},
+  {id:'magnus',name:'Mitts Magnus',tag:'Blacksmith · bare hands',bio:'Forty years at the anvil gave him forearms like hams and fists like anvils. He finds swords a bit rude.',
+   look:{o:0,h:1,bd:3,hc:0,sk:2,b:2,hd:0,ft:2,mk:0,sh:3},pal:['#3a3028','#c97a2a','#241c18',0],kit:['fists',[]],voice:.9,style:{skill:.6,aggr:1.15,kick:.8,fav:'thrust'}},
+  {id:'neville',name:'Nosy Neville',tag:'Village gossip · spear',bio:'Sticks his nose into every fight, then throws a spear at it from as far away as he can.',
+   look:{o:3,h:2,bd:2,hc:1,sk:1,b:3,hd:0,ft:1,mk:0,sh:4},pal:['#2b8a7a','#e0c060','#2a2e34',1],kit:['spear',['nasal']],voice:1.25,style:{skill:.5,aggr:.6,toss:7,kick:.3,fav:'thrust'}},
+  {id:'torvald',name:'Tiny Torvald',tag:'Gentle giant · greatsword',bio:'Built like a barn door, with a head like a turnip. Very kind. Has never once had a plan.',
+   look:{o:0,h:3,bd:3,hc:2,sk:0,b:2,hd:0,ft:2,mk:0,sh:5},pal:['#3a5a7a','#e8e0d0','#2a2e34',0],kit:['greatsword',['mail']],voice:.72,style:{skill:.48,aggr:1.4,kick:1.4,fav:'overhead'}},
+  {id:'puddington',name:'Sir Puddington',tag:'Pompous knight · longsword',bio:'Has never lost a duel, as far as anyone has heard him tell it. Ordered his breastplate a size up, twice.',
+   look:{o:2,h:2,bd:3,hc:4,sk:0,b:1,hd:0,ft:2,mk:0,sh:6},pal:['#e86aa6','#9acd32','#3a3028',1],kit:['longsword',['bascinet','plate']],voice:1.1,style:{skill:.55,aggr:.7,react:.03,kick:2,fav:'thrust'}},
+  {id:'pip',name:'Pip the Fool',tag:'Court jester · arming sword',bio:'Juggles, tumbles, and with those ears hears everything you plan to do next.',
+   look:{o:3,h:1,bd:2,hc:3,sk:1,b:3,hd:0,ft:1,mk:0,sh:7},pal:['#c0261c','#e0c060','#1a1a1a',1],kit:['arming',[]],voice:1.35,style:{skill:.7,aggr:1.5,react:-.05,kick:3,fav:'fromLeft'}},
+];
+const CHAR_BY=Object.fromEntries(CHARS.map(c=>[c.id,c]));
+const kitNames=kit=>[WEAPONS[kit[0]].name,...kit[1].map(a=>ARMOR[a].name)];
+const headOnly=kit=>kit[1].filter(a=>ARMOR[a].slot==='head');   // a battle royale starts them with their helmet; the rest is loot
+// a character entering an arena mode as a bot (see humans() and botEntrant())
+function charEntrant(c){return {ctl:null,name:c.name,pal:c.pal.slice(),look:{...c.look},human:false,skill:c.style.skill,ch:c.id};}
+// a bot plays a character its way; boost is added to the character's own skill (later rounds and waves)
+function applyStyle(f,c,boost=0){const st=c.style,A=f.ai;A.skill=clamp(st.skill+boost,.1,.97);A.react=clamp(.32-A.skill*.25+(st.react||0),.06,.32);
+  A.aggr=st.aggr*(.85+A.skill*.3);A.kick=st.kick||1;A.toss=st.toss||1;A.fav=st.fav||null;}
+// the roster in a fresh random order, leaving out characters someone is already playing
+function charDraw(taken){return CHARS.filter(c=>!(taken&&taken.has(c.id))).sort(()=>Math.random()-.5);}
+function bareHands(f){if(f.sword){f.sword.dispose();f.sword=null;}f.giveFists();}
+
 // ================================================================ your fighter
 const SW=[['#6e1712','#1d3768','#2f5130','#5a3a6a','#8a6a3a','#2a2a2a','#b8ad98','#3a5a7a','#6a2a1a','#c8a060','#40506a','#556b2f'],
   ['#c9a227','#d8d0bc','#a02020','#1a1a1a','#e0c060','#3a2a1a','#7a1f1f','#e8e0d0','#5a2a1a','#2b4d7a'],
   ['#241c18','#24262b','#2b2a22','#3a2e22','#1e1e1e','#3a3028','#2a2e34','#4a3a2a']];
-let PROFILE={name:'',pal:['#6e1712','#c9a227','#241c18',1],look:{...DEF_LOOK}};
-try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&Array.isArray(p.pal)&&p.pal.length===4)PROFILE={name:String(p.name||'').slice(0,24),pal:p.pal,look:cleanLook(p.look)||{...DEF_LOOK}};}catch(e){}
-function saveProfile(){try{localStorage.setItem('bloodmoor-fighter',JSON.stringify(PROFILE));}catch(e){}}
+let PROFILE={name:'',pal:['#6e1712','#c9a227','#241c18',1],look:{...DEF_LOOK},ch:''};
+try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&Array.isArray(p.pal)&&p.pal.length===4)PROFILE={name:String(p.name||'').slice(0,24),pal:p.pal,look:cleanLook(p.look)||{...DEF_LOOK},ch:CHAR_BY[p.ch]?p.ch:''};}catch(e){}
+// a friend tells the host again when they change fighter in the lobby (the host just takes the newest hello)
+function saveProfile(){try{localStorage.setItem('bloodmoor-fighter',JSON.stringify(PROFILE));}catch(e){}clearTimeout(saveProfile.t);saveProfile.t=setTimeout(sendHello,300);}
+// who you are this match: the character picked on the card, or the fighter you made (kit null = the mode's usual start)
+function ME(){const c=CHAR_BY[PROFILE.ch];return c?{name:c.name,pal:c.pal.slice(),look:{...c.look},ch:c.id,kit:c.kit}:{name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),look:PROFILE.look,ch:'',kit:null};}
 const prev={r:null,scene:null,cam:null,model:null,mats:[],mixer:null};
 function buildPreview(){
   const cv=el('fprev');if(!cv||prev.r)return;
@@ -5178,24 +5396,37 @@ function buildPreview(){
 }
 // the preview is re-dressed when the look changes; colour changes just update the dye
 function dressPreview(){if(!prev.scene)return;const ry=prev.model?prev.model.rotation.y:0;if(prev.model)prev.scene.remove(prev.model);prev.mats=[];
-  prev.model=SkeletonUtils.clone(GLTF.scene);dressModel(prev.model,PROFILE.look,PROFILE.pal,prev.mats);prev.model.rotation.y=ry;prev.scene.add(prev.model);
+  const me=ME();prev.model=SkeletonUtils.clone(GLTF.scene);dressModel(prev.model,me.look,me.pal,prev.mats);prev.model.rotation.y=ry;prev.scene.add(prev.model);
+  if(me.kit)for(const a of me.kit[1]){const def=ARMOR[a];fitArmor({model:prev.model},def);   // a character is shown in their armour
+    if(def.slot==='head')prev.model.traverse(o=>{if(o.userData.hair)o.visible=false;});if(a==='mail')for(const m of prev.mats)if(m.userData.U.uBodyMail)m.userData.U.uBodyMail.value=1;}
   prev.mixer=new THREE.AnimationMixer(prev.model);prev.mixer.clipAction(GLTF.animations.find(a=>a.name==='idle')).play();}
-function applyPreview(){for(const m of prev.mats){const U=m.userData.U;U.uTint.value.set(PROFILE.pal[0]);U.uTrim.value.set(PROFILE.pal[1]);U.uHose.value.set(PROFILE.pal[2]);U.uParty.value=PROFILE.pal[3];}}
+function applyPreview(){const pal=ME().pal;for(const m of prev.mats){const U=m.userData.U;U.uTint.value.set(pal[0]);U.uTrim.value.set(pal[1]);U.uHose.value.set(pal[2]);U.uParty.value=pal[3];}}
 function renderPreview(dt){if(!prev.r||el('menu').classList.contains('hide')||innerWidth<=1100)return;prev.mixer.update(dt);if(performance.now()-(prev.dragAt||0)>2500)prev.model.rotation.y+=dt*.45;prev.r.render(prev.scene,prev.cam);}
 function initFighterCard(){
+  const syncs=[];
   el('fname').value=PROFILE.name;el('fname').addEventListener('input',e=>{PROFILE.name=e.target.value.replace(/[<>&"]/g,'').slice(0,24);saveProfile();});
   el('fname').addEventListener('keydown',e=>e.stopPropagation());
   document.querySelectorAll('.sw[data-k]').forEach(box=>{const k=+box.dataset.k;
     const sync=()=>box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',b.dataset.c===PROFILE.pal[k]?'true':'false'));
     for(const c of SW[k]){const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.setAttribute('role','radio');b.setAttribute('aria-label',c);
-      b.addEventListener('click',()=>{PROFILE.pal[k]=c;saveProfile();sync();applyPreview();});box.appendChild(b);}sync();});
+      b.addEventListener('click',()=>{PROFILE.pal[k]=c;saveProfile();sync();applyPreview();});box.appendChild(b);}sync();syncs.push(sync);});
   const ps=()=>el('fpat').querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',+b.dataset.v===PROFILE.pal[3]?'true':'false'));
-  el('fpat').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.pal[3]=+b.dataset.v;saveProfile();ps();applyPreview();}));ps();
+  el('fpat').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.pal[3]=+b.dataset.v;saveProfile();ps();applyPreview();}));ps();syncs.push(ps);
   // look: outfit, hair, beard, hair colour and skin re-dress the preview
   document.querySelectorAll('[data-look]').forEach(box=>{const k=box.dataset.look;
     if(box.classList.contains('sw')){const cols=k==='hc'?LOOK.hairSw:LOOK.skinSw;cols.forEach((c,i)=>{const b=document.createElement('button');b.style.background=c;b.dataset.v=i;b.setAttribute('role','radio');b.setAttribute('aria-label',(k==='hc'?'Hair colour ':'Skin tone ')+(i+1));box.appendChild(b);});}
     const sync=()=>box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',+b.dataset.v===+PROFILE.look[k]?'true':'false'));
-    box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.look[k]=+b.dataset.v;saveProfile();sync();dressPreview();}));sync();});
+    box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{PROFILE.look[k]=+b.dataset.v;saveProfile();sync();dressPreview();}));sync();syncs.push(sync);});
+  // the character picker: Your own, then the roster; a character hides the make-your-own rows and shows who they are instead
+  const order=['',...CHARS.map(c=>c.id)];
+  const showChar=()=>{const c=CHAR_BY[PROFILE.ch];el('chName').textContent=c?c.name:'Your own';el('chTag').textContent=c?c.tag:'Made by you, below';
+    el('chInfo').classList.toggle('hide',!c);el('custom').classList.toggle('hide',!!c);
+    if(c){el('chBio').textContent=c.bio;el('chKit').innerHTML=kitNames(c.kit).map(t=>`<span>${esc(t)}</span>`).join('');}
+    if(prev.scene)dressPreview();};
+  const step=d=>{const i=Math.max(0,order.indexOf(PROFILE.ch));PROFILE.ch=order[(i+d+order.length)%order.length];saveProfile();showChar();};
+  el('chPrev').addEventListener('click',()=>step(-1));el('chNext').addEventListener('click',()=>step(1));
+  el('chCopy').addEventListener('click',()=>{const c=CHAR_BY[PROFILE.ch];if(!c)return;PROFILE.look={...c.look};delete PROFILE.look.sh;PROFILE.pal=c.pal.slice();PROFILE.ch='';saveProfile();syncs.forEach(f=>f());showChar();el('fname').focus();});
+  showChar();
   buildPreview();
   {const cv=el('fprev');let dx=null;cv.style.cursor='grab';   // drag the preview to turn your fighter round
    cv.addEventListener('pointerdown',e=>{dx=e.clientX;cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
@@ -5209,7 +5440,9 @@ let MODE='br',RUN=null,END=null,MODEHUD=['',''];
 try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
-function humans(){const h=[{ctl:'me',name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),look:PROFILE.look,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,human:true});return h;}
+function humans(){const me=ME(),h=[{ctl:'me',name:me.name,pal:me.pal,look:me.look,ch:me.ch,kit:me.kit,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,ch:x.ch||'',kit:CHAR_BY[x.ch]?CHAR_BY[x.ch].kit:null,human:true});return h;}
+const takenChars=H=>new Set(H.map(e=>e.ch).filter(Boolean));
+const ownWeapon=(en,def)=>en.kit?en.kit[0]:def;   // humans playing a character start the gauntlet and the yard with that character's weapon
 function botEntrant(name,skill){return {ctl:null,name,pal:PALETTES[(Math.random()*PALETTES.length)|0],human:false,skill};}
 const vb=(n,a,b)=>n+' '+(n==='You'?b:a);
 function showBanner(title,sub){const b=el('banner');b.querySelector('b').textContent=title;b.querySelector('span').textContent=sub||'';b.classList.remove('hide');b.style.animation='none';void b.offsetWidth;b.style.animation='';clearTimeout(showBanner.t);showBanner.t=setTimeout(()=>b.classList.add('hide'),3200);}
@@ -5224,10 +5457,12 @@ function spawnEntrant(en,x,z,kit,skill){
   if(PIT){let dx=x-PIT.x,dz=z-PIT.z,d=Math.hypot(dx,dz);const m=PIT.r+2;if(d<m){if(d<1e-3){dx=0;dz=-1;d=1;}x=PIT.x+dx/d*m;z=PIT.z+dz/d*m;}}   // the Pit: start clear of the edge
   if(MAPS[curMap].brawl)kit=['fists',[]];
   if(SHIP){const t=x;x=z;z=clamp(t*.3,-1.2,1.2);}   // the deck runs fore and aft: arena modes line up along it
-  const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look});
+  const isMe=en.ctl==='me';const f=new Fighter(en.name,isMe,x,z,en.pal,{weapon:kit[0]==='fists'?'arming':kit[0],armor:kit[1],look:en.look,voice:(CHAR_BY[en.ch]||{}).voice});
   if(kit[0]==='fists'){f.sword.dispose();f.sword=null;f.giveFists();}
   if(en.ctl&&en.ctl!=='me'){f.remote=en.ctl;en.ctl.f=f;}
-  if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
+  const c=!en.human&&en.ch?CHAR_BY[en.ch]:null;
+  if(c)applyStyle(f,c,skill!=null?skill-c.style.skill:0);
+  else if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
   f.yaw=Math.atan2(-x,-z);f.entrant=en;f.ai.retarget=0;fighters.push(f);if(isMe){player=f;f.pitch=-.05;}return f;
 }
 function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;if(MAPS[curMap].brawl)tavernLoot();}
@@ -5239,20 +5474,21 @@ function endRun(winners,title,line,cause){
 }
 function modeStart(){
   const H=humans();
-  if(MODE==='duel'){const foe=H[1]||botEntrant(BOT_NAMES()[0],.62);RUN={mode:'duel',a:H[0],b:foe,sa:0,sb:0,round:0,next:0};duelRound();}
+  if(MODE==='duel'){const foe=H[1]||charEntrant(charDraw(takenChars(H))[0]);RUN={mode:'duel',a:H[0],b:foe,sa:0,sb:0,round:0,next:0};duelRound();}
   else if(MODE==='tourney'){
-    const ents=H.slice(0,8);const names=BOT_NAMES();let k=0;while(ents.length<8)ents.push(botEntrant(names[k++],rand(.35,.75)));
+    const ents=H.slice(0,8);const names=BOT_NAMES(),cast=charDraw(takenChars(H));let k=0;while(ents.length<8)ents.push(cast.length?charEntrant(cast.pop()):botEntrant(names[k++],rand(.35,.75)));
     ents.sort(()=>Math.random()-.5);RUN={mode:'tourney',round:0,ents,cur:ents.slice(),pairs:[],pi:0,results:[]};tourneyNextRound();}
   else if(MODE==='yard')yardStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
-    H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),['arming',['kettle']]);});hostSendStart();gauntletWave();}
+    H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),[ownWeapon(en,'arming'),['kettle']]);});hostSendStart();gauntletWave();}
 }
 // ---- duel: best of three, a fresh kit each round
 function duelRound(){
   const R=RUN;R.round++;const kit=KITS[(Math.random()*KITS.length)|0];roundSetup();
-  spawnEntrant(R.a,0,-3+MO(),kit,null);spawnEntrant(R.b,0,3+MO(),kit,R.b.human?null:.55+R.round*.05);
+  spawnEntrant(R.a,0,-3+MO(),kit,null);spawnEntrant(R.b,0,3+MO(),kit,R.b.human?null:R.b.ch?R.b.skill+(R.round-1)*.05:.55+R.round*.05);
   MODEHUD=[`${R.a.name} ${R.sa} – ${R.sb} ${R.b.name}`,`Duel · round ${R.round} · ${kit[2]}`];
-  hostSendStart();banner(`Round ${R.round}`,kit[2]);
+  const fc=R.round===1&&!R.b.human&&CHAR_BY[R.b.ch];   // round one introduces a character opponent
+  hostSendStart();banner(`Round ${R.round}`,fc?`${fc.name}, ${fc.tag.split(' · ')[0].toLowerCase()} · ${kit[2]}`:kit[2]);
 }
 // ---- tournament: eight fighters, single elimination; bot-vs-bot bouts are settled off stage
 const STAGE=['Quarterfinals','Semifinals','The final'];
@@ -5276,16 +5512,18 @@ function tourneyNextBout(){
 function gauntletWave(){
   const R=RUN;R.wave++;const hn=R.H.length;
   // the fallen come back between waves, and everyone patches up
-  const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),['arming',['kettle']]));}}
+  const back=[];for(const en of R.H){const f=fighters.find(q=>q.entrant===en&&q.alive);if(f){f.hp=Math.min(100,f.hp+45);f.bleed=0;f.stamina=100;}else{const a=Math.random()*6.283;back.push(spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),[ownWeapon(en,'arming'),['kettle']]));}}
   const n=Math.min(6,1+Math.floor(R.wave*.7)+(hn-1)),tier=Math.min(5,Math.floor(R.wave/2));const add=[];
   // they come in through the gate (or the gap in the fence) one after another and walk out to meet you; nobody appears out of thin air
   const E=MAPS[curMap].entry;R.queue=[];
-  for(let i=0;i<n;i++){const kit=KITS[Math.min(5,(Math.random()*(2+tier))|0)];const en=botEntrant(R.names[R.ni++%R.names.length],.3+R.wave*.06);en.foe=true;
+  let lead=null;if(R.wave>=3){R.cast=R.cast&&R.cast.length?R.cast:charDraw(takenChars(R.H));lead=R.cast.pop();}   // from wave 3 a character leads each wave in, in full kit
+  for(let i=0;i<n;i++){const champ=lead&&i===n-1;const kit=champ?[lead.kit[0],lead.kit[1],lead.name]:KITS[Math.min(5,(Math.random()*(2+tier))|0)];
+    const en=champ?charEntrant(lead):botEntrant(R.names[R.ni++%R.names.length],.3+R.wave*.06);if(champ)en.skill=Math.max(lead.style.skill,.3+R.wave*.06)+.04;en.foe=true;
     if(E)R.queue.push({en,kit,at:simTime+.8+i*1.5,lat:(i%3-1)*.9,back:Math.floor(i/3)*.8});
     else{const a=i/n*6.283+rand(-.3,.3);add.push(spawnEntrant(en,Math.cos(a)*Math.min(24,MAP-2),Math.sin(a)*Math.min(24,MAP-2),kit,en.skill));}}
   for(const f of fighters)f.ai.retarget=0;
   hostSendAdd([...back,...add]);
-  MODEHUD=[`Wave ${R.wave}`,`${n} coming · ${R.kills} slain so far`];banner(`Wave ${R.wave}`,`${n} fighter${n>1?'s':''} enter the arena`);
+  MODEHUD=[`Wave ${R.wave}`,`${n} coming · ${R.kills} slain so far`];banner(`Wave ${R.wave}`,`${n} fighter${n>1?'s':''} enter the arena`+(lead?` · ${lead.name} leads them`:''));
 }
 // ---- training yard: dummies to hit, any weapon on the number keys, and a readout of every blow
 const inYard=()=>NET.mode==='client'?NET.mode2==='yard':!!(RUN&&RUN.mode==='yard');
@@ -5295,11 +5533,11 @@ const YARD_DM=['Still','Guard','Spar'];
 const YARD={log:[],peak:0,cur:0,run:0,shown:''};
 function yardStart(H){
   RUN={mode:'yard',H,dm:0,dummies:[]};roundSetup();CD_END=simTime;YARD.log.length=0;YARD.peak=YARD.run=0;
-  H.forEach((en,i)=>{const f=spawnEntrant(en,(i-(H.length-1)/2)*1.6,-2.2+MO(),['longsword',[]]);yardHuman(f);});
+  H.forEach((en,i)=>{const f=spawnEntrant(en,(i-(H.length-1)/2)*1.6,-2.2+MO(),[ownWeapon(en,'longsword'),[]]);yardHuman(f);});
   for(let i=0;i<YARD_D.length;i++)yardDummy(i,true);
   hostSendStart();yardHud();banner('Training yard','1–7 switch weapons · H changes what the dummies do');
 }
-function yardHuman(f){f.noSever=true;f.yardW=1;}
+function yardHuman(f){f.noSever=true;f.yardW=Math.max(0,YARD_W.indexOf(f.sword?f.sword.def.id:'fists'));}
 function yardDummy(i,quiet){const R=RUN,D=YARD_D[i],old=R.dummies[i];
   if(old){const k=fighters.indexOf(old);if(k>=0)fighters.splice(k,1);old.dispose();}
   const en=botEntrant(D.name,.5);en.pal=['#8a7a60','#5a4a3a','#3a3028',0];en.look={o:1,h:0,bd:0,hc:0,sk:1};en.dummy=true;
@@ -5356,7 +5594,7 @@ function modeKill(killer,victim){
 function modeTick(){const R=RUN;if(!R||R.over)return;
   if(R.mode==='gauntlet'&&R.queue&&R.queue.length&&simTime>=R.queue[0].at){const q=R.queue.shift(),E=MAPS[curMap].entry;
     const f=spawnEntrant(q.en,E.x+E.dz*q.lat-E.dx*q.back,E.z-E.dx*q.lat-E.dz*q.back,q.kit,q.en.skill);f.yaw=Math.atan2(E.dx,E.dz);f.vel.set(E.dx*1.2,0,E.dz*1.2);f.ai.retarget=0;hostSendAdd([f]);}
-  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),['longsword',[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
+  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),[ownWeapon(q.en,'longsword'),[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
@@ -5408,7 +5646,7 @@ function hostLobby(){if(NET.mode!=='host'||!NET.peer)return;const n=NET.conns.fi
   el('leaveRoom').onclick=()=>{for(const x of NET.conns)try{x.c.send({t:'closed'});}catch(e){}netReset();};}
 function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
-  if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.look=cleanLook(d.look);x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,24).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
+  if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.look=cleanLook(d.look);x.ch=CHAR_BY[d.ch]?d.ch:'';x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,24).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
@@ -5464,6 +5702,9 @@ function clientSendInput(){
     try{NET.host.send(d);}catch(e){}
   }
 }
+// tell the host who you are: your own fighter, or the character you picked
+function sendHello(){const c=NET.host;if(NET.mode!=='client'||!c||!c.open)return;const me=ME();
+  try{c.send({t:'hello',name:me.ch?me.name:PROFILE.name.trim()||'Friend',pal:me.pal,look:me.look,ch:me.ch,build:BUILD});}catch(e){}}
 async function netJoin(code){
   code=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(code.length!==5){netLobby('Room codes are 5 letters and numbers.');return;}
@@ -5471,7 +5712,7 @@ async function netJoin(code){
   let P;try{P=await loadPeer();}catch(e){netLobby('Multiplayer could not load here.');return;}
   NET.mode='client';const peer=NET.peer=new P(undefined,peerOpts());
   peer.on('open',()=>{if(NET.host||NET.peer!==peer)return;const c=peer.connect('bloodmoor-'+code.toLowerCase(),{reliable:true});NET.host=c;
-    c.on('open',()=>{if(c.__opened)return;c.__opened=true;c.send({t:'hello',name:PROFILE.name.trim()||'Friend',pal:PROFILE.pal,look:PROFILE.look,build:BUILD});NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
+    c.on('open',()=>{if(c.__opened)return;c.__opened=true;sendHello();NET.code=code;try{localStorage.setItem('bloodmoor-lastjoin',code);}catch(e){}clientLobby();});
     c.on('data',clientData);
     c.on('close',()=>{if(window.__netdbg)console.warn('NETDBG client close',c.connectionId);if(NET.peer!==peer)return;const inGame=state!=='attract';netReset();if(inGame)toMainMenu();netLobby('Lost the connection to the host.');});
   });

@@ -5,7 +5,12 @@ A physics sword-fighting game that runs in the browser: battle royale with a clo
 **Play:** open `index.html` from any static web host (this repo is set up for GitHub Pages).
 
 ## Your fighter
-Pick a name, team colours, and a look: bare-chested, peasant or ranger garb, hair, beard, hair colour and skin tone. Friends see your fighter as you made it.
+Step through the fighter card's arrows to play one of seventeen characters, each with their own look, armour, signature weapon and fighting style (you start a battle royale, the gauntlet and the training yard with their weapon): Brother Anselm, Gerold the Ox, Ingvar Red-Axe, Sir Roland, Tobin Quickstep, Old Wat, Black Kasimir, Yusuf of Toledo, Emeric Horseless and Captain Cuthbert, plus seven odd ones with silly bodies and voices to match: Big Head Barnaby, Gutbert the Vast (a pot belly and a severed leg for a club), Mitts Magnus (giant fists), Nosy Neville, Tiny Torvald, Sir Puddington and Pip the Fool. The same characters turn up as opponents: about half the bots in a battle royale, the whole tournament field, your duel opponent, and a champion leading every gauntlet wave from wave 3.
+
+Or make your own: a name, team colours, a build, garb, head covering, footwear, hair, beard, face marks, hair colour and skin tone. Friends see your fighter as you made it.
+
+## Music
+Each place has its own theme: the battle theme in the village, a darbuka-driven theme in the Arena, a slow bell-tolling one in the Pit and on Mutiny, a tense one for duels and tournament bouts, and a jig in the training yard and the Tavern. Winning or losing a match plays a short fanfare or dirge. M turns the music on and off.
 
 ## Modes
 - **Battle royale**: everyone for themselves in the village or the arena; loot weapons and armor, stay inside the fire.

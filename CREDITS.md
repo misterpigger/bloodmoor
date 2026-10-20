@@ -63,6 +63,12 @@ Every recorded sound in `sfx/` is released under **CC0 1.0** (public domain dedi
 ## Music
 The score is written in the game's code and played on recordings of real instruments (organ, harp, strumstick, recorder, frame drums, tambourine) from the [Versilian Community Sample Library](https://github.com/sgossner/VCSL) by Versilian Studios, released under **CC0 1.0**. The short per-note MP3s in `music/` were prepared by the [Conquest](https://github.com/hoffspot/conquest) project.
 
+The Arena, Pit/Mutiny, duel and training-yard/Tavern themes (Build 86) add more VCSL instruments, also **CC0 1.0**, cut to the same format (mono, 32 kHz, 80 kbps, trimmed and levelled):
+- `psaltery-*.mp3` and `pluck-*.mp3`: *Psaltery, Bowed and Plucked* (`Chordophones/Zithers`, LongBow and Pluck articulations). VCSL names notes with C3 = MIDI 60, so `BowedPsaltery_C4` is `psaltery-72`.
+- `bell-*.mp3`: *Tubular Bells 2* (`Idiophones/Struck Idiophones`, the `_v2_` hits).
+- `wardrum.mp3`: *Bass Drum 1* (`Membranophones/Struck Membranophones`, `BDrumNew_hit_v7_rr1`).
+- `darbuka-doum.mp3`, `darbuka-tek.mp3`, `darbuka-ka.mp3`: *Darbuka* hits 1, 2 and 4 (`vl2_rr1`).
+
 ## Fighters
 - Bodies (since Build 54): [MakeHuman](http://www.makehumancommunity.org) base mesh hm08, morph targets and high-poly eyes ([makehumancommunity/makehuman](https://github.com/makehumancommunity/makehuman), `makehuman/data`), and the Mixamo-compatible rig, skin weights and UV masks from [MPFB](https://github.com/makehumancommunity/mpfb2) (`src/mpfb/data`), all released under **CC0 1.0**. Built into `fighters.json` by `tools/mh/build_mh.py` and `tools/build-mh.mjs`; the skin textures (`assets/tex/skin_*.jpg`) are baked procedurally from the mesh by `tools/mh/bake_skin.py`; `assets/tex/eye_d.png` is MakeHuman's `brown_eye.png` (CC0), downscaled.
 - Earlier bodies (Builds 33–53, still buildable with `tools/build-fighters.mjs`): [Quaternius](https://quaternius.com) — *Universal Base Characters* and *Modular Character Outfits – Fantasy* (Standard editions), released under **CC0 1.0**. Taken from the CC0 redistribution in [OpenAgentsInc/openagents](https://github.com/OpenAgentsInc/openagents/tree/main/assets/verse/characters/quaternius), which keeps the original licence texts. Textures were downscaled for the web.
