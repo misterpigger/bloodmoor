@@ -215,11 +215,12 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
       <button class="map" data-map="pit" role="radio" aria-checked="false"><b>The Pit</b><span>Midday · walled yard round a deep shaft · knock them in</span></button>
       <button class="map" data-map="ship" role="radio" aria-checked="false"><b>Mutiny</b><span>A longship in a heavy sea · the deck heaves, so keep low or lose your feet · over the side is the end</span></button>
       <button class="map" data-map="tavern" role="radio" aria-checked="false"><b>The Tavern</b><span>Night · a brawl: everyone starts bare-handed; knives, stools, tankards and bottles</span></button>
+      <button class="map" data-map="mill" role="radio" aria-checked="false"><b>The Mill</b><span>Midday · a watermill: the race runs to the wheel, the gears bite, flour burns</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
       <button class="map eng" data-eng="physics" role="radio" aria-checked="false"><b>Rigid body</b><span>Real weight, solid blades and limbs</span></button>
-      <button class="map" id="fullBtn" role="switch" aria-checked="false"><b>Full-body physics</b><span>Experimental: every standing body is a ragdoll held up by its muscles</span></button>
+      <button class="map" id="fullBtn" role="switch" aria-checked="false"><b>Full-body physics</b><span>Every standing body is one ragdoll held up by its muscles: blows, bumps and walls move it where you see it</span></button>
     </div>
     <div class="mp">
       <div class="mprow"><button class="map" id="hostBtn"><b>Host for friends</b><span>Get a room code to share</span></button>
@@ -338,7 +339,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=104;
+const BUILD=105;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1715,7 +1716,7 @@ function onBridge(x,z){if(!PIT||PIT.down)return false;
   if(PIT.planks){if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r+.6)return false;const k=Math.round((x-PIT.p0)/.19),pl=PIT.planks[k];return !(pl&&pl.broken);}   // the plank bridge: a gap where a plank is gone
   const G=PIT.grate;if(!G||G.mode!=='rest')return false;return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}
 function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
-function groundY(x,z,y=0){if(SINK.st==='open'&&Math.hypot(x-SINK.x,z-SINK.z)<SINK.r)return -SINK.depth;if(!PIT)return SHIP?(shipIn(x,z)&&y>-.15?floorY(x,z,y):-3):FLOORS.length?floorY(x,z,y):0;   // off the side of the ship there's only the sea
+function groundY(x,z,y=0){if(MILL)return millGround(x,z,y);if(SINK.st==='open'&&Math.hypot(x-SINK.x,z-SINK.z)<SINK.r)return -SINK.depth;if(!PIT)return SHIP?(shipIn(x,z)&&y>-.15?floorY(x,z,y):-3):FLOORS.length?floorY(x,z,y):0;   // off the side of the ship there's only the sea
   if(PIT.grate&&PIT.grate.mode==='fallen'&&Math.abs(Math.sin(PIT.grate.phi))<(PIT.grate.bridge?.64:.55)){   /* only once it has come to rest: a falling slab under you is no floor */const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}   /* steeper than about 33° it's a wall of iron, not a ramp: nobody walks up out of the shaft on it */const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
   return inC&&(y<-.04||!onBridge(x,z))?-PIT.d:0;}   // the deck is only ground from above: a body under it isn't snapped up through the boards
 // the ship's hull below the deck is solid: whatever hangs over the side stays outside it (it used to be snapped up onto the deck
@@ -1772,7 +1773,265 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
   const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
-function clearWorld(){dynFree();shardClear();GRASS=null;DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
+// ================================================================ the mill
+// A stone watermill at midday (map key mill, buildMill, MILL). The millrace runs through the building along the north wall in an open
+// stone channel 1.3 m deep, and the undershot wheel turns in it. Whoever falls in wades waist deep against the current (it carries
+// you and anything loose downstream toward the wheel), and two flights of steps lead out; caught by the wheel you are dragged under
+// it. The wheel's axle runs through the pier into the gear pit, where the pit wheel turns in an open slot in the floor: an arm or a
+// leg that falls in is caught by the cogs and torn off, a weapon pushed into them is ripped out of the hand, and a fighter thrown
+// against them can be snagged. The pit wheel drives the wallower and the great spur wheel under the stone floor, a platform 3 m up
+// on posts with two pairs of millstones, reached by a steep stair. Flour sacks burst into clouds when cut, and a flour cloud that
+// drifts into a flame goes up in a flash fire (as real mills did). A lever by the inflow opens and shuts the sluice: shut, the wheel
+// and gears run down and stop and the race goes slack
+let MILL=null;
+const MILL_C={W:13,D:8,H:7.6,rz0:4.6,rz1:7.4,rb:-1.3,wl:-.42,WX:4.5,WY:.95,WR:2.25,wz0:4.95,wz1:7.05,PR:1.3,pz:3.65,sx0:3.05,sx1:5.95,sz0:3.35,sz1:3.95,sb:-.9,SZ:2.88,DH:3.0,px0:1.5,px1:8.5,pz0:.6,pz1:4.05};
+function millWaterMaps(){const S=256,c=mkCanvas(S,S),g=c.getContext('2d'),h=new Float32Array(S*S);let sd=77;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  for(let k=0;k<5;k++){const fx=(1+k)*2,fy=(2+k*3),ph=r()*6.28,ph2=r()*6.28,a=1/(1+k);for(let j=0;j<S;j++)for(let i=0;i<S;i++)h[j*S+i]+=a*Math.sin(i/S*6.283*fx+Math.sin(j/S*6.283*fy+ph)*1.4+ph2)*Math.sin(j/S*6.283*fy*.5+ph);}   // streaks drawn out along the flow
+  const im=g.createImageData(S,S);for(let j=0;j<S;j++)for(let i=0;i<S;i++){const dx=h[j*S+(i+1)%S]-h[j*S+(i+S-1)%S],dy=h[((j+1)%S)*S+i]-h[((j+S-1)%S)*S+i],o=(j*S+i)*4;im.data[o]=128+dx*40;im.data[o+1]=128+dy*40;im.data[o+2]=255;im.data[o+3]=255;}
+  g.putImageData(im,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  const fc=mkCanvas(256,256),fg=fc.getContext('2d');fg.clearRect(0,0,256,256);for(let i=0;i<260;i++){const x=r()*256,y=r()*256,l=10+r()*50;fg.strokeStyle=`rgba(235,240,235,${.12+r()*.4})`;fg.lineWidth=1+r()*3;fg.beginPath();fg.moveTo(x,y);fg.quadraticCurveTo(x+l*.5,y+(r()-.5)*8,x+l,y+(r()-.5)*6);fg.stroke();}
+  const ft=new THREE.CanvasTexture(fc);ft.wrapS=ft.wrapT=THREE.RepeatWrapping;return {n:t,f:ft};}
+function millMats(){if(MATS.flourSack)return;
+  {const t=tex(wovenCanvas('#d8d0bc','#b4aa92','#efe9da'));t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);MATS.flourSack=std({map:t,roughness:1,color:0xf2ede2});}
+  const W=millWaterMaps();W.n.repeat.set(1.4,.5);W.f.repeat.set(1.2,.6);
+  MATS.millWater=std({color:0x223a38,roughness:.12,metalness:.15,normalMap:W.n,normalScale:new THREE.Vector2(.55,.55)});MATS.millFoam=new THREE.MeshBasicMaterial({map:W.f,transparent:true,depthWrite:false,opacity:.75,color:0xd8e2dc});
+  MATS.grain=std({color:0xc8a860,roughness:1});
+  {const c=mkCanvas(256,256),g=c.getContext('2d');g.fillStyle='#8a8478';g.fillRect(0,0,256,256);speckle(g,256,256,2600,['#7a7468','#9a9488','#6e685c','#a8a294'],1,3,.6);
+   g.strokeStyle='rgba(50,46,40,.5)';g.lineWidth=2;for(let k=0;k<10;k++){const a=k/10*6.283;for(let j=0;j<4;j++){const b=a+j*.11;g.beginPath();g.moveTo(128+Math.cos(a)*30,128+Math.sin(a)*30);g.lineTo(128+Math.cos(a)*30+Math.cos(b+.6)*100,128+Math.sin(a)*30+Math.sin(b+.6)*100);g.stroke();}}   // the dressing: harps of furrows
+   g.fillStyle='#2a2620';g.beginPath();g.arc(128,128,22,0,7);g.fill();MATS.millstone=std({map:tex(c),roughness:.95,color:0xe8e4dc});}
+  MATS.millWater.userData.n=W.n;MATS.millFoam.userData.f=W.f;}
+// the floor: inside the race (with its two flights of steps), down the gear slot, or on the boards and the stone floor
+function millGround(x,z,y){const M=MILL;
+  if(z>M.rz0&&z<M.rz1&&x>-M.W-1.5&&x<M.W+1.5){for(const s of M.steps){if(z<s.z1&&x>=Math.min(s.top,s.bot)-.0001&&x<=Math.max(s.top,s.bot)+.0001){const u=(x-s.top)/(s.bot-s.top),i=Math.min(4,Math.floor(u*5));return M.rb*(i+1)/6;}
+      if(z<s.z1&&x>=Math.min(s.top,s.land)&&x<=Math.max(s.top,s.land))return 0;}
+    return M.rb;}
+  if(x>M.sx0&&x<M.sx1&&z>M.sz0&&z<M.sz1)return M.sb;
+  return FLOORS.length?floorY(x,z,y):0;}
+function inRace(x,z){const M=MILL;return !!M&&z>M.rz0&&z<M.rz1&&x>-M.W-1&&x<M.W+1;}
+function inSlot(x,z,m=0){const M=MILL;return !!M&&x>M.sx0-m&&x<M.sx1+m&&z>M.sz0-m&&z<M.sz1+m;}
+// below the floor's edge you are inside the race or the slot (the channel's stone sides)
+function millWall(p,r){const M=MILL;if(!M||p.y>-.03)return;
+  if(p.z>M.rz0-.6&&p.z<M.rz1+.6&&p.x>-M.W-2&&p.x<M.W+2){const st=M.steps.find(s=>p.x>=Math.min(s.top,s.bot)&&p.x<=Math.max(s.top,s.bot)&&p.z<s.z1+.2);if(st&&p.y>millGround(p.x,M.rz0+.05,p.y)-.05){if(p.y<-.25)p.z=Math.max(p.z,M.rz0+r);return;}   // on a flight of steps (up its side only near the top)
+    p.z=clamp(p.z,M.rz0+r,M.rz1-r);p.x=clamp(p.x,-M.W+.25+r,M.W-.6-r);return;}   // (the inflow's sluice and the outflow's grate)
+  if(p.x>M.sx0-.6&&p.x<M.sx1+.6&&p.z>M.sz0-.6&&p.z<M.sz1+.6){p.x=clamp(p.x,M.sx0+r,M.sx1-r);p.z=clamp(p.z,M.sz0+r,M.sz1-r);}}
+function buildMill(){millMats();const C=MILL_C,W=C.W,D=C.D,Hh=C.H,th=.6;
+  MILL={...C,steps:[{top:-10,bot:-7,land:-10.8,z1:5.5},{top:12,bot:9,land:12.6,z1:5.5}],ang:0,flow:1,flowT:1,open:true,parts:{},clouds:[],blast:[],caught:new Map(),gearT:new Map(),gearCD:new Map(),snag:null,clackT:0,splT:0,lever:{x:-11.6,z:4.05}};const M=MILL;
+  // ---- floor (boards over the hall, stone flags round the race), with the race and the slot left open
+  const fl=(x0,x1,z0,z1,k)=>{const g=new THREE.PlaneGeometry(x1-x0,z1-z0);g.rotateX(-Math.PI/2);scaleUV(g,(x1-x0)/3,(z1-z0)/3);addGeo(k,g,T((x0+x1)/2,0,(z0+z1)/2));};
+  fl(-W,W,-D,C.sz0,'floorPlank');fl(-W,C.sx0,C.sz0,C.sz1,'floorPlank');fl(C.sx1,W,C.sz0,C.sz1,'floorPlank');fl(-W,W,C.sz1,C.rz0,'stone');fl(-W,W,C.rz1,D,'stone');
+  for(const s of M.steps){const a=Math.min(s.top,s.land),b=Math.max(s.top,s.land);fl(a,b,C.rz0,s.z1,'stone');}
+  // the race: stone sides and bed, kerbs along the edge, and the water
+  addGeo('ashlar',boxUV(2*W+2*th+1,-C.rb,.3,1.5),T(0,C.rb/2,C.rz0-.15));addGeo('ashlar',boxUV(2*W+2*th+1,-C.rb,.3,1.5),T(0,C.rb/2,C.rz1+.15));addGeo('stone',boxUV(2*W+1,.2,C.rz1-C.rz0,2),T(0,C.rb-.1,(C.rz0+C.rz1)/2));
+  for(const z of [C.rz0-.12,C.rz1+.12])for(let x=-W;x<W;x+=1.3){if(z<C.rz0&&x>1.9&&x<7)continue;addGeo('stoneLight',boxUV(1.28,.1,.26,1),T(x+.65,.05,z));}
+  for(const s of M.steps){const n=5,dir=Math.sign(s.bot-s.top),run=Math.abs(s.bot-s.top)/n;for(let i=0;i<n;i++){const top=C.rb*(i+1)/6,h=top-C.rb;addGeo('ashlar',boxUV(run,h,s.z1-C.rz0,1),T(s.top+dir*(i+.5)*run,C.rb+h/2,(C.rz0+s.z1)/2));}
+    const a=Math.min(s.top,s.land),b=Math.max(s.top,s.land);addGeo('ashlar',boxUV(b-a,-C.rb,s.z1-C.rz0,1),T((a+b)/2,C.rb/2-.01,(C.rz0+s.z1)/2));
+    addGeo('ashlar',boxUV(Math.abs(s.bot-s.top)+.8,-C.rb+.05,.12,1),T((s.top+s.bot)/2,C.rb/2,s.z1+.06));}   // (the flight's open side)
+  {const g=new THREE.PlaneGeometry(2*W+1,C.rz1-C.rz0,1,1);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,MATS.millWater);m.position.set(0,C.wl,(C.rz0+C.rz1)/2);m.receiveShadow=true;world.add(m);M.water=m;
+   const fg=new THREE.PlaneGeometry(W-C.WX+2.6,C.rz1-C.rz0-.1);fg.rotateX(-Math.PI/2);const fm=new THREE.Mesh(fg,MATS.millFoam);fm.position.set((C.WX-2.6+W)/2,C.wl+.01,(C.rz0+C.rz1)/2);fm.renderOrder=2;world.add(fm);M.foam=fm;}
+  // the culverts at both ends: the inflow under a sluice gate, the outflow through a timber grate
+  for(const sd of [-1,1]){const x=sd*(W+th/2);addGeo('ashlar',boxUV(th+.02,.12,C.rz1-C.rz0+.1,1),T(x,-.06,(C.rz0+C.rz1)/2));   // the lintel over the culvert
+    addGeo('beam',boxUV(.5,.08,C.rz1-C.rz0,1),T(x-sd*.6,C.wl-.9,(C.rz0+C.rz1)/2));{const g=new THREE.PlaneGeometry(C.rz1-C.rz0,1.6);const m=new THREE.Mesh(g,std({color:0x06080a,roughness:1}));m.position.set(sd*(W+th+.4),-.5,(C.rz0+C.rz1)/2);m.rotation.y=-sd*Math.PI/2;world.add(m);}}
+  for(let z=C.rz0+.18;z<C.rz1-.1;z+=.24)addGeo('beam',boxUV(.07,1.75,.07,1),T(W-.55,C.rb+.85,z,0,0,-.18));addGeo('beam',boxUV(.14,.14,C.rz1-C.rz0,1),T(W-.4,.42,(C.rz0+C.rz1)/2));   // the grate, leaning downstream
+  {const G=ownGroup(0,0,0,()=>{addGeo('woodPale',boxUV(.1,1.5,C.rz1-C.rz0-.1,1),T(0,0,0));for(const y of [-.5,.2])addGeo('iron',boxUV(.12,.06,C.rz1-C.rz0-.05,1),T(0,y,0));vRod('beam',V(0,.75,0),V(0,2.4,0),.05,6);});
+   G.position.set(-W+.35,C.wl+.65,(C.rz0+C.rz1)/2);M.gate=G;for(const z of [C.rz0+.12,C.rz1-.12])addGeo('beam',boxUV(.22,3.2,.22,1),T(-W+.35,C.rb+1.6,z));addGeo('beam',boxUV(.24,.22,C.rz1-C.rz0+.3,1),T(-W+.35,1.95,(C.rz0+C.rz1)/2));}
+  // ---- walls: thick rubble stone, windows to the south (where the sun comes in), a door on the west, small windows high on the east
+  // limewashed above a band of bare stone at the foot, where the wash has long since worn off
+  const PL=1.1,wallSeg=(x0,x1,y0,y1,z,ry)=>{if(x1-x0<.02||y1-y0<.02)return;const put=(k,a,b,t)=>{if(b-a<.01)return;addGeo(k,boxUV(x1-x0,b-a,th,t),T(ry?z:(x0+x1)/2,(a+b)/2,ry?(x0+x1)/2:z,ry?Math.PI/2:0));};put('stone',y0,Math.min(y1,PL),2.2);put('plaster0',Math.max(y0,PL),y1,3);};
+  const wins=[-9.5,-4.6,.3,5.2,10];const wy0=1.1,wy1=3.55,ww=1.75;
+  {let x=-W-th;for(const wx of wins){wallSeg(x,wx-ww/2,wy0,wy1,-D-th/2,0);x=wx+ww/2;}wallSeg(x,W+th,wy0,wy1,-D-th/2,0);wallSeg(-W-th,W+th,0,wy0,-D-th/2,0);wallSeg(-W-th,W+th,wy1,Hh,-D-th/2,0);
+   for(const wx of wins){addGeo('beam',boxUV(ww+.2,.16,.2,1),T(wx,wy1+.06,-D+.02));addGeo('stoneLight',boxUV(ww+.12,.08,th+.1,1),T(wx,wy0-.04,-D-th/2+.02));addGeo('beam',boxUV(.09,wy1-wy0,.12,1),T(wx,(wy0+wy1)/2,-D-th*.5));
+     for(const s of [-1,1]){addGeo('boards',boxUV(ww/2,wy1-wy0-.05,.05,1),T(wx+s*(ww*.75+.08),(wy0+wy1)/2,-D+.04));for(const y of [wy0+.4,wy1-.4])addGeo('iron',boxUV(ww/2-.1,.04,.02,1),T(wx+s*(ww*.75+.08),y,-D+.075));}}}   // shutters folded back against the wall
+  wallSeg(-D,D,0,Hh,W+th/2,1);{const dz0=-4.9,dz1=-3.1;wallSeg(-D,dz0,0,Hh,-W-th/2,1);wallSeg(dz1,D,0,Hh,-W-th/2,1);wallSeg(dz0,dz1,2.5,Hh,-W-th/2,1);addGeo('wood',boxUV(.12,2.5,1.8,1),T(-W+.05,1.25,-4));for(const y of [.5,1.9])addGeo('iron',boxUV(.14,.08,1.84,1),T(-W+.04,y,-4));}
+  wallSeg(-W-th,W+th,0,Hh,D+th/2,0);
+  // below the race the walls carry on down (the culverts' arches are drawn above)
+  addBox(-W-2,W+2,D,D+2,Hh);addBox(-W-2,W+2,-D-2,-D,Hh);addBox(W,W+2,-D,D,Hh);addBox(-W-2,-W,-D,D,Hh);
+  // ---- the roof: tie beams with king posts, principal rafters, purlins and boards under the slates
+  const RH=3.1;for(let x=-W+.9;x<W;x+=3.25){addGeo('beam',boxUV(.3,.34,2*D+1.2,1),T(x,Hh-.05,0));addGeo('beam',boxUV(.22,RH,.22,1),T(x,Hh+RH/2,0));
+    for(const s of [-1,1]){const L=Math.hypot(D+.6,RH);addGeo('beam',boxUV(.24,.28,L,1),T(x,Hh+RH/2,s*(D+.6)/2,0,s*Math.atan2(RH,D+.6)));vRod('beam',V(x,Hh+.4,0),V(x,Hh+RH*.55,s*(D*.45)),.08,4);}}
+  for(const s of [-1,1]){const L=Math.hypot(D+.8,RH);for(let k=1;k<4;k++){const u=k/4;addGeo('beam',boxUV(2*W+1,.16,.16,1),T(0,Hh+RH*u+.15,s*(D+.6)*(1-u)));}
+    const rx=Math.atan2(-s*(D+.8),RH);const g=new THREE.PlaneGeometry(2*W+1.4,L);scaleUV(g,(2*W)/3,L/3);addGeo('boards',g,T(0,Hh+RH/2+.22,s*(D+.8)/2,0,rx+(s>0?Math.PI:0)));
+    addGeo('slate',boxUV(2*W+1.6,L+.4,.06,2),T(0,Hh+RH/2+.34,s*(D+.8)/2,0,rx));}
+  for(const sd of [-1,1]){const sh=new THREE.Shape();sh.moveTo(-D-th,0);sh.lineTo(D+th,0);sh.lineTo(0,RH+.35);sh.closePath();const g=new THREE.ExtrudeGeometry(sh,{depth:th,bevelEnabled:false});scaleUV(g,.4,.4);addGeo('stone',g,T(sd*(W+th/2)-th/2,Hh,0,Math.PI/2));}
+  // ---- the waterwheel: hub on the axle, spokes and two shrouded rims, 24 floats dipping into the race
+  const ax=C.WX,ay=C.WY,wzc=(C.wz0+C.wz1)/2,hw=(C.wz1-C.wz0)/2;
+  M.parts.wheel=ownGroup(0,0,0,()=>{const R=C.WR;{const z0=-(wzc-C.pz)-.2,z1=hw+.3;addGeo('beam',new THREE.CylinderGeometry(.17,.17,z1-z0,10),T(0,0,(z0+z1)/2,0,Math.PI/2));}addGeo('beam',new THREE.CylinderGeometry(.42,.42,2*hw+.2,12),T(0,0,0,0,Math.PI/2));
+    for(const z of [-hw,hw]){addGeo('beam',new THREE.TorusGeometry(R-.05,.07,6,48),T(0,0,z));addGeo('beam',new THREE.TorusGeometry(R-.52,.06,6,40),T(0,0,z));
+      for(let i=0;i<8;i++){const a=i/8*6.283+(z>0?.2:0);addGeo('beam',boxUV(.13,R-.45,.11,1),T(Math.cos(a)*(R-.45)/2,Math.sin(a)*(R-.45)/2,z,0,0,a-Math.PI/2));}}
+    for(let i=0;i<24;i++){const a=i/24*6.283;addGeo('woodPale',boxUV(.05,.55,2*hw+.08,1),T(Math.cos(a)*(R-.3),Math.sin(a)*(R-.3),0,0,0,a-Math.PI/2+.12));}
+    for(const z of [-hw-.12,hw+.12])addGeo('iron',new THREE.CylinderGeometry(.46,.46,.06,14),T(0,0,z,0,Math.PI/2));});
+  M.parts.wheel.position.set(ax,ay,wzc);
+  // the pier carrying the axle's bearing between the race and the gear pit
+  addGeo('ashlar',boxUV(5,1.1,.55,1.2),T(ax,.55,4.32));addGeo('stoneLight',boxUV(5.1,.1,.62,1),T(ax,1.15,4.32));addGeo('beam',boxUV(.6,.3,.5,1),T(ax,ay-.3,4.32));addGeo('iron',boxUV(.5,.08,.5,1),T(ax,ay-.13,4.32));
+  addBox(ax-2.5,ax+2.5,4.05,4.6,1.1).y0=-.001;FLOORS.push({x0:ax-2.5,x1:ax+2.5,z0:4.05,z1:4.6,h:1.12});
+  // the pit wheel in its slot: an oak rim of felloes on clasp arms, 40 cogs set in its face
+  M.parts.pit=ownGroup(0,0,0,()=>{const R=C.PR;addGeo('beam',new THREE.TorusGeometry(R-.06,.11,6,44),T(0,0,0,0,0,0,1,1,1.4));addGeo('beam',new THREE.TorusGeometry(R-.32,.07,6,40),T(0,0,0));
+    for(const a of [0,Math.PI/2]){addGeo('beam',boxUV(.18,2*R-.2,.16,1),T(0,0,.06,0,0,a+.0));}addGeo('beam',new THREE.CylinderGeometry(.24,.24,.36,10),T(0,0,0,0,Math.PI/2));
+    for(let i=0;i<40;i++){const a=i/40*6.283;addGeo('woodLight',boxUV(.07,.1,.16,1),T(Math.cos(a)*(R-.12),Math.sin(a)*(R-.12),-.2,0,0,a));}});
+  M.parts.pit.position.set(ax,ay,C.pz);
+  addGeo('stone',boxUV(C.sx1-C.sx0,.05,C.sz1-C.sz0,1),T(ax,C.sb,(C.sz0+C.sz1)/2));for(const z of [C.sz0,C.sz1])addGeo('ashlar',boxUV(C.sx1-C.sx0,-C.sb,.08,1),T(ax,C.sb/2,z));for(const x of [C.sx0,C.sx1])addGeo('ashlar',boxUV(.08,-C.sb,C.sz1-C.sz0,1),T(x,C.sb/2,(C.sz0+C.sz1)/2));
+  // the upright shaft: the wallower (a lantern gear) meshing with the pit wheel's cogs, the great spur wheel above it
+  M.parts.shaft=ownGroup(0,0,0,()=>{addGeo('beam',new THREE.CylinderGeometry(.16,.18,C.DH-1.05,8),T(0,1.05+(C.DH-1.05)/2,0));
+    for(const y of [1.73,2.17])addGeo('beam',new THREE.CylinderGeometry(.62,.62,.09,14),T(0,y,0));for(let i=0;i<10;i++){const a=i/10*6.283;addGeo('woodLight',new THREE.CylinderGeometry(.045,.045,.44,6),T(Math.cos(a)*.55,1.95,Math.sin(a)*.55));}
+    addGeo('beam',new THREE.TorusGeometry(1.36,.1,6,44),T(0,2.48,0,0,Math.PI/2,0,1,1,1.3));for(const a of [0,Math.PI/2])addGeo('beam',boxUV(2.7,.14,.16,1),T(0,2.48,0,a));
+    for(let i=0;i<48;i++){const a=i/48*6.283;addGeo('woodLight',boxUV(.16,.12,.06,1),T(Math.cos(a)*1.5,2.48,Math.sin(a)*1.5,-a));}});
+  M.parts.shaft.position.set(ax,0,C.SZ);
+  addGeo('beam',boxUV(.4,.3,3.2,1),T(ax,.9,C.SZ));addGeo('iron',new THREE.CylinderGeometry(.2,.2,.1,10),T(ax,1.08,C.SZ));for(const z of [C.SZ-1.5,C.SZ+1.5])addGeo('ashlar',boxUV(.5,.75,.5,1),T(ax,.38,z));   // the footstep bearing on its bridge tree
+  addCircle(ax,C.SZ,.72,2.4);
+  // the stone nuts and their spindles up to the runner stones
+  M.parts.nuts=[];for(const sx of [-1,1]){const g=ownGroup(0,0,0,()=>{for(const y of [2.38,2.58])addGeo('beam',new THREE.CylinderGeometry(.26,.26,.05,10),T(0,y,0));for(let i=0;i<8;i++){const a=i/8*6.283;addGeo('woodLight',new THREE.CylinderGeometry(.03,.03,.22,5),T(Math.cos(a)*.22,2.48,Math.sin(a)*.22));}
+      addGeo('iron',new THREE.CylinderGeometry(.05,.05,C.DH-2.2+.35,6),T(0,2.2+(C.DH-2.2+.35)/2,0));addGeo('millstone',new THREE.CylinderGeometry(.68,.68,.2,24),T(0,C.DH+.24,0));});
+    g.position.set(ax+sx*1.62,0,C.SZ);M.parts.nuts.push(g);
+    // the tun round the stones, a hopper on its horse above
+    const cx=ax+sx*1.62;addGeo('millstone',new THREE.CylinderGeometry(.72,.72,.16,24),T(cx,C.DH+.08,C.SZ));
+    {const g=new THREE.CylinderGeometry(.8,.8,.42,8,1,true);addGeo('boards',g,T(cx,C.DH+.21,C.SZ,Math.PI/8));addGeo('beam',new THREE.TorusGeometry(.8,.025,4,8),T(cx,C.DH+.42,C.SZ,Math.PI/8,Math.PI/2));addGeo('boards',new THREE.RingGeometry(.3,.8,8).rotateX(-Math.PI/2),T(cx,C.DH+.42,C.SZ,Math.PI/8));}
+    for(const a of [.6,2.2,3.8,5.4])vRod('beam',V(cx+Math.cos(a)*.75,C.DH+.42,C.SZ+Math.sin(a)*.75),V(cx+Math.cos(a)*.35,C.DH+1.35,C.SZ+Math.sin(a)*.35),.04,4);
+    addGeo('boards',new THREE.CylinderGeometry(.52,.12,.62,4,1,true),T(cx,C.DH+1.62,C.SZ,Math.PI/4));addGeo('grain',new THREE.CylinderGeometry(.48,.48,.02,4),T(cx,C.DH+1.86,C.SZ,Math.PI/4));
+    addBox(cx-.82,cx+.82,C.SZ-.82,C.SZ+.82,C.DH+.45).y0=C.DH-.2;}
+  // ---- the stone floor: a deck of boards on joists and posts, the stair up from the west, a rail along part of the south side
+  {const x0=C.px0,x1=C.px1,z0=C.pz0,z1=C.pz1,h=C.DH;FLOORS.push({x0,x1,z0,z1,h});
+   addGeo('floorPlank',boxUV(x1-x0,.1,z1-z0,1.5),T((x0+x1)/2,h-.05,(z0+z1)/2));for(let x=x0+.3;x<x1;x+=.9)addGeo('beam',boxUV(.16,.24,z1-z0,1),T(x,h-.22,(z0+z1)/2));for(const z of [z0+.12,z1-.12])addGeo('beam',boxUV(x1-x0,.3,.24,1),T((x0+x1)/2,h-.25,z));
+   for(const [px,pz] of [[x0+.15,z0+.15],[ax,z0+.15],[x1-.15,z0+.15],[x0+.15,z1-.2],[x1-.15,z1-.2],[x0+.15,(z0+z1)/2],[x1-.15,(z0+z1)/2]]){addGeo('beam',boxUV(.3,h-.1,.3,1),T(px,(h-.1)/2,pz));addCircle(px,pz,.2,h);
+     for(const s of [-1,1])if(px>x0+1&&px<x1-1||s===(px<ax?1:-1))vRod('beam',V(px+s*.15,h-.95,pz),V(px+s*.8,h-.3,pz),.06,4);}
+   // the stair: 12 steps up the west side of the deck, solid underneath, a handrail on posts along its open side
+   const sx0=x0-4,N=12,rs=h/N,gs=(x0-sx0)/N,sz0=1.0,sz1=1.85;FLOORS.push({x0:sx0,x1:x0+.01,z0:sz0,z1:sz1,ramp:'x',a0:sx0,a1:x0,h0:0,h1:h});
+   for(let i=0;i<N;i++){const top=(i+1)*rs,x=sx0+i*gs;addGeo('wood',boxUV(gs,top-.05,sz1-sz0-.04,1),T(x+gs/2,(top-.05)/2,(sz0+sz1)/2));addGeo('woodLight',boxUV(gs+.05,.05,sz1-sz0,1),T(x+gs/2,top-.025,(sz0+sz1)/2));
+     if(i>=2)addBox(x+gs*.5,x+gs+.01,sz0,sz1,i*rs);}
+   const sl=Math.hypot(x0-sx0,h),sa=Math.atan2(h,x0-sx0);addGeo('beam',boxUV(sl+.1,.3,.07,1),T((sx0+x0)/2,h/2-.04,sz0-.04,0,0,sa));
+   for(let i=3;i<=N;i+=3){const x=sx0+(i-.5)*gs;vRod('beam',V(x,i*rs,sz0-.02),V(x,i*rs+.95,sz0-.02),.04,5);}
+   {const a=V(sx0+2.5*gs,2.5*rs+.95,sz0-.02),b=V(x0,h+.95,sz0-.02);vRod('woodLight',a,b,.035,6);}
+   for(let x=x0+.2;x<ax-.9;x+=.9){vRod('beam',V(x,h,z0+.05),V(x,h+1,z0+.05),.04,5);}vRod('woodLight',V(x0+.2,h+1,z0+.05),V(ax-.95,h+1,z0+.05),.035,6);addBox(x0,ax-.9,z0-.05,z0+.1,h+1.05).y0=h-.2;
+   // the sack hoist: a rope over the deck's open south side with a hook, and its drum on the tie beam
+   vRod('rope',V(6.6,Hh-.1,z0-.35),V(6.6,1.35,z0-.35),.02,4);addGeo('iron',new THREE.TorusGeometry(.08,.015,4,10),T(6.6,1.27,z0-.35));addGeo('beam',new THREE.CylinderGeometry(.22,.22,1.2,10),T(6.6,Hh+.18,z0-.35,0,0,Math.PI/2));}
+  // ---- the sluice lever by the inflow
+  {const L=M.lever;addGeo('beam',boxUV(.22,1.3,.22,1),T(L.x,.65,L.z));M.leverArm=ownGroup(0,0,0,()=>{vRod('iron',V(0,0,0),V(0,.95,0),.03,6);addGeo('beam',new THREE.CylinderGeometry(.06,.06,.22,6),T(0,.98,0));});M.leverArm.position.set(L.x+.13,1.05,L.z);addCircle(L.x,L.z,.18,1.3);}
+  // ---- round the hall: flour sacks on the stone floor and the boards, grain bins along the east wall, a spare millstone, tools,
+  // barrels and crates, a sack barrow, lanterns
+  for(const [x,z,y] of [[7.6,1.1,C.DH],[8.05,1.75,C.DH],[7.95,3.45,C.DH],[4.9,.95,C.DH],[5.5,1.05,C.DH],[3.3,1.15,C.DH],
+    [-11.9,-7.2,0],[-11.3,-7.3,0],[-12.3,-6.6,0],[-11.7,-6.5,0],[-12.2,-5.9,0],[-6.9,-7.4,0],[-7.5,-7.3,0],[-0.9,-7.4,0],[11.9,-1.4,0],[12.2,-.7,0],[11.6,-.6,0],[-6.4,3.8,0],[-5.8,3.85,0],[-3.4,3.8,0],[9.8,3.7,0],[10.4,3.8,0]])millSack(x,y,z);
+  for(const [x,z] of [[12.1,-6.6],[12.1,-4.4]]){addGeo('boards',boxUV(1.5,1.3,2,1),T(x,.65,z));addGeo('beam',boxUV(1.56,.08,2.06,1),T(x,1.32,z));addGeo('grain',boxUV(1.4,.04,1.9,1),T(x,1.22,z));addBox(x-.75,x+.75,z-1,z+1,1.32);}
+  addGeo('millstone',new THREE.CylinderGeometry(.66,.66,.24,24),T(-12.5,.68,1.6,Math.PI/2,0,Math.PI/2-.12));addBox(-13,-12.2,.9,2.3,1.35);
+  for(const [x,z] of [[-9,-6.9],[9.5,-7.1],[-12.3,-1.8],[6.8,-7.2]])barrel(x,z);for(const [x,z,s] of [[-8.1,-7.1,.75],[10.6,-7.2,.8],[-12.2,-2.9,.7]])crate(x,z,s);
+  // lanterns: on iron brackets off the walls, and hung on rods from the tie beams over the race's edge and the stone floor
+  for(const [x,z,nx,nz] of [[-W,-6.2,1,0],[W,-2.6,-1,0],[-7.1,-D,0,1],[7.6,-D,0,1],[W,2.4,-1,0]]){const y=2.7;addGeo('iron',boxUV(nx?.4:.04,.04,nz?.4:.04,1),T(x+nx*.2,y+.15,z+nz*.2));vRod('iron',V(x+nx*.4,y+.15,z+nz*.4),V(x+nx*.4,y-.05,z+nz*.4),.012,4);addGeo('iron',new THREE.CylinderGeometry(.08,.1,.22,6),T(x+nx*.4,y-.12,z+nz*.4));addFlame(x+nx*.4,y-.25,z+nz*.4,.55,true);}
+  for(const [x,z,y] of [[-6.1,4.0,2.8],[10.2,4.0,2.8],[-.5,-2.5,3.4],[6.3,2.0,C.DH+1.7]]){vRod('iron',V(x,Hh-.15,z),V(x,y+.15,z),.012,4);addGeo('iron',new THREE.CylinderGeometry(.08,.1,.22,6),T(x,y+.05,z));addGeo('iron',new THREE.ConeGeometry(.12,.12,6),T(x,y+.2,z));addFlame(x,y-.1,z,.55,true);}
+  for(const L of torchLights)L.color.setHex(0xffb070);
+  dynModel('wooden_bucket_01',{x:-10.6,z:3.9,h:.42,ry:1},{m:2.4,auto:'cyl'});dynModel('wicker_basket_01',{x:3.2,y:C.DH,z:.9,h:.32,ry:2},{m:1.4,auto:'cyl'});dynModel('wooden_bucket_02',{x:11.2,z:3.7,h:.38,ry:2},{m:2.4,auto:'cyl'});
+  flushBatch();
+  // the loot here is a miller's: a flail, a pitchfork... (ordinary map loot spawns too)
+}
+function millSack(x,y,z){const g=new THREE.Group();g.position.set(x,y+.002,z);g.rotation.y=x*7+z*3;const m=new THREE.Mesh(SACK_G,MATS.flourSack);m.scale.set(1.05,1.05,1.05);m.castShadow=m.receiveShadow=true;g.add(m);
+  const p=propAdd('sack',g,x,z,.3,.66,5,null);p.y0=y;p.dyn=dynAdd(g,{m:22,sh:[{t:'cyl',h:[.33,.29],o:[0,.33,0]}],prop:p,fr:.9,ad:2});}
+// ---- flour: a burst sack throws a cloud that swells, drifts and settles over several seconds
+const FLOUR=(()=>{const n=700,g=new THREE.BufferGeometry(),pos=new Float32Array(n*3).fill(-999),al=new Float32Array(n),sz=new Float32Array(n);g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('aA',new THREE.BufferAttribute(al,1));g.setAttribute('aS',new THREE.BufferAttribute(sz,1));
+  const m=new THREE.ShaderMaterial({uniforms:{uMap:{value:TX.glow},uS:{value:600}},transparent:true,depthWrite:false,
+    vertexShader:'attribute float aA,aS;varying float vA;uniform float uS;void main(){vA=aA;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=min(260.,uS*aS/max(.1,-mv.z));vA*=smoothstep(.3,1.6,-mv.z);}',
+    fragmentShader:'uniform sampler2D uMap;varying float vA;void main(){float a=texture2D(uMap,gl_PointCoord).a*vA;if(a<.004)discard;gl_FragColor=vec4(vec3(.93,.91,.86),a);}'});
+  const p=new THREE.Points(g,m);p.frustumCulled=false;p.renderOrder=4;scene.add(p);return {p,pos,al,sz,vel:new Float32Array(n*3),life:new Float32Array(n),max:new Float32Array(n),n,i:0,live:0};})();
+function flourBurst(x,y,z,amt=1){const F=FLOUR;const N=(70*amt)|0;for(let k=0;k<N;k++){const i=F.i;F.i=(i+1)%F.n;const a=Math.random()*6.283,u=Math.random(),r=.6+Math.random()*2.6;
+    F.pos[i*3]=x+(Math.random()-.5)*.3;F.pos[i*3+1]=y+.2+Math.random()*.5;F.pos[i*3+2]=z+(Math.random()-.5)*.3;F.vel[i*3]=Math.cos(a)*r;F.vel[i*3+1]=.3+Math.random()*1.6;F.vel[i*3+2]=Math.sin(a)*r;F.max[i]=F.life[i]=5+Math.random()*5;}
+  F.live=Math.max(F.live,10);sfx('fall',V(x,y,z),.35,1.6,0,false);noiseBurstAt(V(x,y,z),.5,'lowpass',900,.5,.35);
+  if(MILL)MILL.clouds.push({x,y:y+.8,z,t:0,r:.5});}
+function noiseBurstAt(p,dur,type,f,q,vol){if(!AC)return;const v=distVol(p)*vol;if(!(v>=.01))return;noiseBurst(AC.currentTime,dur,type,f,q,v);}
+function flourStep(dt){const F=FLOUR;if(F.live<=0)return;F.live-=dt;for(let i=0;i<F.n;i++){if(F.life[i]<=0)continue;F.life[i]-=dt;const k=Math.exp(-2.2*dt);F.vel[i*3]*=k;F.vel[i*3+1]=F.vel[i*3+1]*k-.05*dt;F.vel[i*3+2]*=k;
+    F.pos[i*3]+=F.vel[i*3]*dt;F.pos[i*3+1]+=F.vel[i*3+1]*dt;F.pos[i*3+2]+=F.vel[i*3+2]*dt;const u=1-F.life[i]/F.max[i];F.al[i]=F.life[i]>0?Math.min(1,u*8)*(1-u)*.5:0;F.sz[i]=.35+u*2.4;if(F.life[i]<=0)F.pos[i*3+1]=-999;}
+  F.p.geometry.attributes.position.needsUpdate=F.p.geometry.attributes.aA.needsUpdate=F.p.geometry.attributes.aS.needsUpdate=true;}
+function flourClear(){const F=FLOUR;F.life.fill(0);F.pos.fill(-999);F.al.fill(0);F.live=1;}
+// a dense cloud touching a flame (a lantern, a burning body) goes up: a flash of fire that knocks people down and sets them alight
+function flourBlast(x,y,z,net=true){if(NET.mode==='host'&&net)netEv(['MX',r3(x),r3(y),r3(z)]);const M=MILL;const P=V(x,y,z);
+  const F=FLOUR;for(let i=0;i<F.n;i++){if(F.life[i]<=0)continue;const dx=F.pos[i*3]-x,dz=F.pos[i*3+2]-z;if(dx*dx+dz*dz<30)F.life[i]=Math.min(F.life[i],.15);}if(M)M.clouds=M.clouds.filter(c=>Math.hypot(c.x-x,c.z-z)>5.5);
+  sThud(P,1.4);sfx('crush',P,1,.45,0,false);sfx('crackle',P,1,.8,.05,false);noiseBurstAt(P,1.4,'lowpass',380,.4,1.2);shake(clamp(1.2-P.distanceTo(camera.position)/14,0,1));
+  const L=new THREE.PointLight(0xff9a40,140,22,1.6);L.position.copy(P);world.add(L);const sp=[];for(let k=0;k<22;k++){const m=new THREE.SpriteMaterial({map:k%3?TX.flame:TX.glow,color:k%3?0xffffff:0xff7a2a,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true});const s=new THREE.Sprite(m);
+    const a=Math.random()*6.283,e=(Math.random()-.3)*1.2;s.position.copy(P);s.userData.v=V(Math.cos(a)*Math.cos(e),Math.sin(e)+.4,Math.sin(a)*Math.cos(e)).multiplyScalar(3+Math.random()*4);s.scale.setScalar(.5);world.add(s);sp.push(s);}
+  if(M)M.blast.push({L,sp,t:0});spawnDust(V(x,y-.5,z),24,3,1.4);
+  if(NET.mode==='client')return;
+  for(const f of fighters){if(!f.alive)continue;const c=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips:f.chest,d=c.distanceTo(P);if(d>4.8)continue;const k=1-d/4.8;
+    f.burn=Math.max(f.burn||0,2+5*k);f.damage(4+16*k,null,'burnt in the flash fire');if(f.alive&&!f.ragdoll&&d<3.4){_v.subVectors(c,P).setY(0).normalize();f.knockdown(rand(1.3,2.2),_v.clone().multiplyScalar(3+5*k).setY(1.5),f.chest.clone());}
+    if(f.alive)tell(f,'The flour goes up!','red');}
+  for(const d of DYN){if(!d.body||d.gone)continue;const t=d.body.translation(),dx=t.x-x,dy=t.y-y,dz=t.z-z,dd=Math.hypot(dx,dy,dz);if(dd>5||dd<.05)continue;const J=d.m*(5-dd)*1.1/dd;d.body.applyImpulse({x:dx*J,y:Math.abs(dy)*J+d.m*1.5,z:dz*J},true);}}
+function blastVisual(dt){const M=MILL;if(!M)return;for(const b of M.blast){b.t+=dt;const u=b.t/.9;b.L.intensity=140*Math.max(0,1-u)**2;for(const s of b.sp){s.position.addScaledVector(s.userData.v,dt);s.userData.v.multiplyScalar(Math.exp(-3*dt));s.scale.setScalar(.5+u*3.2);s.material.opacity=Math.max(0,1-u);}
+    if(u>=1){world.remove(b.L);for(const s of b.sp){world.remove(s);s.material.dispose();}b.done=true;}}M.blast=M.blast.filter(b=>!b.done);}
+// the sluice: E by the lever
+function millLever(f){const M=MILL;if(!M||!f||!f.alive||f.ragdoll)return false;if(Math.hypot(f.pos.x-M.lever.x,f.pos.z-M.lever.z)>1.5)return false;millSluice(!M.open);tell(f,M.open?'You open the sluice':'You shut the sluice','sm');return true;}
+function millSluice(open,net=true){const M=MILL;if(!M)return;M.open=open;M.flowT=open?1:0;sfx('crush',V(M.lever.x,1,M.lever.z),.5,.7,0,false);sThud(V(-M.W+.4,0,6),.6);if(NET.mode==='host'&&net)netEv(['ML',open?1:0]);mapDirty=true;}
+// host: the race, the wheel and the cogs at work on whoever is in them
+const MILL_SEV={LeftHand:'LeftForeArm',LeftHandMiddle1:'LeftForeArm',LeftForeArm:'LeftArm',RightHand:'RightForeArm',RightHandMiddle1:'RightForeArm',RightForeArm:'RightArm',LeftFoot:'LeftLeg',LeftToeBase:'LeftLeg',LeftLeg:'LeftUpLeg',RightFoot:'RightLeg',RightToeBase:'RightLeg',RightLeg:'RightUpLeg'};
+function millStep(h){const M=MILL;if(!M)return;M.flow+=(M.flowT-M.flow)*(1-Math.exp(-h*.55));const flow=M.flow,cur=.95*flow,om=.72*flow;
+  if(NET.mode==='client')return;
+  const R=M.WR;
+  for(const f of fighters){if(f.ragdoll){millRag(f,h,cur,om);continue;}
+    const inr=inRace(f.pos.x,f.pos.z)&&f.pos.y<-.25;
+    if(inr&&!f._inRace&&f.alive){millSplash(f.pos.x,f.pos.z,1);f.stagger=Math.max(f.stagger,.5);f.burn=0;}f._inRace=inr;f._wade=inr;
+    if(inr){f.pos.x+=cur*h;f.burn=0;
+      if(f.alive&&Math.abs(f.pos.x-M.WX)<R*.75&&f.pos.y<-.5){f.damage(18,null,'dragged under the millwheel');if(f.alive&&!f.ragdoll)f.knockdown(rand(2.5,3.5),V(1.5,-2,0),f.chest.clone());}}
+    // the slot: standing fighters are kept out of it; pressed against the turning pit wheel, a sleeve or a belt can be caught
+    if(f.pos.y>-.1){const r=.34,x0=M.sx0-r,x1=M.sx1+r,z0=M.sz0-r,z1=M.sz1+r;if(f.pos.x>x0&&f.pos.x<x1&&f.pos.z>z0&&f.pos.z<z1){
+      const dl=f.pos.x-x0,dr=x1-f.pos.x,dn=f.pos.z-z0,ds=z1-f.pos.z,mn=Math.min(dl,dr,dn,ds);if(mn===dl)f.pos.x=x0;else if(mn===dr)f.pos.x=x1;else if(mn===dn)f.pos.z=z0;else f.pos.z=z1;
+      const sp=Math.hypot(f.vel.x,f.vel.z);if(f.alive&&om>.2&&!M.snag&&(sp>2.6||f.stagger>.2||Math.random()<h*.35)){millSnag(f);}}}
+    // a weapon pushed into the cogs is torn out of the hand
+    const s=f.sword;if(s&&s.def.kind!=='fist'&&om>.2&&f.alive){for(let i=2;i<=8;i++){_v.copy(s.H).addScaledVector(s.axis,s.len*i/8);if(_v.x>M.sx0&&_v.x<M.sx1&&Math.abs(_v.z-M.pz)<.3&&_v.y<M.WY+M.PR+.1){const dy=_v.y-M.WY,dx=_v.x-M.WX;if(Math.hypot(dx,dy)>M.PR-.35){millYank(f,s,dx,dy,om);break;}}}}}
+  // loose weapons drift down the race
+  for(const s of freeSwords){if(s.flying||s.owner||s.rb)continue;if(inRace(s.H.x,s.H.z)&&s.H.y<M.wl&&s.H.x<M.W-1){const d=cur*.5*h;s.H.x+=d;s.T.x+=d;s.Hp.x+=d;s.Tp.x+=d;}}
+  for(const c of M.clouds)c.t+=h;M.clouds=M.clouds.filter(c=>c.t<6);
+  // a fresh cloud and a flame: a lantern on the wall, or a fighter on fire
+  if(M.clouds.length&&state==='playing'){for(const c of M.clouds){if(c.t>4.5)continue;const rr=.6+c.t*.45;let hit=null;
+    for(const F of flames){if(F.base<=0)continue;if(Math.hypot(F.x-c.x,F.z-c.z)<rr+.35&&Math.abs(F.y-c.y)<1.6+c.t*.3){hit=V(F.x,F.y,F.z);break;}}
+    if(!hit)for(const f of fighters)if(f.alive&&(f.burn||0)>0&&Math.hypot(f.pos.x-c.x,f.pos.z-c.z)<rr+.3){hit=f.chest.clone();break;}
+    if(hit&&Math.random()<h*3){flourBlast((c.x+hit.x)/2,Math.max(c.y,hit.y),(c.z+hit.z)/2);break;}}}
+  // a cloud right on you makes you cough and squint: a bot's aim wanders
+  if(M.clouds.length)for(const f of fighters){if(!f.alive||f.ragdoll||f.isPlayer||f.remote)continue;for(const c of M.clouds){if(c.t<4&&Math.hypot(f.pos.x-c.x,f.pos.z-c.z)<.9+c.t*.4){f.blindT=Math.max(f.blindT||0,simTime+.35);break;}}}}
+function millSplash(x,z,k){const p=V(x,MILL.wl,z);sfx('fall',p,.7*k,.6,0,false);sfx('fallArmoured',p,.35*k,.45,.05,false);noiseBurstAt(p,.6,'bandpass',900,.6,.5*k);spawnDust(V(x,MILL.wl+.05,z),10,1.2,1.6);}
+function millSnag(f){const M=MILL;M.snag={f,t:0,h:null};tell(f,'The cogs catch you!','red');sfx('crush',f.chest,.5,1.2,0,false);
+  const d=V(M.WX-f.pos.x,0,M.pz-f.pos.z);d.y=0;d.normalize();f.knockdown(rand(2,3),d.clone().multiplyScalar(2.2).setY(.4),f.chest.clone());}
+function millYank(f,s,dx,dy,om){const M=MILL;const tx=-dy,ty=dx,l=Math.hypot(tx,ty)||1;f.dropSword();if(NET.mode==='host')netEv(['S','clash',r3v(s.H),.8,.6,0]);sfx('crush',s.H,.6,1.4,0,false);sClang(s.H,.8);
+  if(!s.rb){const v=V(tx/l*4.5*om,ty/l*4.5*om+1.5,(Math.random()-.5)*1.5);s.Hp.copy(s.H).addScaledVector(v,-H);s.Tp.copy(s.T).addScaledVector(v,-H*1.3);}
+  tell(f,'The cogs rip it out of your hands','red');}
+// a body in the water floats and drifts; in the wheel it is dragged under; a part in the slot goes into the cogs
+function millRag(f,h,cur,om){const M=MILL,rg=f.ragdoll;if(!rg||!rg.P.Hips)return;const P=rg.P,Q=rg.Q;let wet=0,headUnder=false,wheel=false,gearD=0;
+  if(M.snag&&M.snag.f===f){const S=M.snag;S.t+=h;if(!S.h){let best=null,bd=9;for(const n of ['LeftHand','RightHand','LeftFoot','RightFoot']){const p=P[n];if(!p)continue;const d=Math.hypot(p.x-M.WX,p.z-M.pz);if(d<bd){bd=d;best=n;}}S.h=best;}
+    const p=S.h&&P[S.h];if(p&&S.t<1.2){const tx=clamp(p.x,M.sx0+.15,M.sx1-.15),k=Math.min(1,h*5);p.x+=(tx-p.x)*k;p.z+=(M.pz-p.z)*k;p.y+=(-.3-p.y)*k*.5;}else M.snag=null;}
+  for(const n of rg.names){const p=P[n],q=Q[n];if(!p)continue;
+    if(inRace(p.x,p.z)&&p.y<M.wl+.05){wet++;rg.sleep=false;if(n==='Head')headUnder=p.y<M.wl-.05;
+      const vx=(p.x-q.x)/h,vy=(p.y-q.y)/h,vz=(p.z-q.z)/h,k=Math.exp(-2.6*h);let nvx=cur+(vx-cur)*k,nvy=vy*k,nvz=vz*k;
+      const up=(n==='Hips'||n==='Spine1'||n==='Spine2'?15:n==='Head'||n==='Neck'?12.5:10.6)*clamp((M.wl+.05-p.y)/.12,0,1);nvy+=up*h;
+      if(Math.abs(p.x-M.WX)<M.WR*.8&&p.z>M.wz0-.1&&p.z<M.wz1+.1){wheel=true;nvx=Math.max(nvx,om*M.WR*.9);nvy-=6*h;}   // the floats push it down and on
+      q.x=p.x-nvx*h;q.y=p.y-nvy*h;q.z=p.z-nvz*h;}
+    if(inSlot(p.x,p.z)&&p.y<.08&&!MILL_SEV[n]){const dy=Math.max(0,RD_R[n]||.1)-p.y;if(dy>0){p.y+=dy;q.y+=dy;}}   // the rim fills the slot: only an arm or a leg goes in
+    if(inSlot(p.x,p.z)&&p.y<.08&&om>.15&&MILL_SEV[n]&&!(M.gearCD.get(f)>simTime)){   // the cogs: a limb is drawn down into them and held there while they grind
+      rg.sleep=false;const lim=MILL_SEV[n];if(lim){const k=Math.min(1,h*6),dx=(om*.3*h),dy=(-.38-p.y)*k,dz=(M.pz-.14-p.z)*k;p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx;q.y+=dy*.85;q.z+=dz*.85;}
+      const g=M.gearT.get(f)||{};g[n]=(g[n]||0)+h;M.gearT.set(f,g);gearD=Math.max(gearD,n==='Head'||n==='Neck'?45:n.startsWith('Spine')||n==='Hips'?16:9);
+      if(Math.random()<h*5)spawnBlood(p,V((Math.random()-.5)*2,1.6,(Math.random()-.5)),3,1.2,1);if(Math.random()<h*3)sfx('crush',p,.45,1.2+Math.random()*.4,0,false);
+      const bn=lim;if(bn&&g[n]>.5&&f.bones[bn]&&!f.bones[bn].userData.severed){f.sever(bn,V(0,1.5,0));sfx('crush',p,1,.9,0,false);spawnBlood(p,V(0,2,0),30,2,1.4);tell(f,'The gears take it!','red');if(f.lastHitBy)tell(f.lastHitBy,'The gears take a limb','red');M.gearT.set(f,{});M.gearCD.set(f,simTime+4);
+        for(const m of rg.names){const pp=P[m],qq=Q[m];if(pp&&inSlot(pp.x,pp.z,.5)){qq.z=pp.z+.04;qq.y=pp.y-.03;}}}}}   // the wheel throws the rest of you clear
+  if(gearD&&f.alive)f.damage(gearD*h,f.lastHitBy,'caught in the gears');
+  if(wheel&&f.alive){f.damage(26*h,f.lastHitBy,'dragged under the millwheel');if(Math.random()<h*4)sfx('crush',P.Hips,.5,.9,0,false);}
+  if(headUnder&&f.alive)f.damage(5*h,f.lastHitBy,'drowned in the millrace');
+  if(wet)f.burn=0;}
+// every machine: the wheel, the gears, the water's flow, the gate, the lever, the flour, the sound
+function millVisual(dt){const M=MILL;if(!M)return;if(NET.mode==='client')M.flow+=(M.flowT-M.flow)*(1-Math.exp(-dt*.55));const om=.72*M.flow;M.ang+=om*dt;const a=M.ang;
+  M.parts.wheel.rotation.z=a;M.parts.pit.rotation.z=a;M.parts.shaft.rotation.y=-a*4;for(const n of M.parts.nuts)n.rotation.y=a*24;
+  const wn=MATS.millWater.userData.n;wn.offset.x-=.95*M.flow*dt/ (26/1.4)*1;wn.offset.y+=Math.sin(performance.now()*.0007)*.0004;const ff=MATS.millFoam.userData.f;ff.offset.x-=dt*.12*(.3+M.flow);MATS.millFoam.opacity=.15+.6*M.flow;
+  M.gate.position.y+=((M.open?M.wl+1.75:M.wl+.62)-M.gate.position.y)*Math.min(1,dt*1.5);M.leverArm.rotation.z=M.open?.7:-.7;
+  flourStep(dt);blastVisual(dt);
+  // sound: the race rushing, the floats slapping, the cogs knocking
+  if(AC&&state!=='loading'){if(!M.snd){const src=AC.createBufferSource();src.buffer=noiseBuf;src.loop=true;const f1=AC.createBiquadFilter();f1.type='bandpass';f1.frequency.value=700;f1.Q.value=.6;const f2=AC.createBiquadFilter();f2.type='lowpass';f2.frequency.value=2200;const g=AC.createGain();g.gain.value=0;src.connect(f1);f1.connect(f2);f2.connect(g);g.connect(master);src.start();M.snd={src,g,f1};}
+    const cp=camera.position,dz=Math.max(0,Math.abs(cp.z-6)-1.4),v=1/(1+dz*.35);M.snd.g.gain.value=lerp(M.snd.g.gain.value,(.05+.16*M.flow)*v,.05);M.snd.f1.frequency.value=600+300*Math.sin(performance.now()*.0011)+200*M.flow;
+    M.clackT-=dt*om*40/6.283;if(om>.08&&M.clackT<=0){M.clackT=1;const p=V(M.WX,1.9,M.SZ),vv=distVol(p)*.22;if(vv>.01){const t=AC.currentTime;noiseBurst(t,.05,'bandpass',1400+Math.random()*500,3,vv);noiseBurst(t,.09,'lowpass',260,1,vv*.8);}}
+    M.splT-=dt*om*24/6.283;if(om>.08&&M.splT<=0){M.splT=1;const p=V(M.WX+1.5,M.wl,6),vv=distVol(p)*.16;if(vv>.01)noiseBurst(AC.currentTime,.22,'bandpass',500+Math.random()*300,.8,vv);}}}
+function millSoundOff(){const M=MILL;if(M&&M.snd){try{M.snd.src.stop();}catch(e){}M.snd=null;}}
+// bots: keep back from the race's edge, the slot and the stone floor's edges; in the water, make for the nearest steps
+function millSteer(f,wish){const M=MILL;if(!M)return false;
+  if(inRace(f.pos.x,f.pos.z)&&f.pos.y<-.2){const down=f.pos.x>M.WX+1;const s=M.steps[down?1:0];let tx,tz;const onF=f.pos.x>=Math.min(s.top,s.bot)&&f.pos.x<=Math.max(s.top,s.bot);
+    if(onF){tx=s.top;tz=(M.rz0+s.z1)/2;}else{tx=s.bot+(s.top-s.bot)*.1;tz=(M.rz0+s.z1)/2;}const dx=tx-f.pos.x,dz=tz-f.pos.z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}
+  const st=M.steps.find(s=>Math.abs(f.pos.x-s.land)<1.2&&f.pos.z>M.rz0-.1&&f.pos.z<5.6&&f.pos.y>-.1);if(st){wish.set(0,0,-1);return true;}
+  if(f.pos.y<.1){const d=M.rz0-f.pos.z;if(d<.9&&d>-.1&&!(f.pos.x>M.WX-2.5&&f.pos.x<M.WX+2.5)){wish.z-=(.9-d)/.9*1.6;}
+    if(inSlot(f.pos.x,f.pos.z,1.1)){const dz=f.pos.z-(M.sz0+M.sz1)/2;wish.z+=(dz<0?-1:1)*1.6;}}
+  else if(f.pos.y>M.DH-.3){for(const [d,nx,nz] of [[f.pos.z-M.pz0,0,1],[M.pz1-f.pos.z,0,-1],[M.px1-f.pos.x,-1,0]]){if(d<1.1)wish.x+=nx*(1.1-d)*1.8,wish.z+=nz*(1.1-d)*1.8;}}
+  return false;}
+// a target standing with the race (or the stone floor's north edge, over it) at their back, as seen from me
+function millEdge(me,tg){const M=MILL;if(!M)return false;const up=tg.pos.y>M.DH-.3;const ez=up?M.pz1:M.rz0;return ez-tg.pos.z<1.1&&ez-tg.pos.z>-.05&&tg.pos.z-me.pos.z>.3&&Math.abs(tg.pos.y-me.pos.y)<.5;}
+function millOk(x,z){const M=MILL;return !M||(x>-M.W+.6&&x<M.W-.6&&z>-M.D+.6&&z<M.rz0-.5&&!inSlot(x,z,.6));}
+
+function clearWorld(){millSoundOff();MILL=null;flourClear();dynFree();shardClear();GRASS=null;DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;SHIP=null;sky.rotation.set(0,0,0);if(typeof DUST!=='undefined')DUST.p.material.uniforms.uCol.value.setRGB(.62,.53,.4);torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -2060,6 +2319,9 @@ LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0
   env:[[0,'#4d5d6e'],[.42,'#8a98a6'],[.5,'#b6bcc0'],[.53,'#33454c'],[1,'#1a262c']]};
 LIGHTS.tavern={fog:0x15120f,dens:.01,top:0x15120f,mid:0x15120f,hor:0x15120f,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x9a8e80,hg:0x2c2620,hi:.8,sun:0x9fb4d8,si:.45,dir:[.25,.8,-.55],moon:false,exp:1.8,cool:.5,halo:.3,shR:12,shMap:2048,
   env:[[0,'#100e0c'],[.45,'#33291f'],[.5,'#5a4430'],[.55,'#221b14'],[1,'#0c0a08']]};
+// inside the mill at midday: the roof keeps the sun off except where it comes in at the south windows; a soft warm fill
+LIGHTS.mill={fog:0x2c261e,dens:.008,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.3,.55,-.75],stars:0,hs:0xb0a48e,hg:0x5a4a36,hi:1.15,sun:0xffdcae,si:5,dir:[.3,.5,-.8],moon:false,exp:1.3,cool:.7,halo:.25,shR:16,shMap:4096,
+  env:[[0,'#3a3a3c'],[.42,'#6a6058'],[.5,'#8a7a64'],[.55,'#4a3c2c'],[1,'#241c14']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
@@ -2067,6 +2329,7 @@ const MAPS={
   colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
+  mill:{shR:16,entry:{x:-12.2,z:-4,dx:1,dz:0},name:'The Mill',build:()=>buildMill(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:3,lootR:13,ceil:7.4,loot:14,fighters:8,light:'mill',noRing:true,spot:()=>[rand(-11.5,11.5),rand(-6.8,3.7)]},
   pit:{shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
@@ -2158,7 +2421,7 @@ function loadSfx(){if(sfxLoading||!AC)return;sfxLoading=true;
 const _sd=V(),_sr=V();
 function sfx(k,p,vol=1,rate=1,delay=0,net=true){
   if(net)netEv(['S',k,p?r3v(p):0,r3(vol),r3(rate),delay]);
-  const L=SFX[k];if(!AC||!L||!L.length)return false;const v=distVol(p)*vol;if(v<.006)return true;
+  const L=SFX[k];if(!AC||!L||!L.length)return false;const v=distVol(p)*vol;if(!(v>=.006))return true;
   const src=AC.createBufferSource();src.buffer=L[(Math.random()*L.length)|0];src.playbackRate.value=rate*(.92+Math.random()*.16);
   const g=AC.createGain();g.gain.value=v;src.connect(g);
   if(p&&AC.createStereoPanner){const pn=AC.createStereoPanner();_sr.set(1,0,0).applyQuaternion(camera.quaternion);_sd.subVectors(p,camera.position);const d=_sd.length();pn.pan.value=d>.3?clamp(_sd.dot(_sr)/d,-1,1)*.75:0;g.connect(pn);pn.connect(master);}else g.connect(master);
@@ -3314,7 +3577,8 @@ const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck',
   ['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['LeftFoot','LeftToeBase'],['LeftLeg','LeftToeBase'],
   ['RightUpLeg','RightLeg'],['RightLeg','RightFoot'],['RightFoot','RightToeBase'],['RightLeg','RightToeBase']];
 const RD_MINS=[['LeftArm','LeftHand','LeftForeArm',.5],['RightArm','RightHand','RightForeArm',.5],['LeftUpLeg','LeftFoot','LeftLeg',.75],['RightUpLeg','RightFoot','RightLeg',.75]];
-let FULLBODY=/[?&]fullbody/.test(location.search)||(()=>{try{return localStorage.getItem('bloodmoor-fullbody')==='1';}catch(e){return false;}})();
+let FULLBODY=/[?&]fullbody/.test(location.search)||!/[?&]nofullbody/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-fullbody')!=='0';}catch(e){return true;}})();   // on unless switched off
+const FB_R={Hips:.13,Spine1:.15,Spine2:.16,Neck:.07,Head:.11,HeadTop_End:.09,LeftArm:.07,RightArm:.07,LeftForeArm:.055,RightForeArm:.055,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftUpLeg:.09,RightUpLeg:.09,LeftLeg:.07,RightLeg:.07,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};   // contact sizes
 const FB_K={Hips:.22,Spine1:.14,Spine2:.12,Neck:.11,Head:.09,HeadTop_End:.09,LeftArm:.14,RightArm:.14,LeftForeArm:.09,RightForeArm:.09,LeftUpLeg:.2,RightUpLeg:.2,LeftLeg:.16,RightLeg:.16};   // muscle: how hard each point is pulled to its animated place per 1/120 s
 const RD_R={Hips:.13,Spine1:.14,Spine2:.14,Neck:.07,Head:.11,HeadTop_End:.09,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};
 const _rv=V(),_ru=V(),_rq=new THREE.Quaternion(),_rinv=new THREE.Matrix4();
@@ -3363,7 +3627,7 @@ class Ragdoll{
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
-      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);millWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       FLOOR_TOL=.45;
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
@@ -3515,6 +3779,7 @@ function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.cast
 function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
 function propBreak(p,dir,by){if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
+  if(p.kind==='sack'){flourBurst(p.x,p.y0||0,p.z);return;}   // a flour sack bursts: no pieces, a cloud
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
   {let mt=null;p.mesh.traverse(o=>{if(!mt&&o.isMesh&&o.visible)mt=Array.isArray(o.material)?o.material[0]:o.material;});if(mt)for(let i=0;i<(p.kind==='plank'?4:8);i++){const a=Math.random()*6.283,sp=.8+Math.random()*1.8;shardAdd(mt,'splinter',V(p.x+Math.cos(a)*p.r*.6,(p.kind==='plank'?0:.3+Math.random()*(p.h||.8)*.7),p.z+Math.sin(a)*p.r*.6),V(Math.cos(a)*sp+(dir?dir.x*1.5:0),.8+Math.random()*2,Math.sin(a)*sp+(dir?dir.z*1.5:0)),1.6+Math.random());}}   // splinters
   if(NET.mode==='client')return;
@@ -3555,7 +3820,7 @@ function propHitTest(){if(!PROPS.length)return;
   const test=(s,A)=>{if(!s||s.def.kind==='fist')return;const sp=s.tipVel.length();if(sp<4)return;
     for(const p of PROPS){if(p.broken)continue;if((p.x-s.H.x)**2+(p.z-s.H.z)**2>(s.len+p.r+.3)**2)continue;
       for(let i=1;i<=4;i++){const t=s.def.hitFrom+(1-s.def.hitFrom)*i/4;_v.copy(s.H).addScaledVector(s.axis,s.len*t);
-        const inside=p.seg?distPointSeg2(_e.set(_v.x,0,_v.z),_g.set(p.seg[0],0,p.seg[1]),_wl1.set(p.seg[2],0,p.seg[3]))<.12*.12&&_v.y>.35&&_v.y<1.45:p.kind==='plank'?Math.abs(_v.x-p.x)<.12&&Math.abs(_v.z-p.z)<p.r&&_v.y<.05&&_v.y>-.2:(_v.x-p.x)**2+(_v.z-p.z)**2<(p.r+.06)**2&&_v.y<p.h+.05;
+        const inside=p.seg?distPointSeg2(_e.set(_v.x,0,_v.z),_g.set(p.seg[0],0,p.seg[1]),_wl1.set(p.seg[2],0,p.seg[3]))<.12*.12&&_v.y>.35&&_v.y<1.45:p.kind==='plank'?Math.abs(_v.x-p.x)<.12&&Math.abs(_v.z-p.z)<p.r&&_v.y<.05&&_v.y>-.2:(_v.x-p.x)**2+(_v.z-p.z)**2<(p.r+.06)**2&&_v.y<(p.y0||0)+p.h+.05&&_v.y>(p.y0||0)-.05;
         if(!inside)continue;if((p.cd.get(s)||0)>simTime)break;p.cd.set(s,simTime+.3);
         const v=sp*t,k=s.def.kind==='blunt'||s.def.kind==='axe'?1.6:s.def.kind==='spear'?.5:.9,dmg=Math.max(0,v-3)*s.def.weight*k;p.hp-=dmg;p.jig=.25;if(p.kind==='plank'&&PIT&&!PIT.down)PIT.integ-=dmg*.004;
         sThud(_v,Math.min(1,v/10));s.Tp.lerp(s.T,.55);s.Hv.multiplyScalar(.6);
@@ -3691,7 +3956,7 @@ class Sword{
   }
   step(h,target,guide,commit,strength){
     this.Hprev.copy(this.H);
-    if(this.H.distanceToSquared(target)>4){this.stuck=null;this.reset(target,guide);return;}
+    if(!(this.H.distanceToSquared(target)<=4)||!Number.isFinite(this.T.x+this.T.y+this.T.z+this.Tp.x+this.Hp.x)){if(!Number.isFinite(target.x+target.y+target.z))return;this.stuck=null;this.reset(target,guide);return;}   // (also a safety net: a weapon that has gone NaN starts again in the hand)
     if(this.stuck){ // embedded in a body: it stays in, dragging them by the haft, until it works loose or you rip it out
       const st=this.stuck,B=st.B;st.t-=h;st.age+=h;
       const gone=!B.alive||B.ragdoll||!st.c.on||!fighters.includes(B);
@@ -3782,7 +4047,7 @@ class Sword{
       // landed flat or butt-first, or ran into something: it drops where it is instead of levering back
       if(this.H.y<groundY(this.H.x,this.H.z,this.H.y)+.07||this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
     }
-    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);shipWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){const vy=(p.y-q.y)/h;if(vy<-1.6&&simTime>(this.clT||0)){this.clT=simTime+.12;clatter(this,p,-vy);}p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
+    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);shipWall(p,.03);millWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){const vy=(p.y-q.y)/h;if(vy<-1.6&&simTime>(this.clT||0)){this.clT=simTime+.12;clatter(this,p,-vy);}p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
     if(this.flying&&this.def.kind==='spear'&&this.H.y>.1&&this.T.y>.1){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
@@ -3889,6 +4154,10 @@ function mapStatics(R,add,pw){
   if(SHIP){const sh=new THREE.Shape(),N=40;for(let i=0;i<=N;i++){const x=-SHIP.SL+2*SHIP.SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SHIP.SL+2*SHIP.SL*i/N;sh.lineTo(x,-shipHalfW(x));}
     const g=new THREE.ShapeGeometry(sh);g.rotateX(Math.PI/2);const P=g.attributes.position,ix=g.index?Array.from(g.index.array):[...Array(P.count).keys()];add(R.ColliderDesc.trimesh(new Float32Array(P.array),new Uint32Array(ix)));
     add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-3.5,0));}
+  else if(MILL){const M=MILL,G=(x0,x1,y0,y1,z0,z1)=>add(R.ColliderDesc.cuboid((x1-x0)/2,(y1-y0)/2,(z1-z0)/2).setTranslation((x0+x1)/2,(y0+y1)/2,(z0+z1)/2)),E=M.W+3;   // the floor round the race and the slot, thick enough to be their walls
+    G(-E,E,-2,0,-E,M.sz0);G(-E,M.sx0,-2,0,M.sz0,M.sz1);G(M.sx1,E,-2,0,M.sz0,M.sz1);G(-E,E,-2,0,M.sz1,M.rz0);G(-E,E,-2,0,M.rz1,E);
+    G(-E,E,M.rb-.5,M.rb,M.rz0,M.rz1);G(M.sx0,M.sx1,M.sb-.5,M.sb,M.sz0,M.sz1);G(M.W-.62,M.W-.5,M.rb,0,M.rz0,M.rz1);G(-M.W+.15,-M.W+.25,M.rb,.5,M.rz0,M.rz1);
+    for(const s of M.steps){const a=Math.min(s.top,s.land),b=Math.max(s.top,s.land);G(a,b,M.rb,0,M.rz0,s.z1);for(let i=0;i<5;i++){const run=Math.abs(s.bot-s.top)/5,x=s.top+Math.sign(s.bot-s.top)*(i+.5)*run;G(x-run/2,x+run/2,M.rb,M.rb*(i+1)/6,M.rz0,s.z1);}}}
   else if(!PIT)add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-.5,0));
   else{const N=48,ro=(MAP+10)*1.5,v=[],ix=[];for(let i=0;i<N;i++){const a=i/N*6.283;v.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*ro,0,PIT.z+Math.sin(a)*ro);}
     for(let i=0;i<N;i++){const j=(i+1)%N;ix.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(v),new Uint32Array(ix)));
@@ -3982,7 +4251,7 @@ function dynSync(){for(const d of DYN){const b=d.body;if(!b||d.gone)continue;if(
   if(d.brittle||d.hp){const pv=d.pvv||(d.pvv=V()),dv=Math.hypot(v.x-pv.x,v.y-pv.y,v.z-pv.z);pv.set(v.x,v.y,v.z);   // a hard knock breaks it
     if(d.brittle&&dv>3.3){dynBreak(d,v);continue;}if(d.hp&&dv>2.5){d.dmg=(d.dmg||0)+d.m*(dv-2.5);if(d.dmg>=d.hp){dynBreak(d,v);continue;}}}const vm=d.heavy?7:14;if(sp>vm){const k=vm/sp;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);v=b.linvel();sp=vm;}   // (a safety net against anything wedged and spat out)
   if(d.pv!=null&&Math.abs(sp-d.pv)>2&&simTime>(d.sndT||0)){d.sndT=simTime+.12;dynSound(d,Math.abs(sp-d.pv),d.obj.position.clone());}d.pv=sp;
-  const p=d.obj.position,q=d.obj.quaternion;if(d.ob)dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;}if(d.fx)dynFx(d,p,q);
+  const p=d.obj.position,q=d.obj.quaternion;if(d.ob)dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;if(d.prop.y0!=null)d.prop.y0=t.y;}if(d.fx)dynFx(d,p,q);
   if(d.pw){d.pw.setNextKinematicTranslation(t);d.pw.setNextKinematicRotation(r);}
   if(t.y<-20||(SHIP&&t.y<-1&&!shipIn(t.x,t.z)))dynKill(d,true);}}
 // friends: the host sends what moved (and everything that has moved, every 3 s); they ease each thing to it
@@ -3993,7 +4262,7 @@ function dynNet(){if(!DYN.length)return 0;const o=[],full=simTime>dynFull;if(ful
 function dynNetApply(a){for(let i=0;i+7<a.length;i+=8){const d=DYNK.get(a[i]);if(!d||d.gone)continue;if(a[i+2]<-90){dynKill(d,true);continue;}
   (d.tp||(d.tp=V())).set(a[i+1],a[i+2],a[i+3]);(d.tq||(d.tq=new THREE.Quaternion())).set(a[i+4],a[i+5],a[i+6],a[i+7]).normalize();d.mv=true;mapDirty=true;}}
 function dynClient(dt){const k=1-Math.exp(-dt*16);for(const d of DYN){if(!d.tp||d.gone)continue;const o=d.obj;if(o.position.distanceToSquared(d.tp)>4)o.position.copy(d.tp);else o.position.lerp(d.tp,k);o.quaternion.slerp(d.tq,k);
-  if(d.prop){d.prop.x=o.position.x;d.prop.z=o.position.z;}if(d.fx)dynFx(d,o.position,o.quaternion);if(d.floor)dynFloor(d,o.position,o.quaternion);}}
+  if(d.prop){d.prop.x=o.position.x;d.prop.z=o.position.z;if(d.prop.y0!=null)d.prop.y0=o.position.y;}if(d.fx)dynFx(d,o.position,o.quaternion);if(d.floor)dynFloor(d,o.position,o.quaternion);}}
 // ---- breaking: crockery and glass (brittle) shatter on a hard knock: a fall from a table or shelf, a blow, a body landing on it.
 // Furniture with hp (chairs, benches, the spinning wheel) takes damage from every hard impulse it suffers and splits, leaving
 // boards, staves or a plank to fight with. The pieces are cosmetic shards and splinters (SHARDS: instanced, they fall, bounce and
@@ -4218,12 +4487,13 @@ class Fighter{
     if(!FULLBODY||!this.alive||this.ragdoll||dt<=0){this.ar=null;return;}
     const B=this.bones;this.root.updateMatrixWorld(true);
     const T=this.arT||(this.arT={}),Tp=this.arTp||(this.arTp={});for(const n of RD_NAMES){if(!B[n])continue;(T[n]||(T[n]=V())).setFromMatrixPosition(B[n].matrixWorld);}
-    let A=this.ar;if(A&&(A.sev!==this.sevNames.length||A.P.Hips.distanceToSquared(T.Hips)>.5||dt>.2))A=null;
+    let A=this.ar;if(A&&(A.sev!==this.sevNames.length||!(A.P.Hips.distanceToSquared(T.Hips)<=.5)||dt>.2))A=null;
     if(!A){A=this.ar=new Ragdoll(B,RD_NAMES,V(),null,null);A.sev=this.sevNames.length;for(const n of A.names){A.Q[n].copy(A.P[n]);(Tp[n]||(Tp[n]=V())).copy(T[n]);}return;}
     const str=this.pbd?this.pbd.str:1,pin=new Set();
     for(const sd of ['Left','Right'])pin.add(sd+'Foot').add(sd+'ToeBase');
     if(this.sword&&this.mainArm){const m=this.mainArm==='R'?'Right':'Left';pin.add(m+'Hand').add(m+'HandMiddle1');if(twoH(this.sword.def)||this.sword.def.kind==='spear'){const o=m==='Right'?'Left':'Right';pin.add(o+'Hand').add(o+'HandMiddle1');}}
     if(!this.sword){for(const sd of ['Left','Right'])pin.add(sd+'Hand').add(sd+'HandMiddle1');}
+    if(this.isPlayer&&camMode==='fp')pin.add('Neck').add('Head').add('HeadTop_End');
     const ns=Math.max(1,Math.ceil(dt*120)),dk=SHIP&&this.pos.y>-.1?SHIP:null,gx=dk?9.8*dk.pitch*.6:0,gz=dk?9.8*dk.roll*.6:0;
     const rl=this.fbRelax||0;this.fbRelax=Math.max(0,rl-dt*1.6);const mv=clamp(Math.hypot(this.vel.x,this.vel.z)/5,0,1)*(1-rl),cr=.9+.08*mv,vk=.9-.12*mv+.05*rl,km=(1+1.3*mv)*(1-.65*rl);   // moving on your feet the muscles are set: the run carries the whole body, it doesn't shake it loose
     for(let si=1;si<=ns;si++){const a=si/ns,h=dt/ns;
@@ -4236,9 +4506,14 @@ class Fighter{
         const k=Math.min(.5,(FB_K[n]||.12)*(.45+.55*str*str)*km);P.x+=(_wl1.x-P.x)*k;P.y+=(_wl1.y-P.y)*k;P.z+=(_wl1.z-P.z)*k;}
       for(let it=0;it<2;it++){for(const [x,y,l0] of A.links){const Pa=A.P[x],Pb=A.P[y];_wl3.subVectors(Pb,Pa);const d=_wl3.length()||1e-6,fa=pin.has(x),fb=pin.has(y);if(fa&&fb)continue;const l=T[x]&&T[y]?T[x].distanceTo(T[y]):l0,k=(d-l)/d;   // lengths as posed: a bent wrist is not pulled straight
           if(fa)Pb.addScaledVector(_wl3,-k);else if(fb)Pa.addScaledVector(_wl3,k);else{Pa.addScaledVector(_wl3,k*.5);Pb.addScaledVector(_wl3,-k*.5);}}}}
-    for(const n of A.names)if(T[n])(Tp[n]||(Tp[n]=V())).copy(T[n]);
+    for(const n of A.names)if(T[n])(Tp[n]||(Tp[n]=V())).copy(T[n]);A.hs=dt/ns;
+    // contact: the body's parts don't pass into walls, the floor or anyone else's body; pressed together, bodies give
+    {const ctx=CTX.m;CTX.m=0;let near=null;for(const o of fighters){if(o===this||!o.ar||o.ragdoll)continue;if((o.pos.x-this.pos.x)**2+(o.pos.z-this.pos.z)**2<1.7)(near||(near=[])).push(o.ar);}
+     for(const n of A.names){if(pin.has(n))continue;const p=A.P[n],r=FB_R[n]||.06;if(n!=='Hips'&&!n.endsWith('UpLeg'))collide(p,r,true);const gy=groundY(p.x,p.z,p.y+.3);if(p.y<gy+r*.6)p.y=gy+r*.6;
+       if(near)for(const O of near)for(const m of O.names){const q=O.P[m],rr=r+(FB_R[m]||.06);_wl1.subVectors(p,q);const d2=_wl1.lengthSq();if(d2<rr*rr&&d2>1e-8){const d=Math.sqrt(d2);p.addScaledVector(_wl1,(rr-d)/d*.5);}}}
+     CTX.m=ctx;}
     // never wander far from the pose: past 25 cm a point is drawn back hard
-    for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length();if(d>.25){A.P[n].copy(t).addScaledVector(_wl1,.25/d);}}
+    for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length();if(d>.25){A.P[n].copy(t).addScaledVector(_wl1,.25/d);}else if(!(d>=0)){A.P[n].copy(t);A.Q[n].copy(t);}}
     A.apply();this.root.updateMatrixWorld(true);}
   // a blow lands on the full body: the struck point and its neighbours are driven
   fbHit(n,dir,dv){const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];for(const m of A.names){const w=m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-dv*w/55);}this.fbRelax=Math.min(1,(this.fbRelax||0)+dv*.25);}   // a blow knocks the wind out: the muscles give for a moment and the body rides it
@@ -4309,6 +4584,10 @@ class Fighter{
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.25);}
   // ---------------- sim step
   step(h){
+    // a safety net: a body whose numbers have gone bad (NaN) is put back where it last was sound, instead of spreading it to everyone it touches
+    if(!Number.isFinite(this.pos.x+this.pos.y+this.pos.z+this.vel.x+this.vel.z+this.bal.x+this.bal.z+this.balV.x+this.balV.z)){const g=this._okPos;if(g)this.pos.copy(g);else if(!Number.isFinite(this.pos.x+this.pos.y+this.pos.z))this.pos.set(0,0,0);this.vel.set(0,0,0);this.vy=0;this.bal.set(0,0,0);this.balV.set(0,0,0);this.ar=null;}
+    else (this._okPos||(this._okPos=V())).copy(this.pos);
+    for(const k in this.fists){const a=this.fists[k];if(a&&a.pos&&!Number.isFinite(a.pos.x+a.pos.y+a.pos.z+(a.vel?a.vel.x+a.vel.y+a.vel.z:0))){a.init=false;if(a.vel)a.vel.set(0,0,0);}}
     if(this.ragdoll){this.ragdoll.step(h);
       if(this.pitT!=null&&this.alive&&PIT&&this.ragdoll.P.Hips){const R=this.ragdoll,hy=R.P.Hips.y;
         if(hy<-PIT.d+.75){   // down among the stakes: whatever lands on one is run through and held there
@@ -4344,15 +4623,16 @@ class Fighter{
     if((SINK.st==='open'||SINK.st==='cracking')&&!this.isPlayer&&!this.remote){const dx=this.pos.x-SINK.x,dz=this.pos.z-SINK.z,d=Math.hypot(dx,dz),m=SINK.r+1.4;if(d<m&&d>1e-3){const k=(m-d)/1.4*(SINK.st==='cracking'?3:1.8);wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     if(PIT&&!this.isPlayer&&!this.remote){const dx=this.pos.x-PIT.x,dz=this.pos.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r+1.3;   // bots keep back from the edge
       if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
-    const fy=SHIP||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.fallT==null&&this.vy<=0&&this.pos.y>fy&&this.pos.y-fy<.1)this.pos.y=fy;   // down a stair
+    if(MILL&&!this.isPlayer&&!this.remote)millSteer(this,wish);
+    const fy=SHIP||MILL||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.fallT==null&&this.vy<=0&&this.pos.y>fy&&this.pos.y-fy<.1)this.pos.y=fy;   // down a stair
     const onGround=this.pos.y<=fy+.001&&this.fallT==null;if(onGround&&this.pos.y<fy)this.pos.y=fy;
-    run=run&&!exhausted&&!this.crouch&&onGround;
+    run=run&&!exhausted&&!this.crouch&&onGround&&!this._wade;
     const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45||(this.gut||0)>=1)run=false;   // an opened belly: no running
     if(this.heartT&&simTime>this.heartT){this.heartT=0;if(this.alive&&!this.downed&&NET.mode!=='client'){this.goDown(this.lastHitBy);return;}}   // the heart gives out: down in a second or two
     const drag=this.dragT>simTime;if(drag)run=false;const dragB=this.dragBody>simTime;
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
-    let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1);
+    let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -4365,12 +4645,12 @@ class Fighter{
     if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
     if(!this.isPlayer&&!this.remote&&Math.random()<h*2.5&&grabbedBy(this).length)this.struggle();
     if(this.rockAD()&&grabbedBy(this).length)this.struggle();
-    if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
+    if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&!this._wade&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
     // thrusts step in behind the point
     
     if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);shipWall(this.pos,.3);}
-    else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=SHIP||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
-    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;(CTX.m=82+8*ARMOR_SLOTS.reduce((q,sl)=>q+(this.armor[sl]?1:0),0),CTX.v.copy(this.vel),CTX.y=this.pos.y+.95,CTX.f=this,collide(this.pos,.34,true,1.7),CTX.m=0,CTX.f=null);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
+    else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=SHIP||MILL||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
+    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;(CTX.m=82+8*ARMOR_SLOTS.reduce((q,sl)=>q+(this.armor[sl]?1:0),0),CTX.v.copy(this.vel),CTX.y=this.pos.y+.95,CTX.f=this,collide(this.pos,.34,true,1.7),CTX.m=0,CTX.f=null);if(MILL)millWall(this.pos,.38);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.fwd(_f);this.kickRun=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z);this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
@@ -4629,7 +4909,7 @@ class Fighter{
       if(pointThreat&&A.block<=0&&A.phase==='guard'&&A.threatCd<=0&&Math.random()<A.skill){A.threatCd=.5;A.block=.55;A.blockDelay=A.react*.5;}
       if(A.block<=0&&ts>4.5&&d<reach+1.8&&A.threatCd<=0&&A.phase!=='strike'&&!(A.phase==='windup'&&A.pt>.2&&(kind==='blunt'||kind==='axe'))){A.threatCd=.55;if(Math.random()<A.skill){A.block=.42+A.react;A.blockDelay=A.react;if(A.phase==='windup')A.phase='guard';}}
       if(tg.stagger>.25&&A.phase==='guard'&&d<desired+.7)A.cd=Math.min(A.cd,0);   // riposte
-      if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005*A.kick)this.kickReq=true;
+      if(d<1.3&&this.kickCd<=0&&A.phase==='guard'&&!tg.downed&&tg.stagger<=0&&this.stamina>40&&Math.random()<.005*A.kick*(MILL&&millEdge(this,tg)?10:1))this.kickReq=true;   // (much likelier with a drop behind them)
       if(A.throwT<0&&(kind==='spear'||kind==='axe')&&d>4&&d<9&&!tg.ragdoll&&this.stamina>40&&Math.random()<(kind==='spear'?.0015:.0006)*A.toss)A.throwT=0;
       if(A.block>0){A.block-=h;A.blockDelay-=h;if(A.blockDelay<=0&&tg.sword){
           _t2.subVectors(tg.sword.pointAt(.7,_t3),this.chest);const lx=_t2.dot(_r),ly=_t2.y;
@@ -4851,7 +5131,7 @@ class Fighter{
 }
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
-    this.fullBody(dt);
+    this.fullBody(dt);if(this.ar)this.updateCaps();   // a blow lands where the body is drawn
   }
   startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
     if(this.ai&&!this.isPlayer)this.ai.cd=Math.max(this.ai.cd||0,d*.6);if(NET.mode==='host')netEv(['q',this.id,part,r3(d)]);if(this.isPlayer)tell(this,part==='neck'?'Your throat is cut':'You clutch the wound','red');}
@@ -4983,6 +5263,7 @@ class Fighter{
     this.root.updateMatrixWorld(true);
     const names=RD_NAMES.filter(n=>!this.detached.has(n));
     this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;   // even the dying keep some stiffness for a moment
+    {const A=this.ar,R=this.ragdoll;if(A&&A.hs){for(const n of R.names){const p=A.P[n],q=A.Q[n];if(!p||!q)continue;_wl1.subVectors(p,q).multiplyScalar(1/A.hs).sub(this.vel);const l=_wl1.length();if(l>4)_wl1.multiplyScalar(4/l);R.Q[n].addScaledVector(_wl1,-H*2);}}this.ar=null;}   // each part keeps the full body's own motion
     // the dying fold up: knees buckle forward, hips drop, the head lolls, instead of toppling like a plank
     if(crumple){const R=this.ragdoll,f=this.fwd(V()),add=(n,x,y,z)=>{if(R.Q[n])R.Q[n].add(V(f.x*z,y,f.z*z).multiplyScalar(-H*2*crumple));};
       for(const k of ['LeftLeg','RightLeg'])add(k,0,0,.45);add('Hips',0,0,0);for(const k of ['Spine2','Neck'])add(k,0,0,.2);add('Head',0,0,.3);}
@@ -5111,7 +5392,7 @@ function playerLootCandidate(){
 const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
 function rollLoot(){const tot=LOOT_TABLE.reduce((s,r)=>s+r[2],0);let x=Math.random()*tot;for(const r of LOOT_TABLE){x-=r[2];if(x<=0)return r;}return LOOT_TABLE[0];}
 function spawnMapLoot(n){
-  for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2)&&(!SHIP||shipIn(x,z,.6));}
+  for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2)&&(!SHIP||shipIn(x,z,.6))&&millOk(x,z);}
     if(!ok)continue;const [t,id]=rollLoot();if(t==='w')spawnWeaponLoot(WEAPONS[id],x,z);else spawnArmorLoot(ARMOR[id],x,z);}
 }
 
@@ -5270,7 +5551,7 @@ function bladeContact(s,B){
   let J=0;const O=s.owner;
   for(const t of [1,.9,.8,.7,.6,.5,.4,.3]){s.pointAt(t,_bp);
     for(const c of B.caps){if(!c.on)continue;_pa.subVectors(c.b,c.a);const u=clamp(_cq.subVectors(_bp,c.a).dot(_pa)/(_pa.lengthSq()||1e-9),0,1);_cq.copy(c.a).addScaledVector(_pa,u);
-      _cn.subVectors(_bp,_cq);const d=_cn.length(),rr=c.r+.01;if(d>=rr||d<1e-5)continue;_cn.multiplyScalar(1/d);
+      _cn.subVectors(_bp,_cq);const d=_cn.length(),rr=c.r+.01;if(!(d<rr)||d<1e-5)continue;_cn.multiplyScalar(1/d);
       const lev=Math.min(2.5,1/Math.max(t,.3)),push=Math.min(.05,(rr-d)*.8)*lev;s.T.addScaledVector(_cn,push);s.Tp.addScaledVector(_cn,push*.85);
       _v.subVectors(s.T,s.Tp);const vn=_v.dot(_cn);if(vn<0){_v.addScaledVector(_cn,-vn*.92);s.Tp.copy(s.T).sub(_v);J+=-vn/H*.12;}
       if(B.alive&&!B.ragdoll){_hv.copy(_cn).negate();B.vel.addScaledVector(_hv,Math.min(.025,push*.4));}
@@ -5559,7 +5840,7 @@ function fistCheck(A,arm){
     if(B===A||!B.alive||B.pos.distanceToSquared(A.pos)>4)continue;
     for(const c of B.caps){
       if(!c.on)continue;const rr=c.r+.07;if(distPointSeg2(arm.pos,c.a,c.b)>=rr*rr)continue;
-      arm.hit=true;_rel.subVectors(arm.vel,B.vel);const speed=_rel.length();if(speed<2){if(!A.isPlayer){arm.phase='recover';arm.t=0;}return;}
+      _rel.subVectors(arm.vel,B.vel);const speed=_rel.length();if(!Number.isFinite(speed+arm.power)){arm.init=false;return;}arm.hit=true;if(speed<2){if(!A.isPlayer){arm.phase='recover';arm.t=0;}return;}
       const dir=_rel.clone().normalize(),prot=B.prot(c.zone),P=arm.pos.clone();
       let dmg=(speed-1.5)*5.5*arm.power*ZONE_MULT[c.zone]*(1-prot*.45);
       const face=c.zone==='head'||c.zone==='neck';
@@ -5632,7 +5913,7 @@ function camBlocked(x,y,z,ceil){if(ceil&&y>ceil-.22)return true;
   for(const F of FLOORS){if(F.ramp||F.down||F.h<1.5)continue;if(x>F.x0-.1&&x<F.x1+.1&&z>F.z0-.1&&z<F.z1+.1&&Math.abs(y-F.h)<.2)return true;}
   return false;}
 function camClear(a,b,dt){_cd.subVectors(b,a);const L=_cd.length();if(L<1e-4)return;_cd.multiplyScalar(1/L);let t=L;
-  const hit=(c,r)=>{_cs.subVectors(c,a);const along=_cs.dot(_cd);if(along<0||along>t+r)return;const d2=_cs.lengthSq()-along*along,rr=r*r;if(d2>=rr)return;const e=along-Math.sqrt(rr-d2);t=Math.max(.35,Math.min(t,e));};
+  const hit=(c,r)=>{if(!Number.isFinite(c.x+c.y+c.z))return;_cs.subVectors(c,a);const along=_cs.dot(_cd);if(along<0||along>t+r)return;const d2=_cs.lengthSq()-along*along,rr=r*r;if(d2>=rr)return;const e=along-Math.sqrt(rr-d2);t=Math.max(.35,Math.min(t,e));};
   for(const f of fighters){if(f===player||f.pos.distanceToSquared(a)>36)continue;
     if(f.ragdoll){const P=f.ragdoll.P;for(const n of ['Hips','Spine2','Head','LeftLeg','RightLeg','LeftForeArm','RightForeArm'])if(P[n])hit(P[n],n==='Head'?.24:.3);}
     else{hit(f.headPos,.42);hit(f.chest,.46);_cs.set(f.pos.x,f.pos.y+.95,f.pos.z);hit(_cs.clone(),.4);}}   // generous: a body grazing the lens fills the screen as surely as one it passes through
@@ -5642,10 +5923,10 @@ function camClear(a,b,dt){_cd.subVectors(b,a);const L=_cd.length();if(L<1e-4)ret
   // down in the shaft, stay inside it
   if(PIT&&a.y<.2){const dx=a.x-PIT.x,dz=a.z-PIT.z;if(Math.hypot(dx,dz)<PIT.r){for(let i=1;i<=12;i++){const u=i/12*t;const x=a.x+_cd.x*u-PIT.x,z=a.z+_cd.z*u-PIT.z,y=a.y+_cd.y*u;if(y<.3&&Math.hypot(x,z)>PIT.r-.3){t=Math.max(.3,u-t/12);break;}}}}
   // pull in at once, ease back out, so a body brushing past doesn't make the view pump
-  const want=t/L;camPull=want<camPull?want:lerp(camPull,want,1-Math.exp(-4*dt));b.copy(a).addScaledVector(_cd,L*camPull);}
+  const want=t/L;camPull=want<camPull?want:lerp(camPull,want,1-Math.exp(-4*dt));if(!Number.isFinite(camPull))camPull=1;b.copy(a).addScaledVector(_cd,L*camPull);}   // (one bad number never sticks the camera)
 let hitStopT=0,shakeAmt=0;
 function hitstop(t){}   // no freeze-frames: the sim never pauses for effect
-function shake(a){shakeAmt=Math.min(.35,shakeAmt+a*.3);}   // a jolt, not a screen-shake
+function shake(a){if(Number.isFinite(a))shakeAmt=Math.min(.35,shakeAmt+a*.3);}   // a jolt, not a screen-shake
 // camera smoothing: a damped follow pivot (shoves and stumbles move the body in frame instead of jerking the world),
 // smooth shake instead of per-frame noise, and eased blends whenever the camera changes rig (knockdown, death, getting up)
 const camPiv=new THREE.Vector3(),_camQ=new THREE.Quaternion(),_camE=new THREE.Euler(0,0,0,'YXZ'),_camM=new THREE.Matrix4(),_camUp=new THREE.Vector3(0,1,0);
@@ -5836,7 +6117,8 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
     if(inYard()){const d=/^Digit([1-7])$/.exec(e.code);if(d){if(NET.mode==='client')NET.yw=+d[1]-1;else yardArm(player,+d[1]-1);}
       if(e.code==='KeyH'){if(NET.mode==='client')NET.yg=1;else yardCycle();}}
-    if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}else if(NET.mode!=='client'&&player&&player.alive&&!player.ragdoll&&player.mainArm){let best=null,bd=1.6;for(const d of debris){if(d.wep||!d.rag)continue;const q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-player.pos.x,q.z-player.pos.z);if(dd<bd){bd=dd;best=d;}}if(best)debrisWeapon(player,best,player.mainArm);}}
+    if(e.code==='KeyE'&&MILL&&player&&!playerLootCandidate()&&Math.hypot(player.pos.x-MILL.lever.x,player.pos.z-MILL.lever.z)<1.5){if(NET.mode==='client')NET.pick='lever';else millLever(player);}
+    else if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}else if(NET.mode!=='client'&&player&&player.alive&&!player.ragdoll&&player.mainArm){let best=null,bd=1.6;for(const d of debris){if(d.wep||!d.rag)continue;const q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-player.pos.x,q.z-player.pos.z);if(dd<bd){bd=dd;best=d;}}if(best)debrisWeapon(player,best,player.mainArm);}}
   }
 });
 addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
@@ -5971,6 +6253,7 @@ function buildMinimap(){
     g.beginPath();g.arc(X(0),X(0),16*k,0,7);g.fill();}
   else if(SHIP){g.fillStyle='#1d3a44';g.fillRect(0,0,600,600);g.fillStyle='#6a5240';g.beginPath();for(let i=0;i<=40;i++){const x=-SHIP.SL+2*SHIP.SL*i/40;g[i?'lineTo':'moveTo'](X(x),X(shipHalfW(x)));}for(let i=40;i>=0;i--){const x=-SHIP.SL+2*SHIP.SL*i/40;g.lineTo(X(x),X(-shipHalfW(x)));}g.fill();}
   else if(curMap==='tavern'){g.fillStyle='#5a4430';g.fillRect(X(-16),X(-11),32*k,22*k);}
+  else if(MILL){g.fillStyle='#5a4a38';g.fillRect(X(-MILL.W),X(-MILL.D),2*MILL.W*k,2*MILL.D*k);g.fillStyle='#1d3a44';g.fillRect(X(-MILL.W),X(MILL.rz0),2*MILL.W*k,(MILL.rz1-MILL.rz0)*k);}
   else if(curMap==='arena'){g.fillStyle='#6e6352';g.fillRect(X(-18),X(-18),36*k,36*k);g.fillStyle='#c9b088';g.fillRect(X(-13.5),X(-13.5),27*k,27*k);}
   else{g.fillStyle='#6e6352';g.beginPath();g.arc(X(0),X(0),49*k,0,7);g.fill();g.fillStyle='#c9b088';g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.fill();g.strokeStyle='#3a2e22';g.lineWidth=3;g.beginPath();g.arc(X(0),X(0),ARENA_R*k,0,7);g.stroke();}
   g.fillStyle='#2a1c14';for(const b of boxes)g.fillRect(X(b.x0),X(b.z0),(b.x1-b.x0)*k,(b.z1-b.z0)*k);
@@ -6088,7 +6371,7 @@ function sim(h){
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
   dynStep(h);
-  villageStep(h);towerStep(h);bridgeLoad(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);
+  villageStep(h);towerStep(h);bridgeLoad(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);millStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
 // bodies on the ground are solid to the living and to each other: feet shove a corpse aside instead of wading through it,
@@ -6112,11 +6395,12 @@ function bodyPress(){
 }
 function logic(dt){
   if(NET.mode==='client'){clientFrame(dt);return;}
+  if(!(dt>0))return;   // no time has passed (a host's frame right after the background ticker ran): animating over zero time divided by zero and filled bodies with NaN
   // impact weight: a short eased slow-down (never a freeze: freezing a fixed-step sim makes it stutter 1,0,1,0 steps a frame)
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
-  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -6167,7 +6451,7 @@ function frame(now){
       camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
     else if(!player.ragdoll){ // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
-      _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));_t2.y=camY;
+      _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));if(!Number.isFinite(camY))camY=_t2.y;_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
@@ -6507,7 +6791,7 @@ function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roste
 function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
 // put entrants into the arena; kit = [weapon, armor]
 // arena modes are fought round the map's middle; on The Pit that middle is the shaft, so they shift to the open ground beside it
-const MO=()=>curMap==='pit'?-6.5:0;
+const MO=()=>curMap==='pit'?-6.5:curMap==='mill'?-3:0;
 function spawnEntrant(en,x,z,kit,skill){
   if(PIT){let dx=x-PIT.x,dz=z-PIT.z,d=Math.hypot(dx,dz);const m=PIT.r+2;if(d<m){if(d<1e-3){dx=0;dz=-1;d=1;}x=PIT.x+dx/d*m;z=PIT.z+dz/d*m;}}   // the Pit: start clear of the edge
   if(MAPS[curMap].brawl)kit=['fists',[]];
@@ -6679,7 +6963,7 @@ function netLobby(html){const l=el('lobby');l.innerHTML=html;l.classList.toggle(
 let keepAlive=null;
 function hostKeepAlive(on){
   if(on&&!keepAlive){try{const u=URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),16)'],{type:'text/javascript'}));keepAlive=new Worker(u);let lt=performance.now();
-    keepAlive.onmessage=()=>{const n=performance.now(),dt=Math.min((n-lt)/1000,.1);lt=n;if(NET.mode==='host'&&state!=='attract'&&(document.hidden||n-lastFrameAt>400)){logic(dt);netTick(dt);last=n;}};}catch(e){keepAlive=null;}}
+    keepAlive.onmessage=()=>{const n=performance.now();if(n-lt<8)return;const dt=Math.min((n-lt)/1000,.1);lt=n;   /* (ticks that queued up while a slow step ran are dropped, so a slow machine can't fall ever further behind) */if(NET.mode==='host'&&state!=='attract'&&(document.hidden||n-lastFrameAt>400)){logic(dt);netTick(dt);last=n;}};}catch(e){keepAlive=null;}}
   else if(!on&&keepAlive){keepAlive.terminate();keepAlive=null;}
 }
 function netReset(){
@@ -6717,7 +7001,7 @@ function hostData(c,d){
     if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
     if(RUN&&RUN.mode==='yard'){if(Number.isInteger(d.yw))yardArm(f,d.yw);if(d.yg)yardCycle();}
-    if(d.pk!=null){const it=loot.find(i=>i.nid===d.pk);if(it&&canTake(f,it)){lootPos(it,_t3);if(Math.hypot(_t3.x-f.pos.x,_t3.z-f.pos.z)<2.6)pickUp(f,it);}}}
+    if(d.pk==='lever')millLever(f);else if(d.pk!=null){const it=loot.find(i=>i.nid===d.pk);if(it&&canTake(f,it)){lootPos(it,_t3);if(Math.hypot(_t3.x-f.pos.x,_t3.z-f.pos.z)<2.6)pickUp(f,it);}}}
 }
 function remoteInput(f,wish,h){
   const d=f.rin;if(!d)return false;f.fwd(_f);f.right(_r);const k=d.k|0;
@@ -6885,7 +7169,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -6898,6 +7182,7 @@ function clientEvents(ev){
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'MF':mastFall(e[1],e[2],false);break;
+    case 'ML':millSluice(!!e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
     case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
@@ -6951,6 +7236,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
