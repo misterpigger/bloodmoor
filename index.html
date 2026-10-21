@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=100;
+const BUILD=101;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -556,11 +556,12 @@ function gableTri(S,rh){const g=new THREE.BufferGeometry();g.setAttribute('posit
 // collision
 const boxes=[],circles=[];
 // raised floors you can stand on (the village scaffold): {x0,x1,z0,z1,h} or a ramp {…,ramp:'x'|'z',a0,a1,h0,h1}; down=true when it has fallen
+let FLOOR_TOL=.45;   // how far below a loose thing's top (a table, a bench) still counts as on it: a step for walkers, less for a falling body
 const FLOORS=[],HOUSES=[];let SCAF=null,mapDirty=false,SHIP=null;
 // the longship's deck: inside the hull outline (half length SL, half beam SW, narrowing to the ends)
 const shipHalfW=x=>{const S=SHIP;if(!S)return 0;const u=x/S.SL;return u*u>=1?0:S.SW*Math.sqrt(1-u*u*u*u);};
 const shipIn=(x,z,m=0)=>!!SHIP&&Math.abs(z)<shipHalfW(x)-m;
-function floorY(x,z,y){let best=0;for(const F of FLOORS){if(F.down||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;const h=F.ramp?lerp(F.h0,F.h1,clamp(((F.ramp==='x'?x:z)-F.a0)/(F.a1-F.a0),0,1)):F.h;if(y>=h-.45&&h>best)best=h;}return best;}
+function floorY(x,z,y){let best=0;for(const F of FLOORS){if(F.down||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;if(F.ob){const o=F.ob,dx=x-o.cx,dz=z-o.cz;if(Math.abs(dx*o.c-dz*o.s)>o.hx||Math.abs(dx*o.s+dz*o.c)>o.hz)continue;}const h=F.ramp?lerp(F.h0,F.h1,clamp(((F.ramp==='x'?x:z)-F.a0)/(F.a1-F.a0),0,1)):F.h;if(y>=h-(F.dyn?FLOOR_TOL:.45)&&h>best)best=h;}return best;}
 const GRID=8,grid=new Map();
 const gkey=(i,j)=>i*1000+j;
 function gridInsert(o,x0,x1,z0,z1){for(let i=Math.floor(x0/GRID);i<=Math.floor(x1/GRID);i++)for(let j=Math.floor(z0/GRID);j<=Math.floor(z1/GRID);j++){const k=gkey(i,j);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(o);}}
@@ -574,13 +575,19 @@ function collide(p,r,useY=false,span=0){
       const cx=clamp(p.x,o.x0,o.x1),cz=clamp(p.z,o.z0,o.z1);const dx=p.x-cx,dz=p.z-cz,d2=dx*dx+dz*dz;
       if(d2>1e-10){if(d2<r*r){const d=Math.sqrt(d2);p.x=cx+dx/d*r;p.z=cz+dz/d*r;hit=true;}}
       else{const l=p.x-o.x0,rr=o.x1-p.x,t=p.z-o.z0,bt=o.z1-p.z,m=Math.min(l,rr,t,bt);if(m===l)p.x=o.x0-r;else if(m===rr)p.x=o.x1+r;else if(m===t)p.z=o.z0-r;else p.z=o.z1+r;hit=true;}}
-    else{const dx=p.x-o.x,dz=p.z-o.z,R=r+o.r,d2=dx*dx+dz*dz;if(d2<R*R&&d2>1e-10){const d=Math.sqrt(d2);p.x=o.x+dx/d*R;p.z=o.z+dz/d*R;hit=true;}}
+    else if(o.t===1){const dx=p.x-o.x,dz=p.z-o.z,R=r+o.r,d2=dx*dx+dz*dz;if(d2<R*R&&d2>1e-10){const d=Math.sqrt(d2);p.x=o.x+dx/d*R;p.z=o.z+dz/d*R;hit=true;}}
+    else{const dx=p.x-o.cx,dz=p.z-o.cz,ex=o.hx,ez=o.hz;if(Math.abs(dx)>o.rr+r||Math.abs(dz)>o.rr+r||(useY&&o.yu&&p.y+span<o.yu))continue;   /* (under a table top is open: only a standing body is stopped by it) */   // a loose heavy thing: a box turned about the vertical, and it gives way (dynShove)
+      const lx=dx*o.c-dz*o.s,lz=dx*o.s+dz*o.c;if(Math.abs(lx)>ex+r||Math.abs(lz)>ez+r)continue;
+      const qx=clamp(lx,-ex,ex),qz=clamp(lz,-ez,ez),ux=lx-qx,uz=lz-qz,d2=ux*ux+uz*uz;let nx=lx,nz=lz;
+      if(d2>1e-10){if(d2>=r*r)continue;const d=Math.sqrt(d2);nx=qx+ux/d*r;nz=qz+uz/d*r;}
+      else{const m=Math.min(ex-lx,ex+lx,ez-lz,ez+lz);if(m===ex-lx)nx=ex+r;else if(m===ex+lx)nx=-ex-r;else if(m===ez-lz)nz=ez+r;else nz=-ez-r;}
+      const wx=o.cx+nx*o.c+nz*o.s,wz=o.cz-nx*o.s+nz*o.c;if(CTX.m&&o.dyn)dynShove(o.dyn,p,wx-p.x,wz-p.z,r);p.x=wx;p.z=wz;hit=true;}
   }
   if(p.x<-MAP){p.x=-MAP;hit=true;}if(p.x>MAP){p.x=MAP;hit=true;}if(p.z<-MAP){p.z=-MAP;hit=true;}if(p.z>MAP){p.z=MAP;hit=true;}
   if(ARENA_R>0&&!(useY&&p.y>3.4)){const d=Math.hypot(p.x,p.z),m=ARENA_R-r;if(d>m){p.x*=m/d;p.z*=m/d;hit=true;}}
   return hit;
 }
-function obstacleHeight(x,z,r){const cell=grid.get(gkey(Math.floor(x/GRID),Math.floor(z/GRID)));let hmax=0;if(cell)for(const o of cell){if(o.t===0){if(x>o.x0-r&&x<o.x1+r&&z>o.z0-r&&z<o.z1+r)hmax=Math.max(hmax,o.h);}else if(Math.hypot(x-o.x,z-o.z)<o.r+r)hmax=Math.max(hmax,o.h);}return hmax;}
+function obstacleHeight(x,z,r){const cell=grid.get(gkey(Math.floor(x/GRID),Math.floor(z/GRID)));let hmax=0;if(cell)for(const o of cell){if(o.t===0){if(x>o.x0-r&&x<o.x1+r&&z>o.z0-r&&z<o.z1+r)hmax=Math.max(hmax,o.h);}else if(o.t===1){if(Math.hypot(x-o.x,z-o.z)<o.r+r)hmax=Math.max(hmax,o.h);}else{const dx=x-o.cx,dz=z-o.cz;if(Math.abs(dx*o.c-dz*o.s)<o.hx+r&&Math.abs(dx*o.s+dz*o.c)<o.hz+r)hmax=Math.max(hmax,o.h);}}return hmax;}
 function isFree(x,z,r){const p=V(x,0,z);return !collide(p,r)&&Math.abs(p.x-x)<1e-6;}
 function overlapsAny(x0,x1,z0,z1){for(const b of boxes)if(x0<b.x1&&x1>b.x0&&z0<b.z1&&z1>b.z0)return true;for(const c of circles)if(c.x+c.r>x0&&c.x-c.r<x1&&c.z+c.r>z0&&c.z-c.r<z1)return true;return false;}
 
@@ -780,10 +787,10 @@ function tree(x,z,s=1){
 function barrel(x,z){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*6;const b=new THREE.Mesh(new THREE.CylinderGeometry(.33,.3,.9,14),MATS.propWood);b.position.y=.45;g.add(b);
   for(const y of [.2,.72]){const r=new THREE.Mesh(new THREE.TorusGeometry(.335,.02,4,16),MATS.iron);r.position.y=y;r.rotation.x=Math.PI/2;g.add(r);}
   const old=[...g.children];placeModel('wine_barrel_01',{parent:g,fit:[.68,.92,.68],onload:()=>old.forEach(o=>o.visible=false)});   // the real barrel replaces the drawn one when it loads
-  propAdd('barrel',g,x,z,.34,.9,30,addCircle(x,z,.36,1));}
+  const p=propAdd('barrel',g,x,z,.34,.9,30,addCircle(x,z,.36,1));p.dyn=dynAdd(g,{m:36,sh:[{t:'cyl',h:[.46,.33],o:[0,.46,0]}],col:p.col,prop:p});}
 function crate(x,z,s=.8){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*1.5;const b=new THREE.Mesh(boxUV(s,s,s,1),MATS.propWood);b.position.y=s/2;g.add(b);
   placeModel(srand()<.5?'wooden_crate_01':'wooden_crate_02',{parent:g,fit:[s*1.15,s*.8,s*.8],onload:()=>b.visible=false});
-  propAdd('crate',g,x,z,s*.55,s,18+s*10,addCircle(x,z,s*.6,1));}
+  const p=propAdd('crate',g,x,z,s*.55,s,18+s*10,addCircle(x,z,s*.6,1));p.dyn=dynAdd(g,{m:10+s*12,sh:[{t:'box',h:[s*.56,s*.4,s*.4],o:[0,s*.4,0]}],col:p.col,prop:p});}
 // ---- yard furniture: things a castle's practice yard would have lying about between the ring and the walls
 function weaponRack(x,z,ry){const c=Math.cos(ry),sn=Math.sin(ry),P=(u,y,v)=>[x+u*c+v*sn,y,z-u*sn+v*c];
   for(const u of [-1,1]){const [px,,pz]=P(u*.95,0,0);addGeo('wood',boxUV(.09,1.55,.09,1),T(px,.78,pz,ry));const [fx,,fz]=P(u*.95,0,.18);addGeo('wood',boxUV(.07,.07,.5,1),T(fx,.04,fz,ry));}
@@ -839,8 +846,8 @@ function placeModel(id,o={},fallback=null){const g=new THREE.Group();g.position.
 function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;for(let i=0;i<n;i++){const o=-len/2+seg*(i+.5);
     placeModel('modular_fort_01',{node:'modular_fort_01_'+node,x:alongX?x+o:x,z:alongX?z:z+o,ry:alongX?Math.PI/2:0,fit:[thick,H,seg+.02]},i===0?fallback:null);}}
 // a few models scattered round: picks from a list, random turn and size, kept where ok(x,z) allows
-function scatterModels(list,n,ok,seed,smin=.8,smax=1.3){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
-  for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;placeModel(list[(r()*list.length)|0],{x,z,ry:r()*6.28,s:smin+r()*(smax-smin)});k++;}}
+function scatterModels(list,n,ok,seed,smin=.8,smax=1.3,dyn=null){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
+  for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const id=list[(r()*list.length)|0],po={x,z,ry:r()*6.28,s:smin+r()*(smax-smin)};if(dyn&&dyn[id])dynModel(id,po,dyn[id]);else placeModel(id,po);k++;}}
 function hay(x,z){addGeo('thatch',new THREE.CylinderGeometry(.6,.6,1.3,14),T(x,.6,z,srand()*6,0,Math.PI/2));addCircle(x,z,.75,1.2);}
 function cart(x,z,r){
   const add=(k,g,m)=>addGeo(k,g,T(x,0,z,r).multiply(m));
@@ -1163,20 +1170,20 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const [z,r] of [[-.35,.2],[.05,-.3],[.4,.15]])addGeo('beam',new THREE.CylinderGeometry(.07,.07,.95,7),T(-W+.5,.16,hz+z,r,0,Math.PI/2));
   addFlame(-W+.5,.2,hz,1.9,true);addFlame(-W+.45,.2,hz+.5,1.2,false);addFlame(-W+.45,.2,hz-.5,1.2,false);
   addGeo('dirt',boxUV(.06,1.45,2*fw,1),T(-W+.03,.72,hz));   // the sooted back of the firebox
-  for(const z of [-.7,.1,.8])addGeo('winDark',new THREE.CylinderGeometry(.05,.06,.13,8),T(-W+fd-.06,2.1,hz+z));   // jugs on the mantel
+  PSOLID.push([-W+1.03,1.95,hz,.23,.08,fw+.65]);for(const z of [-.7,.1,.8])dynMesh(new THREE.CylinderGeometry(.05,.06,.13,8),MATS.winDark,T(-W+fd-.02,2.1,hz+z),{m:.7,auto:'cyl',snd:'pot'});   // jugs on the mantel
   TAV.spots.push(['poker',-W+1.7,0,hz+1.7]);
   // the bar along the east wall, bottles on the shelf behind it, barrels at its end
   const bx=W-1.8,bz=-1.6,bl=12;addGeo('wood',boxUV(.75,1.1,bl,1.5),T(bx,.55,bz));addGeo('woodLight',boxUV(.92,.06,bl+.2,1.5),T(bx,1.13,bz));addGeo('beam',boxUV(.08,.08,bl,1),T(bx-.45,.15,bz));
   addBox(bx-.45,bx+.45,bz-bl/2,bz+bl/2,1.05);FLOORS.push({x0:bx-.45,x1:bx+.45,z0:bz-bl/2,z1:bz+bl/2,h:1.16});
-  addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,1.6,bz));addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,2.2,bz));
-  for(let z=bz-bl/2+1;z<bz+bl/2-1;z+=.32){addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,1.76,z));if(Math.random()<.6)addGeo('winDark',new THREE.CylinderGeometry(.04,.045,.26,8),T(W-.2,2.36,z+.16));}
+  addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,1.6,bz));addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,2.2,bz));PSOLID.push([W-.2,1.6,bz,.175,.025,(bl-1)/2],[W-.2,2.2,bz,.175,.025,(bl-1)/2]);
+  {const bg=new THREE.CylinderGeometry(.04,.045,.26,8);for(let z=bz-bl/2+1;z<bz+bl/2-1;z+=.32){dynMesh(bg,MATS.winDark,T(W-.2,1.757,z),{m:.9,auto:'cyl',snd:'glass'});if(srand()<.6)dynMesh(bg,MATS.winDark,T(W-.2,2.357,z+.16),{m:.9,auto:'cyl',snd:'glass'});}}
   barrel(W-.6,6.2);barrel(W-.6,7);barrel(W-1.4,7.3);barrel(W-.7,-9.6);barrel(W-1.5,-9.9);barrel(-W+.6,-9.6);
   for(const z of [-7,-5.4,-3.6,-2,0,1.8,3.6])TAV.spots.push([z<-6?'knife':z>3?'cleaver':z===-2?'bottle':z===0||z===-5.4?'knife':'mug',bx,1.17,z]);
   // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both. Open floor in the middle
-  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){placeModel('WoodenTable_01',{x:tx,z:tz,fit:[2.2,.8,.95]},g=>{const add=(geo,x,y,z)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.2,.08,.95,1),0,.76,0);for(const sx of [-.95,.95])for(const sz of [-.35,.35])add(boxUV(.09,.72,.09,1),sx,.36,sz);});
-    addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);FLOORS.push({x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8});
-    for(const sz of [-.85,.85]){placeModel('wooden_stool_02',{x:tx,z:tz+sz,fit:[2.1,.45,.34]},g=>{const add=(geo,x,y)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,0);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.1,.07,.32,1),0,.41);for(const sx of [-.85,.85])add(boxUV(.07,.42,.24,1),sx,.21);});FLOORS.push({x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44});}
-    addFlame(tx+.3,.8,tz,.24,false);TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
+  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){const TF={x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8};FLOORS.push(TF);const tc=addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);addFlame(tx+.3,.8,tz,.24,false);
+    dynModel('WoodenTable_01',{x:tx,z:tz,fit:[2.2,.8,.95]},{m:34,auto:'table',col:tc,floor:TF,fx:[flames[flames.length-1]]},g=>{const add=(geo,x,y,z)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.2,.08,.95,1),0,.76,0);for(const sx of [-.95,.95])for(const sz of [-.35,.35])add(boxUV(.09,.72,.09,1),sx,.36,sz);});
+    for(const sz of [-.85,.85]){const BF={x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44};FLOORS.push(BF);dynModel('wooden_stool_02',{x:tx,z:tz+sz,fit:[2.1,.45,.34]},{m:16,auto:'table',floor:BF,noOb:true},g=>{const add=(geo,x,y)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,0);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.1,.07,.32,1),0,.41);for(const sx of [-.85,.85])add(boxUV(.07,.42,.24,1),sx,.21);});}
+    TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
   // the gallery along the north wall, 2.6 m up, reached by a stair against the west wall, with a rail along its edge
   const gh=2.6,gz0=D-2.6;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
   addGeo('floorPlank',boxUV(2*W,.12,2.6,1.5),T(0,gh-.06,gz0+1.3));for(let x=-W+.4;x<W;x+=1.1)addGeo('beam',boxUV(.12,.22,2.6,1),T(x,gh-.2,gz0+1.3));
@@ -1208,31 +1215,31 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const cx of [-4,4]){addGeo('beam',new THREE.TorusGeometry(.55,.04,5,16),T(cx,Hc-1.5,-2.5,0,Math.PI/2));addGeo('iron',boxUV(.02,1.4,.02,1),T(cx,Hc-.75,-2.5));addFlame(cx,Hc-1.42,-2.5,.6,true);}
   // the hall lived in: shelves of crockery along the long walls, hams and bunches of herbs hung from the beams, firewood stacked by
   // the hearth, sacks and a stack of kegs in the corners, a hanging cloth on each end wall, plates and bowls on the tables, rushes on the floor
-  for(const [z,x0] of [[-D+.18,-4.9],[-D+.18,1.7],[D-.18,-6],[D-.18,3]]){addGeo('beam',boxUV(3.2,.05,.3,1),T(x0+1.6,1.75,z));for(const sx of [.2,3])addGeo('beam',boxUV(.05,.22,.28,1),T(x0+sx,1.62,z));
-    for(let k=0;k<7;k++){const t=k%3;if(t===0)addGeo('winDark',new THREE.CylinderGeometry(.06,.08,.2,8),T(x0+.35+k*.42,1.88,z));else if(t===1)addGeo('woodLight',new THREE.CylinderGeometry(.13,.13,.02,12),T(x0+.35+k*.42,1.92,z-(z>0?-.08:.08),0,Math.PI/2*.85));else addGeo('propWood',new THREE.CylinderGeometry(.09,.06,.08,10),T(x0+.35+k*.42,1.82,z));}}
+  {const jg=new THREE.CylinderGeometry(.06,.08,.2,8),pg=new THREE.CylinderGeometry(.13,.13,.02,12),bg=new THREE.CylinderGeometry(.09,.06,.08,10);
+  for(const [z,x0] of [[-D+.18,-4.9],[-D+.18,1.7],[D-.18,-6],[D-.18,3]]){addGeo('beam',boxUV(3.2,.05,.3,1),T(x0+1.6,1.75,z));for(const sx of [.2,3])addGeo('beam',boxUV(.05,.22,.28,1),T(x0+sx,1.62,z));PSOLID.push([x0+1.6,1.75,z,1.6,.025,.15]);
+    for(let k=0;k<7;k++){const t=k%3;if(t===0)dynMesh(jg,MATS.winDark,T(x0+.35+k*.42,1.877,z),{m:.8,auto:'cyl',snd:'pot'});else if(t===1)dynMesh(pg,MATS.woodLight,T(x0+.35+k*.42,1.915,z-(z>0?-.065:.065),0,Math.PI/2*(z>0?-.85:.85)),{m:.35,auto:'cyl',snd:'pot'});else dynMesh(bg,MATS.propWood,T(x0+.35+k*.42,1.817,z),{m:.3,auto:'cyl',snd:'pot'});}}}
   for(let x=-W+1;x<W;x+=2.4){if(Math.abs(x)<2)continue;for(const z of [-6,-3.5,4.5]){const r=(Math.sin(x*12.9+z*7.3)+1)/2;if(r<.45)continue;const hy=Hc-.32;
     addGeo('iron',boxUV(.01,.45,.01,1),T(x,hy-.22,z));if(r>.75)addGeo('propWood',new THREE.SphereGeometry(.16,8,6).scale(1,1.6,1),T(x,hy-.6,z));else addGeo('leaf2',new THREE.ConeGeometry(.12,.38,6).rotateX(Math.PI),T(x,hy-.6,z));}}
   // furniture from scans: a carved cupboard and a chest of drawers under the gallery, stacked barrels in the corner, chairs at the fire,
   // two lantern chandeliers over the floor, a jug and a cheese box on the bar
-  placeModel('GothicCabinet_01',{x:-9,z:D-.5,ry:Math.PI,h:2.1});addBox(-9.8,-8.2,D-.95,D,2.1);
-  placeModel('drawer_cabinet',{x:10.5,z:D-.4,ry:Math.PI,h:1.05});addBox(9.9,11.1,D-.8,D,1.05);
-  placeModel('wooden_barrels_01',{x:-12.3,z:D-1.1,ry:Math.PI,h:1.7});addBox(-13.4,-11.2,D-2.1,D,1.7);
-  for(const [z,ry] of [[-3.9,-2.2],[-8.1,-.9]]){placeModel('WoodenChair_01',{x:-13.4,z,ry,h:.95});addCircle(-13.4,z,.32,.9);}
+  dynModel('GothicCabinet_01',{x:-9,z:D-.5,ry:Math.PI,h:2.1},{m:70,col:addBox(-9.8,-8.2,D-.95,D,2.1)});
+  dynModel('drawer_cabinet',{x:10.5,z:D-.4,ry:Math.PI,h:1.05},{m:40,col:addBox(9.9,11.1,D-.8,D,1.05)});
+  dynModel('wooden_barrels_01',{x:-12.3,z:D-1.1,ry:Math.PI,h:1.7},{m:120,col:addBox(-13.4,-11.2,D-2.1,D,1.7),sh:[{t:'box',h:[1.08,.85,1.02],o:[0,.85,0]}]});   // (its scan's bounds reach well past the barrels)
+  for(const [z,ry] of [[-3.9,-2.2],[-8.1,-.9]]){dynModel('WoodenChair_01',{x:-13.4,z,ry,h:.95},{m:7});}
   for(const x of [-9.5,9.5]){placeModel('lantern_chandelier_01',{x,y:Hc-1.05,z:1.5,h:1.1,ground:false});addGeo('iron',boxUV(.02,.5,.02,1),T(x,Hc-.25,1.5));addFlame(x,Hc-1.25,1.5,.55,true);}
-  for(const z of [-3,1])placeModel('jug_01',{x:bx,y:1.16,z,h:.3,ry:z});placeModel('CheeseBox_01',{x:bx,y:1.16,z:3.4,h:.18,ry:.4});
+  for(const z of [-3,1])dynModel('jug_01',{x:bx,y:1.16,z,h:.3,ry:z},{m:1.1,auto:'cyl',snd:'pot'});dynModel('CheeseBox_01',{x:bx,y:1.16,z:3.4,h:.18,ry:.4},{m:.7,auto:'cyl'});
   for(const L of torchLights)L.color.setHex(0xffa868);   // candle and lamp light a touch yellower than the outdoor torches: the hall read as red
-  for(let i=0;i<6;i++)addGeo('bark',new THREE.CylinderGeometry(.07,.07,.9,6),T(-W+.45+(i%3)*.15,.08+Math.floor(i/3)*.13,hz+2.4,0,Math.PI/2,0));   // firewood by the hearth
-  addBox(-W,-W+.8,hz+2,hz+2.9,.4);
-  for(const [x,z] of [[-W+.6,D-1],[-W+1.1,D-.8],[W-.7,-D+1.6]])addGeo('cloth3',new THREE.SphereGeometry(.32,8,6).scale(1,1.15,.85),T(x,.32,z));   // sacks
-  for(const [x,z,y] of [[W-.55,D-.9,.35],[W-1.25,D-.9,.35],[W-.9,D-.9,.95]]){addGeo('propWood',new THREE.CylinderGeometry(.33,.33,.62,12),T(x,y,z,0,0,Math.PI/2));for(const o of [-.22,.22])addGeo('iron',new THREE.CylinderGeometry(.34,.34,.03,12),T(x+o,y,z,0,0,Math.PI/2));}
-  addBox(W-1.6,W,D-1.3,D,1.3);
+  {const lg=new THREE.CylinderGeometry(.07,.07,.9,6);for(let i=0;i<6;i++)dynMesh(lg,MATS.bark,T(-W+.42+(i%3)*.15+(i>2?.075:0),.071+Math.floor(i/3)*.125,hz+2.4,0,Math.PI/2,0),{m:2.2,auto:'box'});}   // firewood by the hearth (six-sided logs: they don't roll off the pile by themselves)
+  {const sg=new THREE.SphereGeometry(.32,8,6).scale(1,1.15,.85);for(const [x,z] of [[-W+.6,D-1],[-W+1.15,D-.75],[W-1.3,-D+2.5]])dynMesh(sg,MATS.cloth3,T(x,.368,z),{m:11});}   // sacks
+  {const kg=new THREE.CylinderGeometry(.33,.33,.62,12),hg=new THREE.CylinderGeometry(.34,.34,.03,12);for(const [x,z,y] of [[W-.5,D-.9,.335],[W-1.2,D-.9,.335],[W-.85,D-.9,.92]]){const g=new THREE.Group();g.position.set(x,y,z);g.rotation.x=Math.PI/2;   // kegs on their sides, one in the groove on top of two
+    const m=new THREE.Mesh(kg,MATS.propWood);m.castShadow=m.receiveShadow=true;g.add(m);for(const o of [-.22,.22]){const r=new THREE.Mesh(hg,MATS.iron);r.position.y=o;r.castShadow=true;g.add(r);}world.add(g);dynAdd(g,{m:22,sh:[{t:'cyl',h:[.31,.33],o:[0,0,0]}]});}}
   for(const [x,z,ry] of [[W-.08,-4,-Math.PI/2],[W-.08,-2.6,-Math.PI/2],[-W+.08,6,Math.PI/2],[-W+.08,7.4,Math.PI/2]])placeModel('kite_shield',{x,y:2.6,z,ry,h:1.05,ground:false});   // shields hung on the end walls
-  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){for(const [ox,oz] of [[-.75,-.2],[.05,.22],[.8,.15]])addGeo('woodLight',new THREE.CylinderGeometry(.12,.1,.025,12),T(tx+ox,.815,tz+oz));
-    placeModel('wooden_bowl_01',{x:tx-.1,y:.8,z:tz-.25,h:.07,ry:tx});if((tx*7|0)%2)placeModel('wooden_lantern_01',{x:tx+.9,y:.8,z:tz-.2,h:.32,ry:tz});}
+  for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){for(const [ox,oz] of [[-.75,-.2],[.05,.22],[.8,.15]])dynMesh(PLATE_G,MATS.woodLight,T(tx+ox,.8135,tz+oz),{m:.35,auto:'cyl',snd:'pot'});
+    dynModel('wooden_bowl_01',{x:tx-.1,y:.8,z:tz-.25,h:.07,ry:tx},{m:.3,auto:'cyl',snd:'pot'});if((tx*7|0)%2)dynModel('wooden_lantern_01',{x:tx+.9,y:.8,z:tz-.2,h:.32,ry:tz},{m:1.2,snd:'metal'});}
   // real pieces round the room: a spinning wheel by the hearth, a chest, baskets and buckets in the corners, bottles along the bar
-  placeModel('spinning_wheel_01',{x:-W+1.6,z:hz+3.6,h:1.05,ry:.6});placeModel('treasure_chest',{x:-W+.6,z:D-2.6,h:.55,ry:Math.PI/2});addBox(-W,-W+1.1,D-3.1,D-2.1,.6);
-  for(const [id,x,z,h] of [['wicker_basket_01',W-2.4,D-.6,.32],['wooden_bucket_01',W-.5,-D+2.2,.42],['wooden_bucket_02',-W+.7,-D+.8,.38],['wicker_basket_01',-5,D-.5,.3]])placeModel(id,{x,z,h,ry:x*3});
-  for(let i=0;i<5;i++)placeModel('wine_bottles_01',{x:W-1.8+(i%2?.05:-.05),y:1.13,z:-6+i*2.6,h:.32,ry:i});
+  dynModel('spinning_wheel_01',{x:-W+1.6,z:hz+3.6,h:1.05,ry:.6},{m:8});dynModel('treasure_chest',{x:-W+.6,z:D-2.6,h:.55,ry:Math.PI/2},{m:30,col:addBox(-W,-W+1.1,D-3.1,D-2.1,.6)});
+  for(const [id,x,z,h] of [['wicker_basket_01',W-2.4,D-.6,.32],['wooden_bucket_01',W-.5,-D+2.2,.42],['wooden_bucket_02',-W+.7,-D+.8,.38],['wicker_basket_01',-5,D-.5,.3]])dynModel(id,{x,z,h,ry:x*3},{m:id[1]==='i'?1.4:2.4,auto:'cyl'});
+  for(let i=0;i<5;i++)dynModel('wine_bottles_01',{x:W-1.8+(i%2?.05:-.05),y:1.16,z:-6.6+i*2.4,h:.32,ry:i},{m:2.6,snd:'glass'});
   flushBatch();}
 function tavernLoot(){for(const [id,x,y,z] of TAV.spots){const def=WEAPONS[id];if(!def)continue;const s=new Sword(def);const a=Math.random()*6.28,d=V(Math.cos(a),0,Math.sin(a));
   s.reset(V(x-d.x*def.len*.4,y+.04,z-d.z*def.len*.4),d);if(def.kind==='blade')s.edge.set(-d.z,0,d.x);else s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}   // knives lie flat
@@ -1335,9 +1342,9 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
       addGeo('beam',boxUV(len,.06,.05,1),T(xm,.3,sd*(shipHalfW(xm)-.08),-Math.atan2(dz,x1-x)));}}
   addGeo('beam',boxUV(1.6,.32,.7,1),T(0,.16,0));addBox(-.8,.8,-.35,.35,.32);FLOORS.push({x0:-.8,x1:.8,z0:-.35,z1:.35,h:.34});
   // the crew's sea chests along both sides: something to stand on, and to trip over when the deck heaves
-  for(const sd of [1,-1])for(let x=-SL+4.5;x<=SL-4.5;x+=2.7){if(Math.abs(x)<1.4||x>SL-7.6)continue;const z=sd*(shipHalfW(x)-.62),xx=x+(sd>0?0:1.35);if(Math.random()<.2)continue;
-    placeModel('treasure_chest',{x:xx,z,ry:Math.PI/2,fit:[.44,.44,.66]},g=>{for(const [geo,mat,y] of [[boxUV(.62,.4,.44,1),MATS.wood,.2],[boxUV(.64,.03,.46,1),MATS.iron,.33],[boxUV(.66,.05,.48,1),MATS.beam,.42]]){const m=new THREE.Mesh(geo,mat);m.rotation.y=-Math.PI/2;m.position.y=y;g.add(m);}});
-    addBox(xx-.31,xx+.31,z-.22,z+.22,.4);FLOORS.push({x0:xx-.31,x1:xx+.31,z0:z-.22,z1:z+.22,h:.45});}
+  for(const sd of [1,-1])for(let x=-SL+4.5;x<=SL-4.5;x+=2.7){if(Math.abs(x)<1.4||x>SL-7.6)continue;const z=sd*(shipHalfW(x)-.62),xx=x+(sd>0?0:1.35);if(srand()<.2)continue;const CF={x0:xx-.31,x1:xx+.31,z0:z-.22,z1:z+.22,h:.45};FLOORS.push(CF);
+    dynModel('treasure_chest',{x:xx,z,ry:Math.PI/2,fit:[.44,.44,.66]},{m:28,col:addBox(xx-.31,xx+.31,z-.22,z+.22,.4),floor:CF},g=>{for(const [geo,mat,y] of [[boxUV(.62,.4,.44,1),MATS.wood,.2],[boxUV(.64,.03,.46,1),MATS.iron,.33],[boxUV(.66,.05,.48,1),MATS.beam,.42]]){const m=new THREE.Mesh(geo,mat);m.rotation.y=-Math.PI/2;m.position.y=y;g.add(m);}});
+    }
   // stores lashed round the mast, coils of rope
   barrel(2,1.3);barrel(2.5,-1.2);barrel(-2.2,1.5);barrel(-9,-1.8);
   for(const [x,z] of [[-5.5,.4],[7,-1.6],[12,.8],[-12,-2.2]])for(let k=0;k<4;k++)addGeo('beam',new THREE.TorusGeometry(.28-k*.035,.035,5,16),T(x,.035+k*.06,z,0,Math.PI/2));   // coils of rope
@@ -1349,7 +1356,7 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
     for(const sd of [1,-1])for(let i=0;i<3;i++){const x=-4+i*.15+(sd>0?0:1),y=.42+i*.07,z=sd*(shipHalfW(x)-.2-i*.06);addGeo('wood',new THREE.CylinderGeometry(.04,.045,9.5,6),T(x,y,z,0,0,Math.PI/2));addGeo('wood',boxUV(.9,.02,.13,1),T(x+4.9,y,z));}   // spare oars stowed low along the bulwarks (overhead they filled the camera)
     {const x=SL-5.2,hw=shipHalfW(x)-.5;addGeo('propWood',boxUV(2.2,.8,2*hw-.3,1),T(x,.4,0));const tg=new THREE.SphereGeometry(1,14,8,0,6.283,0,Math.PI/2);tg.scale(1.35,.75,hw);addGeo('cloth2',tg,T(x,.62,0));
       for(const dx of [-.7,0,.7])addGeo('beam',new THREE.TorusGeometry(1,.02,4,24,Math.PI),T(x+dx,.62,0,Math.PI/2,0,0,hw,.78,1));addBox(x-1.25,x+1.25,-hw,hw,1.3);}   // the tarpaulined cargo
-    for(const [x,z] of [[-SL+5.6,1.6],[-SL+5.9,2.2]])addGeo('cloth3',new THREE.SphereGeometry(.32,8,6).scale(1,.75,.8),T(x,.24,z));}
+    {const sg=new THREE.SphereGeometry(.32,8,6).scale(1,.75,.8);for(const [x,z] of [[-SL+5.6,1.5],[-SL+5.9,2.25]])dynMesh(sg,MATS.cloth3,T(x,.241,z),{m:11});}}
   // the steering oar on the starboard quarter, its tiller across the deck
   {const x=-SL+2.6,z=-(shipHalfW(-SL+2.6)+.15);addGeo('beam',new THREE.CylinderGeometry(.09,.11,4.2,8),T(x,-.6,z-.35,0,.12,-.42));addGeo('beam',boxUV(.12,1.5,.5,1),T(x-.85,-2.3,z-.62,0,.12,-.42));
    addGeo('beam',new THREE.CylinderGeometry(.045,.05,1.6,6),T(x+.05,1.15,z+.7,0,Math.PI/2-.12,0));addCircle(x,z+.3,.18,1.3);}
@@ -1371,7 +1378,7 @@ function shipRide(S,dt){const amp=seaMat.uniforms.uAmp.value,t=S.t,pk=S.pk,L=S.S
   const st=(k,c,x,v,tg)=>{v+=(k*(tg-x)-c*v)*dt;return [x+v*dt,v];};
   [S.roll,S.rollV]=st(5.5,2.1,S.roll,S.rollV||0,tr);[S.pitch,S.pitchV]=st(5,2.4,S.pitch,S.pitchV||0,tp);[S.heave,S.heaveV]=st(7,3,S.heave||0,S.heaveV||0,ty);}
 function shipCargo(dt){const S=SHIP;const ax=9.8*S.pitch*.6,az=9.8*S.roll*.6,am=Math.hypot(ax,az),k=am>.3?(am-.3)/am*1.5:0;
-  for(const p of PROPS){if(p.broken||p.kind!=='barrel'||!p.col)continue;const v=p.sv||(p.sv=V());v.x+=ax*k*dt;v.z+=az*k*dt;v.multiplyScalar(1-1.1*dt);
+  for(const p of PROPS){if(p.broken||p.kind!=='barrel'||!p.col||(p.dyn&&(p.dyn.body||p.dyn.tp)))continue;const v=p.sv||(p.sv=V());v.x+=ax*k*dt;v.z+=az*k*dt;v.multiplyScalar(1-1.1*dt);
     let nx=p.x+v.x*dt,nz=p.z+v.z*dt;const lim=shipHalfW(nx)-.75;if(Math.abs(nz)>lim){nz=Math.sign(nz)*lim;v.z*=-.25;}if(Math.abs(nx)>S.SL-3){nx=Math.sign(nx)*(S.SL-3);v.x*=-.25;}
     if(Math.abs(nx-p.x)+Math.abs(nz-p.z)>1e-4){p.x=nx;p.z=nz;p.mesh.position.x=nx;p.mesh.position.z=nz;gridRemove(p.col);p.col.x=nx;p.col.z=nz;gridInsert(p.col,nx-p.col.r-1,nx+p.col.r+1,nz-p.col.r-1,nz+p.col.r+1);}
     p.mesh.rotation.x=v.z*.25+S.roll*.4;p.mesh.rotation.z=-v.x*.25-S.pitch*.4;}}   // the cargo shifts: barrels skid and rock across the deck
@@ -1463,7 +1470,7 @@ function buildWorld(){
   // trees outside the wall
   for(let i=0;i<90;i++){const a=srand()*Math.PI*2,r=MAP+6+srand()*50;tree(Math.cos(a)*r,Math.sin(a)*r,1+srand()*.8);}
   // stones in the dirt, and weeds and long grass along every wall, fence and doorstep where feet don't wear it away
-  scatterModels(['wooden_bucket_01','wooden_bucket_02','wicker_basket_01','wooden_crate_02'],50,(x,z)=>isFree(x,z,.8)&&!isFree(x,z,1.8)&&Math.abs(x)>4&&Math.abs(z)>4,29,.7,1.1);
+  scatterModels(['wooden_bucket_01','wooden_bucket_02','wicker_basket_01','wooden_crate_02'],50,(x,z)=>isFree(x,z,.8)&&!isFree(x,z,1.8)&&Math.abs(x)>4&&Math.abs(z)>4,29,.7,1.1,{wooden_bucket_01:{m:2.5,auto:'cyl'},wooden_bucket_02:{m:2.2,auto:'cyl'},wicker_basket_01:{m:1.4,auto:'cyl'},wooden_crate_02:{m:13,auto:'box'}});
   placeModel('stone_fire_pit',{x:9,z:9,h:.3});
   flushBatch();
 
@@ -1548,7 +1555,7 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
   const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
-function clearWorld(){PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
+function clearWorld(){dynFree();DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;SHIP=null;sky.rotation.set(0,0,0);if(typeof DUST!=='undefined')DUST.p.material.uniforms.uCol.value.setRGB(.62,.53,.4);torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -1773,7 +1780,7 @@ function buildYard(){
   // real scanned pieces: heater shields hung on the walls, buckets and baskets by the trough and shed, a ladder against the gallery,
   // mossy rocks and shrubs at the foot of the walls
   for(const [x,z,ry] of [[-W+.85,-9.5,Math.PI/2],[-W+.85,8,Math.PI/2],[W-.85,-4,-Math.PI/2],[W-.85,9,-Math.PI/2],[-8,-W+.85,0],[8,-W+.85,0]])placeModel('kite_shield',{x,y:2.4,z,ry,h:1.1,ground:false});
-  for(const [id,x,z,h] of [['wooden_bucket_01',-15.3,-8.3,.42],['wooden_bucket_02',-14.9,-10.8,.36],['wicker_basket_01',-16.5,3.5,.3],['wooden_bucket_01',15.8,-11,.42],['wicker_basket_01',16,4.2,.3]])placeModel(id,{x,z,h,ry:x+z});
+  for(const [id,x,z,h] of [['wooden_bucket_01',-15.3,-8.3,.42],['wooden_bucket_02',-14.9,-10.8,.36],['wicker_basket_01',-16.5,3.5,.3],['wooden_bucket_01',15.8,-11,.42],['wicker_basket_01',16,4.2,.3]])dynModel(id,{x,z,h,ry:x+z},{m:id[0]==='w'&&id[1]==='i'?1.4:2.4,auto:'cyl'});
   placeModel('wooden_ladder',{x:W-1.2,z:-12,ry:-Math.PI/2,h:3.2,rz:0});
   scatterModels(['shrub_02','shrub_03','shrub_04'],10,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z));return e>.9&&e<2.6&&Math.abs(x)>3&&isFree(x,z,.6);},77,.6,1.1);
   clutter(900,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.9,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.9)/1.6,0,1),clamp(1-f/.5,0,1)*.7);});
@@ -1854,7 +1861,7 @@ function applyLighting(k){
   hemi.color.setHex(L.hs);hemi.groundColor.setHex(L.hg);hemi.intensity=L.hi;moon.color.setHex(L.sun);moon.intensity=L.si;moonDir.set(...L.dir).normalize();moonSprite.visible=L.moon;
   renderer.toneMappingExposure=L.exp*1.2;scene.environment=L.envTex;grade.uniforms.uCool.value=L.cool;haloMat.opacity=L.halo;
 }
-function loadMap(id){const m=MAPS[id];curMap=id;mapKey++;clearWorld();MAP=m.MAP;ARENA_R=m.arena;m.build();applyLighting(m.light);buildMinimap();}
+function loadMap(id){const m=MAPS[id];curMap=id;mapKey++;clearWorld();MAP=m.MAP;ARENA_R=m.arena;m.build();dynWorld();applyLighting(m.light);buildMinimap();}
 
 // ================================================================ effects (blood, decals, sparks, embers)
 const BLOOD_N=1800;
@@ -2446,26 +2453,60 @@ function hairCapMat(col,body,h){const M=bodyMarks(body),m=std({color:col.clone()
     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(.62+.25*hv(atan(vHP.x-uCrown.x,vHP.z-uCrown.z)*260.),.55,.9);');};
   m.customProgramCacheKey=()=>'bm-haircap';return m;}
 // ---- things that swing: long hair, skirts, tabard flaps and plumes carry an aLoose weight per vertex (0 where they're attached, 1 at
-// the free end), and their vertex shader adds that much of a per-fighter sway offset after skinning. The offsets come from damped
-// pendulums driven by how the hips and the head actually move (accelerations, turns, blows, a little drag at speed), worked out on every
-// machine from what is already drawn, so friends see their own sway without any network traffic.
-function looseMat(m,sway,which){if(!sway)return m;const U=sway[which],pre=m.onBeforeCompile,k0=m.customProgramCacheKey?m.customProgramCacheKey():'';
-  m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uSwL=U;sh.vertexShader='attribute float aLoose;uniform vec3 uSwL;\n'+sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\ntransformed+=uSwL*aLoose;');};
-  m.customProgramCacheKey=()=>k0+'|sw';return m;}
+// the free end). The cloth round the hips and the hair round the head are each a ring of hanging chains (8 round the hips, 6 round the
+// head), two links each, a middle and an end: every link is a damped weight that the body's movement throws about (each one feels the
+// acceleration of its own place on the ring, so a turn flares the hem and a stop swings it forward), the end follows the middle a beat
+// late, and each chain pulls on its neighbours, so a jolt runs down the cloth and round it as a ripple instead of the whole skirt
+// moving as one. The legs push the hem aside as they stride and the hair is kept off the back of the neck. The vertex shader finds each
+// vertex's place on the ring from its angle round the middle (bind space) and blends the two nearest chains. Worked out on every machine
+// from what is already drawn, so friends see their own ripples with no network traffic.
+const SW_N={h:8,n:6};
+function looseMat(m,sway,which){if(!sway)return m;const U=sway[which],C=sway[which+'c'],pre=m.onBeforeCompile,k0=m.customProgramCacheKey?m.customProgramCacheKey():'';
+  m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uSwR=U;sh.uniforms.uSwC=C;
+    sh.vertexShader='attribute float aLoose;uniform vec3 uSwR[16];uniform vec4 uSwC;\n'+sh.vertexShader.replace('#include <skinning_vertex>',`#include <skinning_vertex>
+    {float sN=uSwC.w,an=atan(position.z-uSwC.z,position.x-uSwC.x),su=(an/6.2831853+.5)*sN,s0=floor(su),sf=su-s0;int ia=int(mod(s0,sN)),ib=int(mod(s0+1.,sN));
+     vec3 sm=mix(uSwR[ia*2],uSwR[ib*2],sf),se=mix(uSwR[ia*2+1],uSwR[ib*2+1],sf);float st=aLoose;
+     transformed+=sm*(4.*st*(1.-st))+se*(st*(2.*st-1.));}`);};
+  m.customProgramCacheKey=()=>k0+'|sw2';return m;}
 function ownMat(m){const x=m.clone();x.onBeforeCompile=m.onBeforeCompile;if(m.customProgramCacheKey)x.customProgramCacheKey=m.customProgramCacheKey;x.userData={...m.userData};return x;}
-const SWAY={h:{k:52,c:6,max:.13,drag:.018,y:.25,g:.6},n:{k:62,c:6.3,max:.1,drag:.014,y:.25,g:.55}},_swM=new THREE.Matrix3();
-function swayStep(f,dt){const sw=f.model&&f.model.userData.sway;if(!sw||!f.bones||dt<=0)return;const st=f._sway||(f._sway={});
-  let body=f._swBody;if(!body){f.model.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body/.test(o.name))body=o;});f._swBody=body;}if(!body)return;
-  _swM.setFromMatrix4(body.matrixWorld).invert();
-  for(const k of ['h','n']){const b=f.bones[k==='h'?'Hips':'Head'];if(!b)continue;const S=SWAY[k],A=st[k]||(st[k]={p:null,v:V(),a:V(),s:V(),sv:V()});
-    const p=b.getWorldPosition(V());if(k==='h'){const fw=f.fwd(V());p.addScaledVector(fw,.18);}   // a point ahead of the hips, so turning on the spot swings the hem too
-    if(!A.p){A.p=p.clone();continue;}const v=p.clone().sub(A.p).divideScalar(dt);if(v.length()>20){A.p.copy(p);A.v.copy(v.setScalar(0));continue;}   // teleports and respawns
-    const acc=v.clone().sub(A.v).divideScalar(dt);if(acc.length()>70)acc.setLength(70);A.a.lerp(acc,.3);A.v.copy(v);A.p.copy(p);
-    const n=Math.min(8,Math.ceil(dt/(1/120))),h=dt/n,dead=f.ragdoll?.4:1;
-    for(let i=0;i<n;i++){const F=A.s.clone().multiplyScalar(-S.k).addScaledVector(A.sv,-S.c).addScaledVector(A.a,-dead*S.g);F.y*=S.y;
-      F.addScaledVector(v.clone().setY(0),-S.drag*S.k);A.sv.addScaledVector(F,h);A.s.addScaledVector(A.sv,h);}   // inertia against the acceleration, a little drag behind the motion
-    if(A.s.length()>S.max){A.s.setLength(S.max);A.sv.multiplyScalar(.6);}
-    sw[k].value.copy(A.s).applyMatrix3(_swM);}}
+function swayUniforms(){const mk=()=>({value:Array.from({length:16},()=>V())});return {h:mk(),n:mk(),hc:{value:new THREE.Vector4(0,0,0,SW_N.h)},nc:{value:new THREE.Vector4(0,0,0,SW_N.n)}};}
+// k spring to rest (middle, end), c damping, nb pull of the neighbours, ch how hard the end follows the middle, g how much of the ring's
+// acceleration throws it, drag behind the motion at speed, max offset, R ring radius, L drop of each link below the centre
+const SWAY={h:{k:[64,38],c:[6,3.8],nb:26,ch:44,g:.5,drag:.01,y:.25,max:[.05,.11],R:.2,L:[.17,.38]},
+            n:{k:[72,42],c:[6.2,4],nb:20,ch:46,g:.5,drag:.008,y:.25,max:[.045,.09],R:.1,L:[.08,.24]}},_swM=new THREE.Matrix3(),_swR=new THREE.Matrix3();
+const _sw1=V(),_sw2=V(),_sw3=V(),_sw4=V(),_swA=V(),_swB=V();
+function swayStep(f,dt){const sw=f.model&&f.model.userData.sway;if(!sw||!f.bones||dt<=0||!sw.hc)return;const st=f._sway||(f._sway={});
+  let body=f._swBody;if(!body){f.model.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body/.test(o.name))body=o;});f._swBody=body;
+    if(body){const sk=body.skeleton,bi=new THREE.Matrix4().copy(body.bindMatrix).invert();for(const [k,bn] of [['hc','Hips'],['nc','Head']]){const i=sk.bones.findIndex(b=>b.name===bn);if(i<0)continue;
+      const m=new THREE.Matrix4().copy(sk.boneInverses[i]).invert().premultiply(bi),c=V().setFromMatrixPosition(m);sw[k].value.x=c.x;sw[k].value.y=c.y;sw[k].value.z=c.z;}}}
+  if(!body)return;
+  _swM.setFromMatrix4(body.matrixWorld).invert();_swR.setFromMatrix4(body.matrixWorld);
+  const n=Math.min(8,Math.ceil(dt/(1/120))),h=dt/n,dead=f.ragdoll?.4:1,legs=[];
+  {const lp=st.lp||(st.lp=[]);let q=0;for(const [a,b] of [['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['RightUpLeg','RightLeg'],['RightLeg','RightFoot']])if(f.bones[a]&&f.bones[b]){const A=f.bones[a].getWorldPosition(V()),Bp=f.bones[b].getWorldPosition(V()),m=V().addVectors(A,Bp).multiplyScalar(.5);
+    const vel=lp[q]?m.clone().sub(lp[q]).divideScalar(dt):V();if(vel.lengthSq()>100)vel.set(0,0,0);lp[q]=m;q++;legs.push([A,Bp,vel]);}}   // each leg segment and how fast it moves
+  for(const k of ['h','n']){const B=f.bones[k==='h'?'Hips':'Head'];if(!B)continue;const S=SWAY[k],N=SW_N[k],c=B.getWorldPosition(_sw1);
+    let A=st[k];if(!A){A=st[k]={p:[],v:[],a:[],s:[],sv:[]};for(let i=0;i<N*2;i++){A.p.push(null);A.v.push(V());A.a.push(V());A.s.push(V());A.sv.push(V());}}
+    const down=_sw2.set(0,-1,0).applyMatrix3(_swR).normalize();let tele=false;
+    for(let j=0;j<N;j++){const an=-Math.PI+j/N*Math.PI*2;_sw3.set(Math.cos(an),0,Math.sin(an)).applyMatrix3(_swR).normalize();   // this chain's direction round the ring, in the world
+      for(let l=0;l<2;l++){const i=j*2+l,P=V().copy(c).addScaledVector(_sw3,S.R*(1+.25*l)).addScaledVector(down,S.L[l]);   // where this link hangs at rest
+        if(!A.p[i]){A.p[i]=P;continue;}const v=P.clone().sub(A.p[i]).divideScalar(dt);if(v.lengthSq()>400){tele=true;A.p[i].copy(P);A.v[i].set(0,0,0);continue;}
+        const acc=v.clone().sub(A.v[i]).divideScalar(dt);if(acc.lengthSq()>4900)acc.setLength(70);A.a[i].lerp(acc,.3);A.v[i].copy(v);A.p[i].copy(P);}}
+    if(tele){for(const q of A.s)q.set(0,0,0);for(const q of A.sv)q.set(0,0,0);}
+    for(let it=0;it<n;it++){
+      for(let j=0;j<N;j++)for(let l=0;l<2;l++){const i=j*2+l,s=A.s[i],sv=A.sv[i],jl=((j+N-1)%N)*2+l,jr=((j+1)%N)*2+l;
+        const F=_sw4.copy(s).multiplyScalar(-S.k[l]).addScaledVector(sv,-S.c[l]).addScaledVector(A.a[i],-dead*S.g);
+        F.x+=S.nb*((A.s[jl].x+A.s[jr].x)*.5-s.x);F.y+=S.nb*((A.s[jl].y+A.s[jr].y)*.5-s.y);F.z+=S.nb*((A.s[jl].z+A.s[jr].z)*.5-s.z);   // the neighbours pull it along
+        if(l===1){const m=A.s[j*2];F.x+=S.ch*(m.x*1.5-s.x);F.y+=S.ch*(m.y*1.5-s.y);F.z+=S.ch*(m.z*1.5-s.z);}   // the end follows the middle, late
+        F.y*=S.y;F.x-=S.drag*S.k[l]*A.v[i].x;F.z-=S.drag*S.k[l]*A.v[i].z;sv.addScaledVector(F,h);s.addScaledVector(sv,h);}}
+    // a striding leg kicks the hem and the middle along as it passes them (the cloth already lies over the legs; only their movement
+    // shows); the hair is kept off the back of the neck
+    const segs=k==='h'?legs:(f.bones.Neck&&f.bones.Spine2?[[f.bones.Neck.getWorldPosition(V()),f.bones.Spine2.getWorldPosition(V()),null]]:[]),rr=k==='h'?.2:.12;
+    for(let i=0;i<N*2;i++){const s=A.s[i],l=i&1,P=_swA.copy(A.p[i]).add(s);
+      for(const [a,b,lv] of segs){_swB.subVectors(b,a);const t=clamp(_sw4.subVectors(P,a).dot(_swB)/(_swB.lengthSq()||1e-6),0,1);_sw4.copy(a).addScaledVector(_swB,t);const d=P.distanceTo(_sw4),r=rr+(l?.04:0);if(d>=r||d<1e-5)continue;
+        if(lv){const w=(1-d/r)*(l?.55:.3)*dead;A.sv[i].x+=(lv.x-A.v[i].x-A.sv[i].x)*w*h*12;A.sv[i].z+=(lv.z-A.v[i].z-A.sv[i].z)*w*h*12;}   // dragged toward the leg's own speed
+        else{const pu=(r-d)/d;_sw4.subVectors(P,_sw4).multiplyScalar(pu);s.add(_sw4);P.add(_sw4);}}
+      const mx=S.max[l];if(s.length()>mx){s.setLength(mx);A.sv[i].multiplyScalar(.6);}
+      sw[k].value[i].copy(s).applyMatrix3(_swM);}}}
 // skin is not plastic: light soaks in and comes back out reddened past the edge of the lit side (a wrapped, red-shifted diffuse term),
 // and the face and hands are a little oilier than the body
 function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
@@ -2477,7 +2518,7 @@ function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{p
     reflectedLight.indirectDiffuse*=vec3(1.04,.98,.96);`)
   .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+(vBind.y>1.5?-.08:.05),.3,1.);');};}
 function dressMH(model,look,pal,mats){
-  const SWU=model.userData.sway={h:{value:V()},n:{value:V()}};   // this fighter's sway offsets (swayStep), for everything that swings
+  const SWU=model.userData.sway=swayUniforms();   // this fighter's ring of chains (swayStep), for everything that swings
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
   for(const m of drop)m.removeFromParent();
@@ -3086,11 +3127,12 @@ class Ragdoll{
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
-      for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);sinkWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);sinkWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      FLOOR_TOL=.45;
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
-    for(const n of this.names){if(this.P[n].y<5)collide(this.P[n],RD_R[n]||.055,true);}
+    for(const n of this.names){if(this.P[n].y<5){const p=this.P[n],q=this.Q[n];CTX.m=5;CTX.v.set((p.x-q.x)/h,0,(p.z-q.z)/h);CTX.y=p.y;CTX.q=q;CTX.h=h;collide(p,RD_R[n]||.055,true);CTX.m=0;CTX.q=null;}}
     if(this.pin&&this.P[this.pin]){this.P[this.pin].copy(this.pinP);this.Q[this.pin].copy(this.pinP);}   // run through on a stake
     if(this.age>4&&maxv<1e-7&&!this.rise)this.sleep=true;   // (never mid-effort: a body asleep halfway up would stay there)
   }
@@ -3148,24 +3190,8 @@ const physReady=(!/[?&]physics/.test(location.search)&&!window.__physics&&(()=>{
 function physStatic(){
   if(!PW||physKey===mapKey)return;physKey=mapKey;
   for(const c of physStatics)PW.removeCollider(c,false);physStatics.length=0;
-  const add=d=>{const c=PW.createCollider(d.setCollisionGroups(GR_WORLD).setFriction(.75).setRestitution(.08));physStatics.push(c);return c;};
-  if(SHIP){   // the ship: the deck is the only ground; off the side there's nothing until well below the waves
-    const sh=new THREE.Shape(),N=40;for(let i=0;i<=N;i++){const x=-SHIP.SL+2*SHIP.SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SHIP.SL+2*SHIP.SL*i/N;sh.lineTo(x,-shipHalfW(x));}
-    const g=new THREE.ShapeGeometry(sh);g.rotateX(Math.PI/2);const P=g.attributes.position,ix=g.index?Array.from(g.index.array):[...Array(P.count).keys()];add(R.ColliderDesc.trimesh(new Float32Array(P.array),new Uint32Array(ix)));
-    add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-3.5,0));}
-  else if(!PIT)add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-.5,0));
-  else{   // the Pit: ground ring round the shaft, the plank bridge, the shaft wall and its floor
-    const N=48,ro=(MAP+10)*1.5,v=[],ix=[];for(let i=0;i<N;i++){const a=i/N*6.283;v.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*ro,0,PIT.z+Math.sin(a)*ro);}
-    for(let i=0;i<N;i++){const j=(i+1)%N;ix.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(v),new Uint32Array(ix)));
-    const w=[],wi=[];for(let i=0;i<N;i++){const a=i/N*6.283;w.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*PIT.r,-PIT.d,PIT.z+Math.sin(a)*PIT.r);}
-    for(let i=0;i<N;i++){const j=(i+1)%N;wi.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(w),new Uint32Array(wi)));
-    add(R.ColliderDesc.cuboid(PIT.r+.6,.5,PIT.r+.6).setTranslation(PIT.x,-PIT.d-.5,PIT.z));
-    if(PIT.grate){const G=PIT.grate;G.col=add(R.ColliderDesc.cuboid(GR.L/2,.03,GR.W/2).setTranslation(G.C.x,G.C.y-.03,G.C.z));}
-    if(PIT.planks)for(const pl of PIT.planks){if(!pl.broken)pl.phys=add(R.ColliderDesc.cuboid(.095,.03,PIT.bw).setTranslation(pl.x,-.03,PIT.z));}}   // plank by plank, so a broken one leaves a gap
-  for(const b of boxes){const y0=b.y0||0;b.phys=add(R.ColliderDesc.cuboid(Math.max(.01,(b.x1-b.x0)/2),Math.max(.01,(b.h-y0)/2),Math.max(.01,(b.z1-b.z0)/2)).setTranslation((b.x0+b.x1)/2,(b.h+y0)/2,(b.z0+b.z1)/2));}   // (a raised rail starts at its floor)
-  for(const F of FLOORS)if(!F.ramp&&!F.down)F.phys=add(R.ColliderDesc.cuboid((F.x1-F.x0)/2,.05,(F.z1-F.z0)/2).setTranslation((F.x0+F.x1)/2,F.h-.05,(F.z0+F.z1)/2));   // decks, tables, benches, the gallery
-  for(const c of circles)c.phys=add(R.ColliderDesc.cylinder(c.h/2,c.r).setTranslation(c.x,c.h/2,c.z));
-  if(ARENA_R>0){const n=72;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,th=-(a+Math.PI/2);add(R.ColliderDesc.cuboid(ARENA_R*Math.PI/n+.06,1.7,.3).setTranslation(Math.cos(a)*(ARENA_R+.3),1.7,Math.sin(a)*(ARENA_R+.3)).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)}));}}
+  mapStatics(R,d=>{const c=PW.createCollider(d.setCollisionGroups(GR_WORLD).setFriction(.75).setRestitution(.08));physStatics.push(c);return c;},true);
+  for(const d of DYN)if(d.body&&d.heavy&&!d.pw&&!d.gone){const t=d.body.translation(),r=d.body.rotation();d.pw=PW.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(t.x,t.y,t.z).setRotation(r));for(const S of d.sh)PW.createCollider(dynColl(R,S,1).setCollisionGroups(GR_WORLD).setFriction(.75),d.pw);}
 }
 // colliders in the weapon's own frame (origin under the guard, +Y along the weapon, +X the edge) with real masses in kg
 function wepParts(def){
@@ -3251,7 +3277,7 @@ function improvStep(){for(const d of debris){const s=d.wep;if(!s)continue;if(!fr
 const PROPS=[];
 function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});world.add(mesh);const p={kind,mesh,x,z,r,h,hp,hp0:hp,col,cd:new Map(),jig:0};PROPS.push(p);return p;}
 function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
-function propBreak(p,dir,by){if(p.broken)return;p.broken=true;mapDirty=true;world.remove(p.mesh);if(p.col)gridRemove(p.col);
+function propBreak(p,dir,by){if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
   if(NET.mode==='client')return;
@@ -3287,7 +3313,7 @@ function bridgeCollapse(dir){if(!PIT||PIT.down)return;PIT.down=true;mapDirty=tru
   for(const q of PIT.planks){if(q.broken)continue;q.broken=true;if(q.phys&&PW){try{PW.removeCollider(q.phys,false);}catch(e){}const k=physStatics.indexOf(q.phys);if(k>=0)physStatics.splice(k,1);q.phys=null;}
     const d=Math.abs(q.x-cx);rubbleAdd({m:q.mesh,pos:q.mesh.position.clone(),q:q.mesh.quaternion.clone(),half:V(.085,.025,PIT.bw*.97),
       vel:V((q.x-cx)*.4+(rrand()-.5)*.6,-.2-rrand()*.8+Math.min(.6,d*.25),(rrand()-.5)*.8),w:V((rrand()-.5)*7,(rrand()-.5)*3,(rrand()-.5)*7),mass:3,loot:rrand()<.25?'plank':null});}
-  if(PIT.grate)PIT.grate=null;}
+  for(const q of PIT.planks)if(q.prw&&PRW){try{PRW.removeCollider(q.prw,false);}catch(e){}q.prw=null;}if(PIT.grate)PIT.grate=null;}
 function propHitTest(){if(!PROPS.length)return;
   const test=(s,A)=>{if(!s||s.def.kind==='fist')return;const sp=s.tipVel.length();if(sp<4)return;
     for(const p of PROPS){if(p.broken)continue;if((p.x-s.H.x)**2+(p.z-s.H.z)**2>(s.len+p.r+.3)**2)continue;
@@ -3301,7 +3327,7 @@ function propHitTest(){if(!PROPS.length)return;
   const G=PIT&&PIT.grate;if(G&&G.mode==='rest')for(const f of fighters){const s=f.sword;if(!f.alive||!s||s.def.kind==='fist')continue;const sp=s.tipVel.length();if(sp<4)continue;
     for(let i=2;i<=4;i++){const t=s.def.hitFrom+(1-s.def.hitFrom)*i/4;_v.copy(s.H).addScaledVector(s.axis,s.len*t);if(_v.y>.1||!onBridgeAt(G,_v.x,_v.z))continue;if((G.cd.get(s)||0)>simTime)break;G.cd.set(s,simTime+.3);
       const k=s.def.weight*(s.def.kind==='blunt'||s.def.kind==='axe'?.02:.012)*t;grateKick(s.tipVel.x*k,s.tipVel.z*k);sClang(_v,Math.min(1,sp/10));spawnSparks(_v,(4+sp)|0,null);s.Tp.lerp(s.T,.6);break;}}}
-function propVisual(dt){for(const p of PROPS){if(p.jig>0){p.jig-=dt;const a=Math.sin(p.jig*70)*p.jig*.12;p.mesh.rotation.z=a;p.mesh.rotation.x=a*.6;}}}
+function propVisual(dt){for(const p of PROPS){if(p.jig>0&&!(p.dyn&&p.dyn.body)){p.jig-=dt;const a=Math.sin(p.jig*70)*p.jig*.12;p.mesh.rotation.z=a;p.mesh.rotation.x=a*.6;}}}
 const _hbv=V(),_hba=V();
 // the wardrobe on weapons: whoever holds a weapon puts their steel finish and grip colour on it (looks only)
 function wepMat(base,wf,wg){if(base===gripMat){if(!wg)return base;const k=base.uuid+'|g'+wg;let x=FIN_CACHE.get(k);if(!x){x=base.clone();x.color.set(WARD.wg[wg]).multiplyScalar(1.8);FIN_CACHE.set(k,x);}return x;}
@@ -3543,6 +3569,192 @@ class Sword{
   dispose(){scene.remove(this.mesh);this.unstick();if(this.rb&&PW){for(const c of this.cols)PHC.delete(c.handle);PW.removeRigidBody(this.rb);this.rb=null;}}
 }
 
+// ================================================================ loose things (physical props)
+// Furniture and clutter are real objects: tables, benches, chairs, stools, barrels, crates, kegs, chests, buckets, plates, bowls,
+// bottles, jugs, firewood. Each is a rigid body in its own Rapier world (PRW), loaded in the background in both engines; until it
+// arrives everything stays put as before. Whatever moves pushes them through stand-ins (proxies) that follow what is drawn: every
+// fighter's limb capsules, fists and weapon, the limbs of the fallen, thrown and loose weapons. A stand-in is a body whose speed is
+// set each step to follow its target, so the solver trades momentum by mass: a swing sends a mug flying and bounces off a table,
+// and the speed it lost goes back to the weapon (a blade that hits something heavy is slowed). Standing legs only touch light
+// things (stepping onto a bench doesn't shove it); kicks, bodies and blows move the heavy ones. Heavy things (12 kg and up) also
+// block walkers like a wall that gives way: they are dynamic obstacles in collide(), and walking, running or being thrown into one
+// shoves it by mass and speed (CTX). Floors on top of them (tables, benches, chests) ride along while they stay upright and go when
+// they tip. On Mutiny the deck's heel tilts gravity. Only the host simulates; friends get the poses in snapshots (dp).
+let RP=null,PRW=null,dynKey=-1,dynPh=0,dynN=0,dynFull=0;
+const DYN=[],DYNK=new Map(),PSOLID=[],PROX=new Map();
+const DG_S=1,DG_L=2,DG_H=4,DG_P=8,DG_PL=16;
+const DGR_S=grp(DG_S,DG_L|DG_H),DGR_L=grp(DG_L,DG_S|DG_L|DG_H|DG_P|DG_PL),DGR_H=grp(DG_H,DG_S|DG_L|DG_H|DG_P),DGR_P=grp(DG_P,DG_L|DG_H),DGR_PL=grp(DG_PL,DG_L);
+const CTX={m:0,v:V(),y:0,f:null,q:null,h:0};
+const _xdq=new THREE.Quaternion(),_xdq2=new THREE.Quaternion(),_xdv=V(),_xdv2=V(),_xdv3=V(),_xdm4=new THREE.Matrix4(),_xdm5=new THREE.Matrix4(),_xde=new THREE.Euler(),_xdb=new THREE.Box3();
+const dynKeyOf=(x,y,z)=>((Math.round(x*20)+4096)*8192+(Math.round(z*20)+4096))*64+(Math.round(y*10)&63);
+function dynLoad(){if(RP)return Promise.resolve(RP);
+  return (R?Promise.resolve(R):import(RAPIER_URL).then(async m=>{const r=m.default||m;await r.init();return r;})).then(r=>{RP=r;dynWorld();return r;}).catch(e=>console.warn('Loose things stay put: no physics engine',e));}
+// a static collider leaves the fixed world (it becomes the prop's own moving obstacle)
+function unStatic(c){if(!c)return;gridRemove(c);for(const L of [boxes,circles]){const i=L.indexOf(c);if(i>=0)L.splice(i,1);}
+  if(c.phys&&PW){try{PW.removeCollider(c.phys,false);}catch(e){}const i=physStatics.indexOf(c.phys);if(i>=0)physStatics.splice(i,1);c.phys=null;}}
+// register an object already placed in the world. o: m (kg), sh (shapes) or auto ('box'|'cyl'|'table'|'cylx') from its meshes,
+// col (its static collider), floor (a FLOORS entry on top of it), noOb (heavy but never blocks walkers), fx (flames on it), snd
+function dynAdd(obj,o={}){const d=Object.assign({obj,m:5,body:null,ob:null,floor:null,fl:null,fx:null,sh:null,lb:null,gone:false,mv:false,slp:true,net:0,snd:'wood'},o);
+  d.heavy=d.m>=12;obj.updateMatrixWorld(true);const p=obj.getWorldPosition(V());d.key=dynKeyOf(p.x,p.y,p.z);DYNK.set(d.key,d);DYN.push(d);
+  if(d.floor)d.floor.dyn=d;if(d.col)d.col.dyn=d;
+  if(o.sh){d.shFixed=true;dynShape(d,o.sh);}else if(o.auto&&!o.wait)dynAuto(d);
+  return d;}
+// a scanned model as a loose thing: its shape comes from the model's bounds once it has loaded (or from the fallback shape)
+function dynModel(id,po,o,fb=null){let d=null;const g=placeModel(id,Object.assign({},po,{onload:gg=>{if(po.onload)po.onload(gg);if(d)dynAuto(d);}}),fb?gg=>{fb(gg);if(d)dynAuto(d);}:null);
+  d=dynAdd(g,Object.assign({wait:true,auto:'box'},o));return d;}
+// a drawn mesh as a loose thing: a group with the geometry in it, placed by matrix m
+const PLATE_G=new THREE.CylinderGeometry(.12,.1,.025,12);
+function dynMesh(geo,mat,m,o){const g=new THREE.Group();const p=V(),q=new THREE.Quaternion(),s=V();m.decompose(p,q,s);g.position.copy(p);g.quaternion.copy(q);
+  const me=new THREE.Mesh(geo,mat);me.scale.copy(s);me.castShadow=me.receiveShadow=true;g.add(me);world.add(g);return dynAdd(g,Object.assign({auto:'box'},o));}
+function localBox(o){o.updateMatrixWorld(true);_xdm4.copy(o.matrixWorld).invert();const bb=new THREE.Box3();
+  o.traverse(m=>{if(!m.isMesh||!m.geometry||!m.visible)return;let v=true;for(let p=m;p&&p!==o;p=p.parent)if(!p.visible)v=false;if(!v)return;
+    if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();_xdb.copy(m.geometry.boundingBox).applyMatrix4(_xdm5.multiplyMatrices(_xdm4,m.matrixWorld));bb.union(_xdb);});return bb;}
+function dynAuto(d){if(d.gone||d.shFixed||d.body)return;const bb=localBox(d.obj);if(bb.isEmpty())return;const s=bb.getSize(V()),c=bb.getCenter(V()),k=d.shrink||1;let sh;
+  if(d.auto==='cyl')sh=[{t:'cyl',h:[s.y/2,Math.max(s.x,s.z)/2*.96*k],o:[c.x,c.y,c.z]}];
+  else if(d.auto==='cylx')sh=[{t:'cyl',h:[s.x/2,Math.max(s.y,s.z)/2*.96*k],o:[c.x,c.y,c.z],rz:1}];
+  else if(d.auto==='table'){const th=Math.min(.07,s.y*.18),lh=(s.y-th)/2,lx=s.x/2*k-.07,lz=s.z/2*k-.07;sh=[{t:'box',h:[s.x/2*k,th/2,s.z/2*k],o:[c.x,bb.max.y-th/2,c.z],w:.6}];   // a top on four legs: things roll under it
+    for(const sx of [-1,1])for(const sz of [-1,1])sh.push({t:'box',h:[.04,lh,.04],o:[c.x+sx*lx,bb.min.y+lh,c.z+sz*lz],w:.1});}
+  else sh=[{t:'box',h:[s.x/2*k,s.y/2,s.z/2*k],o:[c.x,c.y,c.z]}];
+  dynShape(d,sh);}
+function dynShape(d,sh){d.sh=sh;const lb=new THREE.Box3();
+  for(const S of sh){const [a,b,c]=S.t==='box'?S.h:S.t==='cyl'?(S.rz?[S.h[0],S.h[1],S.h[1]]:[S.h[1],S.h[0],S.h[1]]):[S.h[0],S.h[0],S.h[0]];lb.expandByPoint(_xdv.set(S.o[0]-a,S.o[1]-b,S.o[2]-c));lb.expandByPoint(_xdv.set(S.o[0]+a,S.o[1]+b,S.o[2]+c));}
+  d.lb=lb;if(d.col){unStatic(d.col);d.col=null;}
+  const p=d.obj.position,q=d.obj.quaternion;dynUnstick(d);
+  if(d.heavy&&!d.noOb&&!d.ob){d.ob={t:2,dyn:d,cx:0,cz:0,c:1,s:0,hx:0,hz:0,h:0,y0:0,rr:0,gx:1e9,gz:1e9};dynOb(d,p,q);}
+  if(d.floor&&!d.fl){const F=d.floor,wc=V((F.x0+F.x1)/2,F.h,(F.z0+F.z1)/2).sub(p).applyQuaternion(_xdq.copy(q).invert());const yw=Math.abs(V(1,0,0).applyQuaternion(q).z)>.7;
+    d.fl={c:wc,hx:yw?(F.z1-F.z0)/2:(F.x1-F.x0)/2,hz:yw?(F.x1-F.x0)/2:(F.z1-F.z0)/2};}
+  if(d.fx)for(const e of d.fx)if(!e.lo)e.lo=V(e.x,e.y,e.z).sub(p).applyQuaternion(_xdq.copy(q).invert());
+  if(PRW&&NET.mode!=='client')dynBody(d);}
+// a scanned model can reach into a wall it stands against; woken there, the solver would spit it out, so it is moved clear first
+function dynUnstick(d){const p=d.obj.position,q=d.obj.quaternion,lb=d.lb;for(let it=0;it<2;it++){let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9,y0=1e9,y1=-1e9;
+  for(let i=0;i<8;i++){_xdv.set(i&1?lb.max.x:lb.min.x,i&2?lb.max.y:lb.min.y,i&4?lb.max.z:lb.min.z).applyQuaternion(q).add(p);x0=Math.min(x0,_xdv.x);x1=Math.max(x1,_xdv.x);z0=Math.min(z0,_xdv.z);z1=Math.max(z1,_xdv.z);y0=Math.min(y0,_xdv.y);y1=Math.max(y1,_xdv.y);}
+  let moved=false;for(const b of boxes){if(x1<=b.x0||x0>=b.x1||z1<=b.z0||z0>=b.z1||y0>=b.h||y1<=(b.y0||0))continue;const px=Math.min(x1-b.x0,b.x1-x0),pz=Math.min(z1-b.z0,b.z1-z0);
+    if(px<pz)p.x+=((x0+x1)/2<(b.x0+b.x1)/2?-1:1)*(px+.01);else p.z+=((z0+z1)/2<(b.z0+b.z1)/2?-1:1)*(pz+.01);moved=true;break;}
+  if(!moved)break;}
+  d.obj.updateMatrixWorld(true);}
+// the footprint a heavy thing blocks: the shapes' bounds turned into the world, as a box turned about the vertical
+function dynOb(d,p,q){const o=d.ob,lb=d.lb;_xdv.set(1,0,0).applyQuaternion(q);let th;if(_xdv.x*_xdv.x+_xdv.z*_xdv.z>.1)th=Math.atan2(-_xdv.z,_xdv.x);else{_xdv.set(0,0,1).applyQuaternion(q);th=Math.atan2(_xdv.x,_xdv.z);}
+  const c=Math.cos(th),s=Math.sin(th);let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9,y0=1e9,y1=-1e9;
+  for(let i=0;i<8;i++){_xdv.set(i&1?lb.max.x:lb.min.x,i&2?lb.max.y:lb.min.y,i&4?lb.max.z:lb.min.z).applyQuaternion(q).add(p);const lx=_xdv.x*c-_xdv.z*s,lz=_xdv.x*s+_xdv.z*c;
+    x0=Math.min(x0,lx);x1=Math.max(x1,lx);z0=Math.min(z0,lz);z1=Math.max(z1,lz);y0=Math.min(y0,_xdv.y);y1=Math.max(y1,_xdv.y);}
+  const mx=(x0+x1)/2,mz=(z0+z1)/2;_xdv.set(0,1,0).applyQuaternion(q);o.yu=d.auto==='table'&&_xdv.y>.95?y1-.12:0;o.c=c;o.s=s;o.hx=(x1-x0)/2;o.hz=(z1-z0)/2;o.cx=mx*c+mz*s;o.cz=-mx*s+mz*c;o.h=y1;o.y0=y0>.06?y0:0;o.rr=Math.hypot(o.hx,o.hz);
+  if(Math.abs(o.cx-o.gx)>.8||Math.abs(o.cz-o.gz)>.8){if(o.gx<1e8)gridRemove(o);o.gx=o.cx;o.gz=o.cz;gridInsert(o,o.cx-o.rr-1.3,o.cx+o.rr+1.3,o.cz-o.rr-1.3,o.cz+o.rr+1.3);}}
+// the floor on top rides along while it stays upright, and is gone once it tips
+function dynFloor(d,p,q){const F=d.floor,fl=d.fl;if(!fl)return;_xdv.set(0,1,0).applyQuaternion(q);if(_xdv.y<.985){F.down=true;return;}F.down=false;
+  _xdv2.copy(fl.c).applyQuaternion(q).add(p);_xdv.set(1,0,0).applyQuaternion(q);const th=Math.atan2(-_xdv.z,_xdv.x),c=Math.cos(th),s=Math.sin(th);
+  F.h=_xdv2.y;F.ob={cx:_xdv2.x,cz:_xdv2.z,hx:fl.hx,hz:fl.hz,c,s};const ex=Math.abs(c)*fl.hx+Math.abs(s)*fl.hz,ez=Math.abs(s)*fl.hx+Math.abs(c)*fl.hz;F.x0=_xdv2.x-ex;F.x1=_xdv2.x+ex;F.z0=_xdv2.z-ez;F.z1=_xdv2.z+ez;}
+function dynFx(d,p,q){_xdv.set(0,1,0).applyQuaternion(q);const out=_xdv.y<.8;
+  for(const e of d.fx){if(!e.lo)continue;if(out){if(e.base>0){e.b0=e.base;e.base=0;e.f.visible=e.h.visible=false;if(e.L)e.L.visible=false;}continue;}
+    _xdv2.copy(e.lo).applyQuaternion(q).add(p);e.x=_xdv2.x;e.y=_xdv2.y;e.z=_xdv2.z;e.f.position.set(e.x,e.y+.18*e.base,e.z);e.h.position.set(e.x,e.y+.2,e.z);if(e.L)e.L.position.set(e.x,e.y+.35,e.z);}}
+// the fixed world in the props' own physics world: the same ground, walls, floors and posts as the rigid-body engine's, plus the
+// shelves things stand on (PSOLID); floors that belong to a loose thing ride with it instead
+function mapStatics(R,add,pw){
+  if(SHIP){const sh=new THREE.Shape(),N=40;for(let i=0;i<=N;i++){const x=-SHIP.SL+2*SHIP.SL*i/N;sh[i?'lineTo':'moveTo'](x,shipHalfW(x));}for(let i=N;i>=0;i--){const x=-SHIP.SL+2*SHIP.SL*i/N;sh.lineTo(x,-shipHalfW(x));}
+    const g=new THREE.ShapeGeometry(sh);g.rotateX(Math.PI/2);const P=g.attributes.position,ix=g.index?Array.from(g.index.array):[...Array(P.count).keys()];add(R.ColliderDesc.trimesh(new Float32Array(P.array),new Uint32Array(ix)));
+    add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-3.5,0));}
+  else if(!PIT)add(R.ColliderDesc.cuboid(MAP+10,.5,MAP+10).setTranslation(0,-.5,0));
+  else{const N=48,ro=(MAP+10)*1.5,v=[],ix=[];for(let i=0;i<N;i++){const a=i/N*6.283;v.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*ro,0,PIT.z+Math.sin(a)*ro);}
+    for(let i=0;i<N;i++){const j=(i+1)%N;ix.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(v),new Uint32Array(ix)));
+    const w=[],wi=[];for(let i=0;i<N;i++){const a=i/N*6.283;w.push(PIT.x+Math.cos(a)*PIT.r,0,PIT.z+Math.sin(a)*PIT.r,PIT.x+Math.cos(a)*PIT.r,-PIT.d,PIT.z+Math.sin(a)*PIT.r);}
+    for(let i=0;i<N;i++){const j=(i+1)%N;wi.push(i*2,i*2+1,j*2,j*2,i*2+1,j*2+1);}add(R.ColliderDesc.trimesh(new Float32Array(w),new Uint32Array(wi)));
+    add(R.ColliderDesc.cuboid(PIT.r+.6,.5,PIT.r+.6).setTranslation(PIT.x,-PIT.d-.5,PIT.z));
+    if(PIT.grate&&pw){const G=PIT.grate;G.col=add(R.ColliderDesc.cuboid(GR.L/2,.03,GR.W/2).setTranslation(G.C.x,G.C.y-.03,G.C.z));}
+    if(PIT.planks)for(const pl of PIT.planks){if(pl.broken)continue;const c=add(R.ColliderDesc.cuboid(.095,.03,PIT.bw).setTranslation(pl.x,-.03,PIT.z));if(pw)pl.phys=c;else pl.prw=c;}}   // plank by plank, so a broken one leaves a gap
+  for(const b of boxes){if(b.dyn&&!pw)continue;const y0=b.y0||0;const c=add(R.ColliderDesc.cuboid(Math.max(.01,(b.x1-b.x0)/2),Math.max(.01,(b.h-y0)/2),Math.max(.01,(b.z1-b.z0)/2)).setTranslation((b.x0+b.x1)/2,(b.h+y0)/2,(b.z0+b.z1)/2));if(pw)b.phys=c;}   // (a raised rail starts at its floor)
+  for(const F of FLOORS)if(!F.ramp&&!F.down&&!F.dyn){const c=add(R.ColliderDesc.cuboid((F.x1-F.x0)/2,.05,(F.z1-F.z0)/2).setTranslation((F.x0+F.x1)/2,F.h-.05,(F.z0+F.z1)/2));if(pw)F.phys=c;}   // decks, tables, benches, the gallery
+  for(const c of circles){if(c.dyn&&!pw)continue;const k=add(R.ColliderDesc.cylinder(c.h/2,c.r).setTranslation(c.x,c.h/2,c.z));if(pw)c.phys=k;}
+  if(ARENA_R>0){const n=72;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,th=-(a+Math.PI/2);add(R.ColliderDesc.cuboid(ARENA_R*Math.PI/n+.06,1.7,.3).setTranslation(Math.cos(a)*(ARENA_R+.3),1.7,Math.sin(a)*(ARENA_R+.3)).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)}));}}
+  if(!pw)for(const s of PSOLID)add(R.ColliderDesc.cuboid(s[3],s[4],s[5]).setTranslation(s[0],s[1],s[2]));}
+function dynWorld(){if(!RP||NET.mode==='client'||(PRW&&dynKey===mapKey))return;dynFree();dynKey=mapKey;
+  PRW=new RP.World({x:0,y:-9.81,z:0});PRW.timestep=PH_H;
+  mapStatics(RP,cd=>PRW.createCollider(cd.setCollisionGroups(DGR_S).setFriction(.7).setRestitution(.05)),false);
+  for(const d of DYN)if(d.sh&&!d.gone&&!d.body)dynBody(d);}
+function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);}catch(e){}d.pw=null;d.body=null;}PROX.clear();if(PRW){try{PRW.free();}catch(e){}PRW=null;}dynKey=-1;}
+function dynColl(R,S,m){let cd;if(S.t==='box')cd=R.ColliderDesc.cuboid(S.h[0],S.h[1],S.h[2]);else if(S.t==='cyl'){cd=R.ColliderDesc.cylinder(S.h[0],S.h[1]);if(S.rz)cd.setRotation({x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2});}else cd=R.ColliderDesc.ball(S.h[0]);
+  return cd.setTranslation(S.o[0],S.o[1],S.o[2]).setMass(m);}
+function dynBody(d){if(d.body||!d.sh||d.gone)return;const p=d.obj.position,q=d.obj.quaternion;
+  const bd=RP.RigidBodyDesc.dynamic().setTranslation(p.x,p.y,p.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}).setLinearDamping(.06).setAngularDamping(d.ad??.3).setCanSleep(true);if(d.m<4)bd.setCcdEnabled(true);
+  const b=PRW.createRigidBody(bd);const vol=d.sh.map(S=>S.w??(S.t==='box'?8*S.h[0]*S.h[1]*S.h[2]:S.t==='cyl'?6.283*S.h[1]*S.h[1]*S.h[0]:4.19*S.h[0]**3)),tot=vol.reduce((a,b)=>a+b,0)||1;
+  d.sh.forEach((S,i)=>PRW.createCollider(dynColl(RP,S,d.m*vol[i]/tot).setFriction(d.fr??(SHIP?.5:.6)).setRestitution(d.rs??.1).setCollisionGroups(d.heavy?DGR_H:DGR_L),b));
+  b.sleep();d.body=b;d.p0=p.clone();d.slp=true;
+  if(PW&&R&&d.heavy){d.pw=PW.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(p.x,p.y,p.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}));   // the rigid-body engine's weapons and limbs meet it too
+    for(const S of d.sh)PW.createCollider(dynColl(R,S,1).setCollisionGroups(GR_WORLD).setFriction(.75),d.pw);}}
+function dynKill(d,wet){if(d.gone)return;d.gone=true;d.net=1;if(d.body&&PRW){try{PRW.removeRigidBody(d.body);}catch(e){}}d.body=null;if(d.pw&&PW){try{PW.removeRigidBody(d.pw);}catch(e){}d.pw=null;}
+  if(d.ob){gridRemove(d.ob);d.ob=null;}if(d.floor)d.floor.down=true;if(d.fx)for(const e of d.fx){e.base=0;e.f.visible=e.h.visible=false;if(e.L)e.L.visible=false;}
+  if(wet&&SHIP)splash(d.obj.position.clone());if(d.obj.parent)d.obj.parent.remove(d.obj);}
+// shoved by a walker or a falling body (from collide(), CTX holds who is moving: mass, velocity, height): it takes the push as a share
+// of the mover's speed by mass, at the height it was met, so a running shoulder tips a table and walking into a barrel rocks it
+function dynShove(d,p,nx,nz,r){const b=d.body;if(!b)return;const l=Math.hypot(nx,nz);if(l<1e-6)return;nx/=l;nz/=l;const vn=-(CTX.v.x*nx+CTX.v.z*nz);if(vn<.5)return;
+  const v=b.linvel(),cur=-(v.x*nx+v.z*nz),rel=vn-cur;if(rel<.4)return;
+  const u=(vn*CTX.m+cur*d.m)/(CTX.m+d.m),imp=rel>=1.5&&simTime-(d.ctT||0)>.3,J=imp?d.m*(u-cur)*.8:Math.min(.75,d.m*(u-cur)*.8),o=d.ob;d.ctT=simTime;   // (the first blow carries the mover's speed; after that, leaning on it, you push with your legs' strength: a slow shove)   // they meet and go on together (a little give), by mass
+  b.applyImpulseAtPoint({x:-nx*J,y:0,z:-nz*J},{x:p.x-nx*r,y:clamp(CTX.y,o?o.y0+.05:0,o?o.h-.05:1),z:p.z-nz*r},true);
+  if(CTX.q){const k=J/CTX.m*CTX.h;CTX.q.x-=nx*k;CTX.q.z-=nz*k;}const f=CTX.f;if(f){const k=J/CTX.m;f.vel.x+=nx*k;f.vel.z+=nz*k;if(rel>2.4&&simTime>(f._dynBump||0)){f._dynBump=simTime+.5;_xdv3.set(nx,0,nz);f.shove(_xdv3,rel*.35);f.bodyHit('Spine2',_xdv3,rel*.4);sThud(f.chest,Math.min(.8,rel/6));}}}   // and the runner is checked by it
+// a kick lands on whatever heavy thing is in front of the foot
+function dynKick(f,fw){if(!PRW)return false;for(const d of DYN){const b=d.body;if(!b||!d.heavy||d.gone)continue;const t=b.translation(),dx=t.x-f.pos.x,dz=t.z-f.pos.z,dd=Math.hypot(dx,dz);
+    const ext=Math.max(d.lb.max.x-d.lb.min.x,d.lb.max.z-d.lb.min.z)*.5;if(dd>.95+ext||dd<1e-3||(dx*fw.x+dz*fw.z)/dd<.55)continue;
+    const run=Math.max(0,f.vel.x*fw.x+f.vel.z*fw.z,f.kickRun||0),u=(3.2+run)*90/(90+d.m)*.75,J=d.m*u,hy=clamp(f.pos.y+.5,t.y+d.lb.min.y+.05,t.y+d.lb.max.y-.05);
+    b.applyImpulseAtPoint({x:fw.x*J,y:0,z:fw.z*J},{x:t.x-fw.x*ext*.8,y:hy,z:t.z-fw.z*ext*.8},true);sThud(V(t.x,hy,t.z),.7);return true;}
+  return false;}
+// a stand-in capsule from a to b that follows its target: its speed is set to reach the target this step, the solver does the rest
+function proxyCap(k,a,b,r,m,g){_xdv.subVectors(b,a);const L=_xdv.length(),hh=Math.max(.004,L/2);_xdv2.addVectors(a,b).multiplyScalar(.5);
+  if(L>1e-4)_xdq.setFromUnitVectors(Y_AXIS,_xdv.multiplyScalar(1/L));else _xdq.identity();
+  let x=PROX.get(k);if(x&&x.off){x.b.setEnabled(true);x.off=false;x.fresh=true;}if(!x){x={b:PRW.createRigidBody(RP.RigidBodyDesc.dynamic().setGravityScale(0).setCcdEnabled(true).setCanSleep(false).setTranslation(_xdv2.x,_xdv2.y,_xdv2.z).setRotation({x:_xdq.x,y:_xdq.y,z:_xdq.z,w:_xdq.w})),c:null,hh:0,r:0,g:0,vc:V(),used:0,fresh:true,sw:null,rag:null,ci:-1};PROX.set(k,x);}
+  if(!x.c||Math.abs(x.hh-hh)>.03||Math.abs(x.r-r)>.004){if(x.c)PRW.removeCollider(x.c,false);x.c=PRW.createCollider(RP.ColliderDesc.capsule(hh,r).setMass(m).setFriction(.5).setRestitution(.15).setCollisionGroups(g),x.b);x.hh=hh;x.r=r;x.g=g;}
+  else if(x.g!==g){x.g=g;if(!x.ghost)x.c.setCollisionGroups(g);}
+  if(x.ghost&&--x.ghost===0)x.c.setCollisionGroups(x.g);
+  const t=x.b.translation(),ex=_xdv2.x-t.x,ey=_xdv2.y-t.y,ez=_xdv2.z-t.z;
+  if(x.fresh||ex*ex+ey*ey+ez*ez>.16){x.ghost=3;x.c.setCollisionGroups(0);x.b.setTranslation({x:_xdv2.x,y:_xdv2.y,z:_xdv2.z},true);x.b.setRotation({x:_xdq.x,y:_xdq.y,z:_xdq.z,w:_xdq.w},true);x.b.setLinvel({x:0,y:0,z:0},true);x.b.setAngvel({x:0,y:0,z:0},true);x.vc.set(0,0,0);x.fresh=false;}
+  else{const iv=1/PH_H;x.vc.set(ex*iv,ey*iv,ez*iv);x.b.setLinvel({x:x.vc.x,y:x.vc.y,z:x.vc.z},true);const rq=x.b.rotation();_xdq2.set(rq.x,rq.y,rq.z,rq.w).invert().premultiply(_xdq);if(_xdq2.w<0){_xdq2.x=-_xdq2.x;_xdq2.y=-_xdq2.y;_xdq2.z=-_xdq2.z;_xdq2.w=-_xdq2.w;}
+    const s=Math.sqrt(Math.max(0,1-_xdq2.w*_xdq2.w)),ang=2*Math.acos(Math.min(1,_xdq2.w));if(s>1e-5){const k2=ang*iv/s;x.b.setAngvel({x:_xdq2.x*k2,y:_xdq2.y*k2,z:_xdq2.z*k2},true);}else x.b.setAngvel({x:0,y:0,z:0},true);}
+  x.used=dynN;return x;}
+const PROX_R={blade:.022,spear:.02,axe:.045,blunt:.055,improv:.035};
+function proxySword(k,s,held){const x=proxyCap(k,s.H,s.T,PROX_R[s.def.kind]||.035,(s.def.weight||1)+(held?1.4:0),DGR_P);x.sw=s;x.rag=null;return x;}
+// which places have loose things near them (a coarse 2 m map, rebuilt now and then): stand-ins are only made near them
+// and each part of a body only gets a stand-in while it is within reach of one (so a fighter in the open costs nothing)
+const dynNearMap=new Map();
+function dynNear(x,z){return dynNearMap.get(Math.floor(x/2)*4099+Math.floor(z/2));}
+function dynNearBuild(){dynNearMap.clear();for(const d of DYN){if(d.gone||!d.body)continue;const p=d.obj.position;d.br=d.lb.getSize(_xdv).length()/2+.35;const e=d.br+1.6,i0=Math.floor((p.x-e)/2),i1=Math.floor((p.x+e)/2),j0=Math.floor((p.z-e)/2),j1=Math.floor((p.z+e)/2);
+  for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const k=i*4099+j;let L=dynNearMap.get(k);if(!L)dynNearMap.set(k,L=[]);L.push(d);}}}
+function dynReach(L,a,b,r){for(const d of L){if(d.gone||!d.body)continue;d.lb.getCenter(_xdv3).applyQuaternion(d.obj.quaternion).add(d.obj.position);if(distPointSeg2(_xdv3,a,b)<(d.br+r)*(d.br+r))return true;}return false;}
+function proxyOff(k){const x=PROX.get(k);if(x&&!x.off){x.b.setEnabled(false);x.off=true;}}
+function dynStep(h){if(!PRW||NET.mode==='client'||!DYN.length)return;if((dynPh^=1)===0)return;const T0=window.__dynT?performance.now():0;dynStep2();if(T0){window.__dynMs=(window.__dynMs||0)+performance.now()-T0;}}
+function dynStep2(){dynN++;
+  if(dynN%30===1)dynNearBuild();
+  if(SHIP){_xdv.set(0,-9.81,0).applyEuler(_xde.set(-SHIP.roll,0,SHIP.pitch));PRW.gravity={x:_xdv.x*2.5,y:_xdv.y,z:_xdv.z*2.5};   // the heel works on the cargo (more than the bare slope: the deck's own rocking)
+    if(dynN%20===0&&Math.hypot(_xdv.x,_xdv.z)*2.5>2.4)for(const d of DYN)if(d.body&&d.body.isSleeping())d.body.wakeUp();}
+  for(const f of fighters){const rag=f.ragdoll,hp=rag&&rag.P.Hips?rag.P.Hips:f.pos,L=dynNear(hp.x,hp.z);if(!L||!f.caps)continue;
+    for(let i=0;i<f.caps.length;i++){const c=f.caps[i];if(!c.on)continue;const leg=c.zone==='legL'||c.zone==='legR';if(!dynReach(L,c.a,c.b,c.r+.25)){proxyOff(f.id*64+i);continue;}
+      const x=proxyCap(f.id*64+i,c.a,c.b,rag?Math.min(c.r*.6,RD_R[c.ba]||.055,.08)*.95:c.r*.92,PART_M[i]*(rag?1.2:1.5),DGR_PL);/* bodies meet heavy things through collide() (CTX), by mass; their stand-ins only move light ones */x.sw=null;x.rag=rag?f:null;x.ci=i;}
+    if(!rag&&f.alive){if(f.sword&&!f.sword.free){if(dynReach(L,f.sword.H,f.sword.T,.45))proxySword(f.id*64+40,f.sword,true);else proxyOff(f.id*64+40);}
+      else if(f.fists)for(const sd of ['R','L']){const a=f.fists[sd],k=f.id*64+(sd==='R'?41:42);if(a&&a.pos&&dynReach(L,a.pos,a.pos,.35)){const x=proxyCap(k,a.pos,a.pos,.05,2.2,DGR_P);x.sw=null;x.rag=null;}else proxyOff(k);}}}
+  for(const s of freeSwords){if(s.owner&&!s.free)continue;const k=1e7+s.id;if(!(s.flying||(s.rb?(()=>{const v=s.rb.linvel();return v.x*v.x+v.y*v.y+v.z*v.z>.09;})():s.H.distanceToSquared(s.Hp)>4e-6))){proxyOff(k);continue;}const L=dynNear(s.H.x,s.H.z);if(!L||!dynReach(L,s.H,s.T,.5)){proxyOff(k);continue;}proxySword(k,s,false);}
+  PRW.step();
+  // what the loose things did back: a blade that met something heavy loses speed, a body that hit a table is held up by it
+  for(const [k,x] of PROX){if(x.used!==dynN){if(dynN-x.used>240){PRW.removeRigidBody(x.b);PROX.delete(k);}else if(!x.off){x.b.setEnabled(false);x.off=true;}continue;}
+    const v=x.b.linvel(),dx=v.x-x.vc.x,dy=v.y-x.vc.y,dz=v.z-x.vc.z,d2=dx*dx+dy*dy+dz*dz;if(d2<.36)continue;
+    if(x.sw){const s=x.sw;if(s.rb){const m=(s.def.weight||1)*.6;s.rb.applyImpulse({x:dx*m,y:dy*m,z:dz*m},true);}else{s.Tp.x-=dx*H*.85;s.Tp.y-=dy*H*.85;s.Tp.z-=dz*H*.85;if(s.owner&&!s.free){s.Hv.x+=dx*.3;s.Hv.y+=dy*.3;s.Hv.z+=dz*.3;}else{s.Hp.x-=dx*H*.3;s.Hp.y-=dy*H*.3;s.Hp.z-=dz*H*.3;}}
+      if(d2>9&&simTime>(s._pt||0)){s._pt=simTime+.15;const t=x.b.translation();sThud(V(t.x,t.y,t.z),Math.min(.8,Math.sqrt(d2)/12));}}
+    else if(x.rag&&x.rag.ragdoll){const Rg=x.rag.ragdoll,c=x.rag.caps[x.ci];if(c)for(const n of [c.ba,c.bb]){const q=Rg.Q[n];if(q){q.x-=dx*H*.6;q.y-=dy*H*.6;q.z-=dz*H*.6;Rg.sleep=false;}}}}
+  dynSync();}
+function dynSound(d,k,p){if(d.snd==='metal')sfx('dropWeapon',p,Math.min(.7,k/10),1.35,.08,false);else if(d.snd==='glass')sfx('clash',p,Math.min(.4,k/14),2.4,.1,false);
+  else if(d.snd==='pot'){sThud(p,Math.min(.5,k/12));sfx('block',p,Math.min(.3,k/16),1.9,.1,false);}else sThud(p,Math.min(1,k/(d.heavy?6:10)));}
+function dynSync(){for(const d of DYN){const b=d.body;if(!b||d.gone)continue;if(b.isSleeping()){if(d.slp)continue;d.slp=true;}else d.slp=false;
+  const t=b.translation(),r=b.rotation();d.obj.position.set(t.x,t.y,t.z);d.obj.quaternion.set(r.x,r.y,r.z,r.w);d.net=1;
+  if(!d.mv&&Math.abs(t.x-d.p0.x)+Math.abs(t.y-d.p0.y)+Math.abs(t.z-d.p0.z)>.02){d.mv=true;mapDirty=true;}
+  let v=b.linvel(),sp=Math.hypot(v.x,v.y,v.z);const vm=d.heavy?7:14;if(sp>vm){const k=vm/sp;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);v=b.linvel();sp=vm;}   // (a safety net against anything wedged and spat out)
+  if(d.pv!=null&&Math.abs(sp-d.pv)>2&&simTime>(d.sndT||0)){d.sndT=simTime+.12;dynSound(d,Math.abs(sp-d.pv),d.obj.position.clone());}d.pv=sp;
+  const p=d.obj.position,q=d.obj.quaternion;if(d.ob)dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;}if(d.fx)dynFx(d,p,q);
+  if(d.pw){d.pw.setNextKinematicTranslation(t);d.pw.setNextKinematicRotation(r);}
+  if(t.y<-20||(SHIP&&t.y<-1&&!shipIn(t.x,t.z)))dynKill(d,true);}}
+// friends: the host sends what moved (and everything that has moved, every 3 s); they ease each thing to it
+function dynNet(){if(!DYN.length)return 0;const o=[],full=simTime>dynFull;if(full)dynFull=simTime+3;
+  for(const d of DYN){if(!(d.net||full&&(d.mv||d.gone)))continue;d.net=0;if(d.gone){o.push(d.key,0,-99,0,0,0,0,1);continue;}if(!d.body)continue;
+    const p=d.obj.position,q=d.obj.quaternion;o.push(d.key,r3(p.x),r3(p.y),r3(p.z),r3(q.x),r3(q.y),r3(q.z),r3(q.w));}
+  return o.length?o:0;}
+function dynNetApply(a){for(let i=0;i+7<a.length;i+=8){const d=DYNK.get(a[i]);if(!d||d.gone)continue;if(a[i+2]<-90){dynKill(d,true);continue;}
+  (d.tp||(d.tp=V())).set(a[i+1],a[i+2],a[i+3]);(d.tq||(d.tq=new THREE.Quaternion())).set(a[i+4],a[i+5],a[i+6],a[i+7]).normalize();d.mv=true;mapDirty=true;}}
+function dynClient(dt){const k=1-Math.exp(-dt*16);for(const d of DYN){if(!d.tp||d.gone)continue;const o=d.obj;if(o.position.distanceToSquared(d.tp)>4)o.position.copy(d.tp);else o.position.lerp(d.tp,k);o.quaternion.slerp(d.tq,k);
+  if(d.prop){d.prop.x=o.position.x;d.prop.z=o.position.z;}if(d.fx)dynFx(d,o.position,o.quaternion);if(d.floor)dynFloor(d,o.position,o.quaternion);}}
 // ================================================================ wounds
 // every hit leaves its mark where it landed: a gash along the edge, a hole from the point, a bruise from a blunt blow.
 // Each mark is a small patch bent to the limb's curve and attached to the struck bone, so it moves with the body.
@@ -3887,7 +4099,7 @@ class Fighter{
     
     if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);}
     else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=SHIP||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
-    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;collide(this.pos,.34,true,1.7);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
+    this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;(CTX.m=82+8*ARMOR_SLOTS.reduce((q,sl)=>q+(this.armor[sl]?1:0),0),CTX.v.copy(this.vel),CTX.y=this.pos.y+.95,CTX.f=this,collide(this.pos,.34,true,1.7),CTX.m=0,CTX.f=null);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
     if(this.kickReq){this.kickReq=false;if(this.kickT<0&&this.kickCd<=0&&this.stamina>18&&onGround&&legs){this.fwd(_f);this.kickRun=Math.max(0,this.vel.x*_f.x+this.vel.z*_f.z);this.kickT=0;this.kickCd=1.2;this.kickHit=false;this.useStamina(18);sfx('swingKick',this.pos,.5);}}
     if(this.kickT>=0){this.kickT+=h;if(!this.kickHit&&this.kickT>.13&&this.kickT<.3)this.kickCheck();if(this.kickT>.5)this.kickT=-1;}
@@ -3936,7 +4148,7 @@ class Fighter{
     }
   }
   kickCheck(){
-    this.fwd(_f);
+    this.fwd(_f);if(dynKick(this,_f)){this.kickHit=true;return;}
     for(const o of fighters){
       if(o===this||!o.alive||o.ragdoll)continue;_v.subVectors(o.pos,this.pos).setY(0);const d=_v.length();if(d>1.45||d<.01)continue;if(_v.dot(_f)/d<.5)continue;
       // a kick is a shove with the leg: it staggers and pushes them back a step or two. It takes them off their feet only when
@@ -5604,6 +5816,7 @@ function sim(h){
   }
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
+  dynStep(h);
   villageStep(h);towerStep(h);bridgeLoad(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
 }
@@ -6251,6 +6464,7 @@ function netSnap(){
     const e={n:it.nid,k:it.kind==='weapon'?1:0,d:it.def.id,c:it.corpse?it.corpse.id:-1,s:it.slot||''};
     if(it.sword){const s=it.sword;e.p=[...r3v(s.H),...r3v(s.axis),...r3v(s.edge)];}else if(it.obj)e.p=[...r3v(it.obj.position),r3(it.obj.rotation.y)];
     S.l.push(e);}
+  S.dp=dynNet();
   return S;
 }
 function netTick(dt){
@@ -6301,7 +6515,7 @@ function snapAt(P,S,a,ex=0){const L=(x,y)=>x.map((v,i)=>typeof v==='number'&&typ
     return n;})};}
 function clientData(d){
   if(!d||typeof d!=='object')return;
-  if(d.t==='s'){if(!NET.puppets.size)return;const now=performance.now();
+  if(d.t==='s'){if(d.dp)dynNetApply(d.dp);if(!NET.puppets.size)return;const now=performance.now();
     if(NET.cur){const a=clamp((now-NET.curAt)/NET.gap,0,1),ex=clamp(now-NET.curAt-NET.gap,0,60)/1000;NET.prev=NET.prev?snapAt(NET.prev,NET.cur,a,ex):NET.cur;const iv=clamp(now-NET.curAt,16,200);NET.gap=lerp(NET.gap||iv,iv,.15);}else{NET.prev=null;NET.gap=50;}
     NET.cur=d;NET.curAt=now;NET.fresh=true;
     if(d.e&&d.e.length){if(typeof d.ht==='number'&&NET.rt!=null)(NET.evq||(NET.evq=[])).push({ht:d.ht,e:d.e});else clientEvents(d.e);}   // sounds and blood play when the blow is drawn, not when the packet lands
@@ -6340,6 +6554,7 @@ function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;
     fighters.push(f);NET.puppets.set(r.i,f);if(me){NET.myId=r.i;player=f;}}}
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(a,1/120);rubbleStep(hh);towerStep(hh);a-=hh;}}   /* falling buildings run on friends' screens too */
+  dynClient(dt);
   simTime+=dt;   // local clock for effects (spurts, clutching) on a friend's screen
   const S=NET.cur;if(!S)return;
   if(S.gr&&PIT&&PIT.grate){const G=PIT.grate;G.C.set(S.gr[0],S.gr[1],S.gr[2]);G.phi=S.gr[3];G.mode=S.gr[4]?'moved':'rest';G.x=G.C.x-PIT.x;G.z=G.C.z-PIT.z;}const P=NET.prev||S;
@@ -6439,7 +6654,7 @@ function loadFighters(onLoad,onErr){
   }).catch(onErr);
 }
 loadFighters(async g=>{
-  GLTF=g;initGuard();await physReady;
+  GLTF=g;initGuard();await physReady;setTimeout(dynLoad,window.__dynNow?0:1200);
   el('physTag').textContent='';el('buildTag').textContent='Build '+BUILD+' · if a friend\'s build number differs from yours, one of you needs to refresh (Ctrl+F5)';showEngine();initFighterCard();showMode();
   {const q=new URLSearchParams(location.search).get('join');let last='';try{last=localStorage.getItem('bloodmoor-lastjoin')||'';}catch(e){}
    el('joinCode').value=(q||last||'').toUpperCase().slice(0,5);if(q&&/^[A-Za-z0-9]{5}$/.test(q))netJoin(q);}
@@ -6452,6 +6667,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={swayStep,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={swayStep,Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
