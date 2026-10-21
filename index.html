@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=99;
+const BUILD=100;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2430,6 +2430,7 @@ function hairCap(body,h){const ck='hcap'+h;const k0=body.name+'|'+ck;
       if(long&&z<M.hz-.015&&y>J.Neck.y-.05&&y<ey+.02)return true;   // the back of the head and neck under the fall
       return !long&&z<M.hz-.03&&y>ey-.08&&y<ey+.02&&w(v,['Head'])>.6;},   // a short back to the nape
     off:(x,y,z)=>(long?.016:.012)+.008*clamp((y-ey)/.08,0,1),smooth:14,bodySmooth:4,minK:.9,rim:-.008,bones:['Head','Neck'],fallback:'Head',
+    loose:(x,y,z)=>long&&z<M.hz?Math.pow(clamp((ey-y)/(ey-J.Neck.y+.04),0,1),1.1):clamp((y-ey-.06)/.08,0,1)*.15,   // the fall swings from the back of the skull; a little bounce on top
     shape:long?(q,g)=>{const y=q[g*3+1];if(y<ey-.02&&q[g*3+2]<M.hz){const t=clamp((ey-.02-y)/.05,0,1);q[g*3+2]+=(Math.min(q[g*3+2],back-.012)-q[g*3+2])*t;   // the fall hangs straight down behind the neck
         const sx=Math.sign(q[g*3]-M.hx)||1,ax=Math.abs(q[g*3]-M.hx);q[g*3]=M.hx+sx*(ax+(Math.max(ax,M.rx*.8)-ax)*t);}}:null});}
 function hairCapMat(col,body,h){const M=bodyMarks(body),m=std({color:col.clone().multiplyScalar(1.15),roughness:.7,metalness:0,side:THREE.DoubleSide,envMapIntensity:.45});
@@ -2444,6 +2445,27 @@ function hairCapMat(col,body,h){const M=bodyMarks(body),m=std({color:col.clone()
         diffuseColor.rgb*=mix(.7,1.,smoothstep(uBot,uBot+.08,vHP.y)); }`)
     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(.62+.25*hv(atan(vHP.x-uCrown.x,vHP.z-uCrown.z)*260.),.55,.9);');};
   m.customProgramCacheKey=()=>'bm-haircap';return m;}
+// ---- things that swing: long hair, skirts, tabard flaps and plumes carry an aLoose weight per vertex (0 where they're attached, 1 at
+// the free end), and their vertex shader adds that much of a per-fighter sway offset after skinning. The offsets come from damped
+// pendulums driven by how the hips and the head actually move (accelerations, turns, blows, a little drag at speed), worked out on every
+// machine from what is already drawn, so friends see their own sway without any network traffic.
+function looseMat(m,sway,which){if(!sway)return m;const U=sway[which],pre=m.onBeforeCompile,k0=m.customProgramCacheKey?m.customProgramCacheKey():'';
+  m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uSwL=U;sh.vertexShader='attribute float aLoose;uniform vec3 uSwL;\n'+sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\ntransformed+=uSwL*aLoose;');};
+  m.customProgramCacheKey=()=>k0+'|sw';return m;}
+function ownMat(m){const x=m.clone();x.onBeforeCompile=m.onBeforeCompile;if(m.customProgramCacheKey)x.customProgramCacheKey=m.customProgramCacheKey;x.userData={...m.userData};return x;}
+const SWAY={h:{k:52,c:6,max:.13,drag:.018,y:.25,g:.6},n:{k:62,c:6.3,max:.1,drag:.014,y:.25,g:.55}},_swM=new THREE.Matrix3();
+function swayStep(f,dt){const sw=f.model&&f.model.userData.sway;if(!sw||!f.bones||dt<=0)return;const st=f._sway||(f._sway={});
+  let body=f._swBody;if(!body){f.model.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body/.test(o.name))body=o;});f._swBody=body;}if(!body)return;
+  _swM.setFromMatrix4(body.matrixWorld).invert();
+  for(const k of ['h','n']){const b=f.bones[k==='h'?'Hips':'Head'];if(!b)continue;const S=SWAY[k],A=st[k]||(st[k]={p:null,v:V(),a:V(),s:V(),sv:V()});
+    const p=b.getWorldPosition(V());if(k==='h'){const fw=f.fwd(V());p.addScaledVector(fw,.18);}   // a point ahead of the hips, so turning on the spot swings the hem too
+    if(!A.p){A.p=p.clone();continue;}const v=p.clone().sub(A.p).divideScalar(dt);if(v.length()>20){A.p.copy(p);A.v.copy(v.setScalar(0));continue;}   // teleports and respawns
+    const acc=v.clone().sub(A.v).divideScalar(dt);if(acc.length()>70)acc.setLength(70);A.a.lerp(acc,.3);A.v.copy(v);A.p.copy(p);
+    const n=Math.min(8,Math.ceil(dt/(1/120))),h=dt/n,dead=f.ragdoll?.4:1;
+    for(let i=0;i<n;i++){const F=A.s.clone().multiplyScalar(-S.k).addScaledVector(A.sv,-S.c).addScaledVector(A.a,-dead*S.g);F.y*=S.y;
+      F.addScaledVector(v.clone().setY(0),-S.drag*S.k);A.sv.addScaledVector(F,h);A.s.addScaledVector(A.sv,h);}   // inertia against the acceleration, a little drag behind the motion
+    if(A.s.length()>S.max){A.s.setLength(S.max);A.sv.multiplyScalar(.6);}
+    sw[k].value.copy(A.s).applyMatrix3(_swM);}}
 // skin is not plastic: light soaks in and comes back out reddened past the edge of the lit side (a wrapped, red-shifted diffuse term),
 // and the face and hands are a little oilier than the body
 function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
@@ -2455,6 +2477,7 @@ function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{p
     reflectedLight.indirectDiffuse*=vec3(1.04,.98,.96);`)
   .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+(vBind.y>1.5?-.08:.05),.3,1.);');};}
 function dressMH(model,look,pal,mats){
+  const SWU=model.userData.sway={h:{value:V()},n:{value:V()}};   // this fighter's sway offsets (swayStep), for everything that swings
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
   for(const m of drop)m.removeFromParent();
@@ -2498,12 +2521,12 @@ function dressMH(model,look,pal,mats){
       off:(x,y,z)=>{const ax=Math.abs(x);if(ax>sh-.02){const u=clamp((ax-sh)/(ha-sh),0,1);return .014+.02*Math.sin(Math.PI*Math.min(1,u*1.08))**.7;}   // sleeves: full in the forearm, gathered at the cuff
         return .016+.016*clamp(1-Math.abs(y-(hy+.05))/.09,0,1);},   // the body: bagging over the belt
       smooth:12,bodySmooth:2,minK:.95,rim:.003,shape:convexTorso(0,.35,.2,.6)},dyedCloth(true,.006));}
-  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14}},dyedCloth(true,.006));   // a knee-length dyed tunic, sleeves to the elbow
-  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','Hands*'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06}},lm).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
+  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14},loose:(x,y,z)=>Math.pow((hy-.03-y)/.3,1.3)},looseMat(dyedCloth(true,.006),SWU,'h'));   // a knee-length dyed tunic, sleeves to the elbow
+  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','Hands*'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06},loose:(x,y,z)=>(hy-.03-y)/.12*.6},looseMat(lm,SWU,'h')).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
-    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['Hands*'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07}});
-    const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';
+    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['Hands*'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07},loose:(x,y,z)=>Math.pow((hy-.03-y)/.28,1.3)*.8});
+    const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';looseMat(mt,SWU,'h');
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   cloth(o===2||o===3?C.hose:C.braies,true,o===2||o===3?.0012:.003);
   // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
@@ -2516,10 +2539,10 @@ function dressMH(model,look,pal,mats){
     shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.013:.01,smooth:14,minK:.95,rim:.003,shape:footShape(.13,M.J.LeftToeBase.z-.03),bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
   if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';body.parent.add(bm);}
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
-    if(look.h>=2&&!(look.hd|0)){const hm=new THREE.SkinnedMesh(hairCap(body,look.h),hairCapMat(hcol,body,look.h));hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=true;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';hm.userData.hair=true;body.parent.add(hm);}   // real hair: a cap (and a fall for long hair)
+    if(look.h>=2&&!(look.hd|0)){const hm=new THREE.SkinnedMesh(hairCap(body,look.h),looseMat(hairCapMat(hcol,body,look.h),SWU,'n'));hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=true;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';hm.userData.hair=true;body.parent.add(hm);}   // real hair: a cap (and a fall for long hair)
     for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)&&look.h<2?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
       const hm=new THREE.SkinnedMesh(hg,scalp?mt:mtB);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
-  if(look.sc|0)tabard(body,look.sc|0,pal,mats);
+  if(look.sc|0)tabard(body,look.sc|0,pal,mats,SWU);
   model.userData.mh=true;}
 // a tabard over everything (clothes or armour): a convex body over the chest and back to the hips, front and back flaps to mid-thigh
 // (stiff from the hips, the hem swinging with the legs), dyed in the coat and trim colours in one of the heraldic patterns
@@ -2532,9 +2555,9 @@ function tabardMat(her,pal,mats,hy,ny){const mt=std({map:LINEN.m,normalMap:LINEN
       else if(uHer<3.5){if(abs(vBind.x)<.034||abs(vBind.y-ym-.05)<.034)t=uTrim;}
       else{if(abs((vBind.y-ym)+vBind.x*.9)<.06)t=uTrim;}`).replace('diffuseColor.rgb=mix(c,t*l*gain,msk*.9);','diffuseColor.rgb=t*clamp(l*1.9,.55,1.25);');};
   mt.customProgramCacheKey=()=>'bm-tabard';return mt;}
-function tabard(body,her,pal,mats){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ny=J.Neck.y;
+function tabard(body,her,pal,mats,SWU){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ny=J.Neck.y;
   const bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
-  const torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'],mt=tabardMat(her,pal,mats,hy,ny);
+  const torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'],mt=looseMat(tabardMat(her,pal,mats,hy,ny),SWU,'h');
   const g=fitShell(body,'tabard',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso)>.55&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.2&&w(v,['Neck','Head'])<.3&&y>hy-.07&&y<ny-.03;},
     off:.08,smooth:30,bodySmooth:24,minK:.9,rim:.004,shape:convexTorso(0,.4,.22,.5,4),bones:torso,fallback:'Spine'});
   const add=geo=>{const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};add(g);
@@ -2548,7 +2571,8 @@ function tabard(body,her,pal,mats){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ny=
     fg=mergeGeometries(parts);const n=fg.attributes.position.count,si=new Uint16Array(n*4),sw=new Float32Array(n*4);
     for(let i=0;i<n;i++){const y=fg.attributes.position.getY(i),t=clamp((hy-.08-y)/.3,0,1),x=fg.attributes.position.getX(i);
       si[i*4]=bi.Hips;sw[i*4]=1-.6*t;si[i*4+1]=bi.LeftUpLeg;sw[i*4+1]=.6*t*(x>0?.65:.35);si[i*4+2]=bi.RightUpLeg;sw[i*4+2]=.6*t*(x>0?.35:.65);}
-    fg.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));fg.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));FIT_CACHE.set(ck,fg);}
+    fg.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));fg.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));
+    {const la=new Float32Array(n);for(let i=0;i<n;i++)la[i]=Math.pow(clamp((hy-.07-fg.attributes.position.getY(i))/.33,0,1),1.2);fg.setAttribute('aLoose',new THREE.BufferAttribute(la,1));}FIT_CACHE.set(ck,fg);}
   add(fg);}
 // strip a fresh model clone down to one look and give it that look's materials
 function dressModel(model,look,pal,mats){
@@ -2831,8 +2855,9 @@ function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))re
       w=[...m].sort((a,b)=>b[1]-a[1]).slice(0,4);s=w.reduce((t,x)=>t+x[1],0);}for(let k=0;k<4;k++){si[i*4+k]=w[k]?w[k][0]:0;sw[i*4+k]=w[k]?w[k][1]/s:0;}});
   const idx=tris.map(v=>map.get(v));
   if(o.extra)o.extra(pos,idx,gid,q);
+  let la=null;if(o.loose){la=new Float32Array(m);for(let i=0;i<m;i++){const k=gid[i],v=o.loose(gpos[k*3],gpos[k*3+1],gpos[k*3+2]);la[i]=v>0?Math.min(1,v):0;}}   // (NaN from a pow of a negative counts as 0)   // how free each vertex is to swing (0 at the seam, 1 at the hem)
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
-  g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));g.setIndex(idx);
+  g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));if(la)g.setAttribute('aLoose',new THREE.BufferAttribute(la,1));g.setIndex(idx);
   // smooth normals across the welded seams
   g.computeVertexNormals();{const nn=g.attributes.normal,acc=new Float32Array(G*3);for(let i=0;i<m;i++){const k=gid[i];acc[k*3]+=nn.getX(i);acc[k*3+1]+=nn.getY(i);acc[k*3+2]+=nn.getZ(i);}
     for(let i=0;i<m;i++){const k=gid[i],l=Math.hypot(acc[k*3],acc[k*3+1],acc[k*3+2]);if(l<1e-6)nn.setXYZ(i,gn[k*3],gn[k*3+1],gn[k*3+2]);else nn.setXYZ(i,acc[k*3]/l,acc[k*3+1]/l,acc[k*3+2]/l);}}   // a collapsed face falls back to the skin's normal (a zero normal lit as NaN and blacked out the frame through the bloom)
@@ -2890,11 +2915,11 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
   switch(def.id){
     case 'plate':return [
       S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4,.22,.5,6),fallback:'Spine'},steelFitMat,['Spine','Spine1','Spine2']),
-      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},fallback:'Hips'},faulMat,['Hips','Spine']),
+      S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06}},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
-    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1}},mailMat,null)];
+    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06},loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
       S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
@@ -2943,13 +2968,16 @@ function crestGeo(top,kind){const parts=[];
   if(kind===1){for(let i=0;i<9;i++){const a=(i/8-.5)*1.1,len=.2+.06*Math.cos(a*2),g=new THREE.ConeGeometry(.016,len,5);g.translate(0,len/2,0);   // a plume of feathers springing up and curling back
       g.rotateX(-.55-.25*Math.abs(a));g.rotateZ(a*.5);g.translate(top.x,top.y-.01,top.z-.01);parts.push(g);}}
   else{for(let i=0;i<15;i++){const t=i/14,z=.09-.2*t,h=.07+.05*Math.sin(Math.PI*t),g=new THREE.BoxGeometry(.012,h,.016);g.translate(0,h/2,0);g.rotateX(-.35*t);g.translate(top.x,top.y-.012-.03*Math.abs(t-.4),top.z+z);parts.push(g);}}   // a stiff horsehair crest front to back
-  const g=mergeGeometries(parts.map(x=>{x.deleteAttribute('uv');return x.index?x.toNonIndexed():x;}));g.computeVertexNormals();return g;}
+  const g=mergeGeometries(parts.map(x=>{x.deleteAttribute('uv');return x.index?x.toNonIndexed():x;}));g.computeVertexNormals();
+  {const p=g.attributes.position,la=new Float32Array(p.count);for(let i=0;i<p.count;i++)la[i]=clamp((p.getY(i)-top.y)/.22,0,1)*(kind===1?1:.35);g.setAttribute('aLoose',new THREE.BufferAttribute(la,1));}   // plumes flutter, a crest barely
+  return g;}
 function fitArmor(f,def){if(!f.model.userData.mh)return null;let body=null;f.model.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body/.test(o.name))body=o;});if(!body)return null;
   let P=fitPieces(body,def);if(!P)return null;const out=[];P=P.map(([g,m])=>[g,armourMat(m,f)]);
   const pl=f.look&&f.look.pl|0;if(def.slot==='head'&&pl&&f.pal){const hg=P[0][0];hg.computeBoundingBox();const bb=hg.boundingBox,top=V((bb.min.x+bb.max.x)/2,bb.max.y,(bb.min.z+bb.max.z)/2);
     const ck='crest'+pl+'|'+body.name+'|'+def.id;let cg=FIT_CACHE.get(ck);if(!cg){cg=crestGeo(top,pl);FIT_CACHE.set(ck,cg);}
     P.push([cg,dyedMat(plumeMat,f.pal[pl===1?1:0])]);}
-  for(const [geo,mat] of P){if(!geo.attributes.skinIndex)bindRigid(geo,'Head',body);const m=new THREE.SkinnedMesh(geo,mat);m.bind(body.skeleton,body.bindMatrix);m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Armor';m.userData.dentBone=def.slot==='head'?'Head':def.slot==='arms'?'RightForeArm':def.slot==='legs'?'RightLeg':'Spine2';body.parent.add(m);out.push(m);}
+  const SWU=f.model.userData.sway;
+  for(let [geo,mat] of P){if(geo.attributes.aLoose&&SWU)mat=looseMat(ownMat(mat),SWU,def.slot==='head'?'n':'h');if(!geo.attributes.skinIndex)bindRigid(geo,'Head',body);const m=new THREE.SkinnedMesh(geo,mat);m.bind(body.skeleton,body.bindMatrix);m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Armor';m.userData.dentBone=def.slot==='head'?'Head':def.slot==='arms'?'RightForeArm':def.slot==='legs'?'RightLeg':'Spine2';body.parent.add(m);out.push(m);}
   return out;}
 function armorMeshes(def){
   switch(def.slot){
@@ -5692,7 +5720,7 @@ function frame(now){
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
 function updateBurnFx(f,now,dt){
-  bodyBlood(f);fighterDetail(f,dt);
+  bodyBlood(f);fighterDetail(f,dt);if(!window.__noSway)swayStep(f,dt);
   if(!f.alive&&f.burn>0)f.burn-=dt;
   if(f.burn>0){
     if(!f.fireFx)f.fireFx=FX_BONES.map(()=>{const s=new THREE.Sprite(flameMat);s.renderOrder=7;scene.add(s);return s;});
@@ -6424,6 +6452,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={swayStep,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
