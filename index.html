@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=103;
+const BUILD=104;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1429,6 +1429,66 @@ function clinkerTex(){const c=mkCanvas(512,512),g=c.getContext('2d');const NS=11
     for(let x=Math.random()*200;x<512;x+=180+Math.random()*140){g.fillStyle='rgba(10,5,2,.6)';g.fillRect(x,y,2,h);}}   // scarf joints
   g.fillStyle='rgba(10,6,3,.35)';g.fillRect(0,512-3*h,512,3*h);   // tar below the waterline
   const t=tex(c);t.wrapS=THREE.RepeatWrapping;t.wrapT=THREE.ClampToEdgeWrapping;return t;}
+// ---- Mutiny's mast and sail. The sail fills and ripples in the wind (a vertex shader: the belly breathes, waves run across it,
+// the foot and the edges flutter, harder as the storm builds). The mast above the step is one piece with its yard and sail and a
+// breakable thing (PROPS kind 'mast'): hack at it enough and it creaks, splits at the foot and comes down the way it was struck,
+// slowly at first, like a felled tree (mastStep). The rigging goes slack. Where it lands it crushes, the sail knocks down whoever is
+// under it, the ship heels and pitches from the blow, loose cargo jumps, and the spar lies across the deck as an obstacle. Friends
+// see it from event MF; only the host deals damage
+function sailMat(){const m=MATS.cloth1.clone();const U={uT:{value:0},uW:{value:.7}};
+  m.onBeforeCompile=sh=>{sh.uniforms.uT=U.uT;sh.uniforms.uW=U.uW;sh.vertexShader='uniform float uT,uW;\n'+sh.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+    float sw=clamp((3.2-position.y)/6.4,0.,1.),se=abs(position.x)/4.1;
+    transformed.z+=uW*(.16*sw*sin(uT*1.5+position.x*.35)+.06*sw*sin(uT*5.1-position.y*1.6+position.x*1.2)*(.4+se)+.035*sw*se*sin(uT*9.3+position.x*2.6+position.y));
+    transformed.z*=1.+.1*uW*sin(uT*1.05);`);};
+  m.customProgramCacheKey=()=>'bm-sail';m.userData.U=U;return m;}
+function buildMast(){const S=SHIP,P0=1.0;   // the step and a metre of mast stay put; the rest can fall
+  addGeo('beam',new THREE.CylinderGeometry(.27,.28,P0,10),T(0,P0/2,0));
+  const G=new THREE.Group();G.position.set(0,P0,0);world.add(G);const mk=(g,mt,x,y,z)=>{const o=new THREE.Mesh(g,mt);o.position.set(x,y,z);o.castShadow=o.receiveShadow=true;G.add(o);return o;};
+  mk(new THREE.CylinderGeometry(.2,.27,12.5-P0,10),MATS.beam,0,(12.5-P0)/2,0);
+  mk(new THREE.CylinderGeometry(.1,.1,8.6,8),MATS.beam,.25,10.2-P0,0).rotation.x=Math.PI/2;
+  const g=new THREE.PlaneGeometry(8.2,6.4,16,12),p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);p.setZ(i,.75*(1-(x/4.1)**2)*(1-((y+3.2)/6.4-.5)**2*1.6));}g.computeVertexNormals();
+  const sm=sailMat(),sail=mk(g,sm,.45,7-P0,0);sail.rotation.y=Math.PI/2;S.sail=sail;S.sailU=sm.userData.U;
+  const col=addCircle(0,0,.3,12.5);const pr=propAdd('mast',G,0,0,.3,12.5,170,col);
+  S.mast={st:'up',G,P0,prop:pr,col,t:0,th:0,w:0,dx:1,dz:0,L:12.5-P0,ob:null,bump:0};}
+function mastFall(dx,dz,net=true){const S=SHIP;if(!S||!S.mast||S.mast.st!=='up')return;const M=S.mast;M.st='fall';M.t=0;M.th=.04;M.w=.05;mapDirty=true;
+  let l=Math.hypot(dx,dz);if(l<.2){const a=Math.random()*6.283;dx=Math.cos(a);dz=Math.sin(a);l=1;}M.dx=dx/l;M.dz=dz/l;
+  if(NET.mode==='host'&&net)netEv(['MF',r3(M.dx),r3(M.dz)]);
+  M.prop.broken=true;M.prop.jig=0;M.G.rotation.set(0,0,0);gridRemove(M.col);for(const L of [boxes,circles]){const i=L.indexOf(M.col);if(i>=0)L.splice(i,1);}
+  if(M.col.phys&&PW){try{PW.removeCollider(M.col.phys,false);}catch(e){}}
+  for(const g of S.rig||[])g.visible=false;   // the rigging parts and goes slack
+  const B=V(0,M.P0,0);sfx('crush',B,1,.55,0,false);sThud(B,1.2);for(let i=0;i<14;i++){const a=Math.random()*6.283;shardAdd(MATS.beam,'splinter',V(Math.cos(a)*.25,M.P0+Math.random()*.2,Math.sin(a)*.25),V(Math.cos(a)*2+M.dx,1+Math.random()*2,Math.sin(a)*2+M.dz),2+Math.random()*2);}
+  for(const f of fighters)if(f.alive&&!f.ragdoll&&f.isPlayer)tell(f,'The mast is going!','red');}
+function mastStep(dt){const S=SHIP;if(!S||!S.mast)return;const M=S.mast;if(S.sailU){S.sailU.uT.value=S.t;S.sailU.uW.value=M.st==='down'?.25:.6+1.2*(S.storm||0);}
+  if(M.st==='up'){if(M.prop.hp<M.prop.hp0*.45&&Math.random()<dt*.5)sfx('crush',V(0,2,0),.25,.5,.1,false);return;}   // it creaks once it's badly hacked
+  if(M.st==='down'){if(M.bump>0){M.bump-=dt;}return;}
+  const END=Math.PI/2+.06;M.t+=dt;M.w+=1.5*9.8/M.L*Math.sin(M.th)*dt;M.th+=M.w*dt;
+  if(Math.random()<dt*3)sfx('crush',V(0,M.P0,0),.3,.45+M.th*.2,.1,false);   // groaning as it goes
+  if(M.th>=END){M.th=END;if(!M.hit){M.hit=true;mastImpact(M.w);}M.w*=-.18;if(Math.abs(M.w)<.05){M.st='down';M.w=0;}}
+  const tw=Math.atan2(M.dz,-M.dx),u=Math.min(1,M.th/END);M.G.quaternion.setFromAxisAngle(_xdv.set(M.dz,0,-M.dx),M.th).multiply(_xdq.setFromAxisAngle(Y_AXIS,tw*u*u*(3-2*u)));}   // it turns as it goes, so the yard and sail come down flat
+function mastImpact(w){const S=SHIP,M=S.mast,L=M.L,dx=M.dx,dz=M.dz,Pb=V(0,M.P0,0),tip=V(dx*L,.3,dz*L);
+  sThud(V(dx*L*.5,.5,dz*L*.5),1.4);sfx('crush',V(dx*L*.5,.5,dz*L*.5),1,.6,0,false);sfx('fall',V(dx*L*.5,.5,dz*L*.5),1,.5,.05,false);spawnDust(V(dx*L*.45,.2,dz*L*.45),18,L*.4,.8);
+  if(!shipIn(tip.x,tip.z))splash(V(tip.x,-.6,tip.z));
+  // the blow heels and pitches the ship
+  S.rollV=(S.rollV||0)+dz*.55*Math.min(1.3,w/1.5);S.pitchV=(S.pitchV||0)-dx*.3*Math.min(1.3,w/1.5);S.swell=Math.max(S.swell,.6);
+  // the spar lies across the deck, where it is on the deck
+  let on=0;for(let s=0;s<=L;s+=.25){if(shipIn(dx*s,dz*s,.1))on=s;else break;}
+  const cx=dx*on/2,cz=dz*on/2,th=Math.atan2(-dz,dx);M.ob={t:2,cx,cz,c:Math.cos(th),s:Math.sin(th),hx:on/2,hz:.24,h:.95,y0:0,rr:on/2+.3};gridInsert(M.ob,cx-on/2-1.5,cx+on/2+1.5,cz-on/2-1.5,cz+on/2+1.5);
+  if(PRW&&RP){const cd=RP.ColliderDesc.cuboid(on/2,.25,.24).setTranslation(cx,.45,cz).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)});PRW.createCollider(cd.setCollisionGroups(DGR_S).setFriction(.7));}
+  if(NET.mode==='client')return;
+  const seg=(p,a,b)=>Math.sqrt(distPointSeg2(_xdv3.set(p.x,0,p.z),a,b));
+  const A0=V(0,0,0),A1=V(dx*on,0,dz*on),S0=V(dx*2.8,0,dz*2.8),S1=V(dx*Math.min(on,9.2),0,dz*Math.min(on,9.2));
+  for(const f of fighters){if(!f.alive)continue;const p=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips:f.pos;if(p.y<-.3)continue;const dm=seg(p,A0,A1),ds=seg(p,S0,S1);
+    if(dm<.55){f.damage(48,null,'crushed by the mast');if(f.alive&&!f.ragdoll)f.knockdown(rand(2,3),V(dx*1.5,-1,dz*1.5),f.chest.clone());if(f.alive)tell(f,'Crushed by the mast!','red');}
+    else if(ds<4.1){f.damage(4,null,'smothered by the sail');if(f.alive&&!f.ragdoll)f.knockdown(rand(1.2,1.8),V(dx*1.2,-.5,dz*1.2),f.chest.clone());if(f.alive)tell(f,'The sail comes down on you','red');}
+    else if(f.alive&&!f.ragdoll){f.shove(V(dz,0,-dx).multiplyScalar(Math.sign(Math.random()-.5)),1.6);f.stagger=Math.max(f.stagger,.4);}}   // the deck jumps under everyone
+  for(const d of DYN){if(!d.body||d.gone)continue;const t=d.body.translation();if(seg(t,A0,A1)<.8)d.body.applyImpulse({x:dx*d.m*1.5,y:d.m*1.2,z:dz*d.m*1.5},true);else d.body.applyImpulse({x:0,y:d.m*(.6+Math.random()*.6),z:0},true);}}   // and everything loose on it
+// the helm: a spoked wheel on a stand (it turns a little as the sea works the rudder)
+function shipWheel(x){const G=ownGroup(x,0,0,()=>{vRod('beam',V(0,0,0),V(0,1.28,0),.09,6,.07);for(const [bx,bz] of [[-.35,0],[.25,-.25],[.25,.25]])vRod('beam',V(bx,0,bz),V(0,.55,0),.035,4);   // a post on three braces
+    addGeo('beam',boxUV(.6,.08,.6,1),T(0,.04,0));addGeo('beam',new THREE.CylinderGeometry(.045,.045,.32,8),T(.12,1.2,0,0,0,Math.PI/2));addGeo('iron',new THREE.CylinderGeometry(.09,.09,.08,10),T(.02,1.2,0,0,0,Math.PI/2));});
+  const W=ownGroup(0,0,0,()=>{addGeo('wood',new THREE.TorusGeometry(.5,.035,6,28),T(0,0,0,Math.PI/2));addGeo('wood',new THREE.TorusGeometry(.42,.025,6,28),T(0,0,0,Math.PI/2));
+    addGeo('beam',new THREE.CylinderGeometry(.1,.1,.14,12),T(0,0,0,0,0,Math.PI/2));
+    for(let i=0;i<8;i++){const a=i/8*6.2832;vRod('wood',V(0,Math.sin(a)*.09,Math.cos(a)*.09),V(0,Math.sin(a)*.7,Math.cos(a)*.7),.022,6,.028);addGeo('wood',new THREE.SphereGeometry(.035,6,5),T(0,Math.sin(a)*.71,Math.cos(a)*.71));}});
+  world.remove(W);W.position.set(.2,1.2,0);G.add(W);SHIP.wheel=W;addCircle(x,0,.4,1.3);}
 function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.uniforms.uSL.value=SL;seaMat.uniforms.uSW.value=SW;SHIP={SL,SW,t:0,roll:0,pitch:0,swell:0,swT:rand(12,18),sea:null,sail:null};
   const hullMat=std({map:clinkerTex(),color:0xd8c2a8,roughness:.8,side:THREE.DoubleSide}),gunY=.55,NS=11;
   // hull: planked sides from the gunwale down to the keel, the sheer rising toward prow and stern
@@ -1452,11 +1512,8 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
    for(const sz of [-1,1]){addGeo('glassLit',new THREE.SphereGeometry(.05,6,5),T(hx+.2,hy+.13,sz*.2));addGeo('beam',new THREE.ConeGeometry(.06,.45,5),T(hx-.12,hy+.3,sz*.14,0,sz*.3,.7));}   // eyes and horns
    addGeo('beam',new THREE.TorusGeometry(.35,.09,6,14,Math.PI*1.4),T(-SL-.55,4.2,0,0,0,.6));}   // the stern post curls over like a tail
   // mast, yard and a striped sail; stays to prow and stern
-  addGeo('beam',new THREE.CylinderGeometry(.2,.28,12.5,10),T(0,6.25,0));addCircle(0,0,.3,12.5);
-  addGeo('beam',new THREE.CylinderGeometry(.1,.1,8.6,8),T(.25,10.2,0,Math.PI/2));
-  {const g=new THREE.PlaneGeometry(8.2,6.4,8,6);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);p.setZ(i,.75*(1-(x/4.1)**2)*(1-((y+3.2)/6.4-.5)**2*1.6));}g.computeVertexNormals();
-   const m=new THREE.Mesh(g,MATS.cloth1);m.position.set(.45,7,0);m.rotation.y=Math.PI/2;m.castShadow=true;world.add(m);SHIP.sail=m;}
-  for(const [x,y] of [[SL+.6,1.6],[-SL-.6,1.6]])addGeo('beam',new THREE.CylinderGeometry(.02,.02,Math.hypot(x,12.2-y),4),T(x/2,(12.2+y)/2,0,0,0,Math.atan2(x,12.2-y)));
+  SHIP.rig=[];buildMast();
+  SHIP.rig.push(ownGroup(0,0,0,()=>{for(const [x,y] of [[SL+.6,1.6],[-SL-.6,1.6]])addGeo('beam',new THREE.CylinderGeometry(.02,.02,Math.hypot(x,12.2-y),4),T(x/2,(12.2+y)/2,0,0,0,Math.atan2(x,12.2-y)));}));
   // shields along the sides, oars shipped and resting out over the water
   const shc=[0x7a1c16,0xd8ccb0,0x1e3560,0xbfa45c];let k=0;for(const sd of [1,-1])for(let x=-SL+3;x<=SL-3;x+=.85){const z=sd*(shipHalfW(x)+.12),m=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.05,14),std({color:shc[(k++)%4],roughness:.8}));m.position.set(x,.32+.55*Math.pow(x/SL,4),z);m.rotation.x=Math.PI/2;m.castShadow=true;world.add(m);}
   for(const sd of [1,-1])for(let x=-SL+3;x<=SL-3;x+=.85){const y=.32+.55*Math.pow(x/SL,4);addGeo('iron',new THREE.SphereGeometry(.08,8,5,0,6.283,0,1.6),T(x,y,sd*(shipHalfW(x)+.16),0,sd*Math.PI/2));}   // shield bosses
@@ -1465,7 +1522,7 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   // the keel
   {const pts=[];for(let x=-SL+.5;x<=SL-.5;x+=1)pts.push(V(x,-1.18-.06*(1-(x/SL)**2),0));addGeo('beam',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.1,5),T(0,0,0));}
   // shrouds from the masthead down to each side, and the yard's braces
-  for(const sd of [1,-1])for(const x of [-1.6,-.5,.6]){const a=V(0,11.6,0),b=V(x,.6,sd*(shipHalfW(x)+.05)),d=V().subVectors(b,a),L=d.length();const g=new THREE.CylinderGeometry(.015,.015,L,4);g.translate(0,-L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,-1,0),d.normalize());const m=new THREE.Matrix4().compose(a,q,V(1,1,1));addGeo('beam',g,m);}
+  SHIP.rig.push(ownGroup(0,0,0,()=>{for(const sd of [1,-1])for(const x of [-1.6,-.5,.6]){const a=V(0,11.6,0),b=V(x,.6,sd*(shipHalfW(x)+.05)),d=V().subVectors(b,a),L=d.length();const g=new THREE.CylinderGeometry(.015,.015,L,4);g.translate(0,-L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,-1,0),d.normalize());const m=new THREE.Matrix4().compose(a,q,V(1,1,1));addGeo('beam',g,m);}}));
   // inside the bulwarks: ribs from the deck to the gunwale, a capping rail along the top, a stringer at knee height; and the mast step
   {const sheer=x=>gunY+.55*Math.pow(x/SL,4);
     for(let x=-SL+1.2;x<=SL-1.2;x+=1.1)for(const sd of [1,-1]){const h=sheer(x);addGeo('beam',boxUV(.1,h,.09,1),T(x,h/2,sd*(shipHalfW(x)-.05)));}
@@ -1483,12 +1540,10 @@ function buildShip(){const SL=20,SW=4.6;seaMat.uniforms.uAmp.value=.65;seaMat.un
   // rigging and gear: sheets from the sail's foot to the sides, halyards down the mast, spare oars along the bulwarks,
   // cargo lashed under a tarpaulin at the bow, casks and sacks aft, proper rope coils
   {const rope=(a,b,r=.018)=>{const d=V().subVectors(b,a),L=d.length(),g=new THREE.CylinderGeometry(r,r,L,4);g.translate(0,L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),d.normalize());addGeo('beam',g,new THREE.Matrix4().compose(a,q,V(1,1,1)));};
-    for(const sd of [1,-1]){rope(V(.45,3.85,sd*4.05),V(-3.2,.62,sd*(shipHalfW(-3.2)-.05)));rope(V(.45,3.85,sd*4.05),V(3.6,.62,sd*(shipHalfW(3.6)-.05)));   // sheets
-      rope(V(.3,.35,sd*.32),V(.18,11.8,sd*.12),.022);addGeo('beam',boxUV(.12,.12,.3,1),T(.3,.9,sd*.33));}   // halyards and their cleats
+    SHIP.rig.push(ownGroup(0,0,0,()=>{for(const sd of [1,-1]){rope(V(.45,3.85,sd*4.05),V(-3.2,.62,sd*(shipHalfW(-3.2)-.05)));rope(V(.45,3.85,sd*4.05),V(3.6,.62,sd*(shipHalfW(3.6)-.05)));   // sheets
+      rope(V(.3,.35,sd*.32),V(.18,11.8,sd*.12),.022);}}));for(const sd of [1,-1])addGeo('beam',boxUV(.12,.12,.3,1),T(.3,.9,sd*.33));   // halyards and their cleats
     for(const sd of [1,-1])for(let i=0;i<3;i++){const x=-4+i*.15+(sd>0?0:1),y=.42+i*.07,z=sd*(shipHalfW(x)-.2-i*.06);addGeo('wood',new THREE.CylinderGeometry(.04,.045,9.5,6),T(x,y,z,0,0,Math.PI/2));addGeo('wood',boxUV(.9,.02,.13,1),T(x+4.9,y,z));}   // spare oars stowed low along the bulwarks (overhead they filled the camera)
-    {const x=SL-5.2,hw=shipHalfW(x)-.5;const ta=1.22,th=1.0,tc=hw-.1;const tg=tarpGeo(ta,th,tc);addGeo('tarp',tg,T(x,0,0));   // a tarpaulin lashed over the cargo, ropes over the top and down to the deck
-      for(const dx of [-.75,0,.75]){const pts=[V(x+dx,.04,-tc*1.06)];for(let j=0;j<=12;j++){const zz=-tc+j*2*tc/12;pts.push(V(x+dx,tg.userData.top(dx,zz)+.03,zz));}pts.push(V(x+dx,.04,tc*1.06));
-        addGeo('rope',new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,.018,4),T(0,0,0));}addBox(x-1.25,x+1.25,-hw,hw,1.3);}   // the tarpaulined cargo
+    shipWheel(SL-5.2);   // the helm
     for(const [x,z] of [[-SL+5.6,1.45],[-SL+5.95,2.2]])dynMesh(SACK_G,MATS.burlap,T(x,.002,z,x),{m:11,auto:'cyl'});}
   // the steering oar on the starboard quarter, its tiller across the deck
   {const x=-SL+2.6,z=-(shipHalfW(-SL+2.6)+.15);addGeo('beam',new THREE.CylinderGeometry(.09,.11,4.2,8),T(x,-.6,z-.35,0,.12,-.42));addGeo('beam',boxUV(.12,1.5,.5,1),T(x-.85,-2.3,z-.62,0,.12,-.42));
@@ -1546,7 +1601,7 @@ function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.s
   if(S.sea){S.sea.rotation.set(-S.roll,0,S.pitch);S.sea.position.y=-1.7-(S.heave||0);seaMat.uniforms.uTime.value=S.t;}sky.rotation.set(-S.roll,0,S.pitch);
   if(S.pk&&S.pk.A>0&&S.pk.s>-8&&S.pk.s<4&&Math.random()<dt*14){const x=(Math.random()-.5)*S.SL*1.6,z=Math.sign(-S.pk.dz||1)*(shipHalfW(x)+.3);spawnDust(V(x,.4,z),6,1.2,2.2);if(Math.random()<.2)sfx('fall',V(x,0,z),.5,.4,0,false);}   // spray as it breaks against the side
   if(NET.mode==='client')shipCargo(dt);
-  if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
+  mastStep(dt);if(S.wheel)S.wheel.rotation.x=S.roll*4+Math.sin(S.t*.37)*.35;}
 
 function onRoad(x,z){
   if(Math.abs(x)<3.8||Math.abs(z)<3.8)return true;
@@ -1554,6 +1609,41 @@ function onRoad(x,z){
   return Math.hypot(x,z)<16;
 }
 
+// ---- grass: a field of grass clumps round the camera (the village ground alone read as dark mud). One mesh of crossed blade cards
+// laid out over a square tile that is wrapped round the camera in the vertex shader, so the field follows you for nothing; a mask
+// painted when the map is built keeps it off the roads, the plaza and out of houses and walls; it fades out toward the tile's edge,
+// sways in the wind, and is lit like the ground under it (its normals point up), so it doesn't flash white at dusk the way the old
+// tufts did
+let GRASS=null;
+function grassCard(){const c=mkCanvas(128,128),g=c.getContext('2d');g.clearRect(0,0,128,128);
+  for(let i=0;i<16;i++){const x0=40+Math.random()*48,lean=(Math.random()-.5)*60,h=60+Math.random()*64,w=3+Math.random()*4;
+    const gr=g.createLinearGradient(0,128,0,128-h);const d=Math.random();gr.addColorStop(0,`rgb(${24+d*10|0},${34+d*12|0},${14+d*6|0})`);gr.addColorStop(.6,`rgb(${70+d*30|0},${92+d*30|0},${38+d*14|0})`);gr.addColorStop(1,`rgb(${120+d*40|0},${130+d*30|0},${70+d*20|0})`);
+    g.fillStyle=gr;g.beginPath();g.moveTo(x0-w,128);g.quadraticCurveTo(x0+lean*.3,128-h*.5,x0+lean,128-h);g.quadraticCurveTo(x0+lean*.3+w*.4,128-h*.5,x0+w,128);g.closePath();g.fill();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
+function buildGrass(R,ok){const T=48,N=40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  for(let i=0;i<N;i++){const bx=r()*T,bz=r()*T,w=.45+r()*.4,h=.24+r()*.32,a=r()*Math.PI;
+    for(let q=0;q<2;q++){const ang=a+q*Math.PI/2,cx=Math.cos(ang)*w/2,cz=Math.sin(ang)*w/2,v0=pos.length/3;
+      pos.push(bx-cx,0,bz-cz, bx+cx,0,bz+cz, bx+cx,h,bz+cz, bx-cx,h,bz-cz);uv.push(0,0,1,0,1,1,0,1);for(let k=0;k<4;k++)base.push(bx,bz);idx.push(v0,v0+1,v0+2,v0,v0+2,v0+3);}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('aBase',new THREE.Float32BufferAttribute(base,2));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_,i)=>i%3===1?1:0),3));g.setIndex(idx);
+  // the mask: white where grass may grow
+  const MS=512,c=mkCanvas(MS,MS),cx=c.getContext('2d'),img=cx.createImageData(MS,MS);
+  for(let j=0;j<MS;j++)for(let i=0;i<MS;i++){const x=(i+.5)/MS*2*R-R,z=(j+.5)/MS*2*R-R,v=ok(x,z)?255:0,o=(j*MS+i)*4;img.data[o]=img.data[o+1]=img.data[o+2]=v;img.data[o+3]=255;}
+  cx.putImageData(img,0,0);cx.fillStyle='#000';for(const b of boxes){if(b.h<.3)continue;const p=v=>(v+R)/(2*R)*MS;cx.fillRect(p(b.x0)-1,p(b.z0)-1,p(b.x1)-p(b.x0)+2,p(b.z1)-p(b.z0)+2);}
+  for(const o of circles){const p=v=>(v+R)/(2*R)*MS;cx.beginPath();cx.arc(p(o.x),p(o.z),o.r/(2*R)*MS+1,0,7);cx.fill();}
+  const mt=new THREE.CanvasTexture(c);mt.flipY=false;
+  const U={uCam:{value:new THREE.Vector2()},uT:{value:0},uTile:{value:T},uMask:{value:mt},uMR:{value:R}};
+  const m=new THREE.MeshLambertMaterial({map:grassCard(),alphaTest:.45,side:THREE.DoubleSide,color:0xd0dcb0});
+  m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader='uniform vec2 uCam;uniform float uT,uTile,uMR;uniform sampler2D uMask;attribute vec2 aBase;\n'+sh.vertexShader
+    .replace('#include <beginnormal_vertex>','vec3 objectNormal=vec3(0.,1.,0.);')
+    .replace('#include <begin_vertex>',`vec2 rel=mod(aBase-uCam+uTile*.5,uTile)-uTile*.5;vec2 wp=uCam+rel;
+      float msk=texture2D(uMask,wp/(2.*uMR)+.5).r,fade=1.-smoothstep(uTile*.3,uTile*.47,length(rel));
+      vec3 off=position-vec3(aBase.x,0.,aBase.y);off*=msk*fade;float hh=off.y;
+      off.x+=sin(uT*1.7+wp.x*.6+wp.y*.4)*hh*.22;off.z+=cos(uT*1.3+wp.x*.5-wp.y*.3)*hh*.16;
+      vec3 transformed=vec3(wp.x,0.,wp.y)+off;`);};
+  m.customProgramCacheKey=()=>'bm-grass';
+  const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.receiveShadow=true;world.add(mesh);GRASS={mesh,U};}
+function grassStep(){if(!GRASS)return;GRASS.U.uCam.value.set(camera.position.x,camera.position.z);GRASS.U.uT.value=performance.now()/1000;}
 function buildWorld(){
   // ground
   const gg=new THREE.PlaneGeometry(500,500);gg.rotateX(-Math.PI/2);const uv=gg.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*500/7,uv.getY(i)*500/7);
@@ -1605,6 +1695,7 @@ function buildWorld(){
   pal.castShadow=true;pal.receiveShadow=true;world.add(pal);
   // distant mountains
   addMountains(0x161c2c,0x222a42);
+  buildGrass(MAP+6,(x,z)=>!onRoad(x,z));
 }
 const grassTime={value:0};
 function addMountains(c1,c2){   // distant country: two rolling ridge lines (forested hills, then hazier ones), not cones
@@ -1624,9 +1715,12 @@ function onBridge(x,z){if(!PIT||PIT.down)return false;
   if(PIT.planks){if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r+.6)return false;const k=Math.round((x-PIT.p0)/.19),pl=PIT.planks[k];return !(pl&&pl.broken);}   // the plank bridge: a gap where a plank is gone
   const G=PIT.grate;if(!G||G.mode!=='rest')return false;return Math.abs(x-G.C.x)<GR.L/2&&Math.abs(z-G.C.z)<GR.W/2;}
 function inPit(x,z,m=0){return !!PIT&&(x-PIT.x)**2+(z-PIT.z)**2<(PIT.r-m)**2&&!onBridge(x,z);}
-function groundY(x,z,y=0){if(SINK.st==='open'&&Math.hypot(x-SINK.x,z-SINK.z)<SINK.r)return -SINK.depth;if(!PIT)return SHIP?(shipIn(x,z)?floorY(x,z,y):-3):FLOORS.length?floorY(x,z,y):0;   // off the side of the ship there's only the sea
+function groundY(x,z,y=0){if(SINK.st==='open'&&Math.hypot(x-SINK.x,z-SINK.z)<SINK.r)return -SINK.depth;if(!PIT)return SHIP?(shipIn(x,z)&&y>-.15?floorY(x,z,y):-3):FLOORS.length?floorY(x,z,y):0;   // off the side of the ship there's only the sea
   if(PIT.grate&&PIT.grate.mode==='fallen'&&Math.abs(Math.sin(PIT.grate.phi))<(PIT.grate.bridge?.64:.55)){   /* only once it has come to rest: a falling slab under you is no floor */const gs=grateSurf(x,z);if(gs!=null&&y>gs-.3)return gs;}   /* steeper than about 33° it's a wall of iron, not a ramp: nobody walks up out of the shaft on it */const d2=(x-PIT.x)**2+(z-PIT.z)**2,inC=d2<PIT.r*PIT.r||(y<-.12&&d2<(PIT.r+.4)**2);   // below the rim, anything at the wall is still in the shaft
   return inC&&(y<-.04||!onBridge(x,z))?-PIT.d:0;}   // the deck is only ground from above: a body under it isn't snapped up through the boards
+// the ship's hull below the deck is solid: whatever hangs over the side stays outside it (it used to be snapped up onto the deck
+// from underneath, which flung bodies half over the side into the air)
+function shipWall(p,r){if(!SHIP||p.y>-.05)return;const hw=shipHalfW(p.x);if(hw>.2&&Math.abs(p.z)<hw+r){p.z=(p.z<0?-1:1)*(hw+r);}}
 function pitWall(p,r){if(!PIT||p.y>-.02)return;const dx=p.x-PIT.x,dz=p.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r-r;if(d>m&&d>1e-6){p.x=PIT.x+dx/d*m;p.z=PIT.z+dz/d*m;}}   // below the rim you're inside the shaft
 // ---- the iron grate over the Pit, after Half Sword's: a heavy woven grate lying across the shaft on the rim stones.
 // It shifts when it's walked on, struck or hauled by hand. If an end slides off the rim it tips in about the other end,
@@ -1678,7 +1772,7 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
   const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
-function clearWorld(){dynFree();shardClear();DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
+function clearWorld(){dynFree();shardClear();GRASS=null;DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;SHIP=null;sky.rotation.set(0,0,0);if(typeof DUST!=='undefined')DUST.p.material.uniforms.uCol.value.setRGB(.62,.53,.4);torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -1727,7 +1821,7 @@ const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
   slate:{mats:{slate:{rep:.8,ns:1.3,col:0x8e949c},towerSlate:{rep:.8,ns:1.3,col:0x8e949c}}},
   floor:{mats:{floorPlank:{rep:1,ns:1.3,col:0xf0e0d0}}},boards:{mats:{boards:{rep:1,ns:1.2,col:0xe0c8b0},woodLight:{rep:1,ns:1.2,col:0xf4e2cc}}},
-  grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xc8c0b0}}},
+  grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},
   rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
@@ -1972,7 +2066,7 @@ const MAPS={
   arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
   colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
-  ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(i+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
+  ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
   pit:{shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
@@ -3195,16 +3289,22 @@ function armorPreview(def){
 }
 
 // ================================================================ ragdoll (verlet)
-// get-up poses (forward, sideways, height in m). A: on hands and knees. B: kneeling on one knee, the other foot planted ahead
-const RISE_A=[['Hips',0,0,.52],['Spine1',.18,0,.56],['Spine2',.36,0,.6],['Neck',.52,0,.62],['Head',.6,0,.58],['HeadTop_End',.7,0,.56],
-  ['LeftHand',.52,.2,.04],['RightHand',.52,-.2,.04],['LeftForeArm',.47,.21,.28],['RightForeArm',.47,-.21,.28],
+// get-up poses (forward, sideways, height in m), from lying face down: P the push-up (arms straight under the shoulders, chest and
+// head lifted, hips and knees still down), A on hands and knees with the head up looking ahead, B kneeling on one knee with the
+// other foot planted ahead and that side's hand on its knee, C pushed up off the front knee into a low guarded crouch close to the
+// pose the legs take over from, so the hand-over doesn't pop
+const RISE_P=[['Hips',-.04,0,.24],['Spine1',.16,0,.34],['Spine2',.34,0,.47],['Neck',.48,0,.57],['Head',.55,0,.66],['HeadTop_End',.62,0,.77],
+  ['LeftHand',.42,.21,.03],['RightHand',.42,-.21,.03],['LeftForeArm',.4,.25,.25],['RightForeArm',.4,-.25,.25],
+  ['LeftLeg',-.36,.12,.07],['RightLeg',-.36,-.12,.07],['LeftFoot',-.78,.13,.07],['RightFoot',-.78,-.13,.07]];
+const RISE_A=[['Hips',0,0,.55],['Spine1',.17,0,.59],['Spine2',.35,0,.63],['Neck',.5,0,.68],['Head',.58,0,.74],['HeadTop_End',.65,0,.84],
+  ['LeftHand',.5,.2,.03],['RightHand',.5,-.2,.03],['LeftForeArm',.46,.22,.28],['RightForeArm',.46,-.22,.28],
   ['LeftLeg',.02,.13,.06],['RightLeg',.02,-.13,.06],['LeftFoot',-.38,.13,.07],['RightFoot',-.38,-.13,.07]];
-const RISE_B=[['Hips',-.05,0,.62],['Spine1',-.02,0,.82],['Spine2',.02,0,1.02],['Neck',.05,0,1.22],['Head',.07,0,1.36],['HeadTop_End',.08,0,1.5],
-  ['LeftLeg',-.08,.13,.06],['RightLeg',-.08,-.13,.06],['LeftFoot',-.45,.13,.07],['RightFoot',-.45,-.13,.07],['LeftHand',.3,.15,.5],['RightHand',.3,-.15,.5]];
-const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06]};
-// C: pushed up off the front knee into a low, guarded crouch, close to the pose the legs take over from, so the hand-over doesn't pop
+const RISE_B=[['Hips',-.06,0,.6],['Spine1',-.01,0,.8],['Spine2',.06,0,.99],['Neck',.11,0,1.17],['Head',.15,0,1.29],['HeadTop_End',.17,0,1.44],
+  ['LeftLeg',-.08,.13,.06],['RightLeg',-.08,-.13,.06],['LeftFoot',-.45,.13,.07],['RightFoot',-.45,-.13,.07],['LeftHand',.22,.2,.72],['RightHand',.22,-.2,.72],['LeftForeArm',.06,.24,.82],['RightForeArm',.06,-.24,.82]];
+const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06],Hand:[.38,.56],ForeArm:[.22,.75]};   // the leading leg: knee up, foot flat ahead, the hand on that knee
 const RISE_C=[['Hips',0,0,.84],['Spine1',.04,0,.99],['Spine2',.08,0,1.17],['Neck',.1,0,1.37],['Head',.12,0,1.48],['HeadTop_End',.13,0,1.63],
-  ['LeftLeg',.12,.12,.47],['RightLeg',.12,-.12,.47],['LeftFoot',-.04,.15,.07],['RightFoot',-.04,-.15,.07],['LeftHand',.34,.04,1.0],['RightHand',.34,-.04,1.0],['LeftForeArm',.16,.2,.98],['RightForeArm',.16,-.2,.98]];   // hands come together where the grip will be   // the leading leg: knee up, foot flat ahead
+  ['LeftLeg',.12,.12,.47],['RightLeg',.12,-.12,.47],['LeftFoot',-.04,.15,.07],['RightFoot',-.04,-.15,.07],['LeftHand',.34,.04,1.0],['RightHand',.34,-.04,1.0],['LeftForeArm',.16,.2,.98],['RightForeArm',.16,-.2,.98]];   // hands come together where the grip will be
+const RISE_ST=[RISE_P,RISE_A,RISE_B,RISE_C];
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
 const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck','Head'],['Head','HeadTop_End'],['Head','Spine2'],['HeadTop_End','Neck'],
   ['Spine2','LeftArm'],['Spine2','RightArm'],['Neck','LeftArm'],['Neck','RightArm'],['LeftArm','RightArm'],['Spine1','LeftArm'],['Spine1','RightArm'],['Hips','LeftArm'],['Hips','RightArm'],
@@ -3263,7 +3363,7 @@ class Ragdoll{
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
-      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);sinkWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       FLOOR_TOL=.45;
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
@@ -3285,17 +3385,17 @@ class Ragdoll{
         const p=P[n],kk=leg?k*2.2:k*1.5,q=this.Q[n];const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
       if(R.t<R.rollT)return;
       R.rollT=0;R.t=0;R.st=-1;const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()>1e-4)R.f.copy(f.normalize());R.base.set(P.Hips.x,0,P.Hips.z);R.gy=groundY(P.Hips.x,P.Hips.z,P.Hips.y);}
-    if(R.fail&&R.t>R.a*.75&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
+    if(R.fail&&R.t>R.p+R.a*.6&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
     if(R.t<0)return;
     // one continuous effort, not three snapped poses: each stage's targets travel smoothly from where the body was when the stage began
-    const st=R.t<R.a?0:R.t<R.a+R.b?1:2,u=st===0?clamp(R.t/R.a,0,1):st===1?clamp((R.t-R.a)/R.b,0,1):clamp((R.t-R.a-R.b)/R.c,0,1),f=R.f,rx=f.z,rz=-f.x,sd=R.kneel;   // (his left, face down with his head along f)
+    const D=[R.p,R.a,R.b,R.c];let st=0,t0=0;while(st<3&&R.t>=t0+D[st]){t0+=D[st];st++;}const u=clamp((R.t-t0)/D[st],0,1),f=R.f,rx=f.z,rz=-f.x,sd=R.kneel;   // (his left, face down with his head along f)
     if(R.st!==st){R.st=st;R.from={};for(const n in P)R.from[n]=P[n].clone();}
     const e=u*u*(3-2*u),ramp=Math.min(1,R.t/.25),shake=1+Math.sin(R.t*11)*.2*R.hurt+Math.sin(R.t*4.3)*.15*R.hurt;
-    const k=(st?.05:.04)*R.str*ramp*shake,S=R.S||1;
+    const k=(st>1?.05:.042)*R.str*ramp*shake,S=R.S||1;
     // [particle, forward, right, up] relative to where the hips came to rest, facing the way the head lies
-    const T=st===0?RISE_A:st===1?RISE_B:RISE_C;
+    const T=RISE_ST[st];
     for(const [n,fw,ri,up] of T){const p=P[n];if(!p)continue;const ss=n.startsWith('Left')?1:n.startsWith('Right')?-1:0;
-      let F=fw,U=up;if(st===1&&ss===-sd&&RISE_B_FRONT[n.replace(/^Left|^Right/,'')]){[F,U]=RISE_B_FRONT[n.replace(/^Left|^Right/,'')];}
+      let F=fw,U=up;if(st===2&&ss===-sd&&RISE_B_FRONT[n.replace(/^Left|^Right/,'')]){[F,U]=RISE_B_FRONT[n.replace(/^Left|^Right/,'')];}
       const tx=R.base.x+f.x*F+rx*ri,tz=R.base.z+f.z*F+rz*ri,ty=R.gy+U*S;
       const o=R.from[n]||p,gx=o.x+(tx-o.x)*e,gy=o.y+(ty-o.y)*e,gz=o.z+(tz-o.z)*e;
       const kk=k*(n==='Hips'||n==='Spine1'||n==='Spine2'?1.2:1);p.x+=(gx-p.x)*kk;p.y+=(gy-p.y)*kk;p.z+=(gz-p.z)*kk;}}
@@ -3413,7 +3513,7 @@ function improvStep(){for(const d of debris){const s=d.wep;if(!s)continue;if(!fr
 const PROPS=[];
 function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});world.add(mesh);const p={kind,mesh,x,z,r,h,hp,hp0:hp,col,cd:new Map(),jig:0};PROPS.push(p);return p;}
 function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
-function propBreak(p,dir,by){if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
+function propBreak(p,dir,by){if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
   {let mt=null;p.mesh.traverse(o=>{if(!mt&&o.isMesh&&o.visible)mt=Array.isArray(o.material)?o.material[0]:o.material;});if(mt)for(let i=0;i<(p.kind==='plank'?4:8);i++){const a=Math.random()*6.283,sp=.8+Math.random()*1.8;shardAdd(mt,'splinter',V(p.x+Math.cos(a)*p.r*.6,(p.kind==='plank'?0:.3+Math.random()*(p.h||.8)*.7),p.z+Math.sin(a)*p.r*.6),V(Math.cos(a)*sp+(dir?dir.x*1.5:0),.8+Math.random()*2,Math.sin(a)*sp+(dir?dir.z*1.5:0)),1.6+Math.random());}}   // splinters
@@ -3682,7 +3782,7 @@ class Sword{
       // landed flat or butt-first, or ran into something: it drops where it is instead of levering back
       if(this.H.y<groundY(this.H.x,this.H.z,this.H.y)+.07||this.T.y<groundY(this.T.x,this.T.z,this.T.y)+.07||this.hitWall){this.flying=false;this.hitWall=false;this.Hp.lerp(this.H,.85);this.Tp.lerp(this.T,.85);}
     }
-    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){const vy=(p.y-q.y)/h;if(vy<-1.6&&simTime>(this.clT||0)){this.clT=simTime+.12;clatter(this,p,-vy);}p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
+    const dmp=this.flying?.9998:.995;for(const [p,q] of [[this.H,this.Hp],[this.T,this.Tp]]){const vx=(p.x-q.x)*dmp,vy=(p.y-q.y)*dmp,vz=(p.z-q.z)*dmp;q.copy(p);p.x+=vx;p.y+=vy-9.8*h*h;p.z+=vz;pitWall(p,.03);shipWall(p,.03);const gy=groundY(p.x,p.z,p.y);if(p.y<gy+.04){const vy=(p.y-q.y)/h;if(vy<-1.6&&simTime>(this.clT||0)){this.clT=simTime+.12;clatter(this,p,-vy);}p.y=gy+.04;q.x=p.x-(p.x-q.x)*.7;q.z=p.z-(p.z-q.z)*.7;q.y=p.y+(p.y-q.y)*.3;}if(collide(p,.03,true)&&this.flying)this.hitWall=true;}
     _e.subVectors(this.T,this.H);const d=_e.length()||1e-6;const k=(d-this.len)/d*.5;this.H.addScaledVector(_e,k);this.T.addScaledVector(_e,-k);
     if(this.flying&&this.def.kind==='spear'&&this.H.y>.1&&this.T.y>.1){_v.subVectors(this.H,this.Hp);if(_v.lengthSq()>1e-6){_v.normalize();_g.copy(this.H).addScaledVector(_v,this.len);this.T.lerp(_g,.04);}}
     this.Hv.subVectors(this.H,this.Hp).multiplyScalar(1/h);this.constrain(h);
@@ -4221,7 +4321,7 @@ class Fighter{
       if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.startRise();}
       else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(this.sword&&!this.sword.free){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}   // the weapon comes up with the hand that holds it
-        if(r.t>=r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
+        if(r.t>=r.p+r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
       return;}
     if(!this.alive)return;
     if(this.bleeds&&this.bleeds.length){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
@@ -4268,7 +4368,7 @@ class Fighter{
     if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
     // thrusts step in behind the point
     
-    if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);}
+    if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);shipWall(this.pos,.3);}
     else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=SHIP||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6,null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
     this.pos.x+=this.vel.x*h;this.pos.z+=this.vel.z*h;(CTX.m=82+8*ARMOR_SLOTS.reduce((q,sl)=>q+(this.armor[sl]?1:0),0),CTX.v.copy(this.vel),CTX.y=this.pos.y+.95,CTX.f=this,collide(this.pos,.34,true,1.7),CTX.m=0,CTX.f=null);if(this.pos.y<-1&&PIT&&PIT.grate&&PIT.grate.mode==='fallen'){_t3.set(this.pos.x,this.pos.y+.9,this.pos.z);if(grateSlab(_t3,.3,true)){this.pos.x=_t3.x;this.vel.x*=.3;}}
     // kick
@@ -4311,7 +4411,7 @@ class Fighter{
     if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
     if(!this.sword&&this.mainArm)this.stepFists(h);
     if(this.sword&&this.mainArm){
-      const tgt=this.handTarget(_t1.clone());if(this.rec&&this.recH){const u=clamp(this.rec.t/.7,0,1);tgt.lerpVectors(this.recH,tgt,u*u*(3-2*u));}else this.recH=null;   // just up: the weapon is brought up to guard, not snapped there
+      const tgt=this.handTarget(_t1.clone());if(this.recH){this.recHT=(this.recHT||0)+h;const u=clamp(this.recHT/1.0,0,1);tgt.lerpVectors(this.recH,tgt,u*u*(3-2*u));if(u>=1)this.recH=null;}   // just up: the weapon is brought up to guard, not snapped there
       const guide=this.guideDir(tgt,V());
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else this.sword.step(h,tgt,guide,cm,str);
@@ -4434,13 +4534,13 @@ class Fighter{
     const hurt=clamp((1-this.hp/100)*.9+legF*.6+armOut*.25+(this.stamina<25?.3:0),0,1.6);
     const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()<1e-4)this.fwd(f);f.normalize();
     let roll=0;if(P.Neck&&P.Spine1&&P.LeftArm&&P.RightArm){const up=V().subVectors(P.Neck,P.Spine1),sd=V().subVectors(P.LeftArm,P.RightArm),fr=V().crossVectors(sd,up).normalize();if(fr.y>.35)roll=.55+hurt*.4;}
-    Rg.rise={t:0,rollT:roll,rollS:Math.random()<.5?1:-1,a:.6+hurt*1.3,b:.5+hurt*.9,c:.35+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
+    Rg.rise={t:0,rollT:roll,rollS:Math.random()<.5?1:-1,p:.42+hurt*.8,a:.42+hurt*1.0,b:.62+hurt*.9,c:.5+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
     Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}}
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
     const rf=this.ragdoll.rise&&this.ragdoll.rise.f;if(rf)this.yaw=Math.atan2(rf.x,rf.z);
     else if(P.Neck){const dx=P.Neck.x-P.Hips.x,dz=P.Neck.z-P.Hips.z;if(dx*dx+dz*dz>.01)this.yaw=Math.atan2(dx,dz);}
-    this.recH=this.sword&&!this.sword.free?this.sword.H.clone():null;
+    this.recH=this.sword&&!this.sword.free?this.sword.H.clone():null;this.recHT=0;
     for(const k in this.fists){const a=this.fists[k];a.phase='guard';a.vel.set(0,0,0);a.initT=simTime;const b=this.bones[k==='R'?'RightHandMiddle1':'LeftHandMiddle1']||this.bones[k==='R'?'RightHand':'LeftHand'];b.getWorldPosition(a.pos);a.init=!this.sword;if(!a.c)a.c={x:k==='R'?.12:-.12,y:.25,z:.27};a.cd=0;}   // bare fists start from where the hands lay, not where they were before the fall
     this.beginRecover();this.ragdoll=null;this.knocked=0;this.vel.set(0,0,0);this.crouchAmt=1;this.stagger=.7;this.useStamina(10);
     if(this.isPlayer)camY=1;
@@ -4716,7 +4816,7 @@ class Fighter{
         ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1]);
       }
     }
-    if(this.rec){const R=this.rec;R.t+=dt;const u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);
+    if(this.rec){const R=this.rec;R.t+=dt;const u=clamp(R.t/.75,0,1),w=1-u*u*(3-2*u);
       if(w<=0||!this.alive)this.rec=null;else{for(const [b,q] of R.q)b.quaternion.slerp(q,w);B.Hips.position.lerp(R.hp,w);}}
     this.root.updateMatrixWorld(true);
     if(this.alive&&!this.ragdoll)this.bodyStep(dt);   // always on, in both engines: the body is a weight its muscles hold up
@@ -4741,7 +4841,7 @@ class Fighter{
         else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
         if(!one&&_t2.distanceTo(shO)<this.armLen[0]+this.armLen[1]+.08){_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,true);gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');}}
       s.sync();
-      if(this.rec){const R=this.rec,u=clamp(R.t/.55,0,1),w=1-u*u*(3-2*u);if(w>0)for(const n of [offS+'Arm',offS+'ForeArm',offS+'Hand',main+'Arm',main+'ForeArm',main+'Hand']){const b=B[n],q=R.q.get(b);if(q)b.quaternion.slerp(q,w);}}   // just up: both arms ease from where they were to the grip instead of snapping
+      if(this.rec){const R=this.rec,u=clamp(R.t/.75,0,1),w=1-u*u*(3-2*u);if(w>0)for(const n of [offS+'Arm',offS+'ForeArm',offS+'Hand',main+'Arm',main+'ForeArm',main+'Hand']){const b=B[n],q=R.q.get(b);if(q)b.quaternion.slerp(q,w);}}   // just up: both arms ease from where they were to the grip instead of snapping
     } else if(!this.sword&&this.alive){
       this.fwd(_f);this.right(_r);
       const cs=this.clutchT>simTime&&this.clutchP?(this.limbs.armL.sev||this.limbs.armL.dead?'R':'L'):null;
@@ -6099,7 +6199,7 @@ function frame(now){
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
   updateHUD(dt);renderPreview(dt);musicTick();
   {const show=state==='playing'&&!input.locked&&!paused&&!!player&&player.alive;const lh=el('lockhint');if(lh.classList.contains('hide')===show)lh.classList.toggle('hide',!show);}
-  composer.render();
+  grassStep();composer.render();
 }
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
@@ -6420,6 +6520,17 @@ function spawnEntrant(en,x,z,kit,skill){
   else if(skill!=null){f.ai.skill=skill;f.ai.react=clamp(.32-skill*.25,.08,.3);f.ai.aggr=.8+skill*.6;}
   f.yaw=Math.atan2(-x,-z);f.entrant=en;f.ai.retarget=0;fighters.push(f);if(isMe){player=f;f.pitch=-.05;}return f;
 }
+// where a bout starts: somewhere fresh on the floor each round, on a line at a random angle (fore and aft on the ship, whose deck
+// spawnEntrant turns), so no two rounds open from the same spots
+let SHIP_SLOTS=null;function shipSlot(i,n){if(!SHIP_SLOTS||SHIP_SLOTS.length!==n||i===0&&!SHIP_SLOTS.used){SHIP_SLOTS=[...Array(n).keys()].sort(()=>Math.random()-.5);}SHIP_SLOTS.used=i!==n-1;return SHIP_SLOTS[i];}
+function duelSpots(gap=6){const M=MAPS[curMap],ship=curMap==='ship';
+  for(let k=0;k<240;k++){let cx,cz,d;if(ship){cx=(Math.random()-.5)*2;cz=(Math.random()-.5)*(k<160?18:6);d=(Math.random()-.5)*.5;}
+    else{const cr=k<160?Math.min(M.spawn[1]*.6,7):1.5,a=Math.random()*6.283,r=Math.sqrt(Math.random())*cr;cx=Math.cos(a)*r;cz=Math.sin(a)*r+MO();d=Math.random()*6.283;}
+    const dx=Math.sin(d)*gap/2,dz=Math.cos(d)*gap/2,A=[cx-dx,cz-dz],B=[cx+dx,cz+dz];
+    const ok=([x,z])=>ship?Math.abs(z)<17:isFree(x,z,.7)&&groundY(x,z,0)>-.05&&(!PIT||Math.hypot(x-PIT.x,z-PIT.z)>PIT.r+1.5);
+    if(ok(A)&&ok(B))return [A,B];}
+  return [[0,-3+MO()],[0,3+MO()]];}
+function faceOff(a,b){if(!a||!b)return;a.yaw=Math.atan2(b.pos.x-a.pos.x,b.pos.z-a.pos.z);b.yaw=Math.atan2(a.pos.x-b.pos.x,a.pos.z-b.pos.z);}
 function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;player=null;END=null;crowdU.uCheer.value=.9;if(MAPS[curMap].brawl)tavernLoot();}
 function endRun(winners,title,line,cause){
   const meWon=winners.some(e=>e.ctl==='me');
@@ -6435,12 +6546,12 @@ function modeStart(){
     ents.sort(()=>Math.random()-.5);RUN={mode:'tourney',round:0,ents,cur:ents.slice(),pairs:[],pi:0,results:[]};tourneyNextRound();}
   else if(MODE==='yard')yardStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
-    H.forEach((en,i)=>{const a=i/H.length*6.283;spawnEntrant(en,Math.cos(a)*2,Math.sin(a)*2+MO(),[ownWeapon(en,'arming'),['kettle']]);});hostSendStart();gauntletWave();}
+    {const [SA]=duelSpots(0),a0=Math.random()*6.283;H.forEach((en,i)=>{const a=a0+i/H.length*6.283;spawnEntrant(en,SA[0]+Math.cos(a)*2,SA[1]+Math.sin(a)*2,[ownWeapon(en,'arming'),['kettle']]);});}hostSendStart();gauntletWave();}
 }
 // ---- duel: best of three, a fresh kit each round
 function duelRound(){
   const R=RUN;R.round++;const kit=KITS[(Math.random()*KITS.length)|0];roundSetup();
-  spawnEntrant(R.a,0,-3+MO(),kit,null);spawnEntrant(R.b,0,3+MO(),kit,R.b.human?null:R.b.ch?R.b.skill+(R.round-1)*.05:.55+R.round*.05);
+  const [SA,SB]=duelSpots();faceOff(spawnEntrant(R.a,SA[0],SA[1],kit,null),spawnEntrant(R.b,SB[0],SB[1],kit,R.b.human?null:R.b.ch?R.b.skill+(R.round-1)*.05:.55+R.round*.05));
   MODEHUD=[`${R.a.name} ${R.sa} – ${R.sb} ${R.b.name}`,`Duel · round ${R.round} · ${kit[2]}`];
   const fc=R.round===1&&!R.b.human&&CHAR_BY[R.b.ch];   // round one introduces a character opponent
   hostSendStart();banner(`Round ${R.round}`,fc?`${fc.name}, ${fc.tag.split(' · ')[0].toLowerCase()} · ${kit[2]}`:kit[2]);
@@ -6456,7 +6567,7 @@ function tourneyNextBout(){
   while(R.pi<R.pairs.length){const [a,b]=R.pairs[R.pi];
     if(!a.human&&!b.human){const w=Math.random()<.5+(a.skill-b.skill)?a:b;R.next.push(w);R.results.push(`${w.name} beat ${w===a?b.name:a.name}`);R.pi++;continue;}
     const kit=KITS[(Math.random()*6)|0];roundSetup();
-    spawnEntrant(a,0,-3+MO(),kit,a.human?null:a.skill+R.round*.08);spawnEntrant(b,0,3+MO(),kit,b.human?null:b.skill+R.round*.08);
+    const [SA,SB]=duelSpots();faceOff(spawnEntrant(a,SA[0],SA[1],kit,a.human?null:a.skill+R.round*.08),spawnEntrant(b,SB[0],SB[1],kit,b.human?null:b.skill+R.round*.08));
     MODEHUD=[`${a.name} vs ${b.name}`,`${stage} · bout ${R.pi+1} of ${R.pairs.length} · ${kit[2]}`];
     hostSendStart();banner(stage,`${a.name} vs ${b.name} · ${kit[2]}`+(R.results.length?` — ${R.results.splice(0).join(', ')}`:''));
     if(!player&&state==='playing')note('You are watching this bout','sm');
@@ -6786,6 +6897,7 @@ function clientEvents(ev){
     case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5]);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
+    case 'MF':mastFall(e[1],e[2],false);break;
     case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
@@ -6839,6 +6951,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={swayStep,dynBreak,SHARDS,sting,vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
