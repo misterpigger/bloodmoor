@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=98;
+const BUILD=99;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2211,7 +2211,7 @@ function outfitMaterial(pal,dark){
 // outfit, hair, beard and tones; team colours dye the undyed cloth (and the shorts on a bare-chested fighter).
 const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_Parted','Hair_Long'],
   hairCol:[[.16,.13,.11],[.42,.27,.16],[1.05,.86,.55],[.85,.36,.18],[1,1,1],[.07,.065,.065],[.66,.58,.47],[.6,.2,.09]],hairSw:['#2a221d','#5e3d26','#c7a46a','#9a4a26','#b9b5ad','#141212','#9e917c','#7e2c14'],
-  skin:[[1.12,1.06,1.02],[1,1,1],[.74,.6,.5],[.48,.36,.29],[1.2,1.12,1.1],[.34,.25,.2]],skinSw:['#e8c0a4','#cf9f7e','#9c7458','#654837','#f2d2c0','#4a3326']};
+  skin:[[1.16,1.02,.94],[1.03,.96,.9],[.76,.6,.49],[.5,.36,.28],[1.24,1.08,1.0],[.36,.25,.19]],skinSw:['#e8c0a4','#cf9f7e','#9c7458','#654837','#f2d2c0','#4a3326']};
 // the wardrobe (looks only, never protection or damage): armour finish af, tabard sc, helmet crest pl, weapon steel wf, grip wg
 const WARD={af:['Bright','Blackened','Russet','Gilt'],sc:['None','Plain','Quartered','Cross','Bend'],pl:['None','Plume','Crest'],wf:['Bright','Blackened','Gilt hilt','Blued'],ws:['Standard','Knightly','Northern'],
   wg:['#5a3a24','#1a1614','#7a1a14','#1e2e5a','#2e4a26','#c8b89a'],wgN:['Brown','Black','Red','Blue','Green','Pale']};
@@ -2368,14 +2368,14 @@ function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.l
   // the normal of each shell vertex is the skin's, so it lights like hair lying on the head
   const nn=g.attributes.normal;for(let l=0;l<L;l++)for(let j=0;j<nv;j++){const v=used[j],o=l*nv+j;nn.setXYZ(o,N.getX(v),N.getY(v),N.getZ(v));}
   HAIRGEO.set(k,g);return g;}
-function hairMat(col){const m=std({color:col,roughness:.62,metalness:0,side:THREE.DoubleSide});
+function hairMat(col,dense=1){const m=std({color:col,roughness:.62,metalness:0,side:THREE.DoubleSide});
   m.onBeforeCompile=sh=>{sh.vertexShader='attribute vec3 aRoot,aRootN;attribute float aLayer;varying vec3 vRoot,vRootN;varying float vLayer;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvRoot=aRoot;vRootN=aRootN;vLayer=aLayer;');
     sh.fragmentShader='varying vec3 vRoot,vRootN;varying float vLayer;\nfloat hh(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}\n'+sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
       { vec3 n=normalize(vRootN);vec3 q=mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*vRoot*2100.;vec3 c=floor(q);vec3 fr=fract(q)-.5-(vec3(hh(c+3.),hh(c+5.),hh(c+9.))-.5)*.5;float r=hh(c),r2=hh(c+7.1);
         vec3 nq=mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*n;float dist=length(fr-nq*dot(fr,nq));   // distance from a strand standing out along the skin normal
-        float thick=(.52-.3*vLayer)*(.65+.45*r2);if(r<vLayer*.7||dist>thick)discard;   // strands thin out toward the tips; some are short
+        float thick=(.52-.3*vLayer)*(.65+.45*r2)*${dense.toFixed(2)};if(r<vLayer*.7||dist>thick)discard;   // strands thin out toward the tips; some are short
         diffuseColor.rgb*=.55+.5*vLayer+.15*(r2-.5); }`);};
-  m.customProgramCacheKey=()=>'bm-hair';return m;}
+  m.customProgramCacheKey=()=>'bm-hair'+dense;return m;}
 // ---- odd shapes for the funny characters: a look's sh picks one. Only the body's bind-pose mesh is reshaped (and the eyes with a bigger or
 // smaller head), so the skeleton, animation, grip and handling are untouched; hair, cloth and armour are grown from the reshaped body as usual.
 //  head   scale the head about the top of the neck      belly  push the gut out, mostly forward
@@ -2420,6 +2420,40 @@ function shapeBody(body,eyes,sh){const S=SHAPES[sh];if(!S)return;const key=body.
     let eg=null;if(eyes&&S.head){eg=eyes.geometry.clone();const E=eg.attributes.position;for(let i=0;i<E.count;i++){q.set(E.getX(i),E.getY(i),E.getZ(i));scaleAbout(q,J.Head,S.head-1);E.setXYZ(i,q.x,q.y,q.z);}E.needsUpdate=true;eg.computeBoundingSphere();}
     SHAPE_GEO.set(key,{g,eg});}
   const r=SHAPE_GEO.get(key);body.geometry=r.g;body.name=key;delete body.userData.marks;if(eyes&&r.eg)eyes.geometry=r.eg;}
+// hair with body: a cap grown from the scalp (the scalp weights baked in the body's colour attribute set the hairline), thicker on top;
+// long hair adds a fall from the back of the skull down to the shoulders that hangs as a curtain instead of following the neck
+function hairCap(body,h){const ck='hcap'+h;const k0=body.name+'|'+ck;
+  const C=body.geometry.attributes.color,M=bodyMarks(body),J=M.J,ey=M.ey,back=M.hz-M.rz,long=h>=3;
+  return fitShell(body,ck,{keep:(v,P,w)=>{const sc=C?C.getX(v):0,y=P.getY(v),z=P.getZ(v);if(w(v,['Head','Neck','HeadTop_End'])<.5)return false;   // the crown is weighted to HeadTop_End
+      const fz=clamp((z-(M.hz-.03))/.09,0,1),hl=ey-.085+(.14)*fz*fz,ear=Math.abs(P.getX(v)-M.hx)>M.rx*.8&&y<ey+.025&&z>M.hz-.05;
+      if(y>hl&&!ear)return true;   // the scalp above a hairline: high over the brow, down the temples, low at the nape
+      if(long&&z<M.hz-.015&&y>J.Neck.y-.05&&y<ey+.02)return true;   // the back of the head and neck under the fall
+      return !long&&z<M.hz-.03&&y>ey-.08&&y<ey+.02&&w(v,['Head'])>.6;},   // a short back to the nape
+    off:(x,y,z)=>(long?.016:.012)+.008*clamp((y-ey)/.08,0,1),smooth:14,bodySmooth:4,minK:.9,rim:-.008,bones:['Head','Neck'],fallback:'Head',
+    shape:long?(q,g)=>{const y=q[g*3+1];if(y<ey-.02&&q[g*3+2]<M.hz){const t=clamp((ey-.02-y)/.05,0,1);q[g*3+2]+=(Math.min(q[g*3+2],back-.012)-q[g*3+2])*t;   // the fall hangs straight down behind the neck
+        const sx=Math.sign(q[g*3]-M.hx)||1,ax=Math.abs(q[g*3]-M.hx);q[g*3]=M.hx+sx*(ax+(Math.max(ax,M.rx*.8)-ax)*t);}}:null});}
+function hairCapMat(col,body,h){const M=bodyMarks(body),m=std({color:col.clone().multiplyScalar(1.15),roughness:.7,metalness:0,side:THREE.DoubleSide,envMapIntensity:.45});
+  const U={uCrown:{value:V(M.hx,M.ey+.13,M.hz-.03)},uBot:{value:h>=3?M.J.Neck.y-.04:M.ey-.09}};
+  m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader='varying vec3 vHP;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvHP=position;');
+    sh.fragmentShader='varying vec3 vHP;uniform vec3 uCrown;uniform float uBot;\nfloat hn(float x){return fract(sin(x*127.1)*43758.5453);}\nfloat hv(float x){float i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(hn(i),hn(i+1.),f);}\n'+sh.fragmentShader
+    .replace('#include <map_fragment>',`#include <map_fragment>
+      { vec3 d=vHP-uCrown;float a=atan(d.x,d.z),len=length(d);   // strands combed out from the crown: fine light and dark lines round it
+        float s1=hv(a*95.+len*14.),s2=hv(a*260.+len*40.),s3=hv(a*31.);float str=s1*.55+s2*.35+s3*.25;
+        diffuseColor.rgb*=.62+.62*str;
+        float tip=uBot+.035*hv(a*70.)+.02*hv(a*190.);if(vHP.y<tip)discard;   // ragged ends
+        diffuseColor.rgb*=mix(.7,1.,smoothstep(uBot,uBot+.08,vHP.y)); }`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(.62+.25*hv(atan(vHP.x-uCrown.x,vHP.z-uCrown.z)*260.),.55,.9);');};
+  m.customProgramCacheKey=()=>'bm-haircap';return m;}
+// skin is not plastic: light soaks in and comes back out reddened past the edge of the lit side (a wrapped, red-shifted diffuse term),
+// and the face and hands are a little oilier than the body
+function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
+    #if NUM_DIR_LIGHTS > 0
+    for(int i=0;i<NUM_DIR_LIGHTS;i++){float nl=dot(normal,directionalLights[i].direction),wrap=max(0.,(nl+.45)/1.45)-max(0.,nl);
+      reflectedLight.directDiffuse+=wrap*directionalLights[i].color*diffuseColor.rgb*vec3(.9,.4,.3)*.35;}
+    #endif
+    reflectedLight.indirectDiffuse*=vec3(1.04,.98,.96);`)
+  .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+(vBind.y>1.5?-.08:.05),.3,1.);');};}
 function dressMH(model,look,pal,mats){
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
@@ -2434,16 +2468,20 @@ function dressMH(model,look,pal,mats){
       { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
         float g1=fract(sin(dot(floor(vMapUv*3072.),vec2(12.9898,78.233)))*43758.5453),g2=fract(sin(dot(floor(vMapUv*1400.),vec2(39.346,11.135)))*24634.63);
         vec4 hm4=texture2D(uMHMask,vMapUv);float browA=clamp(hm4.a*(.55+.45*g1)*1.25,0.,1.);
-        float hairA=clamp(hm.r*uHairAmt*(.62+.38*g1)*(.85+.3*g2)*1.15,0.,1.),beardA=clamp(hm.g*uBeardAmt*(.4+.6*g1)*1.1,0.,1.);
+        float hairA=clamp(hm.r*uHairAmt*(.78+.22*g1)*(.9+.2*g2)*1.2,0.,1.),beardA=clamp(hm.g*uBeardAmt*(.72+.28*g1)*1.35,0.,1.);   // denser, less grainy: the shells on top carry the texture
         diffuseColor.rgb*=1.-hm.b*.3;   // creases sit in shadow
-        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(max(hairA*.94,beardA*.86),browA*.92));
+        diffuseColor.rgb=mix(diffuseColor.rgb,uHairCol,max(max(hairA*.94,beardA*.9),browA*.92));
+        { vec3 f=vBind-uEyeB;float fr=smoothstep(-.09,-.02,f.z);   // blood under the skin: cheeks, nose tip, lips and ears are redder
+          float cheek=exp(-pow((abs(f.x)-.045)/.022,2.)-pow((f.y+.04)/.022,2.))*fr,nose=exp(-pow(f.x/.012,2.)-pow((f.y+.035)/.015,2.))*smoothstep(-.02,.015,f.z),
+            lip=exp(-pow(f.x/.024,2.)-pow((f.y+.074)/.009,2.))*fr,ear=exp(-pow((abs(f.x)-.075)/.012,2.)-pow((f.y+.01)/.03,2.))*smoothstep(-.07,-.03,-abs(f.z+.06));
+          float red=clamp(cheek*.35+nose*.35+lip*.8+ear*.45,0.,1.);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.22,.78,.74),red*(1.-hairA)*(1.-beardA*.8)); }
         if(uMark>.5){vec3 b=vBind-uEyeB;float front=smoothstep(-.07,-.03,b.z);
           if(uMark<1.5){vec2 a=vec2(.028,.045),c=vec2(.05,-.065),pa=b.xy-a,ba=c-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.),d=length(pa-ba*h);   // an old scar from brow to cheek
             float sc=smoothstep(.0045,.0015,d)*front;diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.12,.86,.84)+.05,sc);}
           else{float band=smoothstep(.03,.018,abs(b.y+.003))*smoothstep(.1,.075,abs(b.x))*front*(.75+.25*fract(sin(dot(floor(vBind*900.),vec3(12.9898,78.233,37.719)))*43758.5453));   // woad across the eyes
             diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.05,.09,.2),band*.9);}} }
       float bld=0.;`);};   // (after the cloth tint, which would recolour anything dark and grey as hose)
-  sh_detail(skin);
+  sh_detail(skin);skinScatter(skin);
   skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
   model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
     if(m===body)m.material=skin;else m.material=std({map:T.eye,roughness:.12,alphaTest:.5});});
@@ -2454,17 +2492,17 @@ function dressMH(model,look,pal,mats){
   const M=bodyMarks(body),hy=M.J.Hips.y;HU.uEyeB.value.set(M.hx,M.ey,M.ez);
   const shell=(key,opt,mt,hair)=>{const g=fitShell(body,key,opt);const sm=new THREE.SkinnedMesh(g,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';if(hair)sm.userData.hair=true;body.parent.add(sm);return sm;};
   const dyedCloth=(dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}return mt;};
-  const legW=['LeftLeg','RightLeg','LeftFoot','RightFoot'],handW=['LeftHand','RightHand'],headW=['Neck','Head'];
+  const legW=['LeftLeg','RightLeg','LeftFoot','RightFoot'],handW=['Hands*'],headW=['Neck','Head'];
   if(o===1||o===4){const ha=Math.abs(M.J.LeftHand.x),sh=Math.abs(M.J.LeftArm.x);
     shell('shirt',{keep:(v,P,w)=>w(v,['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftUpLeg','RightUpLeg'])>.5&&w(v,headW)<.25&&w(v,handW)<.2&&P.getY(v)>hy-.14,
       off:(x,y,z)=>{const ax=Math.abs(x);if(ax>sh-.02){const u=clamp((ax-sh)/(ha-sh),0,1);return .014+.02*Math.sin(Math.PI*Math.min(1,u*1.08))**.7;}   // sleeves: full in the forearm, gathered at the cuff
         return .016+.016*clamp(1-Math.abs(y-(hy+.05))/.09,0,1);},   // the body: bagging over the belt
       smooth:12,bodySmooth:2,minK:.95,rim:.003,shape:convexTorso(0,.35,.2,.6)},dyedCloth(true,.006));}
   if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14}},dyedCloth(true,.006));   // a knee-length dyed tunic, sleeves to the elbow
-  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06}},lm).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
+  if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','Hands*'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06}},lm).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
-    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['LeftHand','RightHand'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07}});
+    const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['Hands*'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07}});
     const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   cloth(o===2||o===3?C.hose:C.braies,true,o===2||o===3?.0012:.003);
@@ -2477,9 +2515,10 @@ function dressMH(model,look,pal,mats){
   if(ftw){const bm2=leatherMat.clone();bm2.color.setHex(ftw===2?0x6a4a36:0x7a5840);
     shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.013:.01,smooth:14,minK:.95,rim:.003,shape:footShape(.13,M.J.LeftToeBase.z-.03),bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
   if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';body.parent.add(bm);}
-  {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol);
-    for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
-      const hm=new THREE.SkinnedMesh(hg,mt);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
+  {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
+    if(look.h>=2&&!(look.hd|0)){const hm=new THREE.SkinnedMesh(hairCap(body,look.h),hairCapMat(hcol,body,look.h));hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=true;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';hm.userData.hair=true;body.parent.add(hm);}   // real hair: a cap (and a fall for long hair)
+    for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)&&look.h<2?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
+      const hm=new THREE.SkinnedMesh(hg,scalp?mt:mtB);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
   if(look.sc|0)tabard(body,look.sc|0,pal,mats);
   model.userData.mh=true;}
 // a tabard over everything (clothes or armour): a convex body over the chest and back to the hips, front and back flaps to mid-thigh
@@ -2748,7 +2787,8 @@ const FIT_CACHE=new Map();
 function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,UV=src.attributes.uv,I=src.index,n=P.count;
   const bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
-  const W=(v,names)=>{let s=0;for(let k=0;k<4;k++){const b=SI.getComponent(v,k);for(const nm of names)if(bi[nm]===b){s+=SW.getComponent(v,k);break;}}return s;};
+  const handSet=new Set(Object.keys(bi).filter(k=>/^(Left|Right)Hand/.test(k)).map(k=>bi[k]));   // 'Hands*' = both hands and every finger bone (fingers are weighted to their own bones, so 'LeftHand' alone missed them and sleeves grew over the fists)
+  const W=(v,names)=>{let s=0;for(let k=0;k<4;k++){const b=SI.getComponent(v,k);for(const nm of names)if(nm==='Hands*'?handSet.has(b):bi[nm]===b){s+=SW.getComponent(v,k);break;}}return s;};
   const keep=new Uint8Array(n);for(let v=0;v<n;v++)keep[v]=o.keep(v,P,W)?1:0;
   // weld the uv seams: one group per position, so smoothing never opens a crack
   const grp=new Int32Array(n),gpos=[],gmap=new Map();
@@ -2795,7 +2835,7 @@ function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))re
   g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));g.setIndex(idx);
   // smooth normals across the welded seams
   g.computeVertexNormals();{const nn=g.attributes.normal,acc=new Float32Array(G*3);for(let i=0;i<m;i++){const k=gid[i];acc[k*3]+=nn.getX(i);acc[k*3+1]+=nn.getY(i);acc[k*3+2]+=nn.getZ(i);}
-    for(let i=0;i<m;i++){const k=gid[i],l=Math.hypot(acc[k*3],acc[k*3+1],acc[k*3+2])||1;nn.setXYZ(i,acc[k*3]/l,acc[k*3+1]/l,acc[k*3+2]/l);}}
+    for(let i=0;i<m;i++){const k=gid[i],l=Math.hypot(acc[k*3],acc[k*3+1],acc[k*3+2]);if(l<1e-6)nn.setXYZ(i,gn[k*3],gn[k*3+1],gn[k*3+2]);else nn.setXYZ(i,acc[k*3]/l,acc[k*3+1]/l,acc[k*3+2]/l);}}   // a collapsed face falls back to the skin's normal (a zero normal lit as NaN and blacked out the frame through the bloom)
   g.computeBoundingSphere();FIT_CACHE.set(ck,g);return g;}
 // landmarks of a body in its bind pose (metres): joint heights, eye level, where the face is
 function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const J={};body.skeleton.bones.forEach((b,i)=>{const e=new THREE.Matrix4().copy(body.skeleton.boneInverses[i]).invert().elements;J[b.name.replace('mixamorig','').replace(':','')]=V(e[12],e[13],e[14]);});
@@ -2854,7 +2894,7 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
     case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06}},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
-    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['LeftHand','RightHand','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1}},mailMat,null)];
+    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1}},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
       S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
