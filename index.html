@@ -338,7 +338,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=101;
+const BUILD=102;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -848,51 +848,137 @@ function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;for(let
 // a few models scattered round: picks from a list, random turn and size, kept where ok(x,z) allows
 function scatterModels(list,n,ok,seed,smin=.8,smax=1.3,dyn=null){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
   for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const id=list[(r()*list.length)|0],po={x,z,ry:r()*6.28,s:smin+r()*(smax-smin)};if(dyn&&dyn[id])dynModel(id,po,dyn[id]);else placeModel(id,po);k++;}}
-function hay(x,z){addGeo('thatch',new THREE.CylinderGeometry(.6,.6,1.3,14),T(x,.6,z,srand()*6,0,Math.PI/2));addCircle(x,z,.75,1.2);}
-function cart(x,z,r){
-  const add=(k,g,m)=>addGeo(k,g,T(x,0,z,r).multiply(m));
-  add('wood',boxUV(2.2,.12,1.2,1),T(0,.75,0));add('wood',boxUV(2.2,.4,.06,1),T(0,.95,.6));add('wood',boxUV(2.2,.4,.06,1),T(0,.95,-.6));
-  add('wood',new THREE.CylinderGeometry(.5,.5,.08,14),T(.2,.5,.68,0,Math.PI/2));add('wood',new THREE.CylinderGeometry(.5,.5,.08,14),T(.2,.5,-.68,0,Math.PI/2));
-  add('wood',boxUV(1.8,.07,.07,1),T(-1.9,.6,.4,0,0,.25));add('wood',boxUV(1.8,.07,.07,1),T(-1.9,.6,-.4,0,0,.25));
-  addCircle(x,z,1.1,1.2);
+// ---- village furniture: carts, market stalls, braziers, the well. Each is built from proper parts (spoked wheels with felloes and
+// an iron tyre, turned posts with knee braces, plank counters, scalloped awnings, a windlass with a crank) collected into its own
+// group (ownGroup: one merged mesh per material), so carts can be loose things and stalls can carry crockery that breaks
+MATS.clay=std({color:0x9c5636,roughness:.82});MATS.glaze=std({color:0x4d6236,roughness:.38});MATS.clayPale=std({color:0xb89a72,roughness:.8});
+MATS.apple=std({color:0x8e1f14,roughness:.45});MATS.apple2=std({color:0x7d8a2a,roughness:.5});MATS.cabbage=std({color:0x5d7a3a,roughness:.8});MATS.onion=std({color:0xa8743a,roughness:.6});
+MATS.bread=std({color:0x9a6430,roughness:.85});MATS.rope=std({color:0x7a6646,map:TX.wood,roughness:1});
+MATS.ember=std({color:0x2a0802,emissive:0xd8380a,emissiveIntensity:.9,roughness:1});MATS.coal=std({color:0x161210,roughness:1});
+function ownGroup(x,z,ry,fn){const prev=GEO_TARGET;GEO_TARGET={};fn();const G=new THREE.Group();
+  for(const k in GEO_TARGET){const m=new THREE.Mesh(mergeGeometries(GEO_TARGET[k]),MATS[k]);m.castShadow=m.receiveShadow=true;G.add(m);}
+  GEO_TARGET=prev;G.position.set(x,0,z);G.rotation.y=ry;world.add(G);return G;}
+// a round rod from a to b (tapering from r at a to r2 at b)
+function vRod(k,a,b,r,seg=6,r2=r){const d=V().subVectors(b,a),L=d.length();if(L<1e-4)return;const g=new THREE.CylinderGeometry(r2,r,L,seg);g.translate(0,L/2,0);
+  addGeo(k,g,new THREE.Matrix4().compose(a,new THREE.Quaternion().setFromUnitVectors(Y_AXIS,d.normalize()),V(1,1,1)));}
+const toWorld=(x,z,ry,lx,ly,lz)=>V(lx*Math.cos(ry)+lz*Math.sin(ry)+x,ly,-lx*Math.sin(ry)+lz*Math.cos(ry)+z);
+// crockery, turned on a wheel (profiles run top to bottom)
+const CROCK={jug:lathe([[0,.235],[.038,.235],[.033,.205],[.058,.17],[.078,.105],[.074,.045],[.058,0],[0,0]],14),
+  bowl:lathe([[0,.05],[.1,.072],[.112,.072],[.1,.035],[.058,0],[0,0]],16),
+  pot:lathe([[0,.2],[.072,.2],[.064,.182],[.1,.13],[.11,.075],[.08,0],[0,0]],14),
+  cup:lathe([[0,.1],[.042,.1],[.04,.05],[.032,0],[0,0]],12)};
+function crockery(id,mat,wx,wy,wz,ry){return dynMesh(CROCK[id],MATS[mat],T(wx,wy,wz,ry),{m:id==='bowl'?.35:id==='cup'?.2:id==='pot'?1.2:.9,auto:'cyl',snd:'pot',brittle:1});}
+// a two-wheeled farm cart standing on its shafts, sometimes loaded; a loose thing that rolls on its wheels when shoved
+function cart(x,z,r){const load=srand(),R=.56,ax=.2,y0=.74;
+  const G=ownGroup(x,z,r,()=>{
+    for(const sd of [-1,1]){const zc=sd*.8;
+      addGeo('beam',new THREE.CylinderGeometry(.1,.115,.28,12),T(ax,R,zc,0,Math.PI/2));   // hub
+      for(let i=0;i<12;i++){const a=i/12*6.2832,c=Math.cos(a),s=Math.sin(a);vRod('wood',V(ax+c*.1,R+s*.1,zc),V(ax+c*(R-.08),R+s*(R-.08),zc),.024,5,.018);}   // spokes
+      for(let i=0;i<12;i++){const a=(i+.5)/12*6.2832;addGeo('wood',boxUV(2*Math.PI*(R-.045)/12+.012,.085,.075,1),T(ax+Math.cos(a)*(R-.045),R+Math.sin(a)*(R-.045),zc,0,0,a+Math.PI/2));}   // felloes
+      addGeo('iron',new THREE.TorusGeometry(R,.017,4,36),T(ax,R,zc));}   // the iron tyre
+    addGeo('beam',new THREE.CylinderGeometry(.05,.05,1.78,8),T(ax,R,0,0,Math.PI/2));   // axle
+    for(const sd of [-1,1])addGeo('beam',boxUV(2.6,.11,.1,1),T(0,y0,sd*.64));   // side beams
+    for(const bx of [-1.15,-.4,.4,1.15])addGeo('beam',boxUV(.09,.08,1.36,1),T(bx,y0-.09,0));   // bearers
+    for(let i=0;i<6;i++)addGeo('woodLight',boxUV(2.56,.04,.205,1),T(0,y0+.075,-.56+i*.224));   // bed planks
+    for(const bx of [-1.2,-.4,.4,1.2])for(const sd of [-1,1])vRod('beam',V(bx,y0,sd*.69),V(bx+(bx>0?.03:-.03),y0+.58,sd*.71),.03,6,.025);   // stakes
+    for(const sd of [-1,1])for(const yy of [.2,.44])addGeo('wood',boxUV(2.5,.15,.03,1),T(0,y0+yy,sd*.72));   // side boards
+    addGeo('wood',boxUV(.03,.36,1.38,1),T(-1.29,y0+.26,0));   // headboard
+    for(const sd of [-1,1])vRod('beam',V(-1.0,y0-.02,sd*.52),V(-3.05,.06,sd*.4),.05,7,.035);   // shafts, down on the ground
+    vRod('beam',V(-2.35,.33,-.44),V(-2.35,.33,.44),.03,6);   // a crossbar between them
+    if(load<.32){const sg=new THREE.SphereGeometry(.3,8,6);for(const [lx,lz] of [[-.6,-.28],[-.55,.3],[.35,0],[.9,-.3]])addGeo('cloth3',sg.clone().scale(1.15,.7,.85),T(lx,y0+.27,lz,lx*3));}   // sacks
+    else if(load<.58){const hg=new THREE.SphereGeometry(1,12,8,0,6.283,0,Math.PI/2);addGeo('thatch',hg,T(.05,y0+.08,0,0,0,0,1.25,.62,.62));}   // a heap of hay
+    else if(load<.74){for(const lz of [-.32,.32])addGeo('propWood',new THREE.CylinderGeometry(.27,.27,.7,12),T(.1,y0+.35,lz,0,0,Math.PI/2));}});   // two casks
+  dynAdd(G,{m:150,fr:.8,sh:[{t:'box',h:[1.3,.18,.72],o:[0,y0+.1,0],w:.55},{t:'cyl',h:[.07,R],o:[ax,R,.8],rx:1,w:.15},{t:'cyl',h:[.07,R],o:[ax,R,-.8],rx:1,w:.15},{t:'box',h:[.14,.05,.46],o:[-2.95,.06,0],w:.15}]});}
+// a market stall: turned posts with knee braces, a plank counter with a boarded front, a back shelf, a sloping striped awning with a
+// scalloped valance, and wares by trade: produce, a potter's crockery (which breaks), cloth, a baker's loaves
+function stall(x,z,r,cloth,kind){kind=kind??Math.floor(srand()*4);const cw=1.46,cd=.74;
+  const G=ownGroup(x,z,r,()=>{
+    for(const [px,pz,hh] of [[-cw,cd,2.15],[cw,cd,2.15],[-cw,-cd,2.55],[cw,-cd,2.55]]){vRod('wood',V(px,.1,pz),V(px,hh,pz),.06,8,.05);addGeo('stone',boxUV(.22,.12,.22,1),T(px,.06,pz));
+      vRod('beam',V(px,hh-.55,pz),V(px-Math.sign(px)*.42,hh-.06,pz),.028,5);}   // posts on stone pads, knee braces
+    addGeo('beam',boxUV(3.05,.1,.1,1),T(0,2.12,cd));addGeo('beam',boxUV(3.05,.1,.1,1),T(0,2.52,-cd));
+    for(const sx of [-1,1])vRod('beam',V(sx*cw,2.55,-cd),V(sx*cw,2.12,cd),.045,6);
+    const sl=Math.hypot(2.3,.62),th=Math.atan2(.62,2.3);addGeo(cloth,wallPlane(3.3,sl,1.6,1.6),T(0,2.31,.24,0,-(Math.PI/2-th)));   // the awning
+    for(let i=0;i<11;i++)addGeo(cloth,new THREE.CircleGeometry(.155,8,Math.PI,Math.PI),T(-1.5+i*.3,2.0,1.39));   // its scalloped valance
+    addGeo('woodLight',boxUV(3.0,.06,.78,1),T(0,.93,.37));   // counter top
+    for(let i=0;i<9;i++)addGeo('wood',boxUV(.315,.84,.03,1),T(-1.29+i*.322,.48,.75));   // boarded front
+    for(const sx of [-1,1])addGeo('wood',boxUV(.03,.84,.72,1),T(sx*1.4,.48,.38));
+    addGeo('woodLight',boxUV(2.8,.04,.32,1),T(0,1.42,-.6));for(const sx of [-1.1,1.1])vRod('beam',V(sx,1.12,-.73),V(sx,1.4,-.47),.022,5);   // back shelf on brackets
+    for(const [lx,lz] of [[-.9,-.25],[.5,-.3]])addGeo('propWood',boxUV(.55,.45,.45,1),T(lx,.225,lz,lx));   // crates behind
+    if(kind===0){const bg=lathe([[.21,.15],[.19,.02],[0,0]],12),ap=new THREE.SphereGeometry(.045,7,5),cb=new THREE.SphereGeometry(.1,8,6);
+      for(const [lx,m] of [[-.9,'apple'],[0,'cabbage'],[.9,'apple2']]){addGeo('thatch',bg,T(lx,.96,.38));for(let k=0;k<(m==='cabbage'?4:14);k++){const a=k*2.4,rr=m==='cabbage'?.08:.05+.012*k%.13;addGeo(m,m==='cabbage'?cb:ap,T(lx+Math.cos(a)*rr,1.1+(k>7?.05:0),.38+Math.sin(a)*rr));}}
+      for(let k=0;k<6;k++)addGeo('onion',new THREE.SphereGeometry(.05,7,5),T(-1.2+k*.08,1.95-(k%2)*.06,.68));}   // a string of onions under the awning
+    else if(kind===2){for(let k=0;k<5;k++)addGeo(['cloth1','cloth2','cloth3'][k%3],new THREE.CylinderGeometry(.09,.09,.62,10),T(-1+k*.5,1.05,.4,.25*(k%2?1:-1),0,Math.PI/2));
+      addGeo('cloth2',wallPlane(1.2,.9,1,1),T(.6,1.9,-.7));}   // bolts of cloth, a length hung up
+    else if(kind===3){const lf=new THREE.SphereGeometry(.1,8,6);for(let k=0;k<7;k++)addGeo('bread',lf,T(-1.1+k*.36,1.02,.3+(k%2)*.14,k,0,0,1.5,.55,.8));
+      for(const lx of [-.5,.6])addGeo('cloth3',new THREE.SphereGeometry(.3,8,6).scale(.9,1.15,.85),T(lx,.33,-.15));}});   // loaves, flour sacks
+  // the potter's wares are loose crockery: knocked off the counter, they break
+  if(kind===1){for(let k=0;k<6;k++){const lx=-1.15+k*.46,id=['jug','pot','bowl','jug','cup','pot'][k],P=toWorld(x,z,r,lx,.96,.38+(k%2)*.12);crockery(id,k%3?'clay':'glaze',P.x,P.y,P.z,k);}
+    for(let k=0;k<5;k++){const P=toWorld(x,z,r,-1.1+k*.55,1.44,-.6);crockery(k%2?'bowl':'jug',k%2?'clayPale':'clay',P.x,P.y,P.z,k);}}
+  PSOLID.push([...toWorld(x,z,r,0,.93,.37).toArray(),1.5,.03,.39,r],[...toWorld(x,z,r,0,1.42,-.6).toArray(),1.4,.02,.16,r]);   // the counter and shelf, for loose things
+  for(const lx of [-1.05,-.35,.35,1.05]){const P=toWorld(x,z,r,lx,0,.37);addCircle(P.x,P.z,.4,.96);}   // you can't walk through the counter
+  for(const [lx,lz] of [[-cw,-cd],[cw,-cd]]){const P=toWorld(x,z,r,lx,0,lz);addCircle(P.x,P.z,.09,2.5);}}
+// a brazier: a hammered iron bowl of glowing coals on three legs tied with a ring
+function brazier(x,z){ownGroup(x,z,srand()*6,()=>{
+  addGeo('iron',lathe([[.44,1.2],[.46,1.19],[.42,1.15],[.3,.98],[.12,.9],[0,.89]],18),T(0,0,0));
+  addGeo('coal',new THREE.CylinderGeometry(.4,.3,.08,14),T(0,1.08,0));
+  for(let i=0;i<9;i++){const a=i*2.3,rr=.08+(i%3)*.09;addGeo(i%3?'ember':'coal',new THREE.DodecahedronGeometry(.06+(i%2)*.025,0),T(Math.cos(a)*rr,1.13+(i%2)*.02,Math.sin(a)*rr,a));}
+  for(let i=0;i<3;i++){const a=i*2.094,c=Math.cos(a),s=Math.sin(a);vRod('iron',V(c*.26,.97,s*.26),V(c*.36,.5,s*.36),.024,6);vRod('iron',V(c*.36,.5,s*.36),V(c*.46,.03,s*.46),.024,6,.02);
+    addGeo('iron',new THREE.SphereGeometry(.035,6,4),T(c*.47,.03,s*.47));}
+  addGeo('iron',new THREE.TorusGeometry(.36,.014,4,24),T(0,.5,0,0,Math.PI/2));});
+  addFlame(x,1.12,z,1.5,true);addCircle(x,z,.45,1.3);}
+// the well: a ring of dressed stone with a coping, two posts with braces carrying a windlass and crank, a rope and bucket, and a
+// shingled roof. own=true builds it into its own group (for the cistern machinery)
+function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
+  const N=14,R=1.0;for(let c=0;c<2;c++)for(let i=0;i<N;i++){const a=(i+(c?.5:0))/N*6.2832;addGeo('stone',boxUV(2*Math.PI*R/N-.02,.38,.26,1),T(x+Math.cos(a)*R,.19+c*.4,z+Math.sin(a)*R,-a+Math.PI/2));}
+  for(let i=0;i<N;i++){const a=(i+.25)/N*6.2832;addGeo('stone',boxUV(2*Math.PI*(R+.03)/N-.015,.14,.36,1),T(x+Math.cos(a)*(R+.03),.86,z+Math.sin(a)*(R+.03),-a+Math.PI/2));}   // the coping
+  addGeo('winDark',new THREE.CircleGeometry(.88,20),T(x,.32,z,0,-Math.PI/2));   // dark water far down
+  for(const sx of [-1,1]){vRod('beam',V(x+sx*1.2,0,z),V(x+sx*1.2,2.35,z),.075,4);vRod('beam',V(x+sx*1.2,1.5,z),V(x+sx*.92,1.9,z),.035,5);
+    addGeo('stone',boxUV(.3,.16,.3,1),T(x+sx*1.2,.08,z));}
+  addGeo('beam',new THREE.CylinderGeometry(.1,.1,2.05,10),T(x,1.95,z,0,0,Math.PI/2));   // the windlass
+  for(let i=0;i<5;i++)addGeo('rope',new THREE.TorusGeometry(.115,.018,4,12),T(x-.25+i*.05,1.95,z,Math.PI/2));   // rope wound on it
+  vRod('iron',V(x+1.2,1.95,z),V(x+1.38,1.95,z),.02,5);vRod('iron',V(x+1.38,1.95,z),V(x+1.38,1.65,z),.02,5);vRod('beam',V(x+1.38,1.65,z),V(x+1.55,1.65,z),.025,5);   // the crank
+  vRod('rope',V(x,1.84,z),V(x,1.12,z),.012,4);
+  addGeo('propWood',lathe([[.15,.28],[.13,0],[0,0]],12),T(x,.84,z));for(const yy of [.89,1.06])addGeo('iron',new THREE.TorusGeometry(.142,.008,3,14),T(x,yy,z,0,Math.PI/2));vRod('iron',V(x-.15,1.12,z),V(x+.15,1.12,z),.006,3);   // the bucket
+  for(const sd of [-1,1]){addGeo('tile',boxUV(2.9,.05,1.05,1.2),T(x,2.58,z+sd*.4,0,sd*.62));for(const rx of [-1.2,0,1.2])vRod('beam',V(x+rx,2.35,z+sd*.82),V(x+rx,2.86,z),.03,4);}   // the roof on rafters
+  addGeo('beam',boxUV(2.9,.08,.08,1),T(x,2.88,z));
+  const c=addCircle(x,z,1.25,2.6);
+  if(G){for(const k in GEO_TARGET){const m=new THREE.Mesh(mergeGeometries(GEO_TARGET[k]),MATS[k]);m.castShadow=m.receiveShadow=true;G.add(m);}GEO_TARGET=null;world.add(G);return {g:G,c};}
 }
+function hay(x,z){addGeo('thatch',new THREE.CylinderGeometry(.6,.6,1.3,14),T(x,.6,z,srand()*6,0,Math.PI/2));addCircle(x,z,.75,1.2);}
 function fence(x0,z0,x1,z1){const len=Math.hypot(x1-x0,z1-z0),n=Math.ceil(len/2.2),ang=Math.atan2(x1-x0,z1-z0);
   for(let i=0;i<=n;i++){const t=i/n;addGeo('wood',boxUV(.12,1.1,.12,1),T(lerp(x0,x1,t),.55,lerp(z0,z1,t)));}
   for(let i=0;i<n;i++){const ax=lerp(x0,x1,i/n),az=lerp(z0,z1,i/n),bx=lerp(x0,x1,(i+1)/n),bz=lerp(z0,z1,(i+1)/n),mx=(ax+bx)/2,mz=(az+bz)/2;   // each bay of rails breaks on its own
     const g=new THREE.Group();g.position.set(mx,0,mz);g.rotation.y=ang;for(const y of [.45,.9]){const r=new THREE.Mesh(boxUV(.06,.1,len/n+.02,1),MATS.wood);r.position.y=y;g.add(r);}
     const p=propAdd('fence',g,mx,mz,len/n/2,1.1,18,addCircle(mx,mz,.55,1));p.seg=[ax,az,bx,bz];}
 }
-function stall(x,z,r,cloth){
-  const add=(k,g,m)=>addGeo(k,g,T(x,0,z,r).multiply(m));
-  for(const [px,pz] of [[-1.3,-.8],[1.3,-.8],[-1.3,.8],[1.3,.8]])add('wood',boxUV(.1,2.3,.1,1),T(px,1.15,pz));
-  add('wood',boxUV(2.6,.08,1.4,1),T(0,.9,.1));
-  add(cloth,wallPlane(3,1.9,1,1),T(0,2.35,0,0,-Math.PI/2+.25));
-  for(let i=0;i<3;i++)add('wood',boxUV(.3,.3,.3,1),T(-.8+i*.8,1.1,.1));
-  addBox(x-1.5,x+1.5,z-1.5,z+1.5,2.4);
-}
-function brazier(x,z){
-  addGeo('iron',new THREE.CylinderGeometry(.42,.22,.3,12,1,true),T(x,1.05,z));
-  for(let i=0;i<3;i++){const a=i*2.094;addGeo('iron',new THREE.CylinderGeometry(.03,.03,1.1,5),T(x+Math.cos(a)*.22,.5,z+Math.sin(a)*.22,0,Math.cos(a)*.25,Math.sin(a)*.25));}
-  addGeo('dirt',new THREE.CylinderGeometry(.38,.38,.05,12),T(x,1.12,z));
-  addFlame(x,1.12,z,1.5,true);addCircle(x,z,.45,1.3);
-}
 // the gallows scaffold in the square: a plank deck on six posts with stairs up one end. High ground to fight from, and each post
 // can be hacked through: lose both posts at one end, two on a side, or any three, and the whole deck comes down with whoever is on it
 function scaffold(cx,cz){const W=4.5,D=4,Hh=1.6,x0=cx-W/2,x1=cx+W/2,z0=cz-D/2,z1=cz+D/2;
-  const deck=new THREE.Group();deck.position.set(cx,0,cz);world.add(deck);const mk=(g,m)=>{const o=new THREE.Mesh(g,m);o.castShadow=o.receiveShadow=true;deck.add(o);return o;};
-  for(let i=0;i<Math.round(W/.24);i++){const o=mk(boxUV(.22,.06,D,1),MATS.woodPale);o.position.set(-W/2+.12+i*.24,Hh-.03,(Math.random()-.5)*.03);}
-  for(const z of [-D/2+.1,D/2-.1])mk(boxUV(W,.16,.12,1),MATS.wood).position.set(0,Hh-.14,z);
-  for(const x of [-W/2+.1,W/2-.1])mk(boxUV(.12,.16,D,1),MATS.wood).position.set(x,Hh-.14,0);
-  // the gallows: two uprights, a crossbeam and a rope
-  for(const z of [-1.1,1.1])mk(boxUV(.16,2.7,.16,1),MATS.wood).position.set(W/2-.5,Hh+1.35,z);
-  mk(boxUV(.16,.16,2.6,1),MATS.wood).position.set(W/2-.5,Hh+2.7,0);mk(new THREE.CylinderGeometry(.015,.015,1.1,5),MATS.wood).position.set(W/2-.5,Hh+2.1,0);
-  mk(new THREE.TorusGeometry(.1,.02,5,10),MATS.wood).position.set(W/2-.5,Hh+1.47,0);
+  const PP=[[x0+.15,z0+.15],[cx,z0+.15],[x1-.15,z0+.15],[x0+.15,z1-.15],[cx,z1-.15],[x1-.15,z1-.15]];
+  const deck=ownGroup(cx,cz,0,()=>{   // everything that falls with the deck, in its own frame
+    let px=-W/2;for(let i=0;px<W/2-.05;i++){const w=Math.min(W/2-px,.19+(i*7%5)*.022);addGeo('boards',boxUV(w-.012,.055,D-.04+((i*13)%5-2)*.018,1),T(px+w/2,Hh-.028+((i*11)%3-1)*.003,((i*5)%3-1)*.012));px+=w;}   // planks of mixed widths
+    for(const z of [-D/2+.1,D/2-.1])addGeo('beam',boxUV(W,.18,.12,1),T(0,Hh-.145,z));for(const x of [-W/2+.08,W/2-.08])addGeo('beam',boxUV(.12,.18,D,1),T(x,Hh-.145,0));
+    for(let k=1;k<5;k++)addGeo('beam',boxUV(.1,.15,D-.24,1),T(-W/2+k*W/5,Hh-.13,0));   // joists under the planks
+    for(const [ppx,ppz] of PP){const lx=ppx-cx,lz=ppz-cz,sz=lz<0?1:-1;vRod('beam',V(lx,Hh-.75,lz+sz*.06),V(lx,Hh-.2,lz+sz*.55),.04,4);   // knee braces from each post
+      if(Math.abs(lx)>.5)vRod('beam',V(lx-Math.sign(lx)*.06,Hh-.75,lz),V(lx-Math.sign(lx)*.55,Hh-.2,lz),.04,4);}
+    for(const sd of [-1,1]){vRod('beam',V(-W/2+.2,.25,sd*(D/2-.15)),V(-.1,Hh-.25,sd*(D/2-.15)),.035,4);vRod('beam',V(W/2-.2,.25,sd*(D/2-.15)),V(.1,Hh-.25,sd*(D/2-.15)),.035,4);}   // cross bracing along the sides
+    // the gallows: two stout uprights, a crossbeam braced to both, a rope and noose over a trapdoor
+    const gx=W/2-.55;for(const z of [-1.1,1.1]){addGeo('beam',boxUV(.2,2.75,.2,1),T(gx,Hh+1.375,z));vRod('beam',V(gx,Hh+2.1,z),V(gx,Hh+2.62,z-Math.sign(z)*.5),.045,4);
+      vRod('beam',V(gx-.6,Hh,z),V(gx-.07,Hh+.55,z),.045,4);vRod('beam',V(gx+.45,Hh,z),V(gx+.07,Hh+.45,z),.045,4);}
+    addGeo('beam',boxUV(.22,.22,2.7,1),T(gx,Hh+2.8,0));
+    const rc=new THREE.CatmullRomCurve3([V(gx,Hh+2.69,0),V(gx+.02,Hh+2.3,0),V(gx,Hh+1.85,.01),V(gx,Hh+1.6,0)]);addGeo('rope',new THREE.TubeGeometry(rc,12,.016,5),T(0,0,0));
+    addGeo('rope',new THREE.TorusGeometry(.11,.02,5,14),T(gx,Hh+1.47,0,Math.PI/2));addGeo('rope',new THREE.CylinderGeometry(.03,.03,.14,6),T(gx,Hh+1.62,0));
+    for(const z of [-.42,.42])addGeo('woodLight',boxUV(.86,.06,.8,1),T(gx,Hh+.004,z));addGeo('dirt',boxUV(.9,.062,.02,1),T(gx,Hh+.002,0));   // the trapdoor's two leaves
+    for(const z of [-.7,-.15,.15,.7])addGeo('iron',boxUV(.16,.065,.04,1),T(gx-.4,Hh+.006,z));});
   const F={x0,x1,z0,z1,h:Hh};FLOORS.push(F);const box=addBox(x0,x1,z0,z1,Hh-.3);
-  // stairs up the west end, with rails
-  const sx0=x0-3,st=new THREE.Group();world.add(st);const n=8;for(let i=0;i<n;i++){const o=new THREE.Mesh(boxUV(.38,.05,1.2,1),MATS.woodPale);o.position.set(sx0+(i+.5)*3/n,(i+1)/n*Hh-.03,cz);o.castShadow=o.receiveShadow=true;st.add(o);}
-  for(const z of [cz-.65,cz+.65]){const o=new THREE.Mesh(boxUV(3.4,.1,.1,1),MATS.wood);o.position.set(sx0+1.5,Hh*.5+.5,z);o.rotation.z=Math.atan2(Hh,3);o.castShadow=true;st.add(o);addBox(sx0,x0,z-.06,z+.06,Hh+.3);}
+  // stairs up the west end: two stringers with treads between them, handrails on posts
+  const sx0=x0-3,n=8,run=3,sl=Math.hypot(run,Hh),sa=Math.atan2(Hh,run);
+  for(const z of [cz-.62,cz+.62])addGeo('beam',boxUV(sl+.15,.26,.07,1),T(sx0+run/2,Hh/2-.08,z,0,0,sa));
+  for(let i=0;i<n;i++)addGeo('boards',boxUV(.34,.05,1.17,1),T(sx0+(i+.5)*run/n,(i+1)/n*Hh-.03,cz));
+  for(const z of [cz-.66,cz+.66]){for(const t of [.08,.95]){const px=sx0+t*run,py=t*Hh;vRod('beam',V(px,py-.05,z),V(px,py+.95,z),.035,4);}
+    vRod('woodLight',V(sx0+.08*run,.08*Hh+.92,z),V(sx0+.95*run,.95*Hh+.92,z),.028,5);addBox(sx0,x0,z-.06,z+.06,Hh+.3);}
   FLOORS.push({x0:sx0,x1:x0+.01,z0:cz-.6,z1:cz+.6,ramp:'x',a0:sx0,a1:x0,h0:0,h1:Hh});
-  const posts=[];for(const [px,pz] of [[x0+.15,z0+.15],[cx,z0+.15],[x1-.15,z0+.15],[x0+.15,z1-.15],[cx,z1-.15],[x1-.15,z1-.15]]){const g=new THREE.Group();g.position.set(px,0,pz);const m=new THREE.Mesh(boxUV(.2,Hh-.2,.2,1),MATS.wood);m.position.y=(Hh-.2)/2;g.add(m);
+  const posts=[];for(const [px,pz] of PP){addGeo('stone',boxUV(.34,.1,.34,1),T(px,.05,pz));const g=new THREE.Group();g.position.set(px,0,pz);const m=new THREE.Mesh(boxUV(.2,Hh-.2,.2,1),MATS.beam);m.position.y=(Hh-.2)/2+.1;m.castShadow=m.receiveShadow=true;g.add(m);
     const q=propAdd('post',g,px,pz,.14,Hh-.2,26,null);q.scaf=true;posts.push(q);}
   SCAF={F,box,deck,posts,cx,cz,W,D,Hh,down:false,t:0,ax:V(),fallT:-1};}
 function scafCheck(dir){const S=SCAF;if(!S||S.down)return;const b=S.posts.map(p=>!!p.broken),n=b.filter(Boolean).length;
@@ -1170,19 +1256,19 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const [z,r] of [[-.35,.2],[.05,-.3],[.4,.15]])addGeo('beam',new THREE.CylinderGeometry(.07,.07,.95,7),T(-W+.5,.16,hz+z,r,0,Math.PI/2));
   addFlame(-W+.5,.2,hz,1.9,true);addFlame(-W+.45,.2,hz+.5,1.2,false);addFlame(-W+.45,.2,hz-.5,1.2,false);
   addGeo('dirt',boxUV(.06,1.45,2*fw,1),T(-W+.03,.72,hz));   // the sooted back of the firebox
-  PSOLID.push([-W+1.03,1.95,hz,.23,.08,fw+.65]);for(const z of [-.7,.1,.8])dynMesh(new THREE.CylinderGeometry(.05,.06,.13,8),MATS.winDark,T(-W+fd-.02,2.1,hz+z),{m:.7,auto:'cyl',snd:'pot'});   // jugs on the mantel
+  PSOLID.push([-W+1.03,1.95,hz,.23,.08,fw+.65]);for(const z of [-.7,.1,.8])dynMesh(new THREE.CylinderGeometry(.05,.06,.13,8),MATS.winDark,T(-W+fd-.02,2.1,hz+z),{m:.7,auto:'cyl',snd:'pot',brittle:1});   // jugs on the mantel
   TAV.spots.push(['poker',-W+1.7,0,hz+1.7]);
   // the bar along the east wall, bottles on the shelf behind it, barrels at its end
   const bx=W-1.8,bz=-1.6,bl=12;addGeo('wood',boxUV(.75,1.1,bl,1.5),T(bx,.55,bz));addGeo('woodLight',boxUV(.92,.06,bl+.2,1.5),T(bx,1.13,bz));addGeo('beam',boxUV(.08,.08,bl,1),T(bx-.45,.15,bz));
   addBox(bx-.45,bx+.45,bz-bl/2,bz+bl/2,1.05);FLOORS.push({x0:bx-.45,x1:bx+.45,z0:bz-bl/2,z1:bz+bl/2,h:1.16});
   addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,1.6,bz));addGeo('wood',boxUV(.35,.05,bl-1,1),T(W-.2,2.2,bz));PSOLID.push([W-.2,1.6,bz,.175,.025,(bl-1)/2],[W-.2,2.2,bz,.175,.025,(bl-1)/2]);
-  {const bg=new THREE.CylinderGeometry(.04,.045,.26,8);for(let z=bz-bl/2+1;z<bz+bl/2-1;z+=.32){dynMesh(bg,MATS.winDark,T(W-.2,1.757,z),{m:.9,auto:'cyl',snd:'glass'});if(srand()<.6)dynMesh(bg,MATS.winDark,T(W-.2,2.357,z+.16),{m:.9,auto:'cyl',snd:'glass'});}}
+  {const bg=new THREE.CylinderGeometry(.04,.045,.26,8);for(let z=bz-bl/2+1;z<bz+bl/2-1;z+=.32){dynMesh(bg,MATS.winDark,T(W-.2,1.757,z),{m:.9,auto:'cyl',snd:'glass',brittle:1});if(srand()<.6)dynMesh(bg,MATS.winDark,T(W-.2,2.357,z+.16),{m:.9,auto:'cyl',snd:'glass',brittle:1});}}
   barrel(W-.6,6.2);barrel(W-.6,7);barrel(W-1.4,7.3);barrel(W-.7,-9.6);barrel(W-1.5,-9.9);barrel(-W+.6,-9.6);
   for(const z of [-7,-5.4,-3.6,-2,0,1.8,3.6])TAV.spots.push([z<-6?'knife':z>3?'cleaver':z===-2?'bottle':z===0||z===-5.4?'knife':'mug',bx,1.17,z]);
   // tables with benches either side: the benches are a step up, the tables a jump; you can fight on both. Open floor in the middle
   for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){const TF={x0:tx-1.1,x1:tx+1.1,z0:tz-.47,z1:tz+.47,h:.8};FLOORS.push(TF);const tc=addBox(tx-1.1,tx+1.1,tz-.47,tz+.47,.7);addFlame(tx+.3,.8,tz,.24,false);
     dynModel('WoodenTable_01',{x:tx,z:tz,fit:[2.2,.8,.95]},{m:34,auto:'table',col:tc,floor:TF,fx:[flames[flames.length-1]]},g=>{const add=(geo,x,y,z)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.2,.08,.95,1),0,.76,0);for(const sx of [-.95,.95])for(const sz of [-.35,.35])add(boxUV(.09,.72,.09,1),sx,.36,sz);});
-    for(const sz of [-.85,.85]){const BF={x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44};FLOORS.push(BF);dynModel('wooden_stool_02',{x:tx,z:tz+sz,fit:[2.1,.45,.34]},{m:16,auto:'table',floor:BF,noOb:true},g=>{const add=(geo,x,y)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,0);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.1,.07,.32,1),0,.41);for(const sx of [-.85,.85])add(boxUV(.07,.42,.24,1),sx,.21);});}
+    for(const sz of [-.85,.85]){const BF={x0:tx-1.05,x1:tx+1.05,z0:tz+sz-.16,z1:tz+sz+.16,h:.44};FLOORS.push(BF);dynModel('wooden_stool_02',{x:tx,z:tz+sz,fit:[2.1,.45,.34]},{m:16,auto:'table',floor:BF,noOb:true,grp:'m',hp:110,bits:['plank']},g=>{const add=(geo,x,y)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(x,y,0);m.castShadow=m.receiveShadow=true;g.add(m);};add(boxUV(2.1,.07,.32,1),0,.41);for(const sx of [-.85,.85])add(boxUV(.07,.42,.24,1),sx,.21);});}
     TAV.spots.push(['mug',tx-.5,.82,tz+.15],[Math.random()<.5?'bottle':'mug',tx+.6,.82,tz-.2],['stool',tx+1.5,0,tz+(Math.random()-.5)]);}
   // the gallery along the north wall, 2.6 m up, reached by a stair against the west wall, with a rail along its edge
   const gh=2.6,gz0=D-2.6;FLOORS.push({x0:-W,x1:W,z0:gz0,z1:D,h:gh});
@@ -1217,7 +1303,7 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   // the hearth, sacks and a stack of kegs in the corners, a hanging cloth on each end wall, plates and bowls on the tables, rushes on the floor
   {const jg=new THREE.CylinderGeometry(.06,.08,.2,8),pg=new THREE.CylinderGeometry(.13,.13,.02,12),bg=new THREE.CylinderGeometry(.09,.06,.08,10);
   for(const [z,x0] of [[-D+.18,-4.9],[-D+.18,1.7],[D-.18,-6],[D-.18,3]]){addGeo('beam',boxUV(3.2,.05,.3,1),T(x0+1.6,1.75,z));for(const sx of [.2,3])addGeo('beam',boxUV(.05,.22,.28,1),T(x0+sx,1.62,z));PSOLID.push([x0+1.6,1.75,z,1.6,.025,.15]);
-    for(let k=0;k<7;k++){const t=k%3;if(t===0)dynMesh(jg,MATS.winDark,T(x0+.35+k*.42,1.877,z),{m:.8,auto:'cyl',snd:'pot'});else if(t===1)dynMesh(pg,MATS.woodLight,T(x0+.35+k*.42,1.915,z-(z>0?-.065:.065),0,Math.PI/2*(z>0?-.85:.85)),{m:.35,auto:'cyl',snd:'pot'});else dynMesh(bg,MATS.propWood,T(x0+.35+k*.42,1.817,z),{m:.3,auto:'cyl',snd:'pot'});}}}
+    for(let k=0;k<7;k++){const t=k%3;if(t===0)dynMesh(jg,MATS.winDark,T(x0+.35+k*.42,1.877,z),{m:.8,auto:'cyl',snd:'pot',brittle:1});else if(t===1)dynMesh(pg,MATS.woodLight,T(x0+.35+k*.42,1.915,z-(z>0?-.065:.065),0,Math.PI/2*(z>0?-.85:.85)),{m:.35,auto:'cyl',snd:'pot'});else dynMesh(bg,MATS.propWood,T(x0+.35+k*.42,1.817,z),{m:.3,auto:'cyl',snd:'pot'});}}}
   for(let x=-W+1;x<W;x+=2.4){if(Math.abs(x)<2)continue;for(const z of [-6,-3.5,4.5]){const r=(Math.sin(x*12.9+z*7.3)+1)/2;if(r<.45)continue;const hy=Hc-.32;
     addGeo('iron',boxUV(.01,.45,.01,1),T(x,hy-.22,z));if(r>.75)addGeo('propWood',new THREE.SphereGeometry(.16,8,6).scale(1,1.6,1),T(x,hy-.6,z));else addGeo('leaf2',new THREE.ConeGeometry(.12,.38,6).rotateX(Math.PI),T(x,hy-.6,z));}}
   // furniture from scans: a carved cupboard and a chest of drawers under the gallery, stacked barrels in the corner, chairs at the fire,
@@ -1225,9 +1311,9 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   dynModel('GothicCabinet_01',{x:-9,z:D-.5,ry:Math.PI,h:2.1},{m:70,col:addBox(-9.8,-8.2,D-.95,D,2.1)});
   dynModel('drawer_cabinet',{x:10.5,z:D-.4,ry:Math.PI,h:1.05},{m:40,col:addBox(9.9,11.1,D-.8,D,1.05)});
   dynModel('wooden_barrels_01',{x:-12.3,z:D-1.1,ry:Math.PI,h:1.7},{m:120,col:addBox(-13.4,-11.2,D-2.1,D,1.7),sh:[{t:'box',h:[1.08,.85,1.02],o:[0,.85,0]}]});   // (its scan's bounds reach well past the barrels)
-  for(const [z,ry] of [[-3.9,-2.2],[-8.1,-.9]]){dynModel('WoodenChair_01',{x:-13.4,z,ry,h:.95},{m:7});}
+  for(const [z,ry] of [[-3.9,-2.2],[-8.1,-.9]]){dynModel('WoodenChair_01',{x:-13.4,z,ry,h:.95},{m:7,hp:45,bits:['board','stave']});}
   for(const x of [-9.5,9.5]){placeModel('lantern_chandelier_01',{x,y:Hc-1.05,z:1.5,h:1.1,ground:false});addGeo('iron',boxUV(.02,.5,.02,1),T(x,Hc-.25,1.5));addFlame(x,Hc-1.25,1.5,.55,true);}
-  for(const z of [-3,1])dynModel('jug_01',{x:bx,y:1.16,z,h:.3,ry:z},{m:1.1,auto:'cyl',snd:'pot'});dynModel('CheeseBox_01',{x:bx,y:1.16,z:3.4,h:.18,ry:.4},{m:.7,auto:'cyl'});
+  for(const z of [-3,1])dynModel('jug_01',{x:bx,y:1.16,z,h:.3,ry:z},{m:1.1,auto:'cyl',snd:'pot',brittle:1});dynModel('CheeseBox_01',{x:bx,y:1.16,z:3.4,h:.18,ry:.4},{m:.7,auto:'cyl'});
   for(const L of torchLights)L.color.setHex(0xffa868);   // candle and lamp light a touch yellower than the outdoor torches: the hall read as red
   {const lg=new THREE.CylinderGeometry(.07,.07,.9,6);for(let i=0;i<6;i++)dynMesh(lg,MATS.bark,T(-W+.42+(i%3)*.15+(i>2?.075:0),.071+Math.floor(i/3)*.125,hz+2.4,0,Math.PI/2,0),{m:2.2,auto:'box'});}   // firewood by the hearth (six-sided logs: they don't roll off the pile by themselves)
   {const sg=new THREE.SphereGeometry(.32,8,6).scale(1,1.15,.85);for(const [x,z] of [[-W+.6,D-1],[-W+1.15,D-.75],[W-1.3,-D+2.5]])dynMesh(sg,MATS.cloth3,T(x,.368,z),{m:11});}   // sacks
@@ -1237,9 +1323,9 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   for(const [tx,tz] of [[-10,-8.2],[-9.5,-.5],[-4.5,-8.2],[1.5,-8.2],[7.5,-8],[-4.5,3.6],[4,3.6],[9,-3]]){for(const [ox,oz] of [[-.75,-.2],[.05,.22],[.8,.15]])dynMesh(PLATE_G,MATS.woodLight,T(tx+ox,.8135,tz+oz),{m:.35,auto:'cyl',snd:'pot'});
     dynModel('wooden_bowl_01',{x:tx-.1,y:.8,z:tz-.25,h:.07,ry:tx},{m:.3,auto:'cyl',snd:'pot'});if((tx*7|0)%2)dynModel('wooden_lantern_01',{x:tx+.9,y:.8,z:tz-.2,h:.32,ry:tz},{m:1.2,snd:'metal'});}
   // real pieces round the room: a spinning wheel by the hearth, a chest, baskets and buckets in the corners, bottles along the bar
-  dynModel('spinning_wheel_01',{x:-W+1.6,z:hz+3.6,h:1.05,ry:.6},{m:8});dynModel('treasure_chest',{x:-W+.6,z:D-2.6,h:.55,ry:Math.PI/2},{m:30,col:addBox(-W,-W+1.1,D-3.1,D-2.1,.6)});
+  dynModel('spinning_wheel_01',{x:-W+1.6,z:hz+3.6,h:1.05,ry:.6},{m:8,hp:30,bits:['stave']});dynModel('treasure_chest',{x:-W+.6,z:D-2.6,h:.55,ry:Math.PI/2},{m:30,col:addBox(-W,-W+1.1,D-3.1,D-2.1,.6)});
   for(const [id,x,z,h] of [['wicker_basket_01',W-2.4,D-.6,.32],['wooden_bucket_01',W-.5,-D+2.2,.42],['wooden_bucket_02',-W+.7,-D+.8,.38],['wicker_basket_01',-5,D-.5,.3]])dynModel(id,{x,z,h,ry:x*3},{m:id[1]==='i'?1.4:2.4,auto:'cyl'});
-  for(let i=0;i<5;i++)dynModel('wine_bottles_01',{x:W-1.8+(i%2?.05:-.05),y:1.16,z:-6.6+i*2.4,h:.32,ry:i},{m:2.6,snd:'glass'});
+  for(let i=0;i<5;i++)dynModel('wine_bottles_01',{x:W-1.8+(i%2?.05:-.05),y:1.16,z:-6.6+i*2.4,h:.32,ry:i},{m:2.6,snd:'glass',brittle:1});
   flushBatch();}
 function tavernLoot(){for(const [id,x,y,z] of TAV.spots){const def=WEAPONS[id];if(!def)continue;const s=new Sword(def);const a=Math.random()*6.28,d=V(Math.cos(a),0,Math.sin(a));
   s.reset(V(x-d.x*def.len*.4,y+.04,z-d.z*def.len*.4),d);if(def.kind==='blade')s.edge.set(-d.z,0,d.x);else s.edge.set(0,1,0);if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}s.free=true;s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def,sword:s,halo:null});}}   // knives lie flat
@@ -1414,16 +1500,6 @@ function shipVisual(dt){const S=SHIP;if(!S)return;S.t+=dt;S.swell=Math.max(0,S.s
   if(S.pk&&S.pk.A>0&&S.pk.s>-8&&S.pk.s<4&&Math.random()<dt*14){const x=(Math.random()-.5)*S.SL*1.6,z=Math.sign(-S.pk.dz||1)*(shipHalfW(x)+.3);spawnDust(V(x,.4,z),6,1.2,2.2);if(Math.random()<.2)sfx('fall',V(x,0,z),.5,.4,0,false);}   // spray as it breaks against the side
   if(NET.mode==='client')shipCargo(dt);
   if(S.sail)S.sail.scale.z=1+.12*Math.sin(S.t*1.7)+.05*Math.sin(S.t*4.1);}
-function well(x,z,own){const G=own?new THREE.Group():null;if(G)GEO_TARGET={};
-  addGeo('stone',new THREE.CylinderGeometry(1.1,1.15,.9,18,1,true),T(x,.45,z));
-  addGeo('stone',new THREE.TorusGeometry(1.1,.12,6,18),T(x,.9,z,0,Math.PI/2));
-  addGeo('dirt',new THREE.CircleGeometry(1.05,18),T(x,.6,z,0,-Math.PI/2));
-  addGeo('wood',boxUV(.14,2.4,.14,1),T(x-1.05,1.2,z));addGeo('wood',boxUV(.14,2.4,.14,1),T(x+1.05,1.2,z));
-  addGeo('wood',new THREE.CylinderGeometry(.08,.08,2.3,8),T(x,2.05,z,0,0,Math.PI/2));
-  addGeo('tile',wallPlane(2.8,1.2,2.4,2.4),T(x,2.65,z+.42,0,-1.0));addGeo('tile',wallPlane(2.8,1.2,2.4,2.4),T(x,2.65,z-.42,Math.PI,-1.0));
-  const c=addCircle(x,z,1.25,2.6);
-  if(G){for(const k in GEO_TARGET){const m=new THREE.Mesh(mergeGeometries(GEO_TARGET[k]),MATS[k]);m.castShadow=m.receiveShadow=true;G.add(m);}GEO_TARGET=null;world.add(G);return {g:G,c};}
-}
 
 function onRoad(x,z){
   if(Math.abs(x)<3.8||Math.abs(z)<3.8)return true;
@@ -1555,7 +1631,7 @@ function grateMesh(){const g=new THREE.Group(),geos=[],p=.115,L=GR.L,W=GR.W;
   for(const sx of [-1,1])geos.push(new THREE.BoxGeometry(.05,.045,W).translate(sx*(L/2-.025),0,0));
   const m=new THREE.Mesh(mergeGeometries(geos),iron);m.castShadow=m.receiveShadow=true;g.add(m);world.add(g);return g;}
 function grateVisual(){const G=PIT&&PIT.grate;if(!G||!G.mesh)return;G.mesh.position.copy(G.C);G.mesh.rotation.set(0,0,G.phi);}
-function clearWorld(){dynFree();DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
+function clearWorld(){dynFree();shardClear();DYN.length=0;DYNK.clear();PSOLID.length=0;PIT=null;rubbleClear();TOWER.st='none';SINK.st='none';SINK.well=null;SINK.chunks=null;sinkU.value.z=0;PROPS.length=0;
   scene.remove(world);world.traverse(o=>{if(o.geometry)o.geometry.dispose();});world=new THREE.Group();scene.add(world);
   boxes.length=0;circles.length=0;grid.clear();flames.length=0;FLOORS.length=0;HOUSES.length=0;SCAF=null;mapDirty=false;SHIP=null;sky.rotation.set(0,0,0);if(typeof DUST!=='undefined')DUST.p.material.uniforms.uCol.value.setRGB(.62,.53,.4);torchLights.length=0;lightBudget.n=0;seed=1337;crowd=null;
 }
@@ -3582,8 +3658,8 @@ class Sword{
 // they tip. On Mutiny the deck's heel tilts gravity. Only the host simulates; friends get the poses in snapshots (dp).
 let RP=null,PRW=null,dynKey=-1,dynPh=0,dynN=0,dynFull=0;
 const DYN=[],DYNK=new Map(),PSOLID=[],PROX=new Map();
-const DG_S=1,DG_L=2,DG_H=4,DG_P=8,DG_PL=16;
-const DGR_S=grp(DG_S,DG_L|DG_H),DGR_L=grp(DG_L,DG_S|DG_L|DG_H|DG_P|DG_PL),DGR_H=grp(DG_H,DG_S|DG_L|DG_H|DG_P),DGR_P=grp(DG_P,DG_L|DG_H),DGR_PL=grp(DG_PL,DG_L);
+const DG_S=1,DG_L=2,DG_H=4,DG_P=8,DG_PL=16,DG_PR=32,DG_M=64;   // fixed world, light, heavy, weapons and fists, standing bodies, fallen bodies, medium (benches)
+const DGR_S=grp(DG_S,DG_L|DG_H|DG_M),DGR_L=grp(DG_L,DG_S|DG_L|DG_H|DG_M|DG_P|DG_PL|DG_PR),DGR_H=grp(DG_H,DG_S|DG_L|DG_H|DG_M|DG_P),DGR_M=grp(DG_M,DG_S|DG_L|DG_H|DG_M|DG_P|DG_PR),DGR_P=grp(DG_P,DG_L|DG_H|DG_M),DGR_PL=grp(DG_PL,DG_L),DGR_PR=grp(DG_PR,DG_L|DG_M);
 const CTX={m:0,v:V(),y:0,f:null,q:null,h:0};
 const _xdq=new THREE.Quaternion(),_xdq2=new THREE.Quaternion(),_xdv=V(),_xdv2=V(),_xdv3=V(),_xdm4=new THREE.Matrix4(),_xdm5=new THREE.Matrix4(),_xde=new THREE.Euler(),_xdb=new THREE.Box3();
 const dynKeyOf=(x,y,z)=>((Math.round(x*20)+4096)*8192+(Math.round(z*20)+4096))*64+(Math.round(y*10)&63);
@@ -3617,7 +3693,7 @@ function dynAuto(d){if(d.gone||d.shFixed||d.body)return;const bb=localBox(d.obj)
   else sh=[{t:'box',h:[s.x/2*k,s.y/2,s.z/2*k],o:[c.x,c.y,c.z]}];
   dynShape(d,sh);}
 function dynShape(d,sh){d.sh=sh;const lb=new THREE.Box3();
-  for(const S of sh){const [a,b,c]=S.t==='box'?S.h:S.t==='cyl'?(S.rz?[S.h[0],S.h[1],S.h[1]]:[S.h[1],S.h[0],S.h[1]]):[S.h[0],S.h[0],S.h[0]];lb.expandByPoint(_xdv.set(S.o[0]-a,S.o[1]-b,S.o[2]-c));lb.expandByPoint(_xdv.set(S.o[0]+a,S.o[1]+b,S.o[2]+c));}
+  for(const S of sh){const [a,b,c]=S.t==='box'?S.h:S.t==='cyl'?(S.rz?[S.h[0],S.h[1],S.h[1]]:S.rx?[S.h[1],S.h[1],S.h[0]]:[S.h[1],S.h[0],S.h[1]]):[S.h[0],S.h[0],S.h[0]];lb.expandByPoint(_xdv.set(S.o[0]-a,S.o[1]-b,S.o[2]-c));lb.expandByPoint(_xdv.set(S.o[0]+a,S.o[1]+b,S.o[2]+c));}
   d.lb=lb;if(d.col){unStatic(d.col);d.col=null;}
   const p=d.obj.position,q=d.obj.quaternion;dynUnstick(d);
   if(d.heavy&&!d.noOb&&!d.ob){d.ob={t:2,dyn:d,cx:0,cz:0,c:1,s:0,hx:0,hz:0,h:0,y0:0,rr:0,gx:1e9,gz:1e9};dynOb(d,p,q);}
@@ -3664,18 +3740,18 @@ function mapStatics(R,add,pw){
   for(const F of FLOORS)if(!F.ramp&&!F.down&&!F.dyn){const c=add(R.ColliderDesc.cuboid((F.x1-F.x0)/2,.05,(F.z1-F.z0)/2).setTranslation((F.x0+F.x1)/2,F.h-.05,(F.z0+F.z1)/2));if(pw)F.phys=c;}   // decks, tables, benches, the gallery
   for(const c of circles){if(c.dyn&&!pw)continue;const k=add(R.ColliderDesc.cylinder(c.h/2,c.r).setTranslation(c.x,c.h/2,c.z));if(pw)c.phys=k;}
   if(ARENA_R>0){const n=72;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,th=-(a+Math.PI/2);add(R.ColliderDesc.cuboid(ARENA_R*Math.PI/n+.06,1.7,.3).setTranslation(Math.cos(a)*(ARENA_R+.3),1.7,Math.sin(a)*(ARENA_R+.3)).setRotation({x:0,y:Math.sin(th/2),z:0,w:Math.cos(th/2)}));}}
-  if(!pw)for(const s of PSOLID)add(R.ColliderDesc.cuboid(s[3],s[4],s[5]).setTranslation(s[0],s[1],s[2]));}
+  if(!pw)for(const s of PSOLID){const cd=R.ColliderDesc.cuboid(s[3],s[4],s[5]).setTranslation(s[0],s[1],s[2]);if(s[6])cd.setRotation({x:0,y:Math.sin(s[6]/2),z:0,w:Math.cos(s[6]/2)});add(cd);}}
 function dynWorld(){if(!RP||NET.mode==='client'||(PRW&&dynKey===mapKey))return;dynFree();dynKey=mapKey;
   PRW=new RP.World({x:0,y:-9.81,z:0});PRW.timestep=PH_H;
   mapStatics(RP,cd=>PRW.createCollider(cd.setCollisionGroups(DGR_S).setFriction(.7).setRestitution(.05)),false);
   for(const d of DYN)if(d.sh&&!d.gone&&!d.body)dynBody(d);}
 function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);}catch(e){}d.pw=null;d.body=null;}PROX.clear();if(PRW){try{PRW.free();}catch(e){}PRW=null;}dynKey=-1;}
-function dynColl(R,S,m){let cd;if(S.t==='box')cd=R.ColliderDesc.cuboid(S.h[0],S.h[1],S.h[2]);else if(S.t==='cyl'){cd=R.ColliderDesc.cylinder(S.h[0],S.h[1]);if(S.rz)cd.setRotation({x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2});}else cd=R.ColliderDesc.ball(S.h[0]);
+function dynColl(R,S,m){let cd;if(S.t==='box')cd=R.ColliderDesc.cuboid(S.h[0],S.h[1],S.h[2]);else if(S.t==='cyl'){cd=R.ColliderDesc.cylinder(S.h[0],S.h[1]);if(S.rz)cd.setRotation({x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2});else if(S.rx)cd.setRotation({x:Math.SQRT1_2,y:0,z:0,w:Math.SQRT1_2});}else cd=R.ColliderDesc.ball(S.h[0]);
   return cd.setTranslation(S.o[0],S.o[1],S.o[2]).setMass(m);}
 function dynBody(d){if(d.body||!d.sh||d.gone)return;const p=d.obj.position,q=d.obj.quaternion;
   const bd=RP.RigidBodyDesc.dynamic().setTranslation(p.x,p.y,p.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}).setLinearDamping(.06).setAngularDamping(d.ad??.3).setCanSleep(true);if(d.m<4)bd.setCcdEnabled(true);
   const b=PRW.createRigidBody(bd);const vol=d.sh.map(S=>S.w??(S.t==='box'?8*S.h[0]*S.h[1]*S.h[2]:S.t==='cyl'?6.283*S.h[1]*S.h[1]*S.h[0]:4.19*S.h[0]**3)),tot=vol.reduce((a,b)=>a+b,0)||1;
-  d.sh.forEach((S,i)=>PRW.createCollider(dynColl(RP,S,d.m*vol[i]/tot).setFriction(d.fr??(SHIP?.5:.6)).setRestitution(d.rs??.1).setCollisionGroups(d.heavy?DGR_H:DGR_L),b));
+  d.sh.forEach((S,i)=>PRW.createCollider(dynColl(RP,S,d.m*vol[i]/tot).setFriction(d.fr??(SHIP?.5:.6)).setRestitution(d.rs??.1).setCollisionGroups(d.grp==='m'?DGR_M:d.heavy?DGR_H:DGR_L),b));
   b.sleep();d.body=b;d.p0=p.clone();d.slp=true;
   if(PW&&R&&d.heavy){d.pw=PW.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(p.x,p.y,p.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}));   // the rigid-body engine's weapons and limbs meet it too
     for(const S of d.sh)PW.createCollider(dynColl(R,S,1).setCollisionGroups(GR_WORLD).setFriction(.75),d.pw);}}
@@ -3724,7 +3800,7 @@ function dynStep2(){dynN++;
     if(dynN%20===0&&Math.hypot(_xdv.x,_xdv.z)*2.5>2.4)for(const d of DYN)if(d.body&&d.body.isSleeping())d.body.wakeUp();}
   for(const f of fighters){const rag=f.ragdoll,hp=rag&&rag.P.Hips?rag.P.Hips:f.pos,L=dynNear(hp.x,hp.z);if(!L||!f.caps)continue;
     for(let i=0;i<f.caps.length;i++){const c=f.caps[i];if(!c.on)continue;const leg=c.zone==='legL'||c.zone==='legR';if(!dynReach(L,c.a,c.b,c.r+.25)){proxyOff(f.id*64+i);continue;}
-      const x=proxyCap(f.id*64+i,c.a,c.b,rag?Math.min(c.r*.6,RD_R[c.ba]||.055,.08)*.95:c.r*.92,PART_M[i]*(rag?1.2:1.5),DGR_PL);/* bodies meet heavy things through collide() (CTX), by mass; their stand-ins only move light ones */x.sw=null;x.rag=rag?f:null;x.ci=i;}
+      const x=proxyCap(f.id*64+i,c.a,c.b,rag?Math.min(c.r*.6,RD_R[c.ba]||.055,.08)*.95:c.r*.92,PART_M[i]*(rag?1.2:1.5),rag?DGR_PR:DGR_PL);/* bodies meet heavy things through collide() (CTX), by mass; their stand-ins only move light ones */x.sw=null;x.rag=rag?f:null;x.ci=i;}
     if(!rag&&f.alive){if(f.sword&&!f.sword.free){if(dynReach(L,f.sword.H,f.sword.T,.45))proxySword(f.id*64+40,f.sword,true);else proxyOff(f.id*64+40);}
       else if(f.fists)for(const sd of ['R','L']){const a=f.fists[sd],k=f.id*64+(sd==='R'?41:42);if(a&&a.pos&&dynReach(L,a.pos,a.pos,.35)){const x=proxyCap(k,a.pos,a.pos,.05,2.2,DGR_P);x.sw=null;x.rag=null;}else proxyOff(k);}}}
   for(const s of freeSwords){if(s.owner&&!s.free)continue;const k=1e7+s.id;if(!(s.flying||(s.rb?(()=>{const v=s.rb.linvel();return v.x*v.x+v.y*v.y+v.z*v.z>.09;})():s.H.distanceToSquared(s.Hp)>4e-6))){proxyOff(k);continue;}const L=dynNear(s.H.x,s.H.z);if(!L||!dynReach(L,s.H,s.T,.5)){proxyOff(k);continue;}proxySword(k,s,false);}
@@ -3741,7 +3817,9 @@ function dynSound(d,k,p){if(d.snd==='metal')sfx('dropWeapon',p,Math.min(.7,k/10)
 function dynSync(){for(const d of DYN){const b=d.body;if(!b||d.gone)continue;if(b.isSleeping()){if(d.slp)continue;d.slp=true;}else d.slp=false;
   const t=b.translation(),r=b.rotation();d.obj.position.set(t.x,t.y,t.z);d.obj.quaternion.set(r.x,r.y,r.z,r.w);d.net=1;
   if(!d.mv&&Math.abs(t.x-d.p0.x)+Math.abs(t.y-d.p0.y)+Math.abs(t.z-d.p0.z)>.02){d.mv=true;mapDirty=true;}
-  let v=b.linvel(),sp=Math.hypot(v.x,v.y,v.z);const vm=d.heavy?7:14;if(sp>vm){const k=vm/sp;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);v=b.linvel();sp=vm;}   // (a safety net against anything wedged and spat out)
+  let v=b.linvel(),sp=Math.hypot(v.x,v.y,v.z);
+  if(d.brittle||d.hp){const pv=d.pvv||(d.pvv=V()),dv=Math.hypot(v.x-pv.x,v.y-pv.y,v.z-pv.z);pv.set(v.x,v.y,v.z);   // a hard knock breaks it
+    if(d.brittle&&dv>3.3){dynBreak(d,v);continue;}if(d.hp&&dv>2.5){d.dmg=(d.dmg||0)+d.m*(dv-2.5);if(d.dmg>=d.hp){dynBreak(d,v);continue;}}}const vm=d.heavy?7:14;if(sp>vm){const k=vm/sp;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);v=b.linvel();sp=vm;}   // (a safety net against anything wedged and spat out)
   if(d.pv!=null&&Math.abs(sp-d.pv)>2&&simTime>(d.sndT||0)){d.sndT=simTime+.12;dynSound(d,Math.abs(sp-d.pv),d.obj.position.clone());}d.pv=sp;
   const p=d.obj.position,q=d.obj.quaternion;if(d.ob)dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;}if(d.fx)dynFx(d,p,q);
   if(d.pw){d.pw.setNextKinematicTranslation(t);d.pw.setNextKinematicRotation(r);}
@@ -3755,6 +3833,37 @@ function dynNetApply(a){for(let i=0;i+7<a.length;i+=8){const d=DYNK.get(a[i]);if
   (d.tp||(d.tp=V())).set(a[i+1],a[i+2],a[i+3]);(d.tq||(d.tq=new THREE.Quaternion())).set(a[i+4],a[i+5],a[i+6],a[i+7]).normalize();d.mv=true;mapDirty=true;}}
 function dynClient(dt){const k=1-Math.exp(-dt*16);for(const d of DYN){if(!d.tp||d.gone)continue;const o=d.obj;if(o.position.distanceToSquared(d.tp)>4)o.position.copy(d.tp);else o.position.lerp(d.tp,k);o.quaternion.slerp(d.tq,k);
   if(d.prop){d.prop.x=o.position.x;d.prop.z=o.position.z;}if(d.fx)dynFx(d,o.position,o.quaternion);if(d.floor)dynFloor(d,o.position,o.quaternion);}}
+// ---- breaking: crockery and glass (brittle) shatter on a hard knock: a fall from a table or shelf, a blow, a body landing on it.
+// Furniture with hp (chairs, benches, the spinning wheel) takes damage from every hard impulse it suffers and splits, leaving
+// boards, staves or a plank to fight with. The pieces are cosmetic shards and splinters (SHARDS: instanced, they fall, bounce and
+// settle on whatever floor is under them), worked out on every machine; friends hear of a break by event XS
+const SHARD_N=160,SHARD_IM=new Map(),SHARDS=[];
+const SHARD_G={chip:new THREE.TetrahedronGeometry(.035,0).scale(1,.32,1),splinter:new THREE.BoxGeometry(.025,.018,.17)};
+function shardIM(mat,kind){const k=mat.uuid+kind;let e=SHARD_IM.get(k);if(!e){const im=new THREE.InstancedMesh(SHARD_G[kind],mat,SHARD_N);im.count=0;im.castShadow=true;im.frustumCulled=false;world.add(im);e={im,i:0,list:[]};SHARD_IM.set(k,e);}return e;}
+const _shM=new THREE.Matrix4(),_shQ=new THREE.Quaternion(),_shS=V(1,1,1),_shE=new THREE.Euler();
+function shardAdd(mat,kind,p,v,sc=1){const e=shardIM(mat,kind),slot=e.i++%SHARD_N;e.im.count=Math.min(SHARD_N,Math.max(e.im.count,slot+1));
+  const s={e,slot,p:p.clone(),v:v.clone(),r:V(Math.random()*6,Math.random()*6,Math.random()*6),w:V((Math.random()-.5)*24,(Math.random()-.5)*24,(Math.random()-.5)*24),sc:sc*(.6+Math.random()*.8),rest:false};
+  if(e.list[slot]){const o=e.list[slot],i=SHARDS.indexOf(o);if(i>=0)SHARDS.splice(i,1);}e.list[slot]=s;SHARDS.push(s);shardDraw(s);}
+function shardDraw(s){_shQ.setFromEuler(_shE.set(s.r.x,s.r.y,s.r.z));_shS.setScalar(s.sc);_shM.compose(s.p,_shQ,_shS);s.e.im.setMatrixAt(s.slot,_shM);s.e.im.instanceMatrix.needsUpdate=true;}
+function shardStep(dt){if(!SHARDS.length)return;dt=Math.min(dt,.05);for(const s of SHARDS){if(s.rest)continue;s.v.y-=9.8*dt;s.p.addScaledVector(s.v,dt);s.r.addScaledVector(s.w,dt);
+  const gy=groundY(s.p.x,s.p.z,s.p.y+.03);if(s.p.y<gy+.006){s.p.y=gy+.006;s.v.y*=-.22;s.v.x*=.55;s.v.z*=.55;s.w.multiplyScalar(.5);s.r.x=Math.round(s.r.x/Math.PI)*Math.PI;s.r.z=Math.round(s.r.z/Math.PI)*Math.PI;   // lands flat
+    if(s.v.lengthSq()<.04)s.rest=true;}
+  if(s.p.y<-30)s.rest=true;shardDraw(s);}}
+function shardClear(){SHARD_IM.clear();SHARDS.length=0;}
+function dynBits(ids,P){if(NET.mode==='client')return;for(const id of ids){const s=new Sword(WEAPONS[id]);const a=Math.random()*6.283;
+  s.reset(V(P.x+Math.cos(a)*.25,Math.max(P.y,.25)+.15,P.z+Math.sin(a)*.25),V(Math.random()-.5,Math.random()*.3,Math.random()-.5).normalize());s.edge.set(0,1,0);s.free=true;s.age=0;
+  s.Hp.copy(s.H).add(V(Math.cos(a)*.008,0,Math.sin(a)*.008));s.Tp.copy(s.T).add(V(Math.cos(a)*.008,0,Math.sin(a)*.008));if(s.rb){s.physPose();s.setGroup(GR_LOOSE);}freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:null});}}
+function dynBreak(d,vel){if(d.gone)return;const P=d.obj.position.clone();d.obj.updateMatrixWorld(true);_xdv.set(0,0,0);if(d.lb)d.lb.getCenter(_xdv).applyQuaternion(d.obj.quaternion);P.add(_xdv);
+  let mat=null;d.obj.traverse(o=>{if(!mat&&o.isMesh&&o.visible)mat=Array.isArray(o.material)?o.material[0]:o.material;});
+  const bv=vel||(d.body?d.body.linvel():{x:0,y:0,z:0}),br=!!d.brittle,n=br?7+((d.m*10)|0)%4:6,sz=d.lb?d.lb.getSize(_xdv3):V(.2,.2,.2);
+  if(mat)for(let i=0;i<n;i++){const a=Math.random()*6.283,sp=br?1+Math.random()*2.2:.6+Math.random()*1.4;
+    shardAdd(mat,br?'chip':'splinter',V(P.x+(Math.random()-.5)*sz.x*.6,P.y+(Math.random()-.5)*sz.y*.6,P.z+(Math.random()-.5)*sz.z*.6),V(Math.cos(a)*sp+bv.x*.4,Math.random()*1.6+Math.max(0,bv.y)*.3,Math.sin(a)*sp+bv.z*.4),br?Math.min(2.2,.8+Math.max(sz.x,sz.y)*4):Math.min(3,.7+sz.y*2));}
+  if(d.snd==='glass'){sfx('clash',P,.55,2.7,.1,false);sfx('block',P,.35,2.4,.12,false);}
+  else if(br){sThud(P,.35);sfx('clash',P,.32,1.35,.1,false);sfx('block',P,.3,1.6,.1,false);}
+  else{sThud(P,.9);sfx('crush',P,.55,1.25,.06,false);sfx('dropWeapon',P,.5,.8,.05,false);}
+  if(NET.mode==='host')netEv(['XS',d.key]);
+  if(d.bits)dynBits(d.bits,P);
+  mapDirty=true;dynKill(d);}
 // ================================================================ wounds
 // every hit leaves its mark where it landed: a gash along the edge, a hole from the point, a bruise from a blunt blow.
 // Each mark is a small patch bent to the limb's curve and attached to the struck bone, so it moves with the body.
@@ -5845,7 +5954,7 @@ function logic(dt){
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
-  propVisual(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -6603,7 +6712,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -6615,6 +6724,7 @@ function clientEvents(ev){
     case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5]);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
+    case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
     case 'q':{const f=NET.puppets.get(e[1]);if(f){f.clutchP=e[2];f.clutchT=simTime+e[3];}break;}
@@ -6667,6 +6777,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={swayStep,Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={swayStep,dynBreak,SHARDS,Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
