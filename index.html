@@ -339,7 +339,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=105;
+const BUILD=106;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1893,9 +1893,9 @@ function buildMill(){millMats();const C=MILL_C,W=C.W,D=C.D,Hh=C.H,th=.6;
    for(const [px,pz] of [[x0+.15,z0+.15],[ax,z0+.15],[x1-.15,z0+.15],[x0+.15,z1-.2],[x1-.15,z1-.2],[x0+.15,(z0+z1)/2],[x1-.15,(z0+z1)/2]]){addGeo('beam',boxUV(.3,h-.1,.3,1),T(px,(h-.1)/2,pz));addCircle(px,pz,.2,h);
      for(const s of [-1,1])if(px>x0+1&&px<x1-1||s===(px<ax?1:-1))vRod('beam',V(px+s*.15,h-.95,pz),V(px+s*.8,h-.3,pz),.06,4);}
    // the stair: 12 steps up the west side of the deck, solid underneath, a handrail on posts along its open side
-   const sx0=x0-4,N=12,rs=h/N,gs=(x0-sx0)/N,sz0=1.0,sz1=1.85;FLOORS.push({x0:sx0,x1:x0+.01,z0:sz0,z1:sz1,ramp:'x',a0:sx0,a1:x0,h0:0,h1:h});
+   const sx0=x0-5,N=15,rs=h/N,gs=(x0-sx0)/N,sz0=.95,sz1=2.0;FLOORS.push({x0:sx0,x1:x0+.01,z0:sz0,z1:sz1,ramp:'x',a0:sx0,a1:x0,h0:0,h1:h});
    for(let i=0;i<N;i++){const top=(i+1)*rs,x=sx0+i*gs;addGeo('wood',boxUV(gs,top-.05,sz1-sz0-.04,1),T(x+gs/2,(top-.05)/2,(sz0+sz1)/2));addGeo('woodLight',boxUV(gs+.05,.05,sz1-sz0,1),T(x+gs/2,top-.025,(sz0+sz1)/2));
-     if(i>=2)addBox(x+gs*.5,x+gs+.01,sz0,sz1,i*rs);}
+     if(top>.45){addBox(x,x+gs+.01,sz0-.07,sz0,top);addBox(x,x+gs+.01,sz1,sz1+.07,top);}}   // its sides are solid (no walking under it), the treads are open
    const sl=Math.hypot(x0-sx0,h),sa=Math.atan2(h,x0-sx0);addGeo('beam',boxUV(sl+.1,.3,.07,1),T((sx0+x0)/2,h/2-.04,sz0-.04,0,0,sa));
    for(let i=3;i<=N;i+=3){const x=sx0+(i-.5)*gs;vRod('beam',V(x,i*rs,sz0-.02),V(x,i*rs+.95,sz0-.02),.04,5);}
    {const a=V(sx0+2.5*gs,2.5*rs+.95,sz0-.02),b=V(x0,h+.95,sz0-.02);vRod('woodLight',a,b,.035,6);}
@@ -1910,11 +1910,47 @@ function buildMill(){millMats();const C=MILL_C,W=C.W,D=C.D,Hh=C.H,th=.6;
     [-11.9,-7.2,0],[-11.3,-7.3,0],[-12.3,-6.6,0],[-11.7,-6.5,0],[-12.2,-5.9,0],[-6.9,-7.4,0],[-7.5,-7.3,0],[-0.9,-7.4,0],[11.9,-1.4,0],[12.2,-.7,0],[11.6,-.6,0],[-6.4,3.8,0],[-5.8,3.85,0],[-3.4,3.8,0],[9.8,3.7,0],[10.4,3.8,0]])millSack(x,y,z);
   for(const [x,z] of [[12.1,-6.6],[12.1,-4.4]]){addGeo('boards',boxUV(1.5,1.3,2,1),T(x,.65,z));addGeo('beam',boxUV(1.56,.08,2.06,1),T(x,1.32,z));addGeo('grain',boxUV(1.4,.04,1.9,1),T(x,1.22,z));addBox(x-.75,x+.75,z-1,z+1,1.32);}
   addGeo('millstone',new THREE.CylinderGeometry(.66,.66,.24,24),T(-12.5,.68,1.6,Math.PI/2,0,Math.PI/2-.12));addBox(-13,-12.2,.9,2.3,1.35);
-  for(const [x,z] of [[-9,-6.9],[9.5,-7.1],[-12.3,-1.8],[6.8,-7.2]])barrel(x,z);for(const [x,z,s] of [[-8.1,-7.1,.75],[10.6,-7.2,.8],[-12.2,-2.9,.7]])crate(x,z,s);
+  for(const [x,z] of [[-9,-6.9],[8.2,-6.6],[-12.3,-1.8],[6.8,-7.2]])barrel(x,z);for(const [x,z,s] of [[-8.1,-7.1,.75],[10.6,-7.2,.8],[-12.2,-2.9,.7]])crate(x,z,s);
   // lanterns: on iron brackets off the walls, and hung on rods from the tie beams over the race's edge and the stone floor
   for(const [x,z,nx,nz] of [[-W,-6.2,1,0],[W,-2.6,-1,0],[-7.1,-D,0,1],[7.6,-D,0,1],[W,2.4,-1,0]]){const y=2.7;addGeo('iron',boxUV(nx?.4:.04,.04,nz?.4:.04,1),T(x+nx*.2,y+.15,z+nz*.2));vRod('iron',V(x+nx*.4,y+.15,z+nz*.4),V(x+nx*.4,y-.05,z+nz*.4),.012,4);addGeo('iron',new THREE.CylinderGeometry(.08,.1,.22,6),T(x+nx*.4,y-.12,z+nz*.4));addFlame(x+nx*.4,y-.25,z+nz*.4,.55,true);}
   for(const [x,z,y] of [[-6.1,4.0,2.8],[10.2,4.0,2.8],[-.5,-2.5,3.4],[6.3,2.0,C.DH+1.7]]){vRod('iron',V(x,Hh-.15,z),V(x,y+.15,z),.012,4);addGeo('iron',new THREE.CylinderGeometry(.08,.1,.22,6),T(x,y+.05,z));addGeo('iron',new THREE.ConeGeometry(.12,.12,6),T(x,y+.2,z));addFlame(x,y-.1,z,.55,true);}
   for(const L of torchLights)L.color.setHex(0xffb070);
+  // ---- the hall's frame: oak posts on stone pads under four of the tie beams, braced up to them (cover to fight round)
+  for(const x of [-8.85,-2.35,4.15,10.65]){const z=-3.6;addGeo('stone',boxUV(.55,.18,.55,1),T(x,.09,z));addGeo('beam',boxUV(.32,Hh-.2,.32,1),T(x,.18+(Hh-.2)/2-.09,z));
+    for(const s of [-1,1])vRod('beam',V(x,Hh-1.7,z+s*.12),V(x,Hh-.2,z+s*1.3),.075,4);addCircle(x,z,.24,Hh);}
+  // ---- a stack of flour sacks in the south-east corner, two rows, two high in places
+  for(const [x,z,y] of [[8.85,-7.4,0],[9.5,-7.4,0],[10.15,-7.4,0],[10.8,-7.35,0],[9.15,-6.72,0],[9.8,-6.72,0],[10.45,-6.7,0],[9.5,-6.05,0],[10.15,-6.05,0]])millSack(x,y,z);
+  // ---- the miller's bench against the east wall: a heavy top on trestles, mill bills and a hammer for dressing the stones, rope, a bowl
+  {const bx=12.35,bz=1.4;ownGroup(bx,bz,Math.PI/2,()=>{addGeo('wood',boxUV(2.1,.09,.72,1),T(0,.86,0));for(const sx of [-.85,.85])for(const sz of [-.26,.26])addGeo('beam',boxUV(.09,.82,.09,1),T(sx,.41,sz));addGeo('beam',boxUV(1.8,.07,.06,1),T(0,.25,0));
+    for(let i=0;i<3;i++){const x=-.6+i*.32;addGeo('beam',new THREE.CylinderGeometry(.018,.022,.42,6),T(x,.925,.1,.3,0,Math.PI/2));addGeo('iron',boxUV(.05,.05,.2,1),T(x-.2,.925,.1+.06,.3));}
+    addGeo('iron',boxUV(.12,.06,.06,1),T(.35,.92,-.15));addGeo('beam',new THREE.CylinderGeometry(.015,.015,.3,6),T(.35,.92,-.0,0,Math.PI/2));
+    addGeo('rope',new THREE.TorusGeometry(.13,.035,6,14),T(.72,.94,.05,0,Math.PI/2));addGeo('rope',new THREE.TorusGeometry(.1,.033,6,14),T(.72,.99,.05,0,Math.PI/2));});
+   addBox(bx-.36,bx+.36,bz-1.05,bz+1.05,.92);}
+  // a ladder up the east side of the stone floor
+  {const lx=C.px1+.32,lz=2.5;for(const s of [-.24,.24])vRod('beam',V(lx+.55,0,lz+s),V(lx,C.DH+.9,lz+s),.035,5);for(let k=1;k<10;k++){const u=k/10;vRod('beam',V(lx+.55*(1-u),u*(C.DH+.9),lz-.24),V(lx+.55*(1-u),u*(C.DH+.9),lz+.24),.018,4);}}
+  // handrail posts down each flight of steps in the race
+  for(const s of M.steps){const d=Math.sign(s.bot-s.top);for(let k=0;k<=3;k++){const x=s.top+d*k*Math.abs(s.bot-s.top)/3,y=millGround(x+d*.05,C.rz0+.2,0);vRod('iron',V(x,y,s.z1-.04),V(x,y+.95,s.z1-.04),.018,5);}
+    vRod('iron',V(s.top,.95,s.z1-.04),V(s.bot,C.rb*5/6+.95,s.z1-.04),.016,5);}
+  // flour dust: pale drifts round the tuns and hoppers, and where sacks have stood for years
+  {const c=mkCanvas(128,128),g=c.getContext('2d');const gr=g.createRadialGradient(64,64,4,64,64,62);gr.addColorStop(0,'rgba(255,255,255,.75)');gr.addColorStop(.5,'rgba(255,255,255,.3)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,128,128);
+   for(let i=0;i<400;i++){g.fillStyle=`rgba(255,255,255,${Math.random()*.25})`;const a=Math.random()*6.28,r=Math.random()*60;g.fillRect(64+Math.cos(a)*r,64+Math.sin(a)*r,2,2);}
+   const mt=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),color:0xe8e2d4,transparent:true,depthWrite:false,opacity:.55,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+   for(const [x,y,z,s] of [[C.WX-1.62,C.DH+.002,C.SZ,2.2],[C.WX+1.62,C.DH+.002,C.SZ,2.2],[C.WX,C.DH+.002,1.4,1.6],[7.8,C.DH+.002,1.8,1.4],[-11.8,.003,-6.6,2.2],[9.9,.003,-7,2.6],[-6.1,.003,3.8,1.4],[C.WX,.003,2.1,1.8]]){const m=new THREE.Mesh(new THREE.PlaneGeometry(s,s).rotateX(-Math.PI/2),mt);m.position.set(x,y,z);m.rotation.y=x;m.renderOrder=1;world.add(m);}}
+  // shafts of sunlight from the south windows (faint, warm; they show the air without any motes)
+  {const L=V(-.3,-.5,.8).normalize(),mt=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,uniforms:{uT:{value:0}},
+     vertexShader:'attribute float aF;varying float vF;varying vec3 vW;void main(){vF=aF;vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}',
+     fragmentShader:'uniform float uT;varying float vF;varying vec3 vW;void main(){float s=.75+.25*sin(vW.x*1.7+vW.y*.9+uT*.3);gl_FragColor=vec4(vec3(1.,.82,.55)*.016*s*smoothstep(0.,.45,vF)*smoothstep(1.,.6,vF),1.);}'});
+   M.shaftU=mt.uniforms;const wins=[-9.5,-4.6,.3,5.2,10];
+   for(const wx of wins){const P=[],F=[],ix=[];const c0=[[wx-.8,1.15],[wx+.8,1.15],[wx+.8,3.5],[wx-.8,3.5]];
+     for(const [x,y] of c0){P.push(x,y,-D+.05);F.push(0);}for(const [x,y] of c0){const t=y/-L.y;P.push(x+L.x*t,0,-D+.05+L.z*t);F.push(1);}
+     for(let i=0;i<4;i++){const j=(i+1)%4;ix.push(i,j,4+j,i,4+j,4+i);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('aF',new THREE.Float32BufferAttribute(F,1));g.setIndex(ix);
+     const m=new THREE.Mesh(g,mt);m.renderOrder=5;m.frustumCulled=false;world.add(m);}}
+  // ---- a spare runner stone stood on edge in timber chocks: hit it hard enough or kick it and it rolls down the hall
+  {const S={x:-9.2,z:-1.5,R:.66,st:'stand',v:0,a:0,tip:0,tipD:1,hit:new Set()};const g=new THREE.Group();g.position.set(S.x,S.R,S.z);world.add(g);
+   const sm=new THREE.Mesh(new THREE.CylinderGeometry(S.R,S.R,.26,28),MATS.millstone);sm.rotation.x=Math.PI/2;sm.castShadow=sm.receiveShadow=true;g.add(sm);
+   const ey=new THREE.Mesh(boxUV(.2,.2,.28,1),MATS.iron);g.add(ey);S.g=g;
+   for(const s of [-1,1]){addGeo('beam',boxUV(.3,.14,.5,1),T(S.x+s*.55,.07,S.z,0,0,s*.25));}
+   S.col=addCircle(S.x,S.z,.42,1.35);S.prop=propAdd('millstone',new THREE.Group(),S.x,S.z,.5,1.35,45,null);M.stone=S;}
   dynModel('wooden_bucket_01',{x:-10.6,z:3.9,h:.42,ry:1},{m:2.4,auto:'cyl'});dynModel('wicker_basket_01',{x:3.2,y:C.DH,z:.9,h:.32,ry:2},{m:1.4,auto:'cyl'});dynModel('wooden_bucket_02',{x:11.2,z:3.7,h:.38,ry:2},{m:2.4,auto:'cyl'});
   flushBatch();
   // the loot here is a miller's: a flail, a pitchfork... (ordinary map loot spawns too)
@@ -1955,13 +1991,35 @@ function millLever(f){const M=MILL;if(!M||!f||!f.alive||f.ragdoll)return false;i
 function millSluice(open,net=true){const M=MILL;if(!M)return;M.open=open;M.flowT=open?1:0;sfx('crush',V(M.lever.x,1,M.lever.z),.5,.7,0,false);sThud(V(-M.W+.4,0,6),.6);if(NET.mode==='host'&&net)netEv(['ML',open?1:0]);mapDirty=true;}
 // host: the race, the wheel and the cogs at work on whoever is in them
 const MILL_SEV={LeftHand:'LeftForeArm',LeftHandMiddle1:'LeftForeArm',LeftForeArm:'LeftArm',RightHand:'RightForeArm',RightHandMiddle1:'RightForeArm',RightForeArm:'RightArm',LeftFoot:'LeftLeg',LeftToeBase:'LeftLeg',LeftLeg:'LeftUpLeg',RightFoot:'RightLeg',RightToeBase:'RightLeg',RightLeg:'RightUpLeg'};
-function millStep(h){const M=MILL;if(!M)return;M.flow+=(M.flowT-M.flow)*(1-Math.exp(-h*.55));const flow=M.flow,cur=.95*flow,om=.72*flow;
+// the spare millstone: knocked out of its chocks it rolls along the hall on its edge, slowing, and falls flat where it stops or
+// meets something; anyone in its way is bowled over and crushed. Host and friends roll it the same way from event MR
+function millStoneRoll(dir,net=true){const M=MILL,S=M&&M.stone;if(!S||S.st!=='stand')return;S.st='roll';S.v=(dir>=0?1:-1)*3.6;S.prop.broken=true;mapDirty=true;
+  if(NET.mode==='host'&&net)netEv(['MR',S.v>0?1:-1]);sThud(V(S.x,.3,S.z),1);sfx('crush',V(S.x,.3,S.z),.6,.6,0,false);
+  for(const f of fighters)if(f.isPlayer&&f.alive&&Math.hypot(f.pos.x-S.x,f.pos.z-S.z)<12)tell(f,'The millstone is rolling!','red');}
+function millStoneStep(dt){const M=MILL,S=M&&M.stone;if(!S||S.st==='stand'||S.st==='flat')return;
+  if(S.st==='roll'){const nx=S.x+S.v*dt;S.v-=Math.sign(S.v)*.22*dt;S.a-=S.v/S.R*dt;
+    gridRemove(S.col);const p=V(nx+Math.sign(S.v)*.2,0,S.z),blocked=collide(p,.3)||Math.abs(nx)>M.W-.8;
+    if(blocked){S.v*=-.25;sThud(V(S.x,.4,S.z),1.2);}else S.x=nx;
+    S.col.x=S.x;gridInsert(S.col,S.x-1.5,S.x+1.5,S.z-1.5,S.z+1.5);
+    if(Math.random()<dt*6*Math.min(1,Math.abs(S.v)))noiseBurstAt(V(S.x,0,S.z),.12,'lowpass',160,.6,.35*Math.min(1,Math.abs(S.v)/3));
+    if(NET.mode!=='client')for(const f of fighters){if(!f.alive)continue;const c=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips:f.pos;if(Math.abs(c.z-S.z)>.55||Math.abs(c.x-S.x)>.75||c.y>1)continue;const sp=Math.abs(S.v);if(sp<1)continue;
+      if(S.hit.has(f))continue;S.hit.add(f);f.damage(10+sp*9,f.lastHitBy,'crushed by a millstone');sThud(c,1.2);sfx('crush',c,.8,1.1,0,false);
+      if(f.alive&&!f.ragdoll)f.knockdown(rand(1.8,2.8),V(Math.sign(S.v)*sp,-1,0),f.chest.clone());if(f.ragdoll)for(const n of f.ragdoll.names){const q=f.ragdoll.Q[n];if(q)q.x-=Math.sign(S.v)*sp*.6*H*2;}
+      S.v*=.7;if(f.alive)tell(f,'The millstone runs you down!','red');}
+    if(Math.abs(S.v)<.45){S.st='tip';S.tip=0;S.tipD=Math.random()<.5?1:-1;}}
+  if(S.st==='tip'){S.tip=Math.min(1,S.tip+dt*1.8);const e=S.tip*S.tip;S.g.rotation.set(S.tipD*e*Math.PI/2,0,S.a);S.g.position.y=S.R+(.14-S.R)*e;S.g.position.z=S.z+S.tipD*e*.0;
+    if(S.tip>=1){S.st='flat';sThud(V(S.x,.1,S.z),1.3);spawnDust(V(S.x,.05,S.z),16,1.4,.6);S.col.r=S.R;S.col.h=.28;}}
+  if(S.st==='roll'){S.g.position.set(S.x,S.R,S.z);S.g.rotation.set(0,0,S.a);}}
+// a kick or a hard shoulder into the standing stone sets it off too
+function millStoneKick(f){const M=MILL,S=M&&M.stone;if(!S||S.st!=='stand'||f.kickT<.12||f.kickT>.32||(f._kickStone||0)>simTime)return;const dx=S.x-f.pos.x,dz=S.z-f.pos.z,d=Math.hypot(dx,dz);if(d>1.3)return;f.fwd(_xdv);if((dx*_xdv.x+dz*_xdv.z)/d<.5)return;f._kickStone=simTime+.7;millStoneRoll(_xdv.x);}
+function millStep(h){const M=MILL;if(!M)return;M.flow+=(M.flowT-M.flow)*(1-Math.exp(-h*.55));const flow=M.flow,cur=.75*flow,om=.72*flow;
   if(NET.mode==='client')return;
   const R=M.WR;
   for(const f of fighters){if(f.ragdoll){millRag(f,h,cur,om);continue;}
-    const inr=inRace(f.pos.x,f.pos.z)&&f.pos.y<-.25;
-    if(inr&&!f._inRace&&f.alive){millSplash(f.pos.x,f.pos.z,1);f.stagger=Math.max(f.stagger,.5);f.burn=0;}f._inRace=inr;f._wade=inr;
-    if(inr){f.pos.x+=cur*h;f.burn=0;
+    const inr=inRace(f.pos.x,f.pos.z)&&f.pos.y<-.25,deep=inr&&f.pos.y<-.62;
+    if(inr&&!f._inRace&&f.alive){millSplash(f.pos.x,f.pos.z,1);f.stagger=Math.max(f.stagger,.5);f.burn=0;}f._inRace=inr;f._wade=deep;
+    if(f.kickT>=0)millStoneKick(f);
+    if(inr){if(deep)f.pos.x+=cur*h;f.burn=0;
       if(f.alive&&Math.abs(f.pos.x-M.WX)<R*.75&&f.pos.y<-.5){f.damage(18,null,'dragged under the millwheel');if(f.alive&&!f.ragdoll)f.knockdown(rand(2.5,3.5),V(1.5,-2,0),f.chest.clone());}}
     // the slot: standing fighters are kept out of it; pressed against the turning pit wheel, a sleeve or a belt can be caught
     if(f.pos.y>-.1){const r=.34,x0=M.sx0-r,x1=M.sx1+r,z0=M.sz0-r,z1=M.sz1+r;if(f.pos.x>x0&&f.pos.x<x1&&f.pos.z>z0&&f.pos.z<z1){
@@ -1969,6 +2027,10 @@ function millStep(h){const M=MILL;if(!M)return;M.flow+=(M.flowT-M.flow)*(1-Math.
       const sp=Math.hypot(f.vel.x,f.vel.z);if(f.alive&&om>.2&&!M.snag&&(sp>2.6||f.stagger>.2||Math.random()<h*.35)){millSnag(f);}}}
     // a weapon pushed into the cogs is torn out of the hand
     const s=f.sword;if(s&&s.def.kind!=='fist'&&om>.2&&f.alive){for(let i=2;i<=8;i++){_v.copy(s.H).addScaledVector(s.axis,s.len*i/8);if(_v.x>M.sx0&&_v.x<M.sx1&&Math.abs(_v.z-M.pz)<.3&&_v.y<M.WY+M.PR+.1){const dy=_v.y-M.WY,dx=_v.x-M.WX;if(Math.hypot(dx,dy)>M.PR-.35){millYank(f,s,dx,dy,om);break;}}}}}
+  millStoneStep(h);
+  // a bot standing by the stone with a foe down the line of its roll sometimes sets it going
+  {const S=M.stone;if(S&&S.st==='stand'&&state==='playing')for(const f of fighters){if(!f.alive||f.ragdoll||f.isPlayer||f.remote)continue;const dx=S.x-f.pos.x;if(Math.abs(dx)>1.2||Math.abs(f.pos.z-S.z)>.9)continue;const dir=Math.sign(dx)||1;
+    if(fighters.some(o=>o!==f&&o.alive&&!o.ragdoll&&Math.abs(o.pos.z-S.z)<.7&&(o.pos.x-S.x)*dir>2&&(o.pos.x-S.x)*dir<12)&&Math.random()<h*.6){millStoneRoll(dir);f.kickReq=true;break;}}}
   // loose weapons drift down the race
   for(const s of freeSwords){if(s.flying||s.owner||s.rb)continue;if(inRace(s.H.x,s.H.z)&&s.H.y<M.wl&&s.H.x<M.W-1){const d=cur*.5*h;s.H.x+=d;s.T.x+=d;s.Hp.x+=d;s.Tp.x+=d;}}
   for(const c of M.clouds)c.t+=h;M.clouds=M.clouds.filter(c=>c.t<6);
@@ -2011,7 +2073,7 @@ function millVisual(dt){const M=MILL;if(!M)return;if(NET.mode==='client')M.flow+
   M.parts.wheel.rotation.z=a;M.parts.pit.rotation.z=a;M.parts.shaft.rotation.y=-a*4;for(const n of M.parts.nuts)n.rotation.y=a*24;
   const wn=MATS.millWater.userData.n;wn.offset.x-=.95*M.flow*dt/ (26/1.4)*1;wn.offset.y+=Math.sin(performance.now()*.0007)*.0004;const ff=MATS.millFoam.userData.f;ff.offset.x-=dt*.12*(.3+M.flow);MATS.millFoam.opacity=.15+.6*M.flow;
   M.gate.position.y+=((M.open?M.wl+1.75:M.wl+.62)-M.gate.position.y)*Math.min(1,dt*1.5);M.leverArm.rotation.z=M.open?.7:-.7;
-  flourStep(dt);blastVisual(dt);
+  flourStep(dt);blastVisual(dt);if(M.shaftU)M.shaftU.uT.value+=dt;if(NET.mode==='client')millStoneStep(dt);
   // sound: the race rushing, the floats slapping, the cogs knocking
   if(AC&&state!=='loading'){if(!M.snd){const src=AC.createBufferSource();src.buffer=noiseBuf;src.loop=true;const f1=AC.createBiquadFilter();f1.type='bandpass';f1.frequency.value=700;f1.Q.value=.6;const f2=AC.createBiquadFilter();f2.type='lowpass';f2.frequency.value=2200;const g=AC.createGain();g.gain.value=0;src.connect(f1);f1.connect(f2);f2.connect(g);g.connect(master);src.start();M.snd={src,g,f1};}
     const cp=camera.position,dz=Math.max(0,Math.abs(cp.z-6)-1.4),v=1/(1+dz*.35);M.snd.g.gain.value=lerp(M.snd.g.gain.value,(.05+.16*M.flow)*v,.05);M.snd.f1.frequency.value=600+300*Math.sin(performance.now()*.0011)+200*M.flow;
@@ -3777,7 +3839,7 @@ function improvStep(){for(const d of debris){const s=d.wep;if(!s)continue;if(!fr
 const PROPS=[];
 function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});world.add(mesh);const p={kind,mesh,x,z,r,h,hp,hp0:hp,col,cd:new Map(),jig:0};PROPS.push(p);return p;}
 function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
-function propBreak(p,dir,by){if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
+function propBreak(p,dir,by){if(p.kind==='millstone'){if(NET.mode!=='client')millStoneRoll(dir?dir.x:1);return;}if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
   if(p.kind==='sack'){flourBurst(p.x,p.y0||0,p.z);return;}   // a flour sack bursts: no pieces, a cloud
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
@@ -7182,7 +7244,7 @@ function clientEvents(ev){
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'MF':mastFall(e[1],e[2],false);break;
-    case 'ML':millSluice(!!e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
+    case 'ML':millSluice(!!e[1],false);break;case 'MR':millStoneRoll(e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
     case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
