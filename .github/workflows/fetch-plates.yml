@@ -1,0 +1,55 @@
+name: fetch-plates
+on:
+  push:
+    branches: [fetch-plates]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download public-domain fight-manual plates from Wikimedia Commons
+        run: |
+          mkdir -p /tmp/plates && cd /tmp/plates
+          cat > f.py <<'PY'
+          import json, urllib.request, urllib.parse, os, re, time
+          UA={'User-Agent':'bloodmoor-plates/1.0 (https://github.com/misterpigger/bloodmoor)'}
+          def api(**p):
+              p.update(format='json'); u='https://commons.wikimedia.org/w/api.php?'+urllib.parse.urlencode(p)
+              return json.load(urllib.request.urlopen(urllib.request.Request(u,headers=UA),timeout=60))
+          cats=set()
+          for q in ['Talhoffer','Codex Wallerstein','Fior di Battaglia','Flos Duellatorum','Paulus Kal','Fechtbuch','Goliath Fechtbuch','Codex 44 A 8','Gladiatoria']:
+              r=api(action='query',list='search',srsearch=q,srnamespace=14,srlimit=40)
+              for x in r['query']['search']: cats.add(x['title'])
+          json.dump(sorted(cats),open('cats.json','w'),indent=1)
+          idx=[]
+          for c in sorted(cats):
+              n=0; cont={}
+              while n<120:
+                  r=api(action='query',generator='categorymembers',gcmtitle=c,gcmtype='file',gcmlimit=50,prop='imageinfo',iiprop='url|size',iiurlwidth=900,**cont)
+                  for pg in (r.get('query',{}).get('pages',{}) or {}).values():
+                      ii=pg.get('imageinfo',[{}])[0]; t=ii.get('thumburl')
+                      if not t or not re.search(r'\.(jpe?g|png|tiff?)$',pg['title'],re.I): continue
+                      fn=re.sub(r'[^A-Za-z0-9._-]','_',pg['title'][5:])[:120]
+                      if not fn.lower().endswith(('.jpg','.jpeg','.png')): fn+='.jpg'
+                      if os.path.exists(fn): continue
+                      try:
+                          open(fn,'wb').write(urllib.request.urlopen(urllib.request.Request(t,headers=UA),timeout=60).read()); n+=1
+                          idx.append({'file':fn,'title':pg['title'],'cat':c,'page':'https://commons.wikimedia.org/wiki/'+urllib.parse.quote(pg['title'].replace(' ','_'))})
+                      except Exception as e: print('fail',fn,e)
+                      time.sleep(0.05)
+                  if 'continue' not in r: break
+                  cont=r['continue']
+              print(c,n)
+          json.dump(idx,open('index.json','w'),indent=1)
+          PY
+          python3 f.py
+          rm f.py; du -sh .; ls | wc -l
+      - name: Push to the plates-raw branch
+        run: |
+          cd /tmp/plates
+          git init -q -b plates-raw
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "Public-domain fight manual plates from Wikimedia Commons"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" plates-raw
