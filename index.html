@@ -177,7 +177,12 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
 #endtitle.lose{color:#ff5a48}
 @media (prefers-reduced-motion:reduce){.note{animation-duration:2.4s}.btn{transition:none}}
 /* phones and tablets (body.touch): thumb controls, a compact menu, landscape only in a match */
-#touch,#rotate,.tcontrols{display:none}
+#touch,#rotate,.tcontrols,.tsensrow{display:none}
+body.touch .tsensrow{display:block}
+.tsens{width:min(220px,40vw);vertical-align:middle;accent-color:#c0261c;height:28px}
+body.touch:has(#pause:not(.hide)) #hud,body.touch:has(#end:not(.hide)) #touch{visibility:hidden}
+body.touch .overlay .small:not(.tsensrow){display:none}
+@media (max-height:520px){body.touch .overlay .box{padding:10px 20px;gap:6px;max-height:100vh;overflow:auto}body.touch .overlay h2{font-size:32px;margin:0}body.touch .overlay p{margin:4px 0;font-size:13px}body.touch .overlay .btn{padding:7px 18px;font-size:17px}body.touch .overlay .menu-btns{gap:6px}}
 body.touch{overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 body.touch canvas{touch-action:none}
 body.touch .controls{display:none}
@@ -235,6 +240,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt>Left thumb</dt><dd>Move. Push to the edge to sprint. Rock it left and right to struggle when you're down.</dd>
       <dt>Right thumb</dt><dd>Drag to move your sword hand. Swipe fast to swing hard; drag past the edge to turn.</dd>
       <dt>Buttons</dt><dd>Thrust (hold) · Jump · Kick · Use (take weapons and armour) · Throw (hold, let go to throw) · Grab (unarmed) · Crouch · Wounds</dd>
+      <dt>Sensitivity</dt><dd><input type="range" class="tsens" min="1" max="8" step="0.1" aria-label="Touch sensitivity"> <span class="tsensv"></span></dd>
     </dl>
     <p class="small" id="physTag"></p>
     <p class="small" id="buildTag" style="opacity:.6"></p>
@@ -343,6 +349,7 @@ body.touch #prompt{top:auto;bottom:24%}
 
 <div id="pause" class="overlay hide"><div class="box"><h2>Paused</h2><p>The fight is frozen until you come back</p>
   <div class="menu-btns"><button class="btn" id="resumeBtn">Resume</button><button class="btn ghost" id="restartBtn">Restart match</button><button class="btn ghost" id="mainBtn">Main menu</button></div>
+  <p class="small tsensrow">Touch sensitivity <input type="range" class="tsens" min="1" max="8" step="0.1" aria-label="Touch sensitivity"> <span class="tsensv"></span></p>
   <p class="small">Esc or P pauses · V switches view</p></div></div>
 <div id="spec" class="hide"><b id="specName">Spectating</b><span>Click or ← → to switch · Esc for the menu</span></div>
 <div id="end" class="overlay hide"><div class="box">
@@ -382,7 +389,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=107;
+const BUILD=108;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -6285,7 +6292,8 @@ document.getElementById('startBtn').addEventListener('click',startGame);
 // The left thumb is a stick that presses W/A/S/D (and Shift at the rim); the right thumb drives the same hand box as the mouse
 // (aimMove), a fast swipe holding the swing committed like LMB; each button stands in for its key, so every rule and a friend's
 // input to the host stay exactly as on a keyboard.
-const TOUCH_SENS=2.1,TOUCH_SWING=650;   // hand-box gain for a thumb, and the swipe speed (px/s) that counts as a committed swing
+let TOUCH_SENS=3.2;const TOUCH_SWING=650;   // hand-box gain for a thumb (the player sets it: Touch sensitivity, stored as bloodmoor-tsens), and the swipe speed (px/s) that counts as a committed swing
+try{const v=parseFloat(localStorage.getItem('bloodmoor-tsens'));if(v>=1&&v<=8)TOUCH_SENS=v;}catch(e){}
 if(TOUCH){const gid=id=>document.getElementById(id);
   const tl=gid('touch'),joy=gid('tjoy'),knob=joy.querySelector('i'),sw=gid('tswipe'),J={id:null,x:0,y:0},A={id:null,x:0,y:0,t:0,v:0};
   const setKeys=(dx,dy)=>{const r=Math.hypot(dx,dy),R=58,k=input.keys;k.KeyW=k.KeyS=k.KeyA=k.KeyD=k.ShiftLeft=false;
@@ -6309,6 +6317,9 @@ if(TOUCH){const gid=id=>document.getElementById(id);
     const up=e=>{e.preventDefault();e.stopPropagation();b.classList.remove('on');if(off)off();};b.addEventListener('touchend',up);b.addEventListener('touchcancel',up);};
   for(const [id,code] of [['tb-jump','Space'],['tb-kick','KeyF'],['tb-use','KeyE'],['tb-crouch','KeyC'],['tb-throw','KeyQ'],['tb-grab','KeyG'],['tb-view','KeyV'],['tb-wounds','Tab']])btn(id,()=>key(code,true),()=>key(code,false));
   btn('tb-pause',()=>{if(state==='playing'&&!paused)showPause(true);});
+  const sl=[...document.querySelectorAll('.tsens')],sv=[...document.querySelectorAll('.tsensv')];
+  const showS=()=>{for(const x of sl)x.value=TOUCH_SENS;for(const x of sv)x.textContent=TOUCH_SENS.toFixed(1);};showS();
+  for(const x of sl)x.addEventListener('input',()=>{TOUCH_SENS=clamp(+x.value,1,8);try{localStorage.setItem('bloodmoor-tsens',String(TOUCH_SENS));}catch(e){}showS();});
   btn('tb-thrust',()=>{if(!player)return;if(player.sword){player.ctrl.z=.66;lastWheel=performance.now();}else if(player.fists.R.c)player.fists.R.c.z=.7;},
                   ()=>{if(!player)return;if(player.sword)player.ctrl.z=.46;else if(player.fists.R.c)player.fists.R.c.z=.27;});
   setInterval(()=>{document.body.classList.toggle('inmatch',state==='playing');const s=player&&player.sword;
