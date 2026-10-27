@@ -389,7 +389,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=109;
+const BUILD=110;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -5120,8 +5120,13 @@ class Fighter{
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03||this.fallT!=null;
     this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop?1:airborne?.45:0,1-Math.exp(-10*dt));
-    const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne;this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?1:0,1-Math.exp(-5*dt));
-    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:.2):0,1-Math.exp(-6*dt));
+    // calm: nobody within reach of a fight and nothing has happened lately, so the body stands easy (fighting stance and guard come up when a foe comes near)
+    this._calmT=(this._calmT||0)-dt;if(this._calmT<=0){this._calmT=.25;let dq=1e9;for(const o of fighters)if(o!==this&&o.alive){const q=o.pos.distanceToSquared(this.pos);if(q<dq)dq=q;}this._foeD=Math.sqrt(dq);}
+    if(this.hp<(this._hp0??this.hp))this._hurtAt=simTime;this._hp0=this.hp;
+    {const threat=this._foeD<6||simTime-(this._hurtAt??-99)<3||(this.isPlayer&&input.lmb)||(this.sword&&this.sword.arc>.4)||this.throwHold||this.throwT>=0||!!this.grab;
+      this.calmW=lerp(this.calmW??0,threat||!this.alive||this.ragdoll?0:1,1-Math.exp(-(threat?7:1.4)*dt));}
+    const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:.2)*ease:0,1-Math.exp(-6*dt));
     // a hurt leg hitches the gait: the body drops each time weight goes onto it
     const lgL=this.limbF('legL'),lgR=this.limbF('legR'),lg=Math.max(lgL,lgR);let limp=0;
     if(lg>.2&&Math.hypot(this.vel.x,this.vel.z)>.3&&this.acts){const A=this.acts,ph=A.walk.time/A.walk.getClip().duration;limp=lg*.5*Math.pow(Math.max(0,Math.sin((ph+(lgL>lgR?0:.5))*6.283)),2);}
@@ -5230,8 +5235,8 @@ class Fighter{
       if(!offLimb.sev&&!offLimb.dead&&clutch){this.clutchAt(_t2);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);_hv.copy(_f).negate();gripHand(B,offS,_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);}   // the free hand goes to the wound
       else if(!offLimb.sev&&!offLimb.dead){const one=s.def.kind!=='fist'&&(!twoH(s.def)||this.throwHold||this.throwT>=0);
         if(one){   // one-handed weapon: the off hand stays up in a loose guarding fist by the chest
-          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
-          _hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();gripHand(B,offS,_t2,_hv,_r.clone().multiplyScalar(sgn).add(Y_AXIS).normalize(),_t1,this.armLen,1.3);}
+          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);const cw=this.calmW||0;if(cw>.01){_og.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,-.05*sgn);_t2.lerp(_og,cw*cw*(3-2*cw));}this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
+          {const cw=this.calmW||0,e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
         else _t2.copy(s.H).addScaledVector(s.axis,s.def.grip2-slid);
         if(!one){   // the off hand on the haft. It used to let go the instant the haft passed arm's reach and the arm fell back to the clip's pose (out to the side) for that frame,
@@ -5249,7 +5254,8 @@ class Fighter{
       const cs=this.clutchT>simTime&&this.clutchP?(this.limbs.armL.sev||this.limbs.armL.dead?'R':'L'):null;
       for(const side of ['R','L']){const arm=this.fists[side],lm=this.limbs[side==='R'?'armR':'armL'];if(!arm.init||lm.sev||lm.dead)continue;const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
         if(side===cs){this.clutchAt(_t2);_t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);_hv.copy(_f).negate();gripHand(B,side==='R'?'Right':'Left',_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);arm.pos.copy(_t2);continue;}
-        _t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();gripHand(B,side==='R'?'Right':'Left',arm.pos,_hv,Y_AXIS,_t1,this.armLen,arm.held&&!arm.grab&&arm.vel.length()<3?.35:1.35);   // open while reaching, closed to grab or punch
+        _t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();let hp=arm.pos;{const cw=this.isPlayer?0:(this.calmW||0),e=cw*cw*(3-2*cw);if(e>.01){_t3.copy(sh).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,.05*sg);hp=_t3.lerpVectors(arm.pos,_t3.clone(),e);_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();}}   // a calm bot's fists hang at its sides
+        gripHand(B,side==='R'?'Right':'Left',hp,_hv,Y_AXIS,_t1,this.armLen,arm.held&&!arm.grab&&arm.vel.length()<3?.35:1.35);   // open while reaching, closed to grab or punch
 }
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
