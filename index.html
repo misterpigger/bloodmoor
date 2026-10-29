@@ -4870,7 +4870,12 @@ class Fighter{
       if(stum>0)this.stagger=Math.max(this.stagger,.12);
       let m2=Math.hypot(this.bal.x,this.bal.z);
       if(HYBRID&&m2>.3&&stum>1.5){this.fwd(_f);if((this.bal.x*_f.x+this.bal.z*_f.z)<-.75*m2&&Math.random()<h*3)m2=.5;}   // driven backwards hard, the heels catch and you go down
-      if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
+      // past the ankles' limit: a lean that isn't too far is caught (Build 120): the fighter drops low onto bent knees, a hand goes down
+      // toward the ground, and they come back up out of it, instead of every lean past .42 ending flat on the ground. Too far, or caught
+      // again within a second and a half, and they go down as before
+      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchAmt=1;this.vel.multiplyScalar(.4);
+        if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6)this.bodyHit('Spine2',_v.normalize(),2.5,.15);}if(this.isPlayer)tell(this,'You catch yourself','red');}
+      else if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
     if(!this.isPlayer&&!this.remote&&(this.blindT>simTime||this.blindOff)){const bo=this.blindOff||(this.blindOff=V()),pa=this.blindPrev||(this.blindPrev=V());   // blinded: their aim wanders
       if(this.blindT>simTime){if(Math.random()<h*3)bo.set(rand(-.35,.35),rand(-.3,.3),rand(-.1,.1));}else bo.set(0,0,0);
@@ -5200,7 +5205,7 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03||this.fallT!=null;
-    this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop?1:airborne?.45:0,1-Math.exp(-10*dt));
+    this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop||(this.catchT||0)>simTime+.15?1:airborne?.45:0,1-Math.exp(-10*dt));
     // calm: nobody within reach of a fight and nothing has happened lately, so the body stands easy (fighting stance and guard come up when a foe comes near)
     this._calmT=(this._calmT||0)-dt;if(this._calmT<=0){this._calmT=.25;let dq=1e9;for(const o of fighters)if(o!==this&&o.alive){const q=o.pos.distanceToSquared(this.pos);if(q<dq)dq=q;}this._foeD=Math.sqrt(dq);}
     if(this.hp<(this._hp0??this.hp))this._hurtAt=simTime;this._hp0=this.hp;
@@ -5337,6 +5342,8 @@ class Fighter{
           this._cwW=lerp(this._cwW||0,this.commit&&!rvg&&s.def.kind!=='fist'?1:0,1-Math.exp(-(this.commit?7:2.5)*dt));
           if(this._cwW>.01){_pl.copy(s.Hv).setY(0);const hl=_pl.length();if(!this._cwD)this._cwD=V().copy(_r).multiplyScalar(-sgn);if(hl>.8)this._cwD.lerp(_pl.multiplyScalar(-1/hl),1-Math.exp(-5*dt)).normalize();
             _ogc.copy(shO).addScaledVector(this._cwD,.3).addScaledVector(Y_AXIS,-.44).addScaledVector(_f,-.1);const e=this._cwW*this._cwW*(3-2*this._cwW)*.85;_t2.lerp(_ogc,e);   /* low and a little out, the elbow soft (Build 120: it went straight out at shoulder height like a scarecrow's) */}
+          if((this.catchT||0)>simTime){const u=1-(this.catchT-simTime)/.9,w=Math.sin(Math.PI*Math.min(1,u*1.3))*.95;   // caught off balance: the free hand goes to the ground
+            _ogc.set(this.pos.x+_f.x*.4-_r.x*sgn*.25,groundY(this.pos.x,this.pos.z,this.pos.y+.3)+.07,this.pos.z+_f.z*.4-_r.z*sgn*.25);_t2.lerp(_ogc,Math.max(0,w));}
           this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=Math.max(this.calmW||0,rvg?1:0),e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
@@ -6375,7 +6382,7 @@ function tell(f,text,cls){if(!f)return;if(f.isPlayer)note(text,cls);else if(f.re
 let hmT=null;function hitMarker(kill){return;const c=document.getElementById('cross');c.classList.remove('hit','kill');void c.offsetWidth;c.classList.add(kill?'kill':'hit');clearTimeout(hmT);hmT=setTimeout(()=>c.classList.remove('hit','kill'),kill?420:160);}
 function note(text,cls=''){if(cls!=='red'||!SIM_NOTE(text))return;const n=document.getElementById('notes');const d=document.createElement('div');d.className='note '+cls;d.textContent=text;n.appendChild(d);setTimeout(()=>d.remove(),1900);while(n.children.length>3)n.firstChild.remove();}
 // the only notes left are what your own body tells you
-const SIM_NOTE=t=>/arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside|heart|breath|belly|gut|eye|back|legs won/i.test(t);
+const SIM_NOTE=t=>/catch yourself|arm is useless|leg gives way|throat|clutch|Over the edge|Spear beaten aside|heart|breath|belly|gut|eye|back|legs won/i.test(t);
 let hurtV=0;function hudHurt(d){hurtV=Math.min(1,hurtV+d/40);}
 // a swell of the real crowd recording: the stands roar (or draw breath) and settle back into their murmur
 function crowdBurst(x,att,dec,rate,hp,lp){const t=AC.currentTime,b=AMB.crowd,src=AC.createBufferSource();src.buffer=b;src.playbackRate.value=rate*(.97+Math.random()*.06);
