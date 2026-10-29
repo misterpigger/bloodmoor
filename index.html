@@ -490,8 +490,8 @@ function flameCanvas(){const c=mkCanvas(64,128),g=c.getContext('2d');g.translate
 // (mullets, roundels, crosses, crescents, fleurs) in the other tincture, a woven grain, light folds and a fringed foot. Seeded, so the
 // same seed always paints the same arms
 const TINCT={metal:['#d8a838','#e6dfcc'],colour:['#9a1d1a','#1f3a7a','#2d6a37','#1b1918','#5d2a66']};
-function heraldryCanvas(seed,W=256,H=512){const c=mkCanvas(W,H),g=c.getContext('2d');let sd=seed*7919+13;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};const pk=a=>a[Math.floor(r()*a.length)];
-  const metalField=r()<.4,f=metalField?pk(TINCT.metal):pk(TINCT.colour),o=metalField?pk(TINCT.colour):pk(TINCT.metal),fh=H*.86;
+function heraldryCanvas(seed,W=256,H=512,fringe=true){const c=mkCanvas(W,H),g=c.getContext('2d');let sd=seed*7919+13;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};const pk=a=>a[Math.floor(r()*a.length)];
+  const metalField=r()<.4,f=metalField?pk(TINCT.metal):pk(TINCT.colour),o=metalField?pk(TINCT.colour):pk(TINCT.metal),fh=fringe?H*.86:H;
   g.fillStyle=f;g.fillRect(0,0,W,H);g.fillStyle=o;const kind=Math.floor(r()*10),bw=W*.22;
   g.save();g.beginPath();g.rect(0,0,W,fh);g.clip();
   if(kind===0)g.fillRect(W/2-bw/2,0,bw,fh);
@@ -515,10 +515,29 @@ function heraldryCanvas(seed,W=256,H=512){const c=mkCanvas(W,H),g=c.getContext('
     g.restore();}
   g.restore();
   // the foot: a dark edge and a fringe in the metal, the cloth's weave and folds over everything
-  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(0,fh-4,W,4);g.clearRect(0,fh,W,H-fh);for(let x=0;x<W;x+=6){g.fillStyle=TINCT.metal[0];g.fillRect(x,fh,3,H-fh-(r()*10|0));}
+  if(fringe){g.fillStyle='rgba(0,0,0,.35)';g.fillRect(0,fh-4,W,4);g.clearRect(0,fh,W,H-fh);for(let x=0;x<W;x+=6){g.fillStyle=TINCT.metal[0];g.fillRect(x,fh,3,H-fh-(r()*10|0));}}
   const id=g.getImageData(0,0,W,H),d=id.data;for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4;const fold=.86+.14*Math.sin(x/W*Math.PI*5+Math.sin(y*.02)),weave=.93+.07*((x+y)%2)+(Math.random()-.5)*.06;for(let k=0;k<3;k++)d[i+k]=Math.max(0,Math.min(255,d[i+k]*fold*weave));}
   g.putImageData(id,0,0);return c;}
 function heraldryMat(seed){const t=tex(heraldryCanvas(seed));return std({map:t,roughness:.95,side:THREE.DoubleSide,alphaTest:.5,transparent:false});}
+// a heater shield with painted arms, hung on a wall (Build 124): the shape extruded with a wooden rim, the arms on its face
+function shieldGeo(){const sh=new THREE.Shape();sh.moveTo(-.25,0);sh.lineTo(.25,0);sh.lineTo(.25,-.24);sh.quadraticCurveTo(.24,-.5,0,-.64);sh.quadraticCurveTo(-.24,-.5,-.25,-.24);sh.lineTo(-.25,0);
+  const g=new THREE.ExtrudeGeometry(sh,{depth:.025,bevelEnabled:true,bevelThickness:.008,bevelSize:.012,bevelSegments:2,curveSegments:10});const P=g.attributes.position,U=g.attributes.uv;for(let i=0;i<P.count;i++)U.setXY(i,(P.getX(i)+.26)/.52,(P.getY(i)+.65)/.66);return g;}
+const SHIELD_G={g:null};
+function wallShield(x,y,z,ry,seed,parent){if(!SHIELD_G.g)SHIELD_G.g=shieldGeo();const t=tex(heraldryCanvas(seed,256,320,false));const m=new THREE.Mesh(SHIELD_G.g,[std({map:t,roughness:.7}),MATS.beam||MATS.wood]);
+  m.position.set(x,y,z);m.rotation.y=ry;m.rotation.x=-.08;m.castShadow=true;m.receiveShadow=true;(parent||world).add(m);return m;}
+// a woven wall hanging (Build 124): a millefleur ground strewn with little flowers, a border of repeating lozenges, a coat of arms in the
+// middle, the weave and soft folds over it, hung from a rod
+function tapestryCanvas(seed,W=512,H=640){const c=mkCanvas(W,H),g=c.getContext('2d');let sd=seed*48271+7;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  const grounds=['#1c3324','#16243c','#3b1414'];g.fillStyle=grounds[seed%3];g.fillRect(0,0,W,H);
+  for(let i=0;i<900;i++){const x=r()*W,y=r()*H,s=2+r()*4,col=['#e8dcc0','#b8342a','#d8a838','#5a8a46','#8a5aa8'][Math.floor(r()*5)];g.fillStyle=col;for(let k=0;k<5;k++){const a=k*1.2566+r()*.2;g.beginPath();g.arc(x+Math.cos(a)*s,y+Math.sin(a)*s,s*.55,0,6.283);g.fill();}g.fillStyle='#d8a838';g.beginPath();g.arc(x,y,s*.4,0,6.283);g.fill();
+    if(r()<.4){g.strokeStyle='#3d6a34';g.lineWidth=1.2;g.beginPath();g.moveTo(x,y+s);g.lineTo(x+(r()-.5)*8,y+s+10);g.stroke();}}
+  const B=34;g.fillStyle='#6a2018';g.fillRect(0,0,W,B);g.fillRect(0,H-B,W,B);g.fillRect(0,0,B,H);g.fillRect(W-B,0,B,H);
+  g.fillStyle='#d8a838';for(let t=0;t<2*(W+H);t+=26){let x,y;if(t<W){x=t;y=B/2;}else if(t<W+H){x=W-B/2;y=t-W;}else if(t<2*W+H){x=2*W+H-t;y=H-B/2;}else{x=B/2;y=2*(W+H)-t;}g.save();g.translate(x,y);g.rotate(Math.PI/4);g.fillRect(-6,-6,12,12);g.restore();}
+  g.drawImage(heraldryCanvas(seed+101,180,216,false),W/2-90,H/2-120,180,216);
+  const id=g.getImageData(0,0,W,H),d=id.data;for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4,fold=.82+.18*Math.sin(x/W*Math.PI*6+.7),weave=(x%3===0?.88:1)*(y%2?.96:1);for(let k=0;k<3;k++)d[i+k]=d[i+k]*fold*weave;}
+  g.putImageData(id,0,0);return c;}
+function wallTapestry(x,y,z,ry,w,h,seed,parent){const t=tex(tapestryCanvas(seed));const m=new THREE.Mesh(wallPlane(w,h,w,h),std({map:t,roughness:1,side:THREE.DoubleSide}));m.position.set(x,y,z);m.rotation.y=ry;m.receiveShadow=true;(parent||world).add(m);
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,w+.2,8).rotateZ(Math.PI/2),MATS.iron||MATS.wood);rod.position.set(x,y+h/2+.02,z);rod.rotation.y=ry;(parent||world).add(rod);return m;}
 function clothCanvas(a,b){const c=mkCanvas(128,128),g=c.getContext('2d');for(let x=0;x<128;x+=32){g.fillStyle=a;g.fillRect(x,0,16,128);g.fillStyle=b;g.fillRect(x+16,0,16,128);}speckle(g,128,128,200,['#000'],1,4,.15);return c;}
 
 // ---- detailed surfaces, after Half Sword's yard: tileable noise, shaded pebbles and limestone blocks, with real normal maps
@@ -1437,6 +1456,9 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   addFlame(bx,2.9,-5.5,.75,true);addFlame(bx,2.9,2,.75,true);
   for(const cx of [-4,4]){addGeo('beam',new THREE.TorusGeometry(.55,.04,5,16),T(cx,Hc-1.5,-2.5,0,Math.PI/2));addGeo('iron',boxUV(.02,1.4,.02,1),T(cx,Hc-.75,-2.5));addFlame(cx,Hc-1.42,-2.5,.6,true);}
   // the hall lived in: shelves of crockery along the long walls, hams and bunches of herbs hung from the beams, firewood stacked by
+  // wall hangings and painted shields (Build 124)
+  wallTapestry(W-.06,3.3,-2.2,-Math.PI/2,2.4,3,3);wallTapestry(W-.06,3.3,3.6,-Math.PI/2,2,2.5,4);
+  for(const [x,z,ry,sd] of [[W-.08,.7,-Math.PI/2,11],[W-.08,6.4,-Math.PI/2,12],[W-.08,-5.2,-Math.PI/2,13]])wallShield(x,3.1,z,ry,sd);
   // the hearth, sacks and a stack of kegs in the corners, a hanging cloth on each end wall, plates and bowls on the tables, rushes on the floor
   {const jg=new THREE.CylinderGeometry(.06,.08,.2,8),pg=new THREE.CylinderGeometry(.13,.13,.02,12),bg=new THREE.CylinderGeometry(.09,.06,.08,10);
   for(const [z,x0] of [[-D+.18,-4.9],[-D+.18,1.7],[D-.18,-6],[D-.18,3]]){addGeo('beam',boxUV(3.2,.05,.3,1),T(x0+1.6,1.75,z));for(const sx of [.2,3])addGeo('beam',boxUV(.05,.22,.28,1),T(x0+sx,1.62,z));PSOLID.push([x0+1.6,1.75,z,1.6,.025,.15]);
