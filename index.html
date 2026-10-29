@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=114;
+const BUILD=115;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -3698,6 +3698,20 @@ const FB_R={Hips:.13,Spine1:.15,Spine2:.16,Neck:.07,Head:.11,HeadTop_End:.09,Lef
 const FB_K={Hips:.22,Spine1:.14,Spine2:.12,Neck:.11,Head:.09,HeadTop_End:.09,LeftArm:.14,RightArm:.14,LeftForeArm:.09,RightForeArm:.09,LeftUpLeg:.2,RightUpLeg:.2,LeftLeg:.16,RightLeg:.16};   // muscle: how hard each point is pulled to its animated place per 1/120 s
 const RD_R={Hips:.13,Spine1:.14,Spine2:.14,Neck:.07,Head:.11,HeadTop_End:.09,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};
 const _rv=V(),_ru=V(),_rq=new THREE.Quaternion(),_rinv=new THREE.Matrix4();
+// joint limits (after the soft-limit ragdoll talk the player sent): a point ragdoll has no joints of its own, so without these an elbow or knee
+// bends backwards, an arm swings through the chest and the head lolls round to the spine. Each limit turns the limb back toward its
+// cone. Slain (lim 2): hard, the limb stops at the limit. Alive and down (lim 1): soft, a spring that starts short of the limit and
+// stiffens toward it, plus a little tension pulling elbows, knees, hips and head toward a relaxed, slightly curled pose (not while getting up).
+const _jA=V(),_jB=V(),_jC=V(),_jU=V(),_jL=V(),_jF=V(),_jU2=V(),_jL2=V(),_jF2=V(),_jX=V(),_jq=new THREE.Quaternion();
+function jointCone(R,piv,tip,ns,ax,lim,hard){const P=R.P,A=P[piv],T=P[tip];if(!A||!T)return;_jA.subVectors(T,A);const l=_jA.length();if(l<1e-5)return;_jA.multiplyScalar(1/l);
+  const th=Math.acos(clamp(_jA.dot(ax),-1,1));let rot;
+  if(hard){if(th<=lim)return;rot=th-lim;}else{const st=lim*.78;if(th<=st)return;const u=(th-st)/(lim-st);rot=th>lim*1.25?th-lim*1.25:0;rot+=(th-st)*Math.min(1,.06+.12*u*u);}   // (alive: a spring from 78% of the limit, stiffer the further in; past 125% it stops dead)
+  _jB.crossVectors(_jA,ax);const sl=_jB.length();if(sl<1e-6)return;_jB.multiplyScalar(1/sl);_jq.setFromAxisAngle(_jB,rot);
+  for(const n of ns){const p=P[n],q=R.Q[n];if(!p)continue;_jC.subVectors(p,A);const ox=_jC.x,oy=_jC.y,oz=_jC.z;_jC.applyQuaternion(_jq);const dx=A.x+_jC.x-p.x,dy=A.y+_jC.y-p.y,dz=A.z+_jC.z-p.z;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.5;q.y+=dy*.5;q.z+=dz*.5;}}}   // (half the push stays as speed lost)
+// a hinge that can't bend the wrong way: the middle point (knee, elbow) may not sit on side `dir` of the line between the ends
+function jointHinge(R,a,m,b,dir,sgn,k){const P=R.P,A=P[a],M=P[m],B=P[b];if(!A||!M||!B)return;_jA.subVectors(B,A);const L2=_jA.lengthSq();if(L2<1e-6)return;
+  const t=clamp(_jC.subVectors(M,A).dot(_jA)/L2,0,1);_jX.copy(A).addScaledVector(_jA,t);const off=_jC.subVectors(M,_jX).dot(dir)*sgn;if(off>=0)return;
+  M.addScaledVector(dir,-off*sgn*k);A.addScaledVector(dir,off*sgn*k*.25);B.addScaledVector(dir,off*sgn*k*.25);}
 class Ragdoll{
   constructor(bones,names,vel,impulse,impulsePoint){
     this.b=bones;this.names=names.filter(n=>bones[n]);this.P={};this.Q={};
@@ -3717,7 +3731,22 @@ class Ragdoll{
       const cq=new THREE.Quaternion();bones.Spine2.updateWorldMatrix(true,false);bones.Spine2.matrixWorld.decompose(_pp,cq,_ps);
       this.offC=basisQ(_rv.subVectors(this.P.Neck,this.P.Spine1),_ru.subVectors(this.P.LeftArm,this.P.RightArm),new THREE.Quaternion()).invert().multiply(cq);
     }
-    this.age=0;this.sleep=false;this.tone=0;
+    this.age=0;this.sleep=false;this.tone=0;this.lim=0;
+    this.full={};for(const [a,m,b] of [['LeftArm','LeftForeArm','LeftHand'],['RightArm','RightForeArm','RightHand'],['LeftUpLeg','LeftLeg','LeftFoot'],['RightUpLeg','RightLeg','RightFoot']])if(this.P[a]&&this.P[m]&&this.P[b])this.full[b]=this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]);
+  }
+  limits(it){const P=this.P,hard=this.lim>=2;if(!P.Hips||!P.Spine1||!P.Neck)return;
+    // the chest's frame and the pelvis's frame (forward = left × up)
+    if(P.LeftArm&&P.RightArm){_jU.subVectors(P.Neck,P.Spine1).normalize();_jL.subVectors(P.LeftArm,P.RightArm);_jL.addScaledVector(_jU,-_jL.dot(_jU)).normalize();_jF.crossVectors(_jL,_jU);
+      jointCone(this,'Neck','HeadTop_End',['Head','HeadTop_End'],_jU2.copy(_jU).addScaledVector(_jF,.12).normalize(),.95,hard);   // the head on the neck
+      for(const sd of [1,-1]){const S=sd>0?'Left':'Right';_jX.copy(_jL).multiplyScalar(.75*sd).addScaledVector(_jU,-.45).addScaledVector(_jF,.5).normalize();
+        jointCone(this,S+'Arm',S+'ForeArm',[S+'ForeArm',S+'Hand',S+'HandMiddle1'],_jX,2.2,hard);   // the shoulder: an arm doesn't pass through the chest or far behind the back
+        if(P[S+'Arm']&&P[S+'ForeArm']&&_jA.subVectors(P[S+'ForeArm'],P[S+'Arm']).normalize().dot(_jU)<.45)jointHinge(this,S+'Arm',S+'ForeArm',S+'Hand',_jF,-1,hard?1:.3);}}   // the elbow doesn't bend forwards (not checked with the arm up overhead)
+    if(P.LeftUpLeg&&P.RightUpLeg){_jU2.subVectors(P.Spine1,P.Hips).normalize();_jL2.subVectors(P.LeftUpLeg,P.RightUpLeg);_jL2.addScaledVector(_jU2,-_jL2.dot(_jU2)).normalize();_jF2.crossVectors(_jL2,_jU2);
+      for(const sd of [1,-1]){const S=sd>0?'Left':'Right';_jX.copy(_jU2).multiplyScalar(-1).addScaledVector(_jF2,.55).addScaledVector(_jL2,.2*sd).normalize();
+        jointCone(this,S+'UpLeg',S+'Leg',[S+'Leg',S+'Foot',S+'ToeBase'],_jX,1.3,hard);   // the hip
+        jointHinge(this,S+'UpLeg',S+'Leg',S+'Foot',_jF2,1,hard?1:.3);}}   // the knee doesn't bend backwards
+    // tension: the living hold a loose, slightly bent pose (elbows, knees, the head on the chest), as in a neutral posture
+    if(!hard&&it===0&&!this.rise){for(const [a,b,f,k] of [['LeftArm','LeftHand',.8,.012],['RightArm','RightHand',.8,.012],['LeftUpLeg','LeftFoot',.9,.008],['RightUpLeg','RightFoot',.9,.008]]){const A=P[a],B=P[b],L=this.full[b];if(!A||!B||!L)continue;_jA.subVectors(B,A);const d=_jA.length();if(d>L*f){const c=(d-L*f)/d*k;A.addScaledVector(_jA,c);B.addScaledVector(_jA,-c);}}}
   }
   kick(v){for(const n of this.names)this.Q[n].addScaledVector(v,-H*2);this.sleep=false;this.age=0;}
   strike(p,v,k){for(const n of this.names){const w=.15+.85*Math.exp(-this.P[n].distanceToSquared(p)/.06);this.Q[n].addScaledVector(v,-H*1.4*w*k);}this.sleep=false;this.age=Math.min(this.age,1);}
@@ -3743,6 +3772,7 @@ class Ragdoll{
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
+      if(this.lim)this.limits(it);
       FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);millWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       FLOOR_TOL=.45;
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
@@ -4674,7 +4704,6 @@ class Fighter{
     else this.jabLift=0;
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz+(Hd.reach||0));
-    {const sk=this.sword&&this.sword.def.kind;if(sk==='blade'&&this.sword.def.weight<1.4&&!this.commit&&!this.thrust){const wu=clamp((this.ctrl.y-.25)/.3,0,1)*clamp((Math.abs(this.ctrl.x)-.15)/.3,0,1);if(wu>0)out.addScaledVector(f,-.1*wu);}}   // the wind-up: up in a top corner, the hand draws back past the shoulder
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
@@ -4687,13 +4716,10 @@ class Fighter{
     if(rw>0){const e=this.revS||0,ee=e*e*(3-2*e),cx=this.ctrl.x*.7,cy=this.ctrl.y;
       _wl3.copy(this.chest).addScaledVector(_r,cx).addScaledVector(Y_AXIS,lerp((this.isPlayer&&camMode==='fp'?.0:.14)+cy*.12,-.12+cy*.45,ee)).addScaledVector(_f,lerp(this.isPlayer&&camMode==='fp'?.46:.36,.42,ee)+(Hd.reach||0)*.5).addScaledVector(_r,(this.mainArm==='L'?-1:1)*(this.isPlayer&&camMode==='fp'?-.04:.07)*(1-ee));
       out.lerp(_wl3,rw*rw*(3-2*rw));}
-    // carried easy (calmW: nobody near): the weapon hangs in a lowered hand at your side, swinging against the legs as you walk
-    {const cw=this.sword&&this.sword.def.kind!=='fist'&&rw<.05&&!this.sword.stuck?this.calmW||0:0;if(cw>.01){const sgC=this.mainArm==='L'?-1:1,shC=this.mainArm==='L'?this.shL:this.shR;
-      _wl3.copy(shC).addScaledVector(Y_AXIS,-.52).addScaledVector(_f,.16-(this.armSw||0)*sgC*.12).addScaledVector(_r,.13*sgC);out.lerp(_wl3,cw*cw*(3-2*cw));}}
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
     // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
-    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0&&!((this.calmW||0)>.5)){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
+    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
       _v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length();if(d>ro)out.addScaledVector(_v,-(d-ro)/d);}
     return out;
   }
@@ -4703,9 +4729,6 @@ class Fighter{
     if(this.sword&&(this.throwHold||this.throwT>=0)){
       if(this.sword.def.kind==='spear'){this.throwAim(out);out.y+=.12;this.frame(f,u);return out.normalize();}   // javelin: held overhand, point on the target
       const k=this.throwT>=0?clamp(this.throwT/THROW_T,0,1):0;out.copy(u).multiplyScalar(.75-.6*k).addScaledVector(f,-.65+1.5*k);return out.normalize();}   // cocked back over the shoulder, whipped through
-    {const cw=this.sword&&this.sword.def.kind!=='fist'&&!((this.revW||0)>.05)&&!this.sword.stuck?this.calmW||0:0;if(cw>.01){   // carried easy: the point hangs down and back (a spear trails behind, its point low)
-      const sp=this.sword.def.kind==='spear',sgC=this.mainArm==='L'?-1:1;_rvG.copy(Y_AXIS).multiplyScalar(sp?-.42:-.55).addScaledVector(_f,sp?-.9:-.83).addScaledVector(_r,(sp?.1:.28)*sgC).normalize();   /* (out from the leg, so the stride doesn't pass through it) */
-      const keep=this.calmW;this.calmW=0;this.guideDir(hand,out);this.calmW=keep;this.frame(f,u);const e=cw*cw*(3-2*cw);return out.lerp(_rvG,e).normalize();}}
     {const rw=this.sword&&this.sword.def.kind==='blade'?this.revW||0:0;if(rw>0){   // reverse grip: the point goes down the line of the stab
       _rvG.copy(this.chest).addScaledVector(_r,this.ctrl.x*.7).addScaledVector(Y_AXIS,-.75+this.ctrl.y*.8).addScaledVector(_f,.62).sub(hand).normalize();   /* (the level frame: looking down mustn't tip the stab into a lunge) */
       if(rw>=1)return out.copy(_rvG);this.revW=0;this.guideDir(hand,out);this.revW=rw;this.frame(f,u);return out.lerp(_rvG,rw).normalize();}}
@@ -4716,11 +4739,11 @@ class Fighter{
     const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
     // a human's sword guard holds the point toward the opponent's face (about 25 degrees up), so a jab is a straight poke, not a drop from upright
     const pg=(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'&&!cm&&hi<.5;
-    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:pg?.36:.26-hi*(heavyW?.95:.45+.25*clamp((Math.abs(this.ctrl.x)-.15)/.3,0,1))).addScaledVector(u,cm?Hd.swingUp:pg?.36:.5);
+    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:pg?.36:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:pg?.36:.5);
     return out.normalize();
   }
   // how far the grip is turned over, blade out of the little-finger side: the reverse grip, and carrying a weapon easy (it hangs back from the fist)
-  hrW(){const s=this.sword;if(!s||s.def.kind==='fist')return 0;const rw=s.def.kind==='blade'?this.revW||0:0;if(rw>.05)return rw;return s.stuck?0:this.calmW||0;}
+  hrW(){const s=this.sword;if(!s||s.def.kind==='fist')return 0;const rw=s.def.kind==='blade'?this.revW||0:0;return rw;}
   useStamina(x){this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.25);}
   // ---------------- sim step
   step(h){
@@ -5279,7 +5302,7 @@ class Fighter{
         else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?1:0,1-Math.exp(-9*dt));g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
         if(!one){   // the off hand on the haft. It used to let go the instant the haft passed arm's reach and the arm fell back to the clip's pose (out to the side) for that frame,
           // so a guard hovering at the edge of reach flickered between the two. Now it holds on a little past reach, and when it does let go it eases to a guarding fist by the chest.
-          const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&!(cwO>.5&&s.def.kind!=='fist'&&!rvg);this.offOn=onH;   // carried easy, a two-hander is held in one hand and the other swings free
+          const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&true;this.offOn=onH;
           this.offW=clamp((this.offW??1)+(onH?7:-5)*dt,0,1);const w=this.offW*this.offW*(3-2*this.offW);
           if(w<1){_og.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);if(cwO>.01&&s.def.kind!=='fist'){_pl.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_og.lerp(_pl,cwO*cwO*(3-2*cwO));}_t2.lerpVectors(_og,_t2,w);}
           _t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,w>.5);
@@ -5428,7 +5451,7 @@ class Fighter{
   makeRagdoll(imp,impP,crumple){
     this.root.updateMatrixWorld(true);
     const names=RD_NAMES.filter(n=>!this.detached.has(n));
-    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;   // even the dying keep some stiffness for a moment
+    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;this.ragdoll.lim=this.alive?1:2;   // even the dying keep some stiffness for a moment
     {const A=this.ar,R=this.ragdoll;if(A&&A.hs){for(const n of R.names){const p=A.P[n],q=A.Q[n];if(!p||!q)continue;_wl1.subVectors(p,q).multiplyScalar(1/A.hs).sub(this.vel);const l=_wl1.length();if(l>4)_wl1.multiplyScalar(4/l);R.Q[n].addScaledVector(_wl1,-H*2);}}this.ar=null;}   // each part keeps the full body's own motion
     // the dying fold up: knees buckle forward, hips drop, the head lolls, instead of toppling like a plank
     if(crumple){const R=this.ragdoll,f=this.fwd(V()),add=(n,x,y,z)=>{if(R.Q[n])R.Q[n].add(V(f.x*z,y,f.z*z).multiplyScalar(-H*2*crumple));};
@@ -5438,7 +5461,7 @@ class Fighter{
     if(!this.alive)return;this.alive=false;this.deathT=simTime;
     sfx(this.id%2?'humanRoughDeath':'humanDeath',this.headPos,.85,this.voice);sfx(this.armor.body?'fallArmoured':'fall',this.chest,.8,1,.35);
     if(!by&&this.lastHitBy&&simTime-this.lastHitT<12)by=this.lastHitBy;
-    if(this.ragdoll){const R=this.ragdoll;R.rise=null;R.tone=0;R.reflex=0;R.sleep=false;R.age=Math.min(R.age,1);this.knocked=0;this.rec=null;}   // slain while down or getting up: the muscles let go (a dead body used to finish standing up)
+    if(this.ragdoll){const R=this.ragdoll;R.rise=null;R.tone=0;R.reflex=0;R.sleep=false;R.lim=2;R.age=Math.min(R.age,1);this.knocked=0;this.rec=null;}   // slain while down or getting up: the muscles let go (a dead body used to finish standing up)
     if(!this.ragdoll){this.makeRagdoll(cause==='beheaded'?null:imp,impP,cause==='beheaded'?.15:imp?.6:1);
       if(cause==='beheaded'){const R=this.ragdoll,y={};for(const n of ['Hips','Spine1','Spine2','Neck','LeftArm','RightArm'])if(R.P[n])y[n]=R.P[n].y;R.hold={t:rand(.55,1),y};R.tone=.3;}}
     this.dropSword();
@@ -5903,11 +5926,11 @@ function resolveHit(A,B,cap,t,P,pv){
   else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
   const dnB=wasDown;   // someone on the ground (alive or dead) takes a point too: it stays in until it's pulled out
-  if(!sev&&!glance&&(B.alive||B.ragdoll)&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:dnB?5:8)||!dnB&&mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
+  if(!sev&&!glance&&(B.alive||B.ragdoll)&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:dnB?5:8)&&(!dnB||shortB||A.thrust||(A.revW||0)>.5)||!dnB&&mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
     const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,dmg>25&&cap.zone==='torso'?.46:.22);   // a strong thrust runs the body through
     if(shortB&&!ax){E.copy(P).addScaledVector(s.axis,Math.min(.2,s.len*.55));}   // a knife goes in to the hilt and sticks: you have to wrench it out
-    const deep=!ax&&(dnB||dmg>=16||(shortB&&dmg>8)||(A.revW||0)>.5);   // deep enough that a body falling with it in keeps it
-    if(embed(s,B,cap,t*s.len,E,dnB?1e9:ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15,down:dnB,deep})){if(!dnB)B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax&&B.alive)B.addBleed(shortB?1.4:1.1,10);tell(A,ax?'The axe bites deep':dnB?'Driven in':shortB?'Stabbed':'Run through','red');}}
+    const deep=!ax&&((shortB&&dmg>8)||(A.revW||0)>.5);   // left in a body that falls with it: only a reverse-grip stab or a knife (a sword thrust that kills comes back out with the body's fall, as before)
+    if(embed(s,B,cap,t*s.len,E,dnB?((A.revW||0)>.5?1e9:.6):ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15,down:dnB,deep})){if(!dnB)B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax&&B.alive)B.addBleed(shortB?1.4:1.1,10);tell(A,ax?'The axe bites deep':dnB?'Driven in':shortB?'Stabbed':'Run through','red');}}
   s.arc=0;
 }
 // ---- contacts from the solver: every hit, clash and bounce below is a real collision between bodies
