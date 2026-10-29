@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=122;
+const BUILD=123;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2930,6 +2930,29 @@ function clothFolds(m,amt){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pr
       float hgt=(pow(fa,3.)*.9+pow(fb,4.)*.5*smoothstep(.3,.9,abs(b.x)*3.)+fc*.12)*${amt.toFixed(3)};
       vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
       vec3 grd=sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2);normal=normalize(abs(det)*normal-grd); }`);};}
+// garment detail (Build 123), drawn in bind space on the linen: a laced slit at the throat (shirt), shoulder and side seams with their
+// stitching, a turned hem, and wear: grime working up from the hem and the cuffs, a few darker stains. Kept subtle; the cloth's own
+// texture and folds still carry it
+function garmentDetail(m,kind,M){const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs(J.LeftArm.x),zc=J.Spine1.z,zf=M.nose-.1,shirt=kind==='shirt'?1:0,hem=kind==='tunic'?hy-.34:hy-.14;
+  const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+    { vec3 b=vBind;float ax=abs(b.x),sx=${sx.toFixed(3)},ny=${ny.toFixed(3)},hy=${hy.toFixed(3)},zc=${zc.toFixed(3)};
+      float n1=fract(sin(dot(floor(b*40.),vec3(12.9898,78.233,37.719)))*43758.5453),n2=fract(sin(dot(floor(b*9.),vec3(39.3,11.1,57.7)))*24634.6);
+      float k=1.;
+      // seams: over the shoulder and down each side, a darker fold line with a run of stitches beside it
+      float sideS=(1.-smoothstep(.0015,.004,abs(b.z-zc)))*step(.11,ax)*step(ax,sx-.03)*step(b.y,ny-.06),shS=(1.-smoothstep(.0015,.004,abs(b.y-(ny-.035))))*step(.07,ax)*step(ax,sx);
+      float stitch=step(.5,fract((b.y+b.x)*260.));k*=1.-.22*max(sideS,shS);k*=1.-.12*max(sideS,shS)*stitch;
+      // the hem turned up, and grime working up from it and from the cuffs
+      float hemB=smoothstep(${(hem+.025).toFixed(3)},${(hem+.012).toFixed(3)},b.y);k*=1.-.12*hemB;
+      float grime=clamp((${(hem+.22).toFixed(3)}-b.y)/.22,0.,1.)*.22+smoothstep(sx+.18,sx+.32,ax)*.16;k*=1.-grime*(.6+.4*n2);
+      k*=1.-.1*step(.86,n2)*smoothstep(.2,.6,n1);   // stains
+      ${shirt?`// the laced slit at the throat: a dark opening narrowing down the chest, a leather lace crossing it between eyelets
+      float d=ny-.015-b.y,front=step(${(zf-.03).toFixed(3)},b.z);
+      if(d>0.&&d<.14&&front>.5){float w=.022*(1.-d/.14)+.003,inO=1.-smoothstep(w-.002,w,ax);k*=1.-.55*inO;
+        float ph=fract(d*45.),lx=w*abs(2.*ph-1.),lace=(1.-smoothstep(.0012,.0028,abs(ax-lx)))*step(ax,w+.006);
+        float eye=(1.-smoothstep(.0018,.0032,length(vec2(ax-(w+.004),(fract(d*22.5)-.5)/22.5))));
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.16,.1,.06),max(lace*.9,eye*.6));}`:''}
+      diffuseColor.rgb*=k; }`);};}
 function quilt(m){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
   sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
     { vec3 b=vBind;float limb=smoothstep(.2,.26,abs(b.x));float ch=mix(b.x*80.+b.z*30.,b.y*80.+b.z*20.,limb),st=mix(b.y,abs(b.x),limb)*14.;
@@ -3168,14 +3191,14 @@ function dressMH(model,look,pal,mats){
     const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};
   const M=bodyMarks(body),hy=M.J.Hips.y;HU.uEyeB.value.set(M.hx,M.ey,M.ez);
   const shell=(key,opt,mt,hair)=>{const g=fitShell(body,key,opt);const sm=new THREE.SkinnedMesh(g,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';if(hair)sm.userData.hair=true;body.parent.add(sm);return sm;};
-  const dyedCloth=(dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}return mt;};
+  const dyedCloth=(dyed,folds,det)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);if(det)garmentDetail(mt,det,M);mt.customProgramCacheKey=()=>'bm-cloth'+(det||'');if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}return mt;};
   const legW=['LeftLeg','RightLeg','LeftFoot','RightFoot'],handW=['Hands*'],headW=['Neck','Head'];
   if(o===1||o===4){const ha=Math.abs(M.J.LeftHand.x),sh=Math.abs(M.J.LeftArm.x);
     shell('shirt',{keep:(v,P,w)=>w(v,['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftUpLeg','RightUpLeg'])>.5&&w(v,headW)<.25&&w(v,handW)<.2&&P.getY(v)>hy-.14,
       off:(x,y,z)=>{const ax=Math.abs(x);if(ax>sh-.02){const u=clamp((ax-sh)/(ha-sh),0,1);return .014+.02*Math.sin(Math.PI*Math.min(1,u*1.08))**.7;}   // sleeves: full in the forearm, gathered at the cuff
         return .016+.016*clamp(1-Math.abs(y-(hy+.05))/.09,0,1);},   // the body: bagging over the belt
-      smooth:12,bodySmooth:2,minK:.95,rim:.003,shape:convexTorso(0,.35,.2,.6)},dyedCloth(true,.006));}
-  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14},loose:(x,y,z)=>Math.pow((hy-.03-y)/.3,1.3)},looseMat(dyedCloth(true,.006),SWU,'h'));   // a knee-length dyed tunic, sleeves to the elbow
+      smooth:12,bodySmooth:2,minK:.95,rim:.003,shape:convexTorso(0,.35,.2,.6)},dyedCloth(true,.006,'shirt'));}
+  if(o===3)shell('tunic',{keep:(v,P,w)=>w(v,headW)<.3&&w(v,handW)<.1&&w(v,['LeftForeArm','RightForeArm'])<.5&&w(v,legW)<.05&&P.getY(v)>hy-.34&&P.getY(v)<M.J.Neck.y+.005,off:.014,smooth:8,bodySmooth:4,minK:.85,rim:.004,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.05,flare:.14},loose:(x,y,z)=>Math.pow((hy-.03-y)/.3,1.3)},looseMat(dyedCloth(true,.006,'tunic'),SWU,'h'));   // a knee-length dyed tunic, sleeves to the elbow
   if(o===4){const lm=leatherMat.clone();lm.color.setHex(0x8a6448);shell('jerkin',{keep:(v,P,w)=>w(v,headW)<.25&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','Hands*'])<.25&&w(v,legW)<.05&&P.getY(v)>hy-.12&&P.getY(v)<M.J.Neck.y-.01,off:.038,smooth:8,bodySmooth:4,minK:.85,rim:.005,shape:convexTorso(0,.35,.22,.6),skirt:{y0:hy-.04,flare:.06},loose:(x,y,z)=>(hy-.03-y)/.12*.6},looseMat(lm,SWU,'h')).userData.underBody=true;}   // a sleeveless leather jerkin over the shirt
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
@@ -3196,8 +3219,38 @@ function dressMH(model,look,pal,mats){
     if(look.h>=2&&!(look.hd|0)){const hm=new THREE.SkinnedMesh(hairCap(body,look.h),looseMat(hairCapMat(hcol,body,look.h),SWU,'n'));hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=true;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';hm.userData.hair=true;body.parent.add(hm);}   // real hair: a cap (and a fall for long hair)
     for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)&&look.h<2?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
       const hm=new THREE.SkinnedMesh(hg,scalp?mt:mtB);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
+  if(o>=1&&o!==4)crossStraps(body,M,shell);
+  if(o>=1)beltGear(body,M);
   if(look.sc|0)tabard(body,look.sc|0,pal,mats,SWU);
   model.userData.mh=true;}
+// Half Sword's fighters wear crossed leather straps over the shirt (a baldric and its fellow): two bands from each shoulder to the other
+// hip, front and back, standing on the garment; hidden under body armour (Build 123)
+function crossStraps(body,M,shell){const J=M.J,hy=J.Hips.y+.05,ny=J.Neck.y-.04,sx=Math.abs(J.LeftArm.x)*.82,torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'];
+  const dist=(x,y,s)=>{const ax=s*sx,ay=ny,bx=-s*sx*.75,by=hy,vx=bx-ax,vy=by-ay,u=clamp(((x-ax)*vx+(y-ay)*vy)/(vx*vx+vy*vy),0,1);return Math.hypot(x-(ax+vx*u),y-(ay+vy*u));};
+  const mt=leatherMat.clone();mt.color.setHex(0x5a3a24);mt.roughness=.62;
+  const sm=shell('straps',{keep:(v,P,w)=>{const x=P.getX(v),y=P.getY(v);return w(v,torso)>.6&&y>hy-.02&&y<ny+.07&&Math.min(dist(x,y,1),dist(x,y,-1))<.021;},off:.046,smooth:6,bodySmooth:4,minK:.9,rim:.004,shape:convexTorso(0,.35,.22,.6)},mt);
+  sm.userData.underBody=true;sm.name='MH_Straps';}
+// a pouch on the belt at the left front of the hip and a dagger in its sheath at the right back: rigid pieces skinned wholly to the hips
+function beltGear(body,M){const J=M.J,hy=J.Hips.y,bp=body.geometry.attributes.position;let xm=0,zf=-9,zb=9;
+  for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(y-(hy+.03))>.015||Math.abs(x)>.3)continue;xm=Math.max(xm,Math.abs(x));if(Math.abs(x)<.05){zf=Math.max(zf,z);zb=Math.min(zb,z);}}
+  const bi=body.skeleton.bones.findIndex(b=>/Hips$/.test(b.name));if(bi<0||!xm)return;
+  const parts=[],add=(g,mat)=>{parts.push([g,mat]);};
+  const lt=leatherMat.clone();lt.color.setHex(0x6a4630);const ld=leatherMat.clone();ld.color.setHex(0x2e1d12);const brass=std({color:0xb08a4a,roughness:.35,metalness:.8}),stl=std({color:0x9a9ea2,roughness:.3,metalness:.9}),wood=std({color:0x3a2616,roughness:.7});
+  const zc=(zf+zb)/2,s=1;   // +x is the body's left
+  {const T=new THREE.Matrix4().makeRotationY(Math.atan2(xm*.8,zf-zc)*.85).setPosition(s*xm*.78,hy-.035,zc+(zf-zc)*.82);   // the pouch: a stiff leather bag with a flap and a brass stud
+    const g=new THREE.BoxGeometry(.11,.11,.045,2,2,1);{const p=g.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);if(y<0)p.setX(i,p.getX(i)*(1-.12*(-y/.055)));}}g.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0,.035)).applyMatrix4(T);add(g,lt);
+    const fl=new THREE.BoxGeometry(.116,.055,.05);fl.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.03,.04)).applyMatrix4(T);add(fl,ld);
+    const st=new THREE.SphereGeometry(.009,8,6);st.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.008,.067)).applyMatrix4(T);add(st,brass);}
+  {const T=new THREE.Matrix4().makeRotationY(Math.PI+Math.atan2(xm*.8,zb-zc)*.6).multiply(new THREE.Matrix4().makeRotationZ(.22)).setPosition(-s*xm*.72,hy-.1,zc+(zb-zc)*.62);   // the dagger, hanging back at the right hip
+    const sh=new THREE.CylinderGeometry(.016,.009,.24,10);sh.scale(1.5,1,.7);sh.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0,.03)).applyMatrix4(T);add(sh,ld);
+    const ch=new THREE.CylinderGeometry(.019,.019,.03,10);ch.scale(1.5,1,.75);ch.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.105,.03)).applyMatrix4(T);add(ch,brass);
+    const gu=new THREE.BoxGeometry(.075,.013,.016);gu.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.128,.03)).applyMatrix4(T);add(gu,stl);
+    const gr=new THREE.CylinderGeometry(.011,.012,.085,8);gr.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.178,.03)).applyMatrix4(T);add(gr,wood);
+    const pm=new THREE.SphereGeometry(.017,10,8);pm.scale(1,.8,.8);pm.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.228,.03)).applyMatrix4(T);add(pm,stl);}
+  const byM=new Map();for(const [g,mat] of parts){const ng=g.index?g.toNonIndexed():g;for(const k of Object.keys(ng.attributes))if(k!=='position'&&k!=='normal')ng.deleteAttribute(k);if(!byM.has(mat))byM.set(mat,[]);byM.get(mat).push(ng);}parts.length=0;for(const [mat,gs] of byM)parts.push([mergeGeometries(gs,false),mat]);   // one mesh per material
+  for(const [g,mat] of parts){const n=g.attributes.position.count,si=new Uint16Array(n*4),sw=new Float32Array(n*4);for(let i=0;i<n;i++){si[i*4]=bi;sw[i*4]=1;}
+    g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+    const sm=new THREE.SkinnedMesh(g,mat);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Gear';body.parent.add(sm);}}
 // a tabard over everything (clothes or armour): a convex body over the chest and back to the hips, front and back flaps to mid-thigh
 // (stiff from the hips, the hem swinging with the legs), dyed in the coat and trim colours in one of the heraldic patterns
 function tabardMat(her,pal,mats,hy,ny){const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95,side:THREE.DoubleSide});tintMaterial(mt,0,pal,mats);
