@@ -3807,10 +3807,10 @@ class Ragdoll{
       const u=clamp(R.t/R.rollT,0,1),e=u*u*(3-2*u),th=R.rollS*Math.PI*e,k=.05*R.str;
       // the whole body turns over together, led by the hips and a knee drawn up and across, so the trunk never corkscrews against the legs
       const knee=R.rollS>0?'LeftLeg':'RightLeg',lift=Math.sin(Math.PI*e);
-      for(const n in P){const o=R.rf[n];if(!o)continue;const leg=/UpLeg|Leg|Foot|Toe|Hips/.test(n),th2=leg?R.rollS*Math.PI*Math.min(1,e*1.15):th;
+      for(const n in P){const o=R.rf[n];if(!o)continue;const leg=/UpLeg|Leg|Foot|Toe|Hips/.test(n),th2=leg?R.rollS*Math.PI*Math.min(1,e*1.05):th;
         _rv.subVectors(o,R.rc).applyAxisAngle(R.ax,th2).add(R.rc);_rv.y=Math.max(_rv.y,R.rc.y*.6+.05*lift);
         if(n===knee){_rv.y+=.22*lift;_rv.addScaledVector(R.ax,.12*lift);}
-        const p=P[n],kk=leg?k*2.2:k*1.5,q=this.Q[n];const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
+        const p=P[n],kk=k*2.2,q=this.Q[n];/* trunk and legs pulled round alike (Build 117: the trunk lagged the legs and the body came over wrung up to 170°) */const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
       if(R.t<R.rollT)return;
       R.rollT=0;R.t=0;R.st=-1;const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()>1e-4)R.f.copy(f.normalize());R.base.set(P.Hips.x,0,P.Hips.z);R.gy=groundY(P.Hips.x,P.Hips.z,P.Hips.y);}
     if(R.fail&&R.t>R.p+R.a*.6&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
