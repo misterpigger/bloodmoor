@@ -230,7 +230,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>Wheel</kbd></dt><dd>Swords and spears: scroll to thrust; the point stays on line while you keep scrolling. Axes and maces: scroll changes your reach.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch · <kbd>Space</kbd> jump and vault</dd>
       <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q to wind up over the shoulder, let go to throw from that hand</dd>
-      <dt><kbd>V</kbd> <kbd>M</kbd> <kbd>Tab</kbd></dt><dd>Third or first person · music on/off · hold to look over your wounds</dd>
+      <dt><kbd>V</kbd> <kbd>M</kbd> <kbd>Tab</kbd></dt><dd>Close, wide or first-person view · music on/off · hold to look over your wounds</dd>
       <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=118;
+const BUILD=119;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -1675,7 +1675,7 @@ function grassCard(){const c=mkCanvas(128,128),g=c.getContext('2d');g.clearRect(
     const gr=g.createLinearGradient(0,128,0,128-h);const d=Math.random();gr.addColorStop(0,`rgb(${24+d*10|0},${34+d*12|0},${14+d*6|0})`);gr.addColorStop(.6,`rgb(${70+d*30|0},${92+d*30|0},${38+d*14|0})`);gr.addColorStop(1,`rgb(${120+d*40|0},${130+d*30|0},${70+d*20|0})`);
     g.fillStyle=gr;g.beginPath();g.moveTo(x0-w,128);g.quadraticCurveTo(x0+lean*.3,128-h*.5,x0+lean,128-h);g.quadraticCurveTo(x0+lean*.3+w*.4,128-h*.5,x0+w,128);g.closePath();g.fill();}
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
-function buildGrass(R,ok){const T=48,N=40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+function buildGrass(R,ok){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   for(let i=0;i<N;i++){const bx=r()*T,bz=r()*T,w=.45+r()*.4,h=.24+r()*.32,a=r()*Math.PI;
     for(let q=0;q<2;q++){const ang=a+q*Math.PI/2,cx=Math.cos(ang)*w/2,cz=Math.sin(ang)*w/2,v0=pos.length/3;
       pos.push(bx-cx,0,bz-cz, bx+cx,0,bz+cz, bx+cx,h,bz+cz, bx-cx,h,bz-cz);uv.push(0,0,1,0,1,1,0,1);for(let k=0;k<4;k++)base.push(bx,bz);idx.push(v0,v0+1,v0+2,v0,v0+2,v0+3);}}
@@ -3704,7 +3704,7 @@ const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck',
   ['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['LeftFoot','LeftToeBase'],['LeftLeg','LeftToeBase'],
   ['RightUpLeg','RightLeg'],['RightLeg','RightFoot'],['RightFoot','RightToeBase'],['RightLeg','RightToeBase']];
 const RD_MINS=[['LeftArm','LeftHand','LeftForeArm',.5],['RightArm','RightHand','RightForeArm',.5],['LeftUpLeg','LeftFoot','LeftLeg',.75],['RightUpLeg','RightFoot','RightLeg',.75]];
-let FULLBODY=/[?&]fullbody/.test(location.search)||!/[?&]nofullbody/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-fullbody')!=='0';}catch(e){return true;}})();   // on unless switched off
+let FULLBODY=/[?&]fullbody/.test(location.search)||!/[?&]nofullbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-fullbody');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on, Build 119)
 const FB_R={Hips:.13,Spine1:.15,Spine2:.16,Neck:.07,Head:.11,HeadTop_End:.09,LeftArm:.07,RightArm:.07,LeftForeArm:.055,RightForeArm:.055,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftUpLeg:.09,RightUpLeg:.09,LeftLeg:.07,RightLeg:.07,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};   // contact sizes
 const FB_K={Hips:.22,Spine1:.14,Spine2:.12,Neck:.11,Head:.09,HeadTop_End:.09,LeftArm:.14,RightArm:.14,LeftForeArm:.09,RightForeArm:.09,LeftUpLeg:.2,RightUpLeg:.2,LeftLeg:.16,RightLeg:.16};   // muscle: how hard each point is pulled to its animated place per 1/120 s
 const RD_R={Hips:.13,Spine1:.14,Spine2:.14,Neck:.07,Head:.11,HeadTop_End:.09,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};
@@ -6198,7 +6198,12 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};   // (Build 117 tried 2.2 m and a 50° view; the player lost sight of the legs, so it's back to Build 33's)
+// third-person views (Build 119): 'close' is framed like Half Sword's over-the-shoulder camera (measured off its footage: about 1.3 m
+// behind the head, a little right, at shoulder-to-head height looking slightly down, a wide view, the fighter big in the left third);
+// 'wide' is Build 33's. V steps close → wide → first person (`camView`, stored as bloodmoor-cam). Aim is the same in every view.
+const CAMS={close:{dist:1.35,side:.42,up:-.04,tilt:-.15,fov:58},wide:{dist:3.2,side:.55,up:.22,tilt:-.12,fov:55}};
+let camView='close';try{const v=localStorage.getItem('bloodmoor-cam');if(v==='wide'||v==='close')camView=v;}catch(e){}
+let CAM_TP=CAMS[camView];
 // nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
 const _cs=V(),_cd=V();let camPull=1;
 function camBlocked(x,y,z,ceil){if(ceil&&y>ceil-.22)return true;
@@ -6412,7 +6417,7 @@ addEventListener('keydown',e=>{
     else if(e.code==='KeyG'&&player.sword&&player.sword.stuck&&!player.sword.stuck.thrown){if(NET.mode==='client')NET.lg=1;else letGo(player);}   // G with a blade in someone: let go and leave it there
     else if((e.code==='KeyG'||e.code==='KeyR')&&player.sword&&player.sword.def.kind==='blade'){player.rev=!player.rev;toast(player.rev?'Reverse grip: click to stab down':'Normal grip');}
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
-    if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
+    if(e.code==='KeyV'){if(camMode==='fp'){camMode='tp';camView='close';}else if(camView==='close')camView='wide';else camMode='fp';CAM_TP=CAMS[camView];try{localStorage.setItem('bloodmoor-cam',camView);}catch(e){}toast(camMode==='fp'?'First person':camView==='close'?'Close view':'Wide view');}
     if(inYard()){const d=/^Digit([1-7])$/.exec(e.code);if(d){if(NET.mode==='client')NET.yw=+d[1]-1;else yardArm(player,+d[1]-1);}
       if(e.code==='KeyH'){if(NET.mode==='client')NET.yg=1;else yardCycle();}}
     if(e.code==='KeyE'&&MILL&&player&&!playerLootCandidate()&&Math.hypot(player.pos.x-MILL.lever.x,player.pos.z-MILL.lever.z)<1.5){if(NET.mode==='client')NET.pick='lever';else millLever(player);}
@@ -6563,10 +6568,10 @@ let gtao=null;try{gtao=new GTAOPass(scene,camera,innerWidth,innerHeight);gtao.ou
   gtao.overrideVisibility=function(){const c=this._visibilityCache;this.scene.traverse(o=>{c.set(o,o.visible);if(o.isPoints||o.isLine||o.isSprite||(o.material&&o.material.transparent&&!o.material.depthWrite))o.visible=false;});};
   gtao.updateGtaoMaterial({radius:.55,distanceExponent:1.6,thickness:1.2,scale:1.25,samples:12,distanceFallOff:1,screenSpaceRadius:false});
   gtao.updatePdMaterial({lumaPhi:10,depthPhi:2,normalPhi:3,radius:5,rings:2,samples:12});gtao.blendIntensity=.95;composer.addPass(gtao);if(TOUCH)gtao.enabled=false;}catch(e){console.warn('AO unavailable',e);gtao=null;}   // (too heavy for a phone)
-const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.32,.45,1.15);composer.addPass(bloom);   // only real highlights glow: the bright sky and sunlit steel were blooming the whole screen white
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.32,.45,1.15);composer.addPass(bloom);if(TOUCH)bloom.enabled=false;   // only real highlights glow: the bright sky and sunlit steel were blooming the whole screen white
 composer.addPass(new OutputPass());
 // edge smoothing on the finished image: blades, hafts and limbs no longer stair-step
-let smaa=null;try{smaa=new SMAAPass(innerWidth*renderer.getPixelRatio(),innerHeight*renderer.getPixelRatio());composer.addPass(smaa);}catch(e){console.warn('SMAA unavailable',e);}
+let smaa=null;try{smaa=new SMAAPass(innerWidth*renderer.getPixelRatio(),innerHeight*renderer.getPixelRatio());composer.addPass(smaa);if(TOUCH)smaa.enabled=false;}catch(e){console.warn('SMAA unavailable',e);}
 const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uHurt:{value:0},uZone:{value:0},uDesat:{value:0},uCool:{value:1}},
   vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader:`uniform sampler2D tDiffuse;uniform float uTime,uHurt,uZone,uDesat,uCool;varying vec2 vUv;
@@ -6749,10 +6754,13 @@ function logic(dt){
 let lastFrameAt=0;
 function frame(now){
   if(window.__manual&&!window.__inManual){requestAnimationFrame(frame);return;}   // test hook: a recorder steps frames itself
+  // phones (Build 119): draw at most 30 frames a second in a match and 20 behind the menu, and update the shadows every other frame;
+  // a phone's 60-120 Hz screen had it drawing flat out and running hot. The sim still steps by real time, so nothing slows down
+  if(TOUCH&&!window.__inManual){const cap=state==='playing'?1000/30:1000/20;if(now-(frame._t||0)<cap-4){requestAnimationFrame(frame);return;}frame._t=now;renderer.shadowMap.autoUpdate=((window.__fc||0)&1)===0;}
   lastFrameAt=performance.now();window.__fc=(window.__fc||0)+1;
   if(!window.__inManual)requestAnimationFrame(frame);
   let dt=Math.max(0,Math.min((now-last)/1000,.1));last=now;
-  if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>1/38&&gtao&&gtao.enabled){gtao.enabled=false;}else if(avg>1/38&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
+  if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>PERF_SLOW&&gtao&&gtao.enabled){gtao.enabled=false;}else if(avg>PERF_SLOW&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
   if(state==='loading')return;
   if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
   netTick(dt);
@@ -6800,7 +6808,7 @@ function frame(now){
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
-    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
+    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:CAM_TP.fov)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
@@ -6989,6 +6997,7 @@ function detailTick(dt){
 }
 window.__det={PRINTS,DRAGS,DUST,FLY,BRUISES,dentArmor,knockHelmet,armorPreview:d=>armorPreview(d),get SPEC(){return SPEC}};
 function clearDetails(){for(const F of FLY)scene.remove(F.g);FLY.length=0;BRUISES.length=0;for(const M of [PRINTS,DRAGS]){for(let i=0;i<M.n;i++)M.m.setMatrixAt(i,_zero);M.m.instanceMatrix.needsUpdate=true;}DUST.life.fill(0);DUST.al.fill(0);}
+const PERF_SLOW=TOUCH?1/26:1/38;   // (phones are capped at 30 fps, so 'slow' is under 26 there)
 const perf={t:0,n:0,pr:TOUCH?Math.min(devicePixelRatio,1):Math.min(devicePixelRatio,1.5)};
 
 // ================================================================ characters
