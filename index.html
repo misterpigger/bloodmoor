@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=123;
+const BUILD=124;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -3574,6 +3574,24 @@ function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const
   const bp=body.geometry.attributes.position;let x0=9,x1=-9,z0=9,z1=-9;let nz=-9;for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(x)>.2)continue;if(y>ey-.075&&y<ey+.04&&Math.abs(x)<.03)nz=Math.max(nz,z);if(y<ey-.02||y>ey+.06)continue;x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);}
   return body.userData.marks={J,ey,ez,hx:(x0+x1)/2,hz:(z0+z1)/2,rx:(x1-x0)/2,rz:(z1-z0)/2,nose:Math.max(z1,nz)};}
 const steelFitMat=steelMat.clone();steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;
+// the breastplate's own detail (Build 124), from a per-vertex (round the body, up the plate) coordinate `aCu` set when the cuirass is
+// grown: a row of domed rivets round the waist edge and across the top at the front, a rolled top edge, leather side straps with brass
+// buckles, and shoulder straps over the back. Leather is dark and matte, brass warm and metallic
+const cuirassMat=steelFitMat.clone();{const pre=steelFitMat.onBeforeCompile;cuirassMat.onBeforeCompile=(sh,r)=>{pre.call(cuirassMat,sh,r);
+  sh.vertexShader='attribute vec2 aCu;varying vec2 vCu;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCu=aCu;');
+  sh.fragmentShader='varying vec2 vCu;\nfloat cuL,cuB,cuR;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+    { float a=vCu.x,v=vCu.y,sa=abs(a),fu=fract(a/6.2832*26.)-.5;cuL=0.;cuB=0.;cuR=0.;
+      float r1=length(vec2(fu*.036,(v-.04)*.42)),r2=length(vec2(fu*.036,(v-.955)*.42))+step(1.1,sa);cuR=max(1.-smoothstep(.0035,.0055,r1),1.-smoothstep(.0035,.0055,r2));
+      float side=abs(sa-1.5708),strap=(1.-smoothstep(.1,.12,side))*step(.2,v)*step(v,.72),shoulder=(1.-smoothstep(.09,.11,abs(sa-2.55)))*step(.72,v);cuL=max(strap,shoulder);
+      float bk=step(side,.15)*step(abs(v-.58),.045),hole=step(side,.07)*step(abs(v-.58),.02);cuB=bk*(1.-hole);
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.09,.055,.03),cuL);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.45,.2),max(cuB,cuR*.0));
+      diffuseColor.rgb*=1.+.25*cuR-.25*smoothstep(.97,.985,v)+.18*smoothstep(.985,.995,v); }`)
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.78,cuL);roughnessFactor=mix(roughnessFactor,.32,cuB);')
+    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,0.,cuL);')
+    .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+    { float hgt=cuR*.0015+cuL*.0012+cuB*.0016;vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
+      normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2)); }`);};
+  cuirassMat.customProgramCacheKey=()=>'steel-cuirass';}
 const brassFitMat=brassMat.clone();brassFitMat.side=THREE.DoubleSide;
 const faulMat=steelDark.clone();{const pre=faulMat.onBeforeCompile;steelDetail(faulMat,'faul');const pre2=faulMat.onBeforeCompile;faulMat.onBeforeCompile=(sh,r)=>{pre2.call(faulMat,sh,r);
   sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat lame=fract(vSP.y/.045);diffuseColor.rgb*=.55+.45*smoothstep(.0,.12,lame)*smoothstep(1.,.9,lame);');};faulMat.customProgramCacheKey=()=>'faul';faulMat.side=THREE.DoubleSide;}   // overlapping lames
@@ -3614,13 +3632,14 @@ function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2){let S=null;return (q,g)=
   else{const zt=cz-(cz-S.zb[i])*Math.pow(e,pw);q[g*3+2]=Math.min(z,z+(zt-z)*backK);}};}
 const FINISHABLE=new Set();
 const plumeMat=std({color:0xffffff,roughness:.85,side:THREE.DoubleSide});
-for(const m of [steelMat,steelDark,mailMat,steelFitMat,faulMat,helmSlitMat])FINISHABLE.add(m);
+for(const m of [steelMat,steelDark,mailMat,steelFitMat,cuirassMat,faulMat,helmSlitMat])FINISHABLE.add(m);
 function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
   const arm=['LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],torso=['Hips','Spine','Spine1','Spine2'],neck=['Neck','Head'];
-  const S=(key,o,mat,bones)=>[fitShell(body,key,Object.assign({bones},o)),mat];
+  const S=(key,o,mat,bones)=>{const g=fitShell(body,key,Object.assign({bones},o));if(key==='cuirass'&&!g.attributes.aCu){const P=g.attributes.position,a=new Float32Array(P.count*2),y0=hy+.03,y1=J.Neck.y-.015,zc=J.Spine1.z;
+      for(let i=0;i<P.count;i++){a[i*2]=Math.atan2(P.getX(i),P.getZ(i)-zc);a[i*2+1]=(P.getY(i)-y0)/(y1-y0);}g.setAttribute('aCu',new THREE.BufferAttribute(a,2));}return [g,mat];};
   switch(def.id){
     case 'plate':return [
-      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4,.22,.5,6),fallback:'Spine'},steelFitMat,['Spine','Spine1','Spine2']),
+      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4,.22,.5,6),fallback:'Spine'},cuirassMat,['Spine','Spine1','Spine2']),
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
