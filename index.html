@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=120;
+const BUILD=121;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -4555,6 +4555,7 @@ const CAPS=[
 ];
 for(const c of CAPS)if(c[4])SEV_R[c[4]]=c[2];
 const LIMB_OF={LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
+let _spR=null;
 const ATTACKS=[
   {n:'fromRight',s:[.5,.28],e:[-.5,.05]},{n:'fromLeft',s:[-.5,.3],e:[.5,.02]},{n:'overhead',s:[.08,.55],e:[0,-.38]},
   {n:'diagR',s:[.48,.52],e:[-.42,-.36]},{n:'diagL',s:[-.48,.52],e:[.42,-.36]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
@@ -4733,7 +4734,7 @@ class Fighter{
     const slide=Hd.slide*clamp((cz-.46)/.16,0,1);
     out.addScaledVector(f,slide);
     // a spear is held low with the back hand by the hip and the shaft running forward past the front hand; a thrust drives the back hand out
-    if(this.sword&&this.sword.def.kind==='spear'){const sg=this.mainArm==='L'?-1:1;out.copy(this.chest).addScaledVector(_r,Math.max(.15,.21+this.ctrl.x*sg*.3)*sg).addScaledVector(u,this.ctrl.y*.4-.3).addScaledVector(f,.1+Math.max(0,cz-.42)*1.5+slide*.6);}   // the back hand at the hip on its own side, so the shaft runs past the body (and its butt out behind the hip), not through the chest
+    if(this.sword&&this.sword.def.kind==='spear'){const sg=this.mainArm==='L'?-1:1;out.copy(this.chest).addScaledVector(_r,Math.max(.15,.21+this.ctrl.x*sg*.3)*sg).addScaledVector(u,this.ctrl.y*.4-.3).addScaledVector(f,.1+Math.max(0,cz-.42)*(this.isPlayer||this.remote?2.1:1.5)+slide*.6);}   // the back hand at the hip on its own side, so the shaft runs past the body (and its butt out behind the hip), not through the chest
     // reverse grip: fists up by the face with the point hanging forward and down; a stab drives them down to where you aim (low for someone on the ground)
     const rw=this.sword&&this.sword.def.kind==='blade'?this.revW||0:0;
     if(rw>0){const e=this.revS||0,ee=e*e*(3-2*e),cx=this.ctrl.x*.7,cy=this.ctrl.y;
@@ -4747,7 +4748,7 @@ class Fighter{
     return out;
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
-  guideDir(hand,out){
+  guideDir(hand,out){if(!_spR)_spR=V();
     const f=_t2,u=_t3;this.frame(f,u);
     if(this.sword&&(this.throwHold||this.throwT>=0)){
       if(this.sword.def.kind==='spear'){this.throwAim(out);out.y+=.12;this.frame(f,u);return out.normalize();}   // javelin: held overhand, point on the target
@@ -4756,7 +4757,7 @@ class Fighter{
       _rvG.copy(this.chest).addScaledVector(_r,this.ctrl.x*.7).addScaledVector(Y_AXIS,-.75+this.ctrl.y*.8).addScaledVector(_f,.62).sub(hand).normalize();   /* (the level frame: looking down mustn't tip the stab into a lunge) */
       if(rw>=1)return out.copy(_rvG);this.revW=0;this.guideDir(hand,out);this.revW=rw;this.frame(f,u);return out.lerp(_rvG,rw).normalize();}}
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
-    if(this.thrust||(this.sword&&(this.sword.def.kind==='spear'||(this.sword.def.kind==='blade'&&this.pointT>0)))){const sp=this.sword&&this.sword.def.kind==='spear';const hb=!sp&&(this.isPlayer||this.remote)?.3:0;out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)+hb).sub(hand);return out.normalize();}   // a human's sword jab aims at the face, where the guard already points
+    if(this.thrust||(this.sword&&(this.sword.def.kind==='spear'||(this.sword.def.kind==='blade'&&this.pointT>0)))){const sp=this.sword&&this.sword.def.kind==='spear';const hb=!sp&&(this.isPlayer||this.remote)?.3:0;out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)+hb);if(sp&&(this.isPlayer||this.remote)){_spR.crossVectors(f,u);out.addScaledVector(_spR,this.ctrl.x*1.5);}out.sub(hand);return out.normalize();}   // a human's spear point also swings left and right with the aim (Build 121), not just slides with the back hand   // a human's sword jab aims at the face, where the guard already points
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
     const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
     const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
@@ -6399,6 +6400,9 @@ function playerInput(f,wish,h){
   const k=input.keys;f.fwd(_f);f.right(_r);
   if(k.KeyW)wish.add(_f);if(k.KeyS)wish.sub(_f);if(k.KeyD)wish.add(_r);if(k.KeyA)wish.sub(_r);
   if(wish.lengthSq()>0)wish.normalize();if(k.KeyS&&!k.KeyW)wish.multiplyScalar(.7);
+  // a spear is thrust with the button (Build 121): hold it and both hands drive the shaft out along where you aim; let go and it comes back
+  // to a lower guard. (It used to need the wheel, as a sword's thrust does, and the button did nothing useful with a spear.) The wheel still works
+  if(f.sword&&f.sword.def.kind==='spear'&&!f.sword.stuck){if(input.lmb||input.stab){f.ctrl.z+=(.7-f.ctrl.z)*(1-Math.exp(-30*h));f._spW=simTime;}else if(simTime-(f._spW||0)>.12&&performance.now()-lastWheel>160)f.ctrl.z+=(.36-f.ctrl.z)*(1-Math.exp(-11*h));}
   f.commit=!!f.sword&&(input.lmb||input.stab||f.throwHold||f.throwT>=0);f.thrust=f.ctrl.z>.56&&!!f.sword&&(f.sword.def.kind==='blade'||f.sword.def.kind==='spear');
   // using the wheel puts a sword in a thrusting stance for a moment, so repeated scrolls poke along the line instead of levelling and lifting the blade each time
   f.pointT=f.sword&&f.sword.def.kind==='blade'&&f.ctrl.z>.5?.8:f.ctrl.z<.42?0:Math.max(0,(f.pointT||0)-h);   // wheel back and the blade comes straight up into guard
@@ -6782,7 +6786,11 @@ function frame(now){
     else{player.pitch=clamp(player.pitch+(.5-input.my)*1.2*dt,-1.2,.95);}
     if(input.mx>.85)player.yaw-=2.4*dt*(input.mx-.85)/.15;if(input.mx<.15)player.yaw+=2.4*dt*(.15-input.mx)/.15;
   }
-  if(player&&player.sword&&!player.sword.stuck&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
+  // a spear is thrust with the button (Build 121): hold it and both hands drive the shaft out along where you aim, let go and it comes back
+  // to a lower, shorter guard. (It used to need the wheel, as a sword's thrust does, and the button did nothing useful with a spear)
+  // (a spear's thrust is in playerInput, Build 121)
+  if(player&&player.sword&&player.sword.def.kind!=='spear'&&!player.sword.stuck&&state==='playing'&&!paused&&performance.now()-lastWheel>160)player.ctrl.z+=(.46-player.ctrl.z)*(1-Math.exp(-7*dt));
+  if(NET.mode==='client'&&player&&player.sword&&player.sword.def.kind==='spear'&&state==='playing'&&!paused){const f=player;if(input.lmb||input.stab){f.ctrl.z+=(.7-f.ctrl.z)*(1-Math.exp(-30*dt));f._spW=performance.now();}else if(performance.now()-(f._spW||0)>160&&performance.now()-lastWheel>160)f.ctrl.z+=(.36-f.ctrl.z)*(1-Math.exp(-11*dt));}   // a friend's own spear (their cz goes to the host)
   for(const s of freeSwords)s.sync();
   for(let i=spurts.length-1;i>=0;i--){const sp=spurts[i];if(simTime>sp.until||!sp.obj.parent){spurts.splice(i,1);continue;}sp.obj.getWorldPosition(_t1);if(_t1.distanceToSquared(camera.position)<.5)continue;
     // pumped out in beats along the cut's facing, weakening as the blood runs out; a steady dribble between beats
