@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=119;
+const BUILD=120;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -4695,18 +4695,18 @@ class Fighter{
   fbHit(n,dir,dv){const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];for(const m of A.names){const w=m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-dv*w/55);}this.fbRelax=Math.min(1,(this.fbRelax||0)+dv*.25);}   // a blow knocks the wind out: the muscles give for a moment and the body rides it
   // an elbow: the IK's bend point is a weight carried by the body, sprung to where the arm wants it, so it swings and is knocked about
   physPole(side,t,dt,held){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
-    const str=this.pbd?this.pbd.str:1,k=70*str*str+12,c=2*Math.sqrt(k)*.4,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,P.tp).multiplyScalar(1/Math.max(dt,1e-3));P.p.addScaledVector(_wl1,dt*.7);
+    const str=this.pbd?this.pbd.str:1,k=70*str*str+12,c=2*Math.sqrt(k)*.62,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,P.tp).multiplyScalar(1/Math.max(dt,1e-3));P.p.addScaledVector(_wl1,dt*.7);
     const dk=SHIP&&this.pos.y>-.1?SHIP:null;
     for(let i=0;i<ns;i++){P.v.x+=(k*(t.x-P.p.x)+c*(_wl1.x*.3-P.v.x)+(dk?9.8*dk.pitch*1.5:0))*h;P.v.y+=(k*(t.y-P.p.y)+c*(_wl1.y*.3-P.v.y)-9.8*(1-str)*.6)*h;P.v.z+=(k*(t.z-P.p.z)+c*(_wl1.z*.3-P.v.z)+(dk?9.8*dk.roll*1.5:0))*h;P.p.addScaledVector(P.v,h);}
-    P.tp.copy(t);_wl2.subVectors(P.p,t);const lim=held?.12:.4;if(_wl2.length()>lim)_wl2.setLength(lim);return t.add(_wl2);}
+    P.tp.copy(t);_wl2.subVectors(P.p,t);const lim=held?.12:.2;if(_wl2.length()>lim)_wl2.setLength(lim);return t.add(_wl2);}
   armHit(side,dir,dv){const P=this.poles&&this.poles[side];if(P)P.v.addScaledVector(dir,dv);if(this.ar)this.fbHit((side==='L'?'Left':'Right')+'ForeArm',_wl3.copy(dir).normalize(),dv);}
   // the off hand when a weapon is held in one: a mass on a spring to its guard spot, carrying the body's motion, so it swings and is flung
   freeHand(t,dt){const F=this.offH||(this.offH={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||F.p.distanceToSquared(t)>1){F.p.copy(t);F.v.set(0,0,0);F.tp.copy(t);return;}
-    const k=110*(this.pbd?this.pbd.str*this.pbd.str:1),c=2*Math.sqrt(110)*.42,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,F.tp).multiplyScalar(1/Math.max(dt,1e-3));
+    const k=110*(this.pbd?this.pbd.str*this.pbd.str:1),c=2*Math.sqrt(110)*.7,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,F.tp).multiplyScalar(1/Math.max(dt,1e-3));
     F.p.addScaledVector(_wl1,dt*BODY_CARRY);
     const dk=SHIP&&this.pos.y>-.1?SHIP:null;
     for(let i=0;i<ns;i++){F.v.x+=(k*(t.x-F.p.x)+c*(_wl1.x*(1-BODY_CARRY)-F.v.x)+(dk?9.8*dk.pitch:0))*h;F.v.y+=(k*(t.y-F.p.y)+c*(_wl1.y*(1-BODY_CARRY)-F.v.y))*h;F.v.z+=(k*(t.z-F.p.z)+c*(_wl1.z*(1-BODY_CARRY)-F.v.z)+(dk?9.8*dk.roll:0))*h;F.p.addScaledVector(F.v,h);}
-    F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.35)_wl2.setLength(.35);t.add(_wl2);}
+    F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.2)_wl2.setLength(.2);t.add(_wl2);}   /* Build 120: damped near critically and kept within 20 cm (it bounced up to 35 cm and looked like a rubber arm) */
   // a blow (or anything) pushing a body part: the struck mass gets the push, its neighbours some of it; drop weakens the muscles
   bodyHit(bone,dir,dv,drop=0){if(this.ar)this.fbHit(bone==='Spine'||bone==='Hips'?'Spine1':bone,_wl3.copy(dir).normalize(),dv*.8);const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
     for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}D.rl=Math.min(1,(D.rl||0)+dv*.2);
@@ -5336,7 +5336,7 @@ class Fighter{
           // a committed one-handed swing: the free arm goes out the other way as a counterweight, low and a little back, and comes in again after
           this._cwW=lerp(this._cwW||0,this.commit&&!rvg&&s.def.kind!=='fist'?1:0,1-Math.exp(-(this.commit?7:2.5)*dt));
           if(this._cwW>.01){_pl.copy(s.Hv).setY(0);const hl=_pl.length();if(!this._cwD)this._cwD=V().copy(_r).multiplyScalar(-sgn);if(hl>.8)this._cwD.lerp(_pl.multiplyScalar(-1/hl),1-Math.exp(-5*dt)).normalize();
-            _ogc.copy(shO).addScaledVector(this._cwD,.44).addScaledVector(Y_AXIS,-.3).addScaledVector(_f,-.06);const e=this._cwW*this._cwW*(3-2*this._cwW);_t2.lerp(_ogc,e);}
+            _ogc.copy(shO).addScaledVector(this._cwD,.3).addScaledVector(Y_AXIS,-.44).addScaledVector(_f,-.1);const e=this._cwW*this._cwW*(3-2*this._cwW)*.85;_t2.lerp(_ogc,e);   /* low and a little out, the elbow soft (Build 120: it went straight out at shoulder height like a scarecrow's) */}
           this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=Math.max(this.calmW||0,rvg?1:0),e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
@@ -5824,6 +5824,7 @@ function armourGap(B,cap,P,mode){
 // what a landed blow does to the weapon's motion (classic engine): n points into the body; of the tip's motion into it kn is taken
 // (1 stops it, more bounces it back), along the surface kt is kept; the hand the same with hn and ht
 const _hcn=V(),_hco=V(),_hcv=V();
+const BITE_V=9;   // m/s: a cut slower than this into flesh is caught in the wound (Build 120)
 function hitCarry(s,n,kn,kt,hn,ht){
   _hcv.subVectors(s.T,s.Tp);let vn=_hcv.dot(n);if(vn>0){_hcv.addScaledVector(n,-vn*kn);vn=_hcv.dot(n);}_hcv.addScaledVector(n,-vn).multiplyScalar(kt).addScaledVector(n,vn);s.Tp.copy(s.T).sub(_hcv);
   let hv=s.Hv.dot(n);if(hv>0){s.Hv.addScaledVector(n,-hv*hn);hv=s.Hv.dot(n);}s.Hv.addScaledVector(n,-hv).multiplyScalar(ht).addScaledVector(n,hv);}
@@ -5999,10 +6000,15 @@ function resolveHit(A,B,cap,t,P,pv){
     else if(mode==='flat')hitCarry(s,_hcn,1.1,.8,.7,.9);
     else if(mode==='haft'){hitCarry(s,_hcn,1.1,.6,.8,.8);A.stagger=Math.max(A.stagger,.1);}   // too close: you jam your own hands
     else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
-    else if(mode==='cut')hitCarry(s,_hcn,.6+Math.min(.3,prot*.5),.9,.45,.95);   // the edge bites and is slowed into the body; along it, it draws on
+    else if(mode==='cut')hitCarry(s,_hcn,(speed>=BITE_V&&prot<.3?.35:.6)+Math.min(.3,prot*.5),.9,.45,.95);   // a fast cut into flesh goes on through; a slow one is held (the bite below)   // the edge bites and is slowed into the body; along it, it draws on
     else if(mode==='blunt')hitCarry(s,_hcn,.8,.85,.6,.9);
     else hitCarry(s,_hcn,.85,.7,.6,.85);}
   const dnB=wasDown;   // someone on the ground (alive or dead) takes a point too: it stays in until it's pulled out
+  // a slow cut bites (Build 120, as in Half Sword's demo): an edge that lands in flesh without the speed to go through is caught in the
+  // wound for a moment, the swing dies there, and you draw it free (a little more damage) or it works loose after ~0.35 s; swing fast
+  // enough and it carries on through. Not into armour, the head or neck, a knife, or someone on the ground
+  if(!sev&&!glance&&!s.stuck&&!dnB&&B.alive&&mode==='cut'&&W.kind==='blade'&&!shortB&&prot<.3&&dmg>8&&speed<BITE_V&&cap.zone!=='head'&&cap.zone!=='neck'){
+    if(embed(s,B,cap,t*s.len,P.clone().addScaledVector(dir,.05),.35,{rip:2+dmg*.05,bite:true})){if(!phys){s.Hv.multiplyScalar(.3);s.Tp.lerp(s.T,.8);}B.stagger=Math.max(B.stagger,.3);tell(A,'The edge bites','red');}}
   if(!sev&&!glance&&(B.alive||B.ragdoll)&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:dnB?5:8)&&(!dnB||shortB||A.thrust||(A.revW||0)>.5)||!dnB&&mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
     const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,dmg>25&&cap.zone==='torso'?.46:.22);   // a strong thrust runs the body through
     if(shortB&&!ax){E.copy(P).addScaledVector(s.axis,Math.min(.2,s.len*.55));}   // a knife goes in to the hilt and sticks: you have to wrench it out
@@ -6201,7 +6207,7 @@ function aimPoint(out){
 // third-person views (Build 119): 'close' is framed like Half Sword's over-the-shoulder camera (measured off its footage: about 1.3 m
 // behind the head and half a metre right, a little above it looking down about 17°, a wide view, the fighter big in the left third);
 // 'wide' is Build 33's. V steps close → wide → first person (`camView`, stored as bloodmoor-cam). Aim is the same in every view.
-const CAMS={close:{dist:1.3,side:.56,up:.14,tilt:-.3,fov:60},wide:{dist:3.2,side:.55,up:.22,tilt:-.12,fov:55}};
+const CAMS={close:{dist:1.6,side:.58,up:.18,tilt:-.3,fov:62},wide:{dist:3.2,side:.55,up:.22,tilt:-.12,fov:55}};
 let camView='close';try{const v=localStorage.getItem('bloodmoor-cam');if(v==='wide'||v==='close')camView=v;}catch(e){}
 let CAM_TP=CAMS[camView];
 // nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
