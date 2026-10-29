@@ -234,6 +234,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
+      <dt><kbd>R</kbd></dt><dd>With a sword or knife: turn the grip over, point down, and click to stab down, into a man on the ground or over a shoulder. Keep the button down and the blade stays in; let go and it comes out. <kbd>G</kbd> lets go of a blade that's in someone and leaves it there; walk up and press <kbd>E</kbd> to take hold of a blade left in a body, then step back to pull it out.</dd>
       <dt><kbd>G</kbd></dt><dd>Tap to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <dl class="tcontrols">
@@ -389,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=110;
+const BUILD=111;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -3841,6 +3842,7 @@ function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind===
   _rp.copy(s.edge).addScaledVector(_rr,-c);if(_rp.lengthSq()<1e-8)_rp.crossVectors(A,_rr);_rp.normalize();
   const sg=Math.sign(_wl1.crossVectors(_rr,s.edge).dot(A))||1;out.copy(_rr).multiplyScalar(Math.cos(mx)).addScaledVector(_rp,Math.sin(mx));return (th-mx)*sg;}
 // wrist joint limit: a gripped weapon stays between 12 and 112 degrees of the forearm line; it can't fold back past the hand
+const _rvG=new THREE.Vector3(),_rvA=new THREE.Vector3();
 const WR_MAX=Math.cos(112*Math.PI/180),WR_MIN=Math.cos(12*Math.PI/180),_wl1=new THREE.Vector3(),_wl2=new THREE.Vector3(),_wl3=new THREE.Vector3();
 const PT={kc:950,kg:520,ac:420,ag:220,ktc:420,ktg:300,zc:.45,zg:.8,tc:110,tg:40,gc:.92,hold:.8,thr:2.2};
 const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe=V(),_zero3=V();
@@ -4044,8 +4046,9 @@ class Sword{
     }
     {const ex=rollLimit(this,_wl2);if(ex){const wr=this.w.dot(this.axis);if(wr*ex>0)this.w.addScaledVector(this.axis,-wr);this.w.addScaledVector(this.axis,-Math.sign(ex)*Math.min(Math.abs(ex)*30,8));}
      const wr2=this.w.dot(this.axis);if(Math.abs(wr2)>7)this.w.addScaledVector(this.axis,(Math.sign(wr2)*7-wr2));}   // forearm roll speed limit
-    if(f&&f.foreF&&this.def.kind!=='fist'){const F=f.foreF,c=this.axis.dot(F);
-      if(c<WR_MAX||c>WR_MIN){_wl1.crossVectors(this.axis,F);const sn=_wl1.length();if(sn>1e-5){_wl1.multiplyScalar(1/sn);const sg=c<WR_MAX?1:-1;
+    const rwP=f?f.revW||0:0,rsP=rwP>.5?-1:1;
+    if(f&&f.foreF&&this.def.kind!=='fist'&&(rwP<.05||rwP>.95)){const F=f.foreF,c=rsP*this.axis.dot(F);
+      if(c<WR_MAX||c>WR_MIN){_wl1.crossVectors(this.axis,F).multiplyScalar(rsP);const sn=_wl1.length();if(sn>1e-5){_wl1.multiplyScalar(1/sn);const sg=c<WR_MAX?1:-1;
         const wn=this.w.dot(_wl1)*sg;if(wn<0)this.w.addScaledVector(_wl1,-wn*sg);   // the wrist stops it going further
         this.w.addScaledVector(_wl1,sg*Math.min((c<WR_MAX?WR_MAX-c:c-WR_MIN)*40,6));}}}
     this.rb.setLinvel(this.v,true);this.rb.setAngvel(this.w,true);
@@ -4053,6 +4056,8 @@ class Sword{
   }
   physStuck(h,target){
     const st=this.stuck;st.t-=h;st.age=(st.age||0)+h;const pull=stuckPull(this,target);
+    if(st.lodgeReq)return;
+    if((!st.B.alive||st.B.ragdoll)&&st.deep&&st.c&&st.c.on&&fighters.includes(st.B)&&pull<.1){st.lodgeReq=true;return;}   // down with it in them: it stays in the body
     if(st.t<=0||!st.B.alive||st.B.ragdoll||pull>.25){const B=st.B,yank=st.t>0&&B.alive&&!B.ragdoll;this.unstick();if(yank)ripOut(this,B,this.owner,st.rip||4);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
   }
   unstick(){if(!this.stuck)return;if(this.stuck.j&&PW){try{PW.removeImpulseJoint(this.stuck.j,true);}catch(e){}}if(this.stuck.thrown&&this.rb){this.rb.setBodyType(R.RigidBodyType.Dynamic,true);this.grp=null;this.setGroup(GR_LOOSE);this.rb.wakeUp();}this.stuck=null;}
@@ -4074,12 +4079,15 @@ class Sword{
     if(!(this.H.distanceToSquared(target)<=4)||!Number.isFinite(this.T.x+this.T.y+this.T.z+this.Tp.x+this.Hp.x)){if(!Number.isFinite(target.x+target.y+target.z))return;this.stuck=null;this.reset(target,guide);return;}   // (also a safety net: a weapon that has gone NaN starts again in the hand)
     if(this.stuck){ // embedded in a body: it stays in, dragging them by the haft, until it works loose or you rip it out
       const st=this.stuck,B=st.B;st.t-=h;st.age+=h;
-      const gone=!B.alive||B.ragdoll||!st.c.on||!fighters.includes(B);
-      if(!gone)stuckPose(this);
-      const pull=gone?0:stuckPull(this,target);
-      if(gone||st.t<=0||pull>.25){this.unstick();this.Hv.set(0,0,0);this.Tp.copy(this.T);this.Hp.copy(this.H);
-        if(pull>.25)ripOut(this,B,this.owner,st.rip);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
-      else{_v.subVectors(target,this.H).setY(0);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));
+      const lost=!st.c.on||!fighters.includes(B),down=!lost&&(!B.alive||!!B.ragdoll);
+      if(!lost)stuckPose(this);
+      const of2=this.owner,pull=lost?0:Math.max(stuckPull(this,target),of2&&(of2.revW||0)>.5&&!of2.commit&&(of2.revS||0)<.55?1:0),pl=st.taken?.2:st.down?.35:.25;   // (a reverse-grip stab is drawn back out when you let go of the button)
+      if(down&&!st.down&&st.deep&&pull<.1&&!st.lodgeReq){st.lodgeReq=true;}   // they went down with it deep in them: the falling weight tears it out of your hand (lodgeSweep)
+      if(st.lodgeReq){this.Hv.set(0,0,0);this.Hp.copy(this.H);this.Tp.copy(this.T);this.tipVel.set(0,0,0);return;}
+      const gone=lost||(down&&!st.down);
+      if(gone||st.t<=0||(pull>pl&&st.age>.12)){this.unstick();this.Hv.set(0,0,0);this.Tp.copy(this.T);this.Hp.copy(this.H);
+        if(pull>pl)ripOut(this,B,this.owner,st.rip);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
+      else{if(!down){_v.subVectors(target,this.H).setY(0);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));}
         this.Hv.set(0,0,0);this.Hp.copy(this.H);this.Tp.copy(this.T);this.tipVel.set(0,0,0);return;}
     }
     // the hand is sprung toward where you aim, limited by how hard the weapon's weight makes it work (HANDLING)
@@ -4117,9 +4125,9 @@ class Sword{
     {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.03)this.T.y=gy+.03;}
     collide(this.T,.02,true);
     this.constrain(h);
-    const of=this.owner;if(of&&of.foreF&&this.def.kind!=='fist'){const F=of.foreF,c=this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;
-      if(tc!==null){_wl1.copy(this.axis).addScaledVector(F,-c);if(_wl1.lengthSq()<1e-8)_wl1.copy(this.edge);_wl1.normalize();
-        _wl2.copy(F).multiplyScalar(tc).addScaledVector(_wl1,Math.sqrt(1-tc*tc));_wl3.copy(this.H).addScaledVector(_wl2,this.len).sub(this.T);
+    const of=this.owner,rw0=of?of.revW||0:0,rs=rw0>.5?-1:1;if(of&&of.foreF&&this.def.kind!=='fist'&&(rw0<.05||rw0>.95)){const F=of.foreF,c=rs*this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;   // (while the grip is being turned over the limit waits)
+      if(tc!==null){_wl1.copy(this.axis).multiplyScalar(rs).addScaledVector(F,-c);if(_wl1.lengthSq()<1e-8)_wl1.copy(this.edge);_wl1.normalize();
+        _wl2.copy(F).multiplyScalar(tc).addScaledVector(_wl1,Math.sqrt(1-tc*tc)).multiplyScalar(rs);_wl3.copy(this.H).addScaledVector(_wl2,this.len).sub(this.T);
         const dl=_wl3.length();if(dl>1e-7){_wl3.multiplyScalar(1/dl);_wl1.subVectors(this.T,this.Tp);const vn=_wl1.dot(_wl3);if(vn<0)_wl1.addScaledVector(_wl3,-vn);   // momentum into the limit is absorbed by the wrist
           this.T.copy(this.H).addScaledVector(_wl2,this.len);this.Tp.copy(this.T).sub(_wl1);this.axis.copy(_wl2);this.tipVel.copy(_wl1).multiplyScalar(1/h);
           this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis)).normalize();}}}
@@ -4673,6 +4681,11 @@ class Fighter{
     out.addScaledVector(f,slide);
     // a spear is held low with the back hand by the hip and the shaft running forward past the front hand; a thrust drives the back hand out
     if(this.sword&&this.sword.def.kind==='spear'){const sg=this.mainArm==='L'?-1:1;out.copy(this.chest).addScaledVector(_r,Math.max(.15,.21+this.ctrl.x*sg*.3)*sg).addScaledVector(u,this.ctrl.y*.4-.3).addScaledVector(f,.1+Math.max(0,cz-.42)*1.5+slide*.6);}   // the back hand at the hip on its own side, so the shaft runs past the body (and its butt out behind the hip), not through the chest
+    // reverse grip: fists up by the face with the point hanging forward and down; a stab drives them down to where you aim (low for someone on the ground)
+    const rw=this.sword&&this.sword.def.kind==='blade'?this.revW||0:0;
+    if(rw>0){const e=this.revS||0,ee=e*e*(3-2*e),cx=this.ctrl.x*.7,cy=this.ctrl.y;
+      _wl3.copy(this.chest).addScaledVector(_r,cx).addScaledVector(u,lerp(.34+cy*.12,-.25+cy*.8,ee)).addScaledVector(f,lerp(.24,.5,ee)+(Hd.reach||0)*.5);
+      out.lerp(_wl3,rw*rw*(3-2*rw));}
     const sh=this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f);if(fd<.16)out.addScaledVector(_f,.16-fd);
     // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
@@ -4686,6 +4699,9 @@ class Fighter{
     if(this.sword&&(this.throwHold||this.throwT>=0)){
       if(this.sword.def.kind==='spear'){this.throwAim(out);out.y+=.12;this.frame(f,u);return out.normalize();}   // javelin: held overhand, point on the target
       const k=this.throwT>=0?clamp(this.throwT/THROW_T,0,1):0;out.copy(u).multiplyScalar(.75-.6*k).addScaledVector(f,-.65+1.5*k);return out.normalize();}   // cocked back over the shoulder, whipped through
+    {const rw=this.sword&&this.sword.def.kind==='blade'?this.revW||0:0;if(rw>0){   // reverse grip: the point goes down the line of the stab
+      _rvG.copy(this.chest).addScaledVector(_r,this.ctrl.x*.7).addScaledVector(u,-.75+this.ctrl.y*.8).addScaledVector(f,.85).sub(hand).normalize();
+      if(rw>=1)return out.copy(_rvG);this.revW=0;this.guideDir(hand,out);this.revW=rw;this.frame(f,u);return out.lerp(_rvG,rw).normalize();}}
     // thrusts and spears aim at the centre line in front of you, so the point converges on whoever is there
     if(this.thrust||(this.sword&&(this.sword.def.kind==='spear'||(this.sword.def.kind==='blade'&&this.pointT>0)))){const sp=this.sword&&this.sword.def.kind==='spear';const hb=!sp&&(this.isPlayer||this.remote)?.3:0;out.copy(this.chest).addScaledVector(f,sp?2.4:1.5).addScaledVector(u,(this.ctrl.y-.1)*(sp?1.2:.8)+hb).sub(hand);return out.normalize();}   // a human's sword jab aims at the face, where the guard already points
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
@@ -4725,6 +4741,7 @@ class Fighter{
     if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);
     else if(this.dummy&&RUN&&RUN.dm===0){this.commit=this.thrust=false;}
     else{if(this.dummy&&RUN&&RUN.dm===1)this.ai.cd=9;run=this.think(h,wish);if(this.dummy&&RUN&&RUN.dm<2){wish.set(0,0,0);run=false;}}
+    revStep(this,h);
     if(simTime<CD_END){wish.set(0,0,0);run=false;this.commit=false;this.kickReq=this.jumpReq=this.slideReq=this.throwReq=false;}
     const legs=!(this.limbs.legL.sev||this.limbs.legR.sev);
     const exhausted=this.stamina<12;
@@ -4968,7 +4985,7 @@ class Fighter{
     if(!this.armed()&&this.mainArm){
       if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
       const lpd=A.loot?Math.hypot(lootPos(A.loot,_t2).x-this.pos.x,_t2.z-this.pos.z):99;
-      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!(tg&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
+      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!(tg&&!tg.ragdoll&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
     }
     if(!this.sword&&this.mainArm&&tg&&!(needZone&&dT0(this,tg)>3)){
       _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();this.faceDir(_v,h,8);this.right(_r);
@@ -5046,13 +5063,18 @@ class Fighter{
           if(A.pt>(kind==='blunt'||kind==='axe'?.42:.34)){A.phase='recover';A.pt=0;}}
         else if(A.phase==='recover'){if(A.pt<.05&&!A.backT&&Math.random()<.65)A.backT=rand(.3,.6);if(A.pt>.4){A.phase='guard';A.pt=0;A.cd=rand(.45,1.4)/A.aggr;}}
       }
+      {const RP=tg.ragdoll&&(tg.ragdoll.P.Spine2||tg.ragdoll.P.Hips);let dd=99;if(RP){_t2.set(RP.x-this.pos.x,0,RP.z-this.pos.z);dd=_t2.length();}
+        const rv=kind==='blade'&&low&&!!RP&&dd<2.6;this.rev=rv;   // someone on the ground: turn the grip over, stand over the body and stab down into it
+        if(rv&&A.block<=0){_t2.multiplyScalar(1/Math.max(dd,1e-3));this.faceDir(_t2,h,8);wish.copy(_t2).multiplyScalar(dd>.95?1:dd<.62?-.8:0).addScaledVector(_r,A.strafe*.1);
+          if(A.phase==='windup'||(A.phase==='guard'&&A.cd<=0&&dd<1.05&&(this.revW||0)>.9)){A.phase='strike';A.pt=0;A.atk=A.atk||ATTACKS[2];A.feint=false;A.cd=rand(.3,.8)/A.aggr;}
+          this.ctrlT.x=0;this.ctrlT.y=-.42;this.commit=A.phase==='strike';this.thrust=false;}}
       const sst=this.sword&&this.sword.stuck;   // blade in them: hold it there a moment, then wrench it out
       if(sst&&!sst.thrown){if(sst.age<.55){this.ctrlT.x=this.ctrl.x;this.ctrlT.y=this.ctrl.y;this.ctrlT.z=this.ctrl.z;this.ctrlV.x=this.ctrlV.y=this.ctrlV.z=0;}else{this.ctrlT.z=.24;this.ctrlT.y=this.ctrl.y+.2;wish.addScaledVector(tg.pos.clone().sub(this.pos).setY(0).normalize(),-1);}A.phase='recover';A.pt=0;}
       if(this.stagger>.1){A.phase='guard';}
     } else {
       let tx,tz;if(needZone){tx=zc.c.x;tz=zc.c.z;run=true;}else{if(this.pos.distanceTo(A.wander)<3)A.wander.set(rand(-1,1)*zone.r*.6+zone.c.x,0,rand(-1,1)*zone.r*.6+zone.c.z);tx=A.wander.x;tz=A.wander.z;}
       wish.set(tx-this.pos.x,0,tz-this.pos.z);if(wish.lengthSq()>.01)wish.normalize();
-      this.ctrlT.x=.15;this.ctrlT.y=-.1;this.ctrlT.z=.36;this.pitch=lerp(this.pitch,0,.02);
+      this.ctrlT.x=.15;this.ctrlT.y=-.1;this.ctrlT.z=.36;this.pitch=lerp(this.pitch,0,.02);this.rev=false;
     }
     A.stuck+=h;if(A.stuck>1.2){if(this.pos.distanceTo(A.lastPos)<.6&&wish.lengthSq()>.1){A.detour=1.2;A.detourDir.set(-wish.z,0,wish.x).multiplyScalar(Math.random()<.5?1:-1);if(Math.random()<.3&&!(A.target&&A.target.alive&&A.target.pos.distanceTo(this.pos)<4))this.jumpReq=true;}   /* a bot keeping its measure in a fight isn't stuck: it used to hop mid-duel */A.stuck=0;A.lastPos.copy(this.pos);}
     if(A.detour>0&&!engage){A.detour-=h;wish.copy(A.detourDir);}
@@ -5228,12 +5250,12 @@ class Fighter{
       const sgn=this.mainArm==='R'?1:-1;
       const shM=this.mainArm==='R'?this.shR:this.shL,shO=this.mainArm==='R'?this.shL:this.shR;
       _t1.copy(shM).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,.55*sgn).addScaledVector(_f,-.2);
-      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt,true);gripHand(B,main,_t3,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');
+      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt,true);const rvg=(this.revW||0)>.5&&s.def.kind==='blade';_rvA.copy(s.axis);if(rvg)_rvA.negate();gripHand(B,main,_t3,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist');
       B[main+'ForeArm'].getWorldPosition(_wl1);B[main+'Hand'].getWorldPosition(_wl2);(this.foreF||(this.foreF=V())).subVectors(_wl2,_wl1).normalize();
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
       const clutch=this.clutchT>simTime&&this.clutchP;
       if(!offLimb.sev&&!offLimb.dead&&clutch){this.clutchAt(_t2);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);_hv.copy(_f).negate();gripHand(B,offS,_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);}   // the free hand goes to the wound
-      else if(!offLimb.sev&&!offLimb.dead){const one=s.def.kind!=='fist'&&(!twoH(s.def)||this.throwHold||this.throwT>=0);
+      else if(!offLimb.sev&&!offLimb.dead){const one=s.def.kind!=='fist'&&(rvg?s.len<.45:(!twoH(s.def)||this.throwHold||this.throwT>=0));   // a reverse grip takes both fists on any sword, one over the other (not a knife)
         if(one){   // one-handed weapon: the off hand stays up in a loose guarding fist by the chest
           _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);const cw=this.calmW||0;if(cw>.01){_og.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,-.05*sgn);_t2.lerp(_og,cw*cw*(3-2*cw));}this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=this.calmW||0,e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}
@@ -5245,7 +5267,7 @@ class Fighter{
           this.offW=clamp((this.offW??1)+(onH?7:-5)*dt,0,1);const w=this.offW*this.offW*(3-2*this.offW);
           if(w<1){_og.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);_t2.lerpVectors(_og,_t2,w);}
           _t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,w>.5);
-          if(w>.5)gripHand(B,offS,_t2,s.edge,s.axis,_t1,this.armLen,1,s.def.kind!=='fist');
+          if(w>.5)gripHand(B,offS,_t2,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist');
           else{_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}}
       s.sync();
       if(this.rec){const R=this.rec,u=clamp(R.t/.75,0,1),w=1-u*u*(3-2*u);if(w>0)for(const n of [offS+'Arm',offS+'ForeArm',offS+'Hand',main+'Arm',main+'ForeArm',main+'Hand']){const b=B[n],q=R.q.get(b);if(q)b.quaternion.slerp(q,w);}}   // just up: both arms ease from where they were to the grip instead of snapping
@@ -5385,7 +5407,7 @@ class Fighter{
   }
   armed(){return !!this.sword;}
   giveFists(){for(const k in this.fists){const a=this.fists[k];a.init=false;a.phase='guard';a.charge=0;}}
-  dropSword(noFists){if(!this.sword)return;const s=this.sword;s.owner=null;s.unstick&&s.unstick();if(s.def.kind==='fist'){s.dispose();this.sword=null;return;}s.free=true;s.stuck=null;s.Hp.copy(s.H).addScaledVector(this.vel,-H);s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:lootHalo(s.def.tier)});this.sword=null;if(!noFists)this.giveFists();}
+  dropSword(noFists){if(!this.sword)return;const s=this.sword;if(s.stuck&&!s.stuck.thrown&&s.stuck.deep&&s.stuck.B&&fighters.includes(s.stuck.B)&&s.stuck.c&&s.stuck.c.on){lodge(s,noFists);return;}s.owner=null;s.unstick&&s.unstick();if(s.def.kind==='fist'){s.dispose();this.sword=null;return;}s.free=true;s.stuck=null;s.Hp.copy(s.H).addScaledVector(this.vel,-H);s.age=0;freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:lootHalo(s.def.tier)});this.sword=null;if(!noFists)this.giveFists();}
   goDown(by){if(!this.alive||this.downed)return;this.downed=true;this.lastHitBy=by||this.lastHitBy;this.bleed=Math.max(this.bleed,this.hp/3.5+4);this.makeRagdoll(null,null,.8);this.dropSword();}
   makeRagdoll(imp,impP,crumple){
     this.root.updateMatrixWorld(true);
@@ -5490,14 +5512,17 @@ function lootPos(it,out){
   return out.copy(it.obj.position);
 }
 function removeLoot(it){const i=loot.indexOf(it);if(i>=0)loot.splice(i,1);if(it.obj)scene.remove(it.obj);if(it.halo)scene.remove(it.halo);}
-function canTake(f,it){if(it.kind==='weapon')return !!f.mainArm&&!f.ragdoll;if(it.corpse===f)return false;if(it.def.slot==='arms'&&f.limbs.armL.sev&&f.limbs.armR.sev)return false;if(it.def.slot==='head'&&f.limbs.head.sev)return false;return true;}
+function canTake(f,it){if(it.kind==='weapon')return !!f.mainArm&&!f.ragdoll&&!(f.noTakeT>simTime);if(it.corpse===f)return false;if(it.def.slot==='arms'&&f.limbs.armL.sev&&f.limbs.armR.sev)return false;if(it.def.slot==='head'&&f.limbs.head.sev)return false;return true;}
 function pickUp(f,it){
   if(!loot.includes(it)||!canTake(f,it))return;
   removeLoot(it);
   if(it.kind==='weapon'){
-    const s=it.sword;const fi=freeSwords.indexOf(s);if(fi>=0)freeSwords.splice(fi,1);if(s.stuck){const B=s.stuck.B;s.unstick();if(B.alive)ripOut(s,B,f,5);}
+    const s=it.sword;const fi=freeSwords.indexOf(s);if(fi>=0)freeSwords.splice(fi,1);
+    let hold=false;if(s.stuck){const st=s.stuck,B=st.B;
+      if(!s.rb&&st.lodged&&st.c&&st.c.on&&fighters.includes(B)){hold=true;st.thrown=false;st.lodged=false;st.t=1e9;st.age=0;st.down=!B.alive||!!B.ragdoll;st.deep=true;st.taken=true;delete st.d0;delete st.l0;st.rip=Math.max(st.rip||0,5);}   // your hand closes on the hilt where it is: draw back or step away to pull it out
+      else{s.unstick();if(B.alive)ripOut(s,B,f,5);}}
     if(f.sword)f.dropSword(true);f.giveFists();
-    s.free=false;s.flying=false;f.sword=s;s.owner=f;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));
+    s.free=false;s.flying=false;f.sword=s;s.owner=f;if(s.rb)s.setGroup(GR_HELD);if(!hold){const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));}
   } else {
     if(it.corpse)it.corpse.unequip(it.slot);
     const old=f.equip(it.def);
@@ -5641,10 +5666,32 @@ function stuckPose(s){
 }
 // how hard the hand is pulling on a stuck weapon: drawn back along the blade, or wrenched across it, since it went in
 function stuckPull(s,target){const st=s.stuck;_v.subVectors(s.H,target);const ax=_v.dot(s.axis),lat=Math.sqrt(Math.max(0,_v.lengthSq()-ax*ax));if(st.d0==null){st.d0=ax;st.l0=lat;}return Math.max(ax-st.d0,(lat-st.l0)*.55);}
+// a weapon left in a body: it comes out of its wielder's hand and rides the bone it went into (like a thrown one that stuck)
+// until someone takes hold of it and pulls it out (pickUp), or the body is gone
+function lodge(s,noFists){
+  const A=s.owner,st=s.stuck;if(!st)return;const B=st.B;
+  if(st.j||!st.bone){if(!st.c||!st.c.on){s.unstick();if(A)A.dropSword(noFists);return;}const ly=clamp(st.ly??s.len*.6,0,s.len);if(!embed(s,B,st.c,ly,s.H.clone().addScaledVector(s.axis,ly),1,{deep:true}))return;}
+  const S2=s.stuck;S2.thrown=true;S2.lodged=true;S2.t=B.alive?30:150;S2.born=simTime-9;S2.lodgeReq=false;delete S2.d0;delete S2.l0;
+  if(A){A.sword=null;if(!noFists)A.giveFists();if(A.isPlayer&&noteCd<=0){note('Left in them','red');noteCd=1;}}
+  s.owner=null;s.free=true;s.flying=false;s.age=0;s.Hv.set(0,0,0);s.tipVel.set(0,0,0);s.Hp.copy(s.H);s.Tp.copy(s.T);
+  freeSwords.push(s);loot.push({kind:'weapon',def:s.def,sword:s,halo:lootHalo(s.def.tier)});
+  if(s.rb){s.rb.setBodyType(R.RigidBodyType.KinematicPositionBased,true);for(const c of s.cols)c.setCollisionGroups(0);s.grp=0;}
+}
+function lodgeSweep(){for(const f of fighters){const s=f.sword;if(s&&s.stuck&&s.stuck.lodgeReq&&s.owner===f)lodge(s);}}
+// let go of a weapon that's in someone (G): it stays in them
+function letGo(f){const s=f&&f.sword;if(s&&s.stuck&&!s.stuck.thrown&&s.stuck.B&&fighters.includes(s.stuck.B)){if(!s.stuck.c)return;s.stuck.deep=true;lodge(s);f.noTakeT=simTime+.7;}}   // (the hand that let go doesn't close on it again straight away)
+// reverse grip: R (or G with a sword) turns the grip over, point down out of the bottom of the fist; LMB stabs down
+function revStep(f,h){
+  const s=f.sword,ok=!!s&&s.def.kind==='blade'&&!f.throwHold&&f.throwT<0,held=s&&s.stuck&&!s.stuck.thrown;
+  if(!held)f.revW=clamp((f.revW||0)+(ok&&f.rev?1:-1)*h/.3,0,1);   // (it can't be turned over while it's in someone)
+  if((f.revW||0)>.05){f.thrust=false;f.pointT=0;}
+  if(!held||!f.commit)f.revS=clamp((f.revS||0)+((f.revW||0)>.9&&f.commit&&!held?h*8:-h*4),0,1);   // driven down fast, drawn back up slower: keep the button down to hold it in, let go and it's drawn back out
+  if(s&&s.def.kind!=='fist')f.stoop=!!(held&&s.stuck.down)||((f.revW||0)>.5&&f.ctrl.y<-.18&&(f.revS>.15||f.commit));   // bend down to stab, or to hold, someone on the ground
+}
 // pulling a stuck weapon out tears the wound open
 function ripOut(s,B,A,dmg){
   spawnBlood(s.T,_v.copy(s.axis).multiplyScalar(-2.2).setY(1),28,2,1.3);sHit(s.T,.75,false);
-  if(B.alive&&!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.25);B.damage(dmg,A,'torn open');}
+  if(B.alive){if(!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.25);}B.addBleed(.9,8);B.damage(dmg,A,'torn open');}
   if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
 }
 function bloodWeapon(s){
@@ -5720,7 +5767,7 @@ function organHurt(A,B,o,dmg,dir,P){
   if(o.blind){B.blindT=Math.max(B.blindT||0,simTime+o.blind);if(B.remote)netEv(['bl',B.id,r3(o.blind)]);if(o.name==='eye')bad('Your eye!');else bad('Blood in your eyes');B.addBleed(.4+dmg*.01,15);}
   if(o.daze&&B.alive&&!B.ragdoll&&B.bodyHit)B.bodyHit('Head',dir,4,.45);}
 function resolveHit(A,B,cap,t,P,pv){
-  if(simTime<CD_END)return;
+  if(simTime<CD_END)return;const wasDown=!!B.ragdoll;
   // the neck runs from the base (Neck bone) up to the jaw, about a quarter of the way up the head; on these bodies the Head
   // bone sits almost at the base, so the head and chest capsules used to swallow every blow to the neck (no beheadings)
   if(cap.zone==='head'||cap.zone==='torso'){const nc=B.caps[1],hc=B.caps[0];if(nc&&nc.on&&hc){_ox.copy(hc.a).lerp(hc.b,.27);_ov.subVectors(_ox,nc.a);const L2=_ov.lengthSq()||1e-6,u=_ow.subVectors(P,nc.a).dot(_ov)/L2;
@@ -5830,7 +5877,7 @@ function resolveHit(A,B,cap,t,P,pv){
     else if(glance||mode==='flat'||mode==='haft')A.stagger=Math.max(A.stagger,.12);
     if(mode==='thrust'&&!sev&&B.alive&&!B.ragdoll&&dmg>6&&!glance&&B.pb&&!s.stuck){const pp=B.pb[B.caps.indexOf(cap)];if(pp&&pp.on&&!pp.kin){
       _pv.subVectors(P,pp.p).applyQuaternion(_pq.copy(pp.q).invert());const ly=clamp(_e.subVectors(P,s.H).dot(s.axis),0,s.len);
-      s.stuck={B,t:1,rip:4+dmg*.15,j:PW.createImpulseJoint(R.JointData.spherical({x:0,y:ly,z:0},{x:_pv.x,y:_pv.y,z:_pv.z}),s.rb,pp.rb,true)};
+      s.stuck={B,t:1,rip:4+dmg*.15,c:cap,ly,deep:dmg>=16||(A.revW||0)>.5,j:PW.createImpulseJoint(R.JointData.spherical({x:0,y:ly,z:0},{x:_pv.x,y:_pv.y,z:_pv.z}),s.rb,pp.rb,true)};
       B.stagger=Math.max(B.stagger,.5);B.addBleed(1.1,10);tell(A,'Run through','red');}}
     s.arc=0;return;
   }
@@ -5839,10 +5886,12 @@ function resolveHit(A,B,cap,t,P,pv){
   else if(glance||mode==='flat'||mode==='haft'){reflectTip(s,_v.copy(dir).negate(),.3);s.Tp.lerp(s.T,.5);s.Hv.multiplyScalar(.3);A.stagger=Math.max(A.stagger,.15);}
   else if(dmg<3&&(mode==='cut'||mode==='blunt')){s.Tp.lerp(s.T,.15);s.Hv.multiplyScalar(.85);A.hitCd.set(B.id,simTime+.08);}   // a graze: the blade carries on and the swing can still land properly
   else{s.Tp.lerp(s.T,.72);s.Hv.multiplyScalar(.4);}
-  if(!sev&&!glance&&B.alive&&!B.ragdoll&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:8)||mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
+  const dnB=wasDown;   // someone on the ground (alive or dead) takes a point too: it stays in until it's pulled out
+  if(!sev&&!glance&&(B.alive||B.ragdoll)&&!s.stuck&&(mode==='thrust'&&dmg>(shortB?4:dnB?5:8)||!dnB&&mode==='cut'&&W.kind==='axe'&&dmg>18&&cap.zone!=='head'&&cap.zone!=='neck')){
     const ax=mode==='cut',E=ax?P.clone().addScaledVector(dir,.08):P.clone().addScaledVector(s.axis,dmg>25&&cap.zone==='torso'?.46:.22);   // a strong thrust runs the body through
     if(shortB&&!ax){E.copy(P).addScaledVector(s.axis,Math.min(.2,s.len*.55));}   // a knife goes in to the hilt and sticks: you have to wrench it out
-    if(embed(s,B,cap,t*s.len,E,ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15})){B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax)B.addBleed(shortB?1.4:1.1,10);tell(A,ax?'The axe bites deep':shortB?'Stabbed':'Run through','red');}}
+    const deep=!ax&&(dnB||dmg>=16||(shortB&&dmg>8)||(A.revW||0)>.5);   // deep enough that a body falling with it in keeps it
+    if(embed(s,B,cap,t*s.len,E,dnB?1e9:ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15,down:dnB,deep})){if(!dnB)B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax&&B.alive)B.addBleed(shortB?1.4:1.1,10);tell(A,ax?'The axe bites deep':dnB?'Driven in':shortB?'Stabbed':'Run through','red');}}
   s.arc=0;
 }
 // ---- contacts from the solver: every hit, clash and bounce below is a real collision between bodies
@@ -6241,6 +6290,8 @@ addEventListener('keydown',e=>{
     if(e.code==='Space'){player.crouch=false;player.jumpReq=true;}
     if(e.code==='KeyF')player.kickReq=true;
     if(e.code==='KeyG'&&!e.repeat&&!player.sword){player.grabMode=!player.grabMode;toast(player.grabMode?'Open hands: grab':'Fists: punch');}   // tap G: open hands to grab, tap again for fists
+    else if(e.code==='KeyG'&&player.sword&&player.sword.stuck&&!player.sword.stuck.thrown){if(NET.mode==='client')NET.lg=1;else letGo(player);}   // G with a blade in someone: let go and leave it there
+    else if((e.code==='KeyG'||e.code==='KeyR')&&player.sword&&player.sword.def.kind==='blade'){player.rev=!player.rev;toast(player.rev?'Reverse grip: click to stab down':'Normal grip');}
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
     if(e.code==='KeyV')camMode=camMode==='fp'?'tp':'fp';
     if(inYard()){const d=/^Digit([1-7])$/.exec(e.code);if(d){if(NET.mode==='client')NET.yw=+d[1]-1;else yardArm(player,+d[1]-1);}
@@ -6336,8 +6387,8 @@ if(TOUCH){const gid=id=>document.getElementById(id);
   btn('tb-thrust',()=>{if(!player)return;if(player.sword){player.ctrl.z=.66;lastWheel=performance.now();}else if(player.fists.R.c)player.fists.R.c.z=.7;},
                   ()=>{if(!player)return;if(player.sword)player.ctrl.z=.46;else if(player.fists.R.c)player.fists.R.c.z=.27;});
   setInterval(()=>{document.body.classList.toggle('inmatch',state==='playing');const s=player&&player.sword;
-    gid('tb-thrust').textContent=s&&s.def.kind!=='blade'&&s.def.kind!=='spear'?'Reach':s?'Thrust':'Jab';gid('tb-grab').style.display=s?'none':'';gid('tb-throw').style.display=s?'':'none';
-    if(player&&player.grabMode)gid('tb-grab').classList.add('on');else gid('tb-grab').classList.remove('on');},250);
+    gid('tb-thrust').textContent=s&&s.def.kind!=='blade'&&s.def.kind!=='spear'?'Reach':s?'Thrust':'Jab';gid('tb-grab').style.display=s&&s.def.kind!=='blade'?'none':'';gid('tb-grab').textContent=!s?'Grab':s.stuck&&!s.stuck.thrown?'Let go':'Grip';gid('tb-throw').style.display=s?'':'none';
+    if(player&&(player.sword?player.rev:player.grabMode))gid('tb-grab').classList.add('on');else gid('tb-grab').classList.remove('on');},250);
   // a match goes full screen and sideways where the phone allows it
   gid('startBtn').addEventListener('click',()=>{try{const d=document.documentElement;if(d.requestFullscreen&&!document.fullscreenElement)d.requestFullscreen({navigationUI:'hide'}).then(()=>screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{})).catch(()=>{});}catch(e){}});
 }
@@ -6521,6 +6572,7 @@ function sim(h){
   propHitTest();improvStep();grateStep(h);
   physTick=!!PW&&(physPhase^=1)===1;
   for(const f of fighters)f.step(h);
+  lodgeSweep();
   for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),k=(.6-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;
       // bodies collide: closing speed is shared out, and running into someone knocks both off balance (the one who was standing more)
       const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0),mb=1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0),ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
@@ -7170,7 +7222,7 @@ function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
   if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.look=cleanLook(d.look);x.ch=CHAR_BY[d.ch]?d.ch:'';x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,24).trim()||'Friend';x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
-    if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;
+    if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;if(d.lg)letGo(f);
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
     if(RUN&&RUN.mode==='yard'){if(Number.isInteger(d.yw))yardArm(f,d.yw);if(d.yg)yardCycle();}
     if(d.pk==='lever')millLever(f);else if(d.pk!=null){const it=loot.find(i=>i.nid===d.pk);if(it&&canTake(f,it)){lootPos(it,_t3);if(Math.hypot(_t3.x-f.pos.x,_t3.z-f.pos.z)<2.6)pickUp(f,it);}}}
@@ -7181,7 +7233,7 @@ function remoteInput(f,wish,h){
   const n=v=>Number.isFinite(v)?v:0;
   f.yaw=n(d.yaw);f.pitch=clamp(n(d.pitch),-1.2,.95);f.ctrl.x=clamp(n(d.cx),-.5,.5);f.ctrl.y=clamp(n(d.cy),-.46,.56);f.ctrl.z=clamp(n(d.cz),.12,.7);
   for(const sd of ['R','L']){const a=f.fists[sd],c=d['f'+sd];if(a.c&&c){a.c.x=clamp(n(c.x),-.5,.5);a.c.y=clamp(n(c.y),-.6,.55);a.c.z=clamp(n(c.z),.12,.7);}}
-  f.commit=!!f.sword&&(!!(k&32)||f.throwHold||f.throwT>=0);f.thrust=f.ctrl.z>.56&&!!f.sword&&(f.sword.def.kind==='blade'||f.sword.def.kind==='spear');
+  f.rev=!!(k&256);f.commit=!!f.sword&&(!!(k&32)||f.throwHold||f.throwT>=0);f.thrust=f.ctrl.z>.56&&!!f.sword&&(f.sword.def.kind==='blade'||f.sword.def.kind==='spear');
   // using the wheel puts a sword in a thrusting stance for a moment, so repeated scrolls poke along the line instead of levelling and lifting the blade each time
   f.pointT=f.sword&&f.sword.def.kind==='blade'&&f.ctrl.z>.5?.8:f.ctrl.z<.42?0:Math.max(0,(f.pointT||0)-h);   // wheel back and the blade comes straight up into guard
   return !!(k&16);
@@ -7193,7 +7245,7 @@ function netSnap(){
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
-    if(f.sword){const s=f.sword;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
+    if(f.sword){const s=f.sword;if((f.revW||0)>.5)o.rv=1;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
     if(f.ragdoll){const P=f.ragdoll.P;o.rg=[];for(const n of RD_NAMES){const q=P[n];if(q)o.rg.push(r3(q.x),r3(q.y),r3(q.z));else o.rg.push(0,-99,0);}}
     S.f.push(o);
@@ -7216,11 +7268,11 @@ function netTick(dt){
 setInterval(()=>{if(NET.mode==='client')clientSendInput();},33);
 function clientSendInput(){
   if(NET.host&&NET.host.open&&player&&state!=='attract'){const k=input.keys,p=player;
-    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb?32:0)|(input.rmb?64:0)|(p.grabMode?128:0),
+    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb?32:0)|(input.rmb?64:0)|(p.grabMode?128:0)|(p.rev?256:0),
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
-    if(NET.pick!=null){d.pk=NET.pick;NET.pick=null;}
+    if(NET.pick!=null){d.pk=NET.pick;NET.pick=null;}if(NET.lg){d.lg=1;NET.lg=0;}
     if(NET.yw!=null){d.yw=NET.yw;NET.yw=null;}if(NET.yg){d.yg=1;NET.yg=0;}
     try{NET.host.send(d);}catch(e){}
   }
@@ -7314,7 +7366,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     if(m0&&f!==player){const x0=m0.get(o0.i),x1=m1.get(o0.i);if(x0&&x1&&!!x1.a===!!o0.a&&!!x1.rg===!!o0.rg){q=x0;o={...o0,p:x1.p,y:x1.y,v:x1.v,w:x1.w&&o0.w&&x1.w[0]===o0.w[0]?x1.w:o0.w,fs:x1.fs||o0.fs,rg:x1.rg||o0.rg};a=ab;ex=exB;}}
     f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);if(ex&&o.a&&!o.rg){f.pos.x+=o.v[0]*ex;f.pos.z+=o.v[1]*ex;}   // a late packet: keep walking briefly instead of stopping dead
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
-    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;
+    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;f.revW=o.rv?1:0;
     if(f.alive&&!o.a)f.alive=false;
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
@@ -7408,6 +7460,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
