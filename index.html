@@ -3620,7 +3620,7 @@ function footShape(top=.13,zs=.07){let S=null;return (q,g)=>{const G=q.length/3;
     q[g*3]+=(c.x+d.x/l*r.x-q[g*3])*t;q[g*3+1]+=(Math.max(q[g*3+1],c.y+d.y/l*r.y)-q[g*3+1])*t;q[g*3+2]+=(c.z+d.z/l*r.z-z)*t;}}
   const y=q[g*3+1];if(y>top)return;const a=S.get((q[g*3]>0?1:-1)*1000+Math.floor(q[g*3+2]/.02));if(!a||a.x1<=a.x0)return;const mid=(a.y0+a.y1)/2;if(y<mid)return;
   const cx=(a.x0+a.x1)/2,dx=Math.min(1,Math.abs(q[g*3]-cx)/((a.x1-a.x0)/2+.002)),yt=mid+(a.y1-mid)*Math.pow(Math.max(0,1-dx*dx),.35);q[g*3+1]=Math.max(y,yt);};}
-function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2){let S=null;return (q,g)=>{const G=q.length/3;
+function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2,flat=0){let S=null;return (q,g)=>{const G=q.length/3;
   if(!S){let y0=9,y1=-9;for(let i=0;i<G;i++){y0=Math.min(y0,q[i*3+1]);y1=Math.max(y1,q[i*3+1]);}const nb=Math.max(1,Math.ceil((y1-y0)/.02)),A=Array.from({length:nb},()=>({x0:9,x1:-9,z0:9,z1:-9}));
     const bin=y=>Math.min(nb-1,Math.max(0,Math.floor((y-y0)/.02)));for(let i=0;i<G;i++){if(Math.abs(q[i*3])>lim)continue;const a=A[bin(q[i*3+1])];a.x0=Math.min(a.x0,q[i*3]);a.x1=Math.max(a.x1,q[i*3]);a.z0=Math.min(a.z0,q[i*3+2]);a.z1=Math.max(a.z1,q[i*3+2]);}
     const sm=k=>A.map((_,i)=>{let s=0,c=0;for(let j=Math.max(0,i-3);j<=Math.min(nb-1,i+3);j++)if(A[j].x1>A[j].x0){s+=k(A[j]);c++;}return c?s/c:0;});
@@ -3628,18 +3628,18 @@ function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2){let S=null;return (q,g)=
     const zf=ext(a=>a.z1,Math.max),zb=ext(a=>a.z0,Math.min),sm2=v=>v.map((_,i)=>{let s=0,c=0;for(let j=Math.max(0,i-2);j<=Math.min(nb-1,i+2);j++){s+=v[j];c++;}return s/c;});
     S={bin,cx:sm(a=>(a.x0+a.x1)/2),rx:sm(a=>(a.x1-a.x0)/2),zf:sm2(zf).map((v,i)=>Math.max(v,A[i].z1>-9?A[i].z1:v)),zb:sm2(zb).map((v,i)=>Math.min(v,A[i].z0<9?A[i].z0:v)),zc:sm(a=>(a.z0+a.z1)/2)};}
   if(Math.abs(q[g*3])>lim)return;const i=S.bin(q[g*3+1]),x=q[g*3],z=q[g*3+2],cz=S.zc[i],dx=Math.min(1,Math.abs(x-S.cx[i])/(S.rx[i]+.004)),e=Math.sqrt(Math.max(0,1-dx*dx));
-  if(z>cz){const zt=cz+(S.zf[i]-cz)*Math.pow(Math.max(0,1-Math.pow(dx,sq)),.5)+ridge*Math.max(0,1-Math.abs(x-S.cx[i])/.09)**2;q[g*3+2]=Math.max(zt,z);}   // fill across the hollows, never in
+  if(z>cz){const zt=cz+(S.zf[i]-cz)*Math.pow(Math.max(0,1-Math.pow(dx,sq)),.5)+ridge*Math.max(0,1-Math.abs(x-S.cx[i])/.09)**2;q[g*3+2]=Math.max(zt,z-flat);}   // fill across the hollows, never in (a plate may press in over small bumps like the nipples, `flat`)
   else{const zt=cz-(cz-S.zb[i])*Math.pow(e,pw);q[g*3+2]=Math.min(z,z+(zt-z)*backK);}};}
 const FINISHABLE=new Set();
 const plumeMat=std({color:0xffffff,roughness:.85,side:THREE.DoubleSide});
 for(const m of [steelMat,steelDark,mailMat,steelFitMat,cuirassMat,faulMat,helmSlitMat])FINISHABLE.add(m);
 function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
   const arm=['LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],torso=['Hips','Spine','Spine1','Spine2'],neck=['Neck','Head'];
-  const S=(key,o,mat,bones)=>{const g=fitShell(body,key,Object.assign({bones},o));if(key==='cuirass'&&!g.attributes.aCu){const P=g.attributes.position,a=new Float32Array(P.count*2),y0=hy+.03,y1=J.Neck.y-.015,zc=J.Spine1.z;
+  const S=(key,o,mat,bones)=>{const g=fitShell(body,key,Object.assign({bones},o));if(key==='cuirass'&&!g.attributes.aCu){const P=g.attributes.position,a=new Float32Array(P.count*2),zc=J.Spine1.z;let y0=9,y1=-9;for(let i=0;i<P.count;i++){y0=Math.min(y0,P.getY(i));y1=Math.max(y1,P.getY(i));}
       for(let i=0;i<P.count;i++){a[i*2]=Math.atan2(P.getX(i),P.getZ(i)-zc);a[i*2+1]=(P.getY(i)-y0)/(y1-y0);}g.setAttribute('aCu',new THREE.BufferAttribute(a,2));}return [g,mat];};
   switch(def.id){
     case 'plate':return [
-      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.4,.22,.5,6),fallback:'Spine'},cuirassMat,['Spine','Spine1','Spine2']),
+      S('cuirass',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.3&&w(v,neck)<.3&&y>hy+.03&&y<J.Neck.y-.015;},off:(x,y,z)=>.036+.012*clamp((Math.abs(x)-.11)/.08,0,1)+.022*clamp((J.Spine1.z-z)/.05,0,1),smooth:40,bodySmooth:30,minK:.8,rim:.007,shape:convexTorso(.012,.55,.22,.5,6,.014),fallback:'Spine'},cuirassMat,['Spine','Spine1','Spine2']),
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.06;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
