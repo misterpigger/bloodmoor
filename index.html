@@ -3793,6 +3793,10 @@ class Ragdoll{
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
     for(const n of this.names){if(this.P[n].y<5){const p=this.P[n],q=this.Q[n];CTX.m=5;CTX.v.set((p.x-q.x)/h,0,(p.z-q.z)/h);CTX.y=p.y;CTX.q=q;CTX.h=h;collide(p,RD_R[n]||.055,true);CTX.m=0;CTX.q=null;}}
+    // no part of a body is thrown faster than a man could be: sideways or upward at most 9 m/s (falling is free). A fighter's pose can
+    // start outside the joint limits, and the first step's correction went in as speed: hands and toes left at 30-90 m/s and whole bodies
+    // skidded off at 16 m/s (measured in a battle royale, Build 117)
+    {const vm=9*h;for(const n of this.names){const p=this.P[n],q=this.Q[n],vx=p.x-q.x,vz=p.z-q.z,vu=Math.max(0,p.y-q.y),w2=vx*vx+vz*vz+vu*vu;if(w2>vm*vm){const k=vm/Math.sqrt(w2);q.x=p.x-vx*k;q.z=p.z-vz*k;if(vu>0)q.y=p.y-vu*k;}}}
     if(this.pin&&this.P[this.pin]){this.P[this.pin].copy(this.pinP);this.Q[this.pin].copy(this.pinP);}   // run through on a stake
     if(this.age>4&&maxv<1e-7&&!this.rise)this.sleep=true;   // (never mid-effort: a body asleep halfway up would stay there)
   }
