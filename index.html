@@ -2946,6 +2946,13 @@ function garmentDetail(m,kind,M){const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs
       float hemB=smoothstep(${(hem+.025).toFixed(3)},${(hem+.012).toFixed(3)},b.y);k*=1.-.12*hemB;
       float grime=clamp((${(hem+.22).toFixed(3)}-b.y)/.22,0.,1.)*.22+smoothstep(sx+.18,sx+.32,ax)*.16;k*=1.-grime*(.6+.4*n2);
       k*=1.-.1*step(.86,n2)*smoothstep(.2,.6,n1);   // stains
+      // crossed leather straps over the garment, as Half Sword's fighters wear (a baldric and its fellow), front and back: each runs from
+      // one shoulder to the other hip, dark leather with stitched edges and a little relief, crossing over the breastbone
+      { float sh=${(sx*.8).toFixed(3)},st=0.;
+        for(int i=0;i<2;i++){float sg=i==0?1.:-1.;vec2 a=vec2(sg*sh,ny-.02),c=vec2(-sg*sh*.75,hy+.06),pa=b.xy-a,ba=c-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.),d=length(pa-ba*h);
+          float band=1.-smoothstep(.019,.022,d);if(band>st){st=band;float edge=smoothstep(.013,.016,d)*step(.5,fract(h*90.));
+            vec3 lc=vec3(.2,.12,.07)*(.85+.3*n1);diffuseColor.rgb=mix(diffuseColor.rgb,lc*(1.-.35*edge)+.04*edge,band);}}
+        if(st>.01)k=mix(k,1.,st); }
       ${shirt?`// the laced slit at the throat: a dark opening narrowing down the chest, a leather lace crossing it between eyelets
       float d=ny-.015-b.y,front=step(${(zf-.03).toFixed(3)},b.z);
       if(d>0.&&d<.14&&front>.5){float w=.022*(1.-d/.14)+.003,inO=1.-smoothstep(w-.002,w,ax);k*=1.-.55*inO;
@@ -3203,7 +3210,7 @@ function dressMH(model,look,pal,mats){
   else if(o===2){   // a quilted gambeson, as Half Sword's fighters wear: a thick padded coat to the thighs, sewn in channels
     const M=bodyMarks(body),hy=M.J.Hips.y;
     const gg=fitShell(body,'gambeson',{keep:(v,P,w)=>w(v,['Neck','Head'])<.35&&w(v,['Hands*'])<.15&&P.getY(v)>hy-.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&P.getY(v)<M.J.Neck.y+.01,off:.02,smooth:8,bodySmooth:4,minK:.85,rim:.006,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.07},loose:(x,y,z)=>Math.pow((hy-.03-y)/.28,1.3)*.8});
-    const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';looseMat(mt,SWU,'h');
+    const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);garmentDetail(mt,'gambeson',M);mt.customProgramCacheKey=()=>'bm-quilt';looseMat(mt,SWU,'h');
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   cloth(o===2||o===3?C.hose:C.braies,true,o===2||o===3?.0012:.003);
   // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
@@ -3219,17 +3226,9 @@ function dressMH(model,look,pal,mats){
     if(look.h>=2&&!(look.hd|0)){const hm=new THREE.SkinnedMesh(hairCap(body,look.h),looseMat(hairCapMat(hcol,body,look.h),SWU,'n'));hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=true;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';hm.userData.hair=true;body.parent.add(hm);}   // real hair: a cap (and a fall for long hair)
     for(const [hg,scalp] of [[HAIR_STYLE[look.h]&&!(look.hd|0)&&look.h<2?hairShells(body,HAIR_STYLE[look.h],false,false):null,true],[hairShells(body,null,[0,.007,0,.014][look.bd|0]||0,true),false]]){if(!hg)continue;   // the scalp goes under a helmet, beard and brows don't
       const hm=new THREE.SkinnedMesh(hg,scalp?mt:mtB);hm.bind(body.skeleton,body.bindMatrix);hm.castShadow=false;hm.receiveShadow=true;hm.frustumCulled=false;hm.name='MH_Hair';if(scalp)hm.userData.hair=true;body.parent.add(hm);}}
-  if(o>=1&&o!==4)crossStraps(body,M,shell);
   if(o>=1)beltGear(body,M);
   if(look.sc|0)tabard(body,look.sc|0,pal,mats,SWU);
   model.userData.mh=true;}
-// Half Sword's fighters wear crossed leather straps over the shirt (a baldric and its fellow): two bands from each shoulder to the other
-// hip, front and back, standing on the garment; hidden under body armour (Build 123)
-function crossStraps(body,M,shell){const J=M.J,hy=J.Hips.y+.05,ny=J.Neck.y-.04,sx=Math.abs(J.LeftArm.x)*.82,torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'];
-  const dist=(x,y,s)=>{const ax=s*sx,ay=ny,bx=-s*sx*.75,by=hy,vx=bx-ax,vy=by-ay,u=clamp(((x-ax)*vx+(y-ay)*vy)/(vx*vx+vy*vy),0,1);return Math.hypot(x-(ax+vx*u),y-(ay+vy*u));};
-  const mt=leatherMat.clone();mt.color.setHex(0x5a3a24);mt.roughness=.62;
-  const sm=shell('straps',{keep:(v,P,w)=>{const x=P.getX(v),y=P.getY(v);return w(v,torso)>.6&&y>hy-.02&&y<ny+.07&&Math.min(dist(x,y,1),dist(x,y,-1))<.021;},off:.046,smooth:6,bodySmooth:4,minK:.9,rim:.004,shape:convexTorso(0,.35,.22,.6)},mt);
-  sm.userData.underBody=true;sm.name='MH_Straps';}
 // a pouch on the belt at the left front of the hip and a dagger in its sheath at the right back: rigid pieces skinned wholly to the hips
 function beltGear(body,M){const J=M.J,hy=J.Hips.y,bp=body.geometry.attributes.position;let xm=0,zf=-9,zb=9;
   for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(y-(hy+.03))>.015||Math.abs(x)>.3)continue;xm=Math.max(xm,Math.abs(x));if(Math.abs(x)<.05){zf=Math.max(zf,z);zb=Math.min(zb,z);}}
@@ -3237,7 +3236,7 @@ function beltGear(body,M){const J=M.J,hy=J.Hips.y,bp=body.geometry.attributes.po
   const parts=[],add=(g,mat)=>{parts.push([g,mat]);};
   const lt=leatherMat.clone();lt.color.setHex(0x6a4630);const ld=leatherMat.clone();ld.color.setHex(0x2e1d12);const brass=std({color:0xb08a4a,roughness:.35,metalness:.8}),stl=std({color:0x9a9ea2,roughness:.3,metalness:.9}),wood=std({color:0x3a2616,roughness:.7});
   const zc=(zf+zb)/2,s=1;   // +x is the body's left
-  {const T=new THREE.Matrix4().makeRotationY(Math.atan2(xm*.8,zf-zc)*.85).setPosition(s*xm*.78,hy-.035,zc+(zf-zc)*.82);   // the pouch: a stiff leather bag with a flap and a brass stud
+  {const T=new THREE.Matrix4().makeRotationY(1.2).setPosition(s*xm*.98,hy-.04,zc+(zf-zc)*.3);   // the pouch: a stiff leather bag with a flap and a brass stud
     const g=new THREE.BoxGeometry(.11,.11,.045,2,2,1);{const p=g.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);if(y<0)p.setX(i,p.getX(i)*(1-.12*(-y/.055)));}}g.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0,.035)).applyMatrix4(T);add(g,lt);
     const fl=new THREE.BoxGeometry(.116,.055,.05);fl.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.03,.04)).applyMatrix4(T);add(fl,ld);
     const st=new THREE.SphereGeometry(.009,8,6);st.applyMatrix4(new THREE.Matrix4().makeTranslation(0,.008,.067)).applyMatrix4(T);add(st,brass);}
