@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=117;
+const BUILD=118;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -2776,6 +2776,10 @@ function pointBone(bone,target){
   _qr.setFromUnitVectors(_ax,_dd);_qw.premultiply(_qr);
   bone.parent.matrixWorld.decompose(_pp,_qp,_ps);bone.quaternion.copy(_qp.invert().multiply(_qw));bone.updateMatrixWorld(true);
 }
+const _ffa=V(),_ffb=V(),_ffd=V(),_ffq=new THREE.Quaternion(),_ffq2=new THREE.Quaternion(),_ffI=new THREE.Quaternion();
+function footFlat(F,T,pitch,w){if(!F||!T||w<=.01)return;F.updateWorldMatrix(true,true);F.getWorldPosition(_ffa);T.getWorldPosition(_ffb);_ffd.subVectors(_ffb,_ffa);const L=_ffd.length();if(L<1e-4)return;_ffd.multiplyScalar(1/L);
+  const h=Math.hypot(_ffd.x,_ffd.z);if(h<.15)return;_ffb.set(_ffd.x/h*Math.cos(pitch),-Math.sin(pitch),_ffd.z/h*Math.cos(pitch));_ffq.setFromUnitVectors(_ffd,_ffb);if(w<1)_ffq.slerp(_ffI,1-w);
+  F.getWorldQuaternion(_ffq2);_ffq2.premultiply(_ffq);setWorldQuat(F,_ffq2);}
 function setWorldQuat(bone,q){bone.parent.updateWorldMatrix(true,false);bone.parent.matrixWorld.decompose(_pp,_qp,_ps);bone.quaternion.copy(_qp.invert().multiply(q));bone.updateMatrixWorld(true);}
 const _bm=new THREE.Matrix4(),_bu=V(),_bs=V(),_bf=V();
 function basisQ(up,side,out){_bu.copy(up).normalize();_bs.copy(side).addScaledVector(_bu,-side.dot(_bu)).normalize();_bf.crossVectors(_bs,_bu);_bm.makeBasis(_bs,_bu,_bf);return out.setFromRotationMatrix(_bm);}
@@ -4570,7 +4574,8 @@ class Fighter{
     const B=this.bones;
     this.armLen=[B.RightForeArm.position.length()*.01,B.RightHand.position.length()*.01];
     this.legLen=[B.RightLeg.position.length()*.01,B.RightFoot.position.length()*.01];
-    {this.model.updateMatrixWorld(true);const a=V(),b=V();B.LeftFoot.getWorldPosition(a);this.model.getWorldPosition(b);this.ankY=clamp(a.y-b.y,.04,.14);}   // ankle height over the sole, at rest
+    {this.model.updateMatrixWorld(true);const a=V(),b=V();B.LeftFoot.getWorldPosition(a);this.model.getWorldPosition(b);this.ankY=clamp(a.y-b.y,.04,.14);
+      if(B.LeftToeBase){B.LeftToeBase.getWorldPosition(b);this.footP=Math.atan2(a.y-b.y,Math.hypot(a.x-b.x,a.z-b.z));}}   // ankle height over the sole, and how far the foot slopes from ankle to toes, at rest (feet flat)
     this.armor={head:null,body:null,arms:null,legs:null};this.helmet=-1;
     for(const a of load.armor||[])this.equip(ARMOR[a]);
     this.mixer=new THREE.AnimationMixer(this.model);
@@ -5261,6 +5266,11 @@ class Fighter{
     const disturbed=HYBRID&&simTime-(this.distT??-9)<.35||(HYBRID&&this.gait&&['Left','Right'].some(s=>this.gait[s]&&this.gait[s].t<1));
     if(HYBRID&&(this.gaitW||0)<.02&&!disturbed)this.gait=null;   // start fresh from wherever the walk cycle left the feet
     const gaitOK=(GAIT_ON||disturbed)&&this.alive&&!this.ragdoll&&!airborne&&kk<=0&&this.slideT<=0&&this.fallT==null;this.gaitW=lerp(this.gaitW||0,gaitOK?1:0,1-Math.exp(-(gaitOK?(HYBRID?14:5):(HYBRID?4:16))*dt));
+    // walking and running (no leg IK): the clips' planted foot is heel-up too, so flatten whichever foot is down and sink the body the 3 cm
+    // that lifts it off the ground (the swinging foot keeps the clip's angle)
+    if(!(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01)&&this.footP!=null&&this.alive&&!this.ragdoll&&!airborne){this.root.updateMatrixWorld(true);const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ws={};let any=0;
+      for(const S of ['Left','Right']){if(!B[S+'Foot']||!B[S+'ToeBase']||this.limbs[S==='Left'?'legL':'legR'].sev)continue;B[S+'Foot'].getWorldPosition(_t2);ws[S]=clamp(1-(_t2.y-gy-this.ankY-.03)/.06,0,1);any=Math.max(any,ws[S]);}
+      if(any>0){B.Hips.position.y-=3*any;this.root.updateMatrixWorld(true);for(const S in ws)if(ws[S]>0)footFlat(B[S+'Foot'],B[S+'ToeBase'],this.footP-.35,ws[S]);}}
     if(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
@@ -5292,7 +5302,11 @@ class Fighter{
         let tgt=feet[s];
         if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);tgt=_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);tgt.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);}
         _pl.copy(tgt).addScaledVector(_f,.9).addScaledVector(Y_AXIS,.4);
+        const flw=this.footP!=null&&!(s==='Right'&&kk>0)?clamp(1-((PL[s]&&PL[s].lift)||0)/.05,0,1)*(1-(this.gaitW||0))*clamp(1-(tgt.y-groundY(tgt.x,tgt.z,tgt.y+.3)-this.ankY-.03)/.06,0,1):0;   /* only a foot that's down: a walking clip's swinging foot keeps its own angle */if(flw>0){if(tgt!==_t3)tgt=_t3.copy(tgt);tgt.y-=.03*flw;}   // a flat foot puts the ankle lower than the heel-up one did
         ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1]);
+        // the sole goes flat on the ground: the clip's foot kept its angle to the shin, so the bent-knee stance (shin tipped forward)
+        // pointed the toes into the ground and everyone stood on tiptoe (sole tilted heel-up 29-46°, toes 1-7 cm under the ground). The bind pose itself has the heel 20° up (ankle to toe base 39°), so flat is 0.35 rad less
+        if(flw>0)footFlat(B[s+'Foot'],B[s+'ToeBase'],this.footP-.35,flw);
       }
     }
     if(this.rec){const R=this.rec;R.t+=dt;const u=clamp(R.t/.75,0,1),w=1-u*u*(3-2*u);
@@ -6184,7 +6198,7 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-const CAM_TP={dist:2.2,side:.5,up:.16,tilt:-.1};   // Build 117: pulled in from 3.2 m (and the view narrowed 55° → 50°) so fighters fill more of the screen
+const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};   // (Build 117 tried 2.2 m and a 50° view; the player lost sight of the legs, so it's back to Build 33's)
 // nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
 const _cs=V(),_cd=V();let camPull=1;
 function camBlocked(x,y,z,ceil){if(ceil&&y>ceil-.22)return true;
@@ -6786,7 +6800,7 @@ function frame(now){
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
-    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:50)+(pv>4.4?5:0)+(player.slideT>0?5:0);
+    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
