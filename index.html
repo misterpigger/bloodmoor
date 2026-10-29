@@ -3804,10 +3804,10 @@ class Ragdoll{
   riseStep(h){const R=this.rise,P=this.P;R.t+=h;
     // flat on his back, a man rolls onto his front before he can get his hands and knees under him
     if(R.rollT){if(!R.rf){R.rf={};for(const n in P)R.rf[n]=P[n].clone();R.ax=V().subVectors(P.Neck||P.Spine2,P.Hips);R.ax.y=0;if(R.ax.lengthSq()<1e-4)R.ax.set(1,0,0);R.ax.normalize();R.rc=P.Hips.clone();}
-      const u=clamp(R.t/R.rollT,0,1),e=u*u*(3-2*u),th=R.rollS*Math.PI*e,k=.05*R.str;
+      const u=clamp(R.t/R.rollT,0,1),e=u*u*(3-2*u),th=R.rollTh*e,k=.05*R.str;
       // the whole body turns over together, led by the hips and a knee drawn up and across, so the trunk never corkscrews against the legs
-      const knee=R.rollS>0?'LeftLeg':'RightLeg',lift=Math.sin(Math.PI*e);
-      for(const n in P){const o=R.rf[n];if(!o)continue;const leg=/UpLeg|Leg|Foot|Toe|Hips/.test(n),th2=leg?R.rollS*Math.PI*Math.min(1,e*1.05):th;
+      const knee=R.rollTh>0?'LeftLeg':'RightLeg',lift=Math.sin(Math.PI*e);
+      for(const n in P){const o=R.rf[n];if(!o)continue;const leg=/UpLeg|Leg|Foot|Toe|Hips/.test(n),th2=leg?R.rollTh*Math.min(1,e*1.05):th;
         _rv.subVectors(o,R.rc).applyAxisAngle(R.ax,th2).add(R.rc);_rv.y=Math.max(_rv.y,R.rc.y*.6+.05*lift);
         if(n===knee){_rv.y+=.22*lift;_rv.addScaledVector(R.ax,.12*lift);}
         const p=P[n],kk=k*2.2,q=this.Q[n];/* trunk and legs pulled round alike (Build 117: the trunk lagged the legs and the body came over wrung up to 170°) */const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
@@ -4995,8 +4995,12 @@ class Fighter{
     const legF=Math.max(this.limbF('legL'),this.limbF('legR')),armOut=(this.limbs.armL.sev||this.limbs.armL.dead?1:0)+(this.limbs.armR.sev||this.limbs.armR.dead?1:0);
     const hurt=clamp((1-this.hp/100)*.9+legF*.6+armOut*.25+(this.stamina<25?.3:0),0,1.6);
     const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()<1e-4)this.fwd(f);f.normalize();
-    let roll=0;if(P.Neck&&P.Spine1&&P.LeftArm&&P.RightArm){const up=V().subVectors(P.Neck,P.Spine1),sd=V().subVectors(P.LeftArm,P.RightArm),fr=V().crossVectors(sd,up).normalize();if(fr.y>.35)roll=.55+hurt*.4;}
-    Rg.rise={t:0,rollT:roll,rollS:Math.random()<.5?1:-1,p:.42+hurt*.8,a:.42+hurt*1.0,b:.62+hurt*.9,c:.5+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
+    // roll onto the front by however far the chest is from facing the ground, about the line from hips to neck: from the back that's half a
+    // turn, from the side a quarter (Build 117: only a body clearly face up rolled, always half a turn, so one lying on its side got up
+    // with its shoulders and hips set for the opposite side, wrung round its spine)
+    let roll=0,rollTh=0;if(P.Neck&&P.Spine1&&P.LeftArm&&P.RightArm){const up=V().subVectors(P.Neck,P.Spine1),sd=V().subVectors(P.LeftArm,P.RightArm),fr=V().crossVectors(sd,up).normalize(),ax=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);
+      if(ax.lengthSq()>1e-4){ax.normalize();fr.addScaledVector(ax,-fr.dot(ax));if(fr.lengthSq()>1e-4){fr.normalize();const th=Math.atan2(ax.dot(V().crossVectors(fr,V(0,-1,0))),-fr.y);if(Math.abs(th)>.6){rollTh=th;roll=Math.max(.25,(.55+hurt*.4)*Math.abs(th)/Math.PI);}}}}
+    Rg.rise={t:0,rollT:roll,rollTh,p:.42+hurt*.8,a:.42+hurt*1.0,b:.62+hurt*.9,c:.5+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
     Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}}
   getUp(){
     const P=this.ragdoll.P;this.pos.set(P.Hips.x,0,P.Hips.z);collide(this.pos,.34);
