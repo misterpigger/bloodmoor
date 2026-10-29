@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=121;
+const BUILD=122;
 let CD_END=-1;   // simTime when the start countdown ends
 const NET={mode:null,peer:null,conns:[],host:null,code:'',myId:-1,ev:[],cur:null,prev:null,curAt:0,gap:50,sendT:0,inT:0,lootSeq:1,lootMap:new Map(),puppets:new Map(),pick:null,thrSent:false};
 const r3=v=>Math.round(v*1000)/1000,r3v=v=>[r3(v.x),r3(v.y),r3(v.z)];
@@ -4563,18 +4563,22 @@ const X_AXIS=V(1,0,0);
 let fid=0;
 const _f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
 
+// fighters are drawn and built 7% bigger than the MakeHuman bodies come (Build 122): they stood 1.62 m to the top of the head in the fighting
+// stance (about 1.74 m upright), against Half Sword's ~1.8 m men, and read small next to them. The skeleton's lengths, hit capsules and
+// the walk and run clips' stride all scale with it
+const FSCALE=1.07;
 function dT0(a,b){return a.pos.distanceTo(b.pos);}
 class Fighter{
   constructor(name,isPlayer,x,z,pal,load){
     this.id=fid++;this.name=name;this.isPlayer=isPlayer;this.pal=pal;this.remote=null;this.rin=null;this.sevNames=[];
     this.root=new THREE.Group();scene.add(this.root);
-    this.model=SkeletonUtils.clone(GLTF.scene);this.root.add(this.model);
+    this.model=SkeletonUtils.clone(GLTF.scene);this.model.scale.multiplyScalar(FSCALE);this.root.add(this.model);
     this.mats=[];this.look=cleanLook(load.look)||randomLook();dressModel(this.model,this.look,pal,this.mats);
     this.skins=[];this.model.traverse(o=>{if(o.isSkinnedMesh)this.skins.push(o);});this.wounds=[];
     this.bones=indexBones(this.model);
     const B=this.bones;
-    this.armLen=[B.RightForeArm.position.length()*.01,B.RightHand.position.length()*.01];
-    this.legLen=[B.RightLeg.position.length()*.01,B.RightFoot.position.length()*.01];
+    this.armLen=[B.RightForeArm.position.length()*.01*FSCALE,B.RightHand.position.length()*.01*FSCALE];
+    this.legLen=[B.RightLeg.position.length()*.01*FSCALE,B.RightFoot.position.length()*.01*FSCALE];
     {this.model.updateMatrixWorld(true);const a=V(),b=V();B.LeftFoot.getWorldPosition(a);this.model.getWorldPosition(b);this.ankY=clamp(a.y-b.y,.04,.14);
       if(B.LeftToeBase){B.LeftToeBase.getWorldPosition(b);this.footP=Math.atan2(a.y-b.y,Math.hypot(a.x-b.x,a.z-b.z));}}   // ankle height over the sole, and how far the foot slopes from ankle to toes, at rest (feet flat)
     this.armor={head:null,body:null,arms:null,legs:null};this.helmet=-1;
@@ -4592,7 +4596,7 @@ class Fighter{
     this.ctrl={x:.12,y:isPlayer?.2:.08,z:isPlayer?.46:.42};this.ctrlT={x:.12,y:.08,z:.42};this.ctrlV={x:0,y:0,z:0};this.burn=0;this.fireFx=null;this.commit=false;this.thrust=false;this.stagger=0;this.mainArm='R';
     this.sword=new Sword(WEAPONS[load.weapon]);this.sword.owner=this;this.sword.setGroup(GR_HELD);this.pb=null;
     this.chest=V(x,1.35,z);this.shR=V(x,1.45,z);this.shL=V(x,1.45,z);this.headPos=V(x,1.65,z);
-    this.caps=CAPS.map(c=>({a:V(),b:V(),r:c[2],zone:c[3],sever:c[4],req:c[5],ba:c[0],bb:c[1],on:true}));
+    this.caps=CAPS.map(c=>({a:V(),b:V(),r:c[2]*FSCALE,zone:c[3],sever:c[4],req:c[5],ba:c[0],bb:c[1],on:true}));
     {const shp=SHAPES[this.look.sh];if(shp)for(const c of this.caps){if(c.zone==='head'&&shp.head)c.r*=Math.min(1.5,shp.head);if(c.ba==='Hips'&&shp.belly)c.r*=1+.22*shp.belly;}}   // a big head is a big target
     this.voice=load.voice||1;   // pitch of grunts and cries (a character's voice)
     this.ragdoll=null;this.kills=0;this.lastHitBy=null;this.lastHitT=-99;this.hitCd=new Map();this.clashCd=0;
@@ -5187,7 +5191,7 @@ class Fighter{
     // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
     // so the feet stay planted at every speed instead of two cycles drifting through each other (measured on the X Bot: walk 1.54 m/s, run 3.53 m/s)
     const Dw=A.walk.getClip().duration,Dr=A.run.getClip().duration,rt=wr/(ww+wr||1);
-    const fq=(back?-1:1)*Math.max(sp,.5)/(1.51*Dw*(1-rt)+3.62*Dr*rt);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
+    const fq=(back?-1:1)*Math.max(sp,.5)/((1.51*Dw*(1-rt)+3.62*Dr*rt)*FSCALE);A.walk.timeScale=fq*Dw;A.run.timeScale=fq*Dr;
     if(ww>0&&wr>0){const m=wr>ww?A.run:A.walk,o=m===A.run?A.walk:A.run;const ph=m.time/m.getClip().duration+(m===A.run?-.075:.075);o.time=((ph%1+1)%1)*o.getClip().duration;}
     this.mixer.update(dt);
     // the legs settle into a fencer's guard (Quaternius' sword idle, CC0) when armed and standing, a lower guarded gait when closing in;
@@ -5274,10 +5278,11 @@ class Fighter{
     const gaitOK=(GAIT_ON||disturbed)&&this.alive&&!this.ragdoll&&!airborne&&kk<=0&&this.slideT<=0&&this.fallT==null;this.gaitW=lerp(this.gaitW||0,gaitOK?1:0,1-Math.exp(-(gaitOK?(HYBRID?14:5):(HYBRID?4:16))*dt));
     // walking and running (no leg IK): the clips' planted foot is heel-up too, so flatten whichever foot is down and sink the body the 3 cm
     // that lifts it off the ground (the swinging foot keeps the clip's angle)
-    if(!(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01)&&this.footP!=null&&this.alive&&!this.ragdoll&&!airborne){this.root.updateMatrixWorld(true);const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ws={};let any=0;
+    const lockOK=this.alive&&!this.ragdoll&&!airborne&&sp>.3&&!(this.gaitW>.01)&&kk<=0&&this.fallT==null&&this.slideT<=0;   // walking or running: the leg IK runs to lock the planted foot (Build 122)
+    if(!(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01||lockOK)&&this.footP!=null&&this.alive&&!this.ragdoll&&!airborne){this.root.updateMatrixWorld(true);const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ws={};let any=0;
       for(const S of ['Left','Right']){if(!B[S+'Foot']||!B[S+'ToeBase']||this.limbs[S==='Left'?'legL':'legR'].sev)continue;B[S+'Foot'].getWorldPosition(_t2);ws[S]=clamp(1-(_t2.y-gy-this.ankY-.03)/.06,0,1);any=Math.max(any,ws[S]);}
       if(any>0){B.Hips.position.y-=3*any;this.root.updateMatrixWorld(true);for(const S in ws)if(ws[S]>0)footFlat(B[S+'Foot'],B[S+'ToeBase'],this.footP-.35,ws[S]);}}
-    if(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01){
+    if(bend>.02||kk>0||this.plantW>.01||this.gaitW>.01||lockOK){
       this.root.updateMatrixWorld(true);const feet={};
       if(!this.limbs.legL.sev){feet.Left=V();B.LeftFoot.getWorldPosition(feet.Left);}
       if(!this.limbs.legR.sev){feet.Right=V();B.RightFoot.getWorldPosition(feet.Right);}
@@ -5304,6 +5309,16 @@ class Fighter{
             if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false,this);}
           else{p.at.y=want.y;p.lift=0;}
           feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
+      // foot locking (Build 122): on the move, a foot the clip has put down stays where it landed until the clip lifts it, and the leg IK
+      // reaches it, instead of skating over the ground with the clip's stride (running feet slid up to 6 cm a frame)
+      {const FL=this.flock||(this.flock={});
+        for(const s in feet){const t=feet[s];let k=FL[s];if(!k)k=FL[s]={p:t.clone(),w:0,on:false};
+          if(!lockOK){k.on=false;k.w=0;continue;}
+          const low=t.y-groundY(t.x,t.z,t.y+.3)-this.ankY<.03;
+          if(low&&!k.on&&k.w<.05){k.on=true;k.p.copy(t);}
+          if(k.on&&(!low||Math.hypot(t.x-k.p.x,t.z-k.p.z)>.24))k.on=false;
+          k.w=clamp(k.w+(k.on?1:-1)*dt/.05,0,1);
+          if(k.w>0){t.x+=(k.p.x-t.x)*k.w;t.z+=(k.p.z-t.z)*k.w;}}}
       for(const s in feet){
         let tgt=feet[s];
         if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);tgt=_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);tgt.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);}
@@ -6823,7 +6838,7 @@ function frame(now){
       camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
     else if(!player.ragdoll){ // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
-      _t2.set(player.pos.x,player.pos.y+1.7-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));if(!Number.isFinite(camY))camY=_t2.y;_t2.y=camY;
+      _t2.set(player.pos.x,player.pos.y+1.7*FSCALE-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));if(!Number.isFinite(camY))camY=_t2.y;_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
@@ -7608,7 +7623,7 @@ window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).
 window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
 window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
-window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
+window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
