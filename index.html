@@ -3683,7 +3683,14 @@ const RISE_B=[['Hips',-.06,0,.6],['Spine1',-.01,0,.8],['Spine2',.06,0,.99],['Nec
 const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06],Hand:[.38,.56],ForeArm:[.22,.75]};   // the leading leg: knee up, foot flat ahead, the hand on that knee
 const RISE_C=[['Hips',0,0,.84],['Spine1',.04,0,.99],['Spine2',.08,0,1.17],['Neck',.1,0,1.37],['Head',.12,0,1.48],['HeadTop_End',.13,0,1.63],
   ['LeftLeg',.12,.12,.47],['RightLeg',.12,-.12,.47],['LeftFoot',-.04,.15,.07],['RightFoot',-.04,-.15,.07],['LeftHand',.34,.04,1.0],['RightHand',.34,-.04,1.0],['LeftForeArm',.16,.2,.98],['RightForeArm',.16,-.2,.98]];   // hands come together where the grip will be
+// the shoulders and hip joints are held too (Build 117): without them the chest and pelvis kept whatever twist they fell with and the
+// body got up wrung round its own spine
+RISE_P.push(['LeftArm',.44,.17,.52],['RightArm',.44,-.17,.52],['LeftUpLeg',-.06,.09,.2],['RightUpLeg',-.06,-.09,.2]);
+RISE_A.push(['LeftArm',.46,.17,.65],['RightArm',.46,-.17,.65],['LeftUpLeg',-.02,.09,.5],['RightUpLeg',-.02,-.09,.5]);
+RISE_B.push(['LeftArm',.09,.17,1.11],['RightArm',.09,-.17,1.11],['LeftUpLeg',-.06,.09,.56],['RightUpLeg',-.06,-.09,.56]);
+RISE_C.push(['LeftArm',.09,.17,1.3],['RightArm',.09,-.17,1.3],['LeftUpLeg',0,.09,.79],['RightUpLeg',0,-.09,.79]);
 const RISE_ST=[RISE_P,RISE_A,RISE_B,RISE_C];
+const RD_RND=n=>{const s=Math.sin((n.length*12.9898+n.charCodeAt(0)*78.233+n.charCodeAt(n.length-1)*3.7+(RD_RND.k=(RD_RND.k||0)+1))*43758.5453);return s-Math.floor(s);};   // a little difference per limb
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
 const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck','Head'],['Head','HeadTop_End'],['Head','Spine2'],['HeadTop_End','Neck'],
   ['Spine2','LeftArm'],['Spine2','RightArm'],['Neck','LeftArm'],['Neck','RightArm'],['LeftArm','RightArm'],['Spine1','LeftArm'],['Spine1','RightArm'],['Hips','LeftArm'],['Hips','RightArm'],
@@ -3717,7 +3724,10 @@ class Ragdoll{
     this.b=bones;this.names=names.filter(n=>bones[n]);this.P={};this.Q={};
     for(const n of this.names){const p=V();bones[n].updateWorldMatrix(true,false);p.setFromMatrixPosition(bones[n].matrixWorld);this.P[n]=p;
       // a blow moves the whole body a little and the struck part more; all of it on one spot whips the far end over like a flail
-      const v=vel.clone();if(impulse&&impulsePoint){const w=Math.exp(-p.distanceToSquared(impulsePoint)/.2);v.addScaledVector(impulse,.35+.4*w);}
+      // arms are flung further than the trunk and the feet, still on the ground, resist, so the body turns as it goes (the arms thrown
+      // back, the legs left behind); each limb a little different so they don't all move as one (Build 117, after the ragdoll video)
+      const v=vel.clone();if(impulse&&impulsePoint){const w=Math.exp(-p.distanceToSquared(impulsePoint)/.2),arm=/Arm|Hand/.test(n),leg=/Leg|Foot|Toe/.test(n)&&!/UpLeg/.test(n);
+        v.addScaledVector(impulse,(arm?.5+.35*w:leg?.12+.35*w:.35+.4*w)*(arm||leg?.75+.5*RD_RND(n):1));}
       v.x+=(Math.random()-.5)*.4;v.z+=(Math.random()-.5)*.4;this.Q[n]=p.clone().addScaledVector(v,-H*2);}
     // nothing may start inside the ground: a toe below it gets shoved up so hard the whole body launches
     {let pen=0;for(const n of this.names){const p=this.P[n];pen=Math.max(pen,groundY(p.x,p.z,p.y)+(RD_R[n]||.055)-p.y);}if(pen>0&&pen<.6)for(const n of this.names){this.P[n].y+=pen;this.Q[n].y+=pen;}}
@@ -3746,7 +3756,11 @@ class Ragdoll{
         jointCone(this,S+'UpLeg',S+'Leg',[S+'Leg',S+'Foot',S+'ToeBase'],_jX,1.3,hard);   // the hip
         jointHinge(this,S+'UpLeg',S+'Leg',S+'Foot',_jF2,1,hard?1:.3);}}   // the knee doesn't bend backwards
     // tension: the living hold a loose, slightly bent pose (elbows, knees, the head on the chest), as in a neutral posture
-    if(!hard&&it===0&&!this.rise){for(const [a,b,f,k] of [['LeftArm','LeftHand',.8,.012],['RightArm','RightHand',.8,.012],['LeftUpLeg','LeftFoot',.9,.008],['RightUpLeg','RightFoot',.9,.008]]){const A=P[a],B=P[b],L=this.full[b];if(!A||!B||!L)continue;_jA.subVectors(B,A);const d=_jA.length();if(d>L*f){const c=(d-L*f)/d*k;A.addScaledVector(_jA,c);B.addScaledVector(_jA,-c);}}}
+    // the dead keep a weaker pull toward that neutral posture (the slack body settles with knees and elbows a little bent and the arms
+    // down, not stuck up over the head), as an unconscious body does (Build 117)
+    if(it===0&&!this.rise){const m=hard?.45:1;for(const [a,b,f,k] of [['LeftArm','LeftHand',.8,.012],['RightArm','RightHand',.8,.012],['LeftUpLeg','LeftFoot',.9,.008],['RightUpLeg','RightFoot',.9,.008]]){const A=P[a],B=P[b],L=this.full[b];if(!A||!B||!L)continue;_jA.subVectors(B,A);const d=_jA.length();if(d>L*f){const c=(d-L*f)/d*k*m;A.addScaledVector(_jA,c);B.addScaledVector(_jA,-c);}}
+      if(P.LeftArm&&P.RightArm)for(const S of ['Left','Right']){const sh=P[S+'Arm'],el=P[S+'ForeArm'];if(!sh||!el)continue;_jA.subVectors(el,sh);const up=_jA.dot(_jU)/(_jA.length()||1);   // an upper arm raised past level drifts back down along the body
+        if(up>.15){const c=(up-.15)*.006*m;el.addScaledVector(_jU,-c*.3);}}}
   }
   kick(v){for(const n of this.names)this.Q[n].addScaledVector(v,-H*2);this.sleep=false;this.age=0;}
   strike(p,v,k){for(const n of this.names){const w=.15+.85*Math.exp(-this.P[n].distanceToSquared(p)/.06);this.Q[n].addScaledVector(v,-H*1.4*w*k);}this.sleep=false;this.age=Math.min(this.age,1);}
@@ -4538,7 +4552,7 @@ const ATTACKS=[
   {n:'diagR',s:[.48,.52],e:[-.42,-.36]},{n:'diagL',s:[-.48,.52],e:[.42,-.36]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
 const X_AXIS=V(1,0,0);
 let fid=0;
-const _f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V();
+const _f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
 
 function dT0(a,b){return a.pos.distanceTo(b.pos);}
 class Fighter{
@@ -5293,10 +5307,15 @@ class Fighter{
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
       const clutch=this.clutchT>simTime&&this.clutchP;
       if(!offLimb.sev&&!offLimb.dead&&clutch){this.clutchAt(_t2);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);_hv.copy(_f).negate();gripHand(B,offS,_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);}   // the free hand goes to the wound
-      else if(!offLimb.sev&&!offLimb.dead){const cwO=this.calmW||0;if(this.commit)this._cmT=simTime;const join=s.def.kind==='blade'&&s.len>=.6&&!twoH(s.def)&&!rvg&&cwO<.3&&simTime-(this._cmT??-9)<.35&&!this.throwHold&&this.throwT<0;   // a big cut with a one-handed sword: the off hand comes on at the pommel for it, and lets go after
+      else if(!offLimb.sev&&!offLimb.dead){const cwO=this.calmW||0;if(this.commit)this._cmT=simTime;const join=false;   // (Build 114 put the off hand on the pommel for big one-handed cuts; Build 117 swings it out as a counterweight instead, as in Half Sword)
         const one=s.def.kind!=='fist'&&(rvg?!twoH(s.def):(!twoH(s.def)||this.throwHold||this.throwT>=0))&&!join;   // a reverse grip keeps a two-hander in both fists, one over the other; a one-handed blade stays in one
         if(one){   // one-handed weapon: the off hand stays up in a loose guarding fist by the chest
-          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);const cw=Math.max(this.calmW||0,rvg?1:0);if(cw>.01){_og.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_t2.lerp(_og,cw*cw*(3-2*cw));}this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
+          _t2.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);const cw=Math.max(this.calmW||0,rvg?1:0);if(cw>.01){_og.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_t2.lerp(_og,cw*cw*(3-2*cw));}
+          // a committed one-handed swing: the free arm goes out the other way as a counterweight, low and a little back, and comes in again after
+          this._cwW=lerp(this._cwW||0,this.commit&&!rvg&&s.def.kind!=='fist'?1:0,1-Math.exp(-(this.commit?7:2.5)*dt));
+          if(this._cwW>.01){_pl.copy(s.Hv).setY(0);const hl=_pl.length();if(!this._cwD)this._cwD=V().copy(_r).multiplyScalar(-sgn);if(hl>.8)this._cwD.lerp(_pl.multiplyScalar(-1/hl),1-Math.exp(-5*dt)).normalize();
+            _ogc.copy(shO).addScaledVector(this._cwD,.44).addScaledVector(Y_AXIS,-.3).addScaledVector(_f,-.06);const e=this._cwW*this._cwW*(3-2*this._cwW);_t2.lerp(_ogc,e);}
+          this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=Math.max(this.calmW||0,rvg?1:0),e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
         else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?1:0,1-Math.exp(-9*dt));g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
@@ -6157,7 +6176,7 @@ function aimPoint(out){
   return out.copy(o).addScaledVector(_t1,best);
 }
 // third-person camera: close behind the shoulder, a little above the head, tilted down at the fight
-const CAM_TP={dist:3.2,side:.55,up:.22,tilt:-.12};
+const CAM_TP={dist:2.2,side:.5,up:.16,tilt:-.1};   // Build 117: pulled in from 3.2 m (and the view narrowed 55° → 50°) so fighters fill more of the screen
 // nothing comes between the camera and you: other fighters, the fallen and the pit's walls pull it in, the way Half Sword's does
 const _cs=V(),_cd=V();let camPull=1;
 function camBlocked(x,y,z,ceil){if(ceil&&y>ceil-.22)return true;
@@ -6759,7 +6778,7 @@ function frame(now){
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
     else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
-    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:55)+(pv>4.4?5:0)+(player.slideT>0?5:0);
+    const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:50)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
   }
   if(window.__dbgCam){camera.position.copy(window.__dbgCam.p);camera.lookAt(window.__dbgCam.t);}
