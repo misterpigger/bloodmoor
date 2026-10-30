@@ -3079,6 +3079,14 @@ function mhPart(id){if(!MHP.has(id))MHP.set(id,fetch('assets/mhparts/'+id+'.bin'
   const C={float32:Float32Array,uint16:Uint16Array,uint32:Uint32Array,int8:Int8Array,uint8:Uint8Array};
   for(const [k,[o,t,sh]] of Object.entries(H.layout)){const T=C[t];A[k]=new T(ab,base+o,sh.reduce((a,b)=>a*b,1));}return {H,A,geo:{}};}).catch(()=>null));return MHP.get(id);}
 function mhPartTex(u,srgb){if(!MHP_TEX.has(u)){const t=new THREE.TextureLoader().load('assets/mhparts/'+u);if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=MAXANI;MHP_TEX.set(u,t);}return MHP_TEX.get(u);}
+// strand beards (Build 127): grown once on build A by tools/mh/garb/hairgen.py, each vertex tied to the body vertex under it (anchor) by an
+// offset, so the same beard sits on any build's own face; normals are the skin's, skinned wholly to the head
+function strandGeo(P,body){const gb=body.geometry,k=gb.uuid;if(P.geo[k])return P.geo[k];const A=P.A,n=P.H.nv,bp=gb.attributes.position.array,bn=gb.attributes.normal.array;
+  const pos=new Float32Array(n*3),nor=new Float32Array(n*3);for(let i=0;i<n;i++){const a=A.anchor[i]*3;for(let c=0;c<3;c++){pos[i*3+c]=bp[a+c]+A.off[i*3+c];nor[i*3+c]=bn[a+c];}}
+  const hi=Math.max(0,body.skeleton.bones.findIndex(x=>/Head$/.test(x.name))),si=new Uint8Array(n*4),sw=new Float32Array(n*4);for(let i=0;i<n;i++){si[i*4]=hi;sw[i*4]=1;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('normal',new THREE.BufferAttribute(nor,3));g.setAttribute('uv',new THREE.BufferAttribute(A.uv,2,true));
+  g.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));if(A.loose)g.setAttribute('aLoose',new THREE.BufferAttribute(A.loose,1));
+  g.setIndex(new THREE.BufferAttribute(A.index,1));g.computeBoundingSphere();return P.geo[k]=g;}
 function mhPartGeo(P,b){if(P.geo[b])return P.geo[b];const A=P.A,g=new THREE.BufferGeometry();let pb=P.H.perBuild?b:'';
   if(pb&&!A[b+'pos'])b=pb=Object.keys(P.H.builds)[0];
   g.setAttribute('position',new THREE.BufferAttribute(A[b+'pos'],3));g.setAttribute('normal',new THREE.BufferAttribute(A[b+'nor'],3,true));g.setAttribute('uv',new THREE.BufferAttribute(A[pb+'uv'],2));
@@ -3086,14 +3094,18 @@ function mhPartGeo(P,b){if(P.geo[b])return P.geo[b];const A=P.A,g=new THREE.Buff
   if(A[b+'loose'])g.setAttribute('aLoose',new THREE.BufferAttribute(A[b+'loose'],1));
   g.computeBoundingSphere();return P.geo[b]=g;}
 const MHP_MAT=new Map();
-function mhPartMat(P,col,kind){const k=P.H.id+'|'+col.getHexString();if(MHP_MAT.has(k))return MHP_MAT.get(k);const T=P.H.tex;
-  const m=std({map:mhPartTex(T.d,true),color:col,roughness:kind==='lash'?.6:.55,metalness:0,side:THREE.DoubleSide,alphaTest:kind==='brow'?.25:kind==='lash'?.5:.38,transparent:false});
+// hair, beards and brows are drawn twice (Build 127): the solid middle of every strand card with a depth write, then its thin edges blended
+// over it without one, so strands end soft instead of in hard alpha-test steps; a sheen lights the hair's edges as real hair catches light
+function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?'|s':'');if(MHP_MAT.has(k))return MHP_MAT.get(k);const T=P.H.tex;
+  const thr=kind==='brow'?.3:kind==='lash'?.5:.5;
+  const m=new THREE.MeshPhysicalMaterial({map:mhPartTex(T.d,true),color:col,roughness:kind==='lash'?.6:.5,metalness:0,side:THREE.DoubleSide,alphaTest:soft?.18:thr,transparent:!!soft,depthWrite:!soft,
+    sheen:kind==='lash'?0:.55,sheenRoughness:.45,sheenColor:new THREE.Color().copy(col).lerp(new THREE.Color(1,.95,.85),.35),specularIntensity:.4});
   if(T.n)m.normalMap=mhPartTex(T.n,false);
-  // strands: a little sheen along the hair, darker at the roots (the inner layers) so a head of hair has depth
-  m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n roughnessFactor=mix(.75,.42,diffuseColor.r/max(diffuseColor.r+.05,.1));');};
-  m.customProgramCacheKey=()=>'bm-mhpart';MHP_MAT.set(k,m);return m;}
+  m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n roughnessFactor=mix(.75,.42,diffuseColor.r/max(diffuseColor.r+.05,.1));')
+    .replace('#include <alphatest_fragment>','#include <alphatest_fragment>'+(soft?'\n if(diffuseColor.a>='+thr.toFixed(2)+')discard;':''));};
+  m.customProgramCacheKey=()=>'bm-mhpart'+(soft?'s':'');MHP_MAT.set(k,m);return m;}
 function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_([ABCD])/)||[])[1]||'A';const root=body.parent;
-  mhPart(id).then(P=>{if(!P||!body.parent||body.parent!==root)return;const m=new THREE.SkinnedMesh(mhPartGeo(P,b),mat||mhPartMat(P,col,kind));
+  mhPart(id).then(P=>{if(!P||!body.parent||body.parent!==root)return;const m=new THREE.SkinnedMesh(P.H.strands?strandGeo(P,body):mhPartGeo(P,b),mat||mhPartMat(P,col,kind));
     const cov=P.A[(P.A[b+'cov']?b:Object.keys(P.H.builds||{})[0])+'cov'];
     if(cov&&P.A[b+'pos']){const bit=GARB_BIT[id]??(GARB_BIT[id]=1<<Object.keys(GARB_BIT).length);const gb=body.geometry;let at=gb.getAttribute('aCov');
       if(!at){at=new THREE.BufferAttribute(new Float32Array(gb.attributes.position.count),1);gb.setAttribute('aCov',at);}
@@ -3102,7 +3114,8 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
     m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard'||kind==='cloth';m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9);}}   // (a belt goes under body armour altogether)
-    let hid=false;for(let o=root;o;o=o.parent)if(o.userData.hideHair){hid=true;break;}if(tag&&hid)m.visible=false;root.add(m);}   /* (a helmet put on before the hair arrived) */).catch(e=>console.warn('part',id,e&&e.message));}
+    let hid=false;for(let o=root;o;o=o.parent)if(o.userData.hideHair){hid=true;break;}if(tag&&hid)m.visible=false;root.add(m);
+    if(!mat&&kind!=='lash'){const m2=new THREE.SkinnedMesh(m.geometry,mhPartMat(P,col,kind,true));m2.bind(body.skeleton,body.bindMatrix);m2.frustumCulled=false;m2.renderOrder=2;m2.name=m.name+'_soft';if(tag){m2.userData.hair=true;if(hid)m2.visible=false;}root.add(m2);}}   /* (a helmet put on before the hair arrived) */).catch(e=>console.warn('part',id,e&&e.message));}
 // look.o -> draped garment: 1 linen shirt, 2 quilted aketon, 3 knee-length wool cote, 4 fitted doublet; each with its belt
 // woven wool for the cote and doublet (CC0 Poly Haven 'Caban' and 'Wool herringbone' scans, greyed so the dye tints them)
 const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('assets/tex/'+k+'_d.jpg'),n=L.load('assets/tex/'+k+'_n.jpg');m.colorSpace=THREE.SRGBColorSpace;for(const x of [m,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(22,22);x.anisotropy=MAXANI;}return {m,n};};return {wool:mk('wool'),twill:mk('twill')};})();
@@ -3114,7 +3127,7 @@ function garbClip(m){const U={uClip:{value:GARB_NOCLIP.clone()}};m.userData.clip
     sh.fragmentShader='uniform vec2 uClip;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if(vBind.y>uClip.y&&abs(vBind.x)<uClip.x)discard;');};
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|clip';return m;}
 function setGarbClip(model,id){const c=GARB_CLIP[id];const v=c?new THREE.Vector2(c[0],c[1]):GARB_NOCLIP;model.userData.garbClip=v.clone();model.traverse(o=>{const U=o.material&&o.material.userData;if(!U)return;if(U.clipU){U.clipU.value.copy(v);if(c&&U.isBelt)U.clipU.value.set(9,-9);}if(U.HU&&U.HU.uCov)U.HU.uCov.value=c?0:(U.HU.covAll|0);});}   // (under the armour the skin is drawn again: nothing pokes through steel)
-const MH_HAIR=[null,null,'h_crop','h_alpha7','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'b_scruffy','b_mous'];
+const MH_HAIR=[null,null,'h_crop','h_alpha7','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'bs_full','b_mous'];
 const HAIRGEO=new Map();
 function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.len:0)+'|'+beard+'|'+brows;if(HAIRGEO.has(k))return HAIRGEO.get(k);
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
