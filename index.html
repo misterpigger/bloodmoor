@@ -3113,6 +3113,7 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
       const HU=body.material&&body.material.userData.HU;if(HU){HU.covAll=(HU.covAll|0)|bit;let cl=false;for(let o=root;o;o=o.parent)if(o.userData.garbClip&&o.userData.garbClip.x<5){cl=true;break;}HU.uCov.value=cl?0:HU.covAll;}}
     m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard'||kind==='cloth';m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
+    if(m.material.userData.legU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.legMeshes||(mo.userData.legMeshes=[])).push(m);}
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9);}}   // (a belt goes under body armour altogether)
     let hid=false;for(let o=root;o;o=o.parent)if(o.userData.hideHair){hid=true;break;}if(tag&&hid)m.visible=false;root.add(m);
     if(!mat&&kind!=='lash'){const m2=new THREE.SkinnedMesh(m.geometry,mhPartMat(P,col,kind,true));m2.bind(body.skeleton,body.bindMatrix);m2.frustumCulled=false;m2.renderOrder=2;m2.name=m.name+'_soft';if(tag){m2.userData.hair=true;if(hid)m2.visible=false;}root.add(m2);}}   /* (a helmet put on before the hair arrived) */).catch(e=>console.warn('part',id,e&&e.message));}
@@ -3122,6 +3123,17 @@ const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('ass
 const GARB={1:{id:'shirt',belt:'belt_shirt',mat:'linen'},2:{id:'aketon',mat:'quilt'},3:{id:'cote',belt:'belt_cote',mat:'wool'},4:{id:'doublet',belt:'belt_doublet',mat:'twill'}};
 // body armour over a draped garment: the part it covers isn't drawn (the cloth would poke through the steel); x = half-width, y = from
 const GARB_CLIP={plate:[.27,.84],brigandine:[.27,.85],mail:[.6,.45]},GARB_NOCLIP=new THREE.Vector2(9,9);
+// the legs push the skirt out of their way (Build 127): each frame the hips, knees and ankles go to the garment's shader in its own space and
+// any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
+function garbLegs(m){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile;
+  m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uLegP=U.uLegP;
+    sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);vec3 c=a+ab*t,d=p-c;float l=length(d);return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+
+      sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n transformed=legPush(transformed,uLegP[0],uLegP[1],.098);transformed=legPush(transformed,uLegP[1],uLegP[2],.072);transformed=legPush(transformed,uLegP[3],uLegP[4],.098);transformed=legPush(transformed,uLegP[4],uLegP[5],.072);');};
+  const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|legs';return m;}
+const _glM=new THREE.Matrix4(),_glN=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
+function garbLegStep(f){const gs=f.model&&f.model.userData.legMeshes;if(!gs||!gs.length||!f.bones)return;
+  for(const m of gs){if(!m.parent||!m.visible)continue;const U=m.material.userData.legU;if(!U)continue;_glM.copy(m.matrixWorld).invert();
+    for(let i=0;i<6;i++){const b=f.bones[_glN[i]];if(b)b.getWorldPosition(U.value[i]).applyMatrix4(_glM);}}}
 function garbClip(m){const U={uClip:{value:GARB_NOCLIP.clone()}};m.userData.clipU=U.uClip;const pre=m.onBeforeCompile;
   m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uClip=U.uClip;if(!/varying vec3 vBind;/.test(sh.vertexShader)){sh.vertexShader='varying vec3 vBind;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;');sh.fragmentShader='varying vec3 vBind;\n'+sh.fragmentShader;}
     sh.fragmentShader='uniform vec2 uClip;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if(vBind.y>uClip.y&&abs(vBind.x)<uClip.x)discard;');};
@@ -3363,7 +3375,7 @@ function dressMH(model,look,pal,mats){
     const gm=G.mat==='quilt'?(()=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';return mt;})()
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
-    gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);addMHPart(body,G.id,null,'cloth',false,gm);
+    gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm);addMHPart(body,G.id,null,'cloth',false,gm);
     if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0x4a2e1c);bm.side=THREE.DoubleSide;garbClip(bm);bm.userData.isBelt=true;addMHPart(body,G.belt,null,'belt',false,bm);}}}
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
     // hair, beard, brows and lashes are MakeHuman's own (Build 126; the shells and the painted cap are no longer used)
@@ -3521,7 +3533,7 @@ function wpnGroup(parts){const g=new THREE.Group();for(const [geo,mat,x,y,z,rx=0
 // blades: a lenticular section with ground edge bevels and a fuller; vertex colour marks the polished bevels bright and the fuller dark
 function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3,1],[.12,1],[0,.55],[-.12,1],[-.3,1],[-.66,.55],[-1,0],[-.66,-.55],[-.3,-1],[-.12,-1],[0,-.55],[.12,-1],[.3,-1],[.66,-.55]],K=sec.length,pos=[],col=[];
   const width=u=>leaf?w*(.32+.68*Math.sin(Math.PI*Math.pow(u,.72)))*(1-Math.pow(u,6)):u<.76?w*(1-.24*u/.76):w*.76*Math.cos((u-.76)/.24*Math.PI/2);   // a straight taper, then an ogive point
-  const ring=j=>{const u=j/NS,y=u*L,wd=width(u),th=.0036*(1-.5*u)+.0006,ful=leaf?0:clamp(1-u/.68,0,1);
+  const ring=j=>{const u=j/NS,y=u*L,wd=width(u),th=.0052*(1-.55*u)+.0008,ful=leaf?0:clamp(1-u/.68,0,1);
     return sec.map(([a,b])=>{const fl=Math.abs(a)<.01?(.55+.45*(1-ful))/.55:1;return [a*wd,y,b*th*fl];});};
   const shade=(k,j)=>{const a=Math.abs(sec[k][0]),ful=leaf?0:clamp(1-j/NS/.68,0,1);return a>.99?1.32:a>.6?1.16:a<.01?1-.2*ful:.97;};
   const put=(v,k,j)=>{pos.push(...v);const c=shade(k,j);col.push(c,c,c);};
@@ -3529,7 +3541,7 @@ function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3
   {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0],4,0);put(r0[(k+1)%K],(k+1)%K,0);put(r0[k],k,0);}}   // the shoulder of the blade under the guard
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);return g;}
-const bladeMat=std({color:0x96938e,metalness:.92,roughness:.24,envMapIntensity:1.2,vertexColors:true});steelDetail(bladeMat,'blade');
+const bladeMat=new THREE.MeshPhysicalMaterial({color:0x96938e,metalness:.92,roughness:.24,envMapIntensity:1.2,vertexColors:true,clearcoat:.45,clearcoatRoughness:.14});   // (a polished skin over the brushed steel: crisp highlights)steelDetail(bladeMat,'blade');
 const gripMat=std({color:0x9a7050,roughness:.72});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1,3);x.anisotropy=MAXANI;}Object.assign(gripMat,{map:ld,normalMap:ln});gripMat.normalScale.set(.6,.6);}
 // a grip bound in leather over cord: the wrap's ridges spiral down it, waisted or swelling along its length
 function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Math.max(8,Math.round(len*260)),true),p=g.attributes.position;
@@ -3537,10 +3549,21 @@ function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Ma
     prof=1+swell*Math.sin(Math.PI*t)-.06*Math.pow(Math.abs(2*t-1),6),k=(r*prof+cord)/r;p.setX(i,x*k);p.setZ(i,z*k);}
   g.computeVertexNormals();return g;}
 // a cross guard: quillons tapering out from a block and flaring at the tips, edges rounded, bent toward the blade if asked
-function guardGeo(S,H,D,bend=0){const xs=[-.5,-.46,-.4,-.13,0,.13,.4,.46,.5],hs=[.5,.78,.52,.6,1,.6,.52,.78,.5],h=H/2,sh=new THREE.Shape();
-  sh.moveTo(xs[0]*S,hs[0]*h);for(let i=1;i<9;i++)sh.lineTo(xs[i]*S,hs[i]*h);for(let i=8;i>=0;i--)sh.lineTo(xs[i]*S,-hs[i]*h*.92);
-  const g=new THREE.ExtrudeGeometry(sh,{depth:D*.7,bevelEnabled:true,bevelThickness:D*.15,bevelSize:Math.min(.003,H*.18),bevelSegments:2,curveSegments:4});g.translate(0,0,-D*.35);
-  const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),f=Math.abs(x)/(S/2);p.setY(i,p.getY(i)+bend*f*f);p.setZ(i,p.getZ(i)*(1-.35*f*f));}g.computeVertexNormals();return g;}
+function guardGeo(S,H,D,bend=0){
+  // (Build 127) forged, not cut from a plate: a chamfered centre block (the écusson) and two quillons swept out from it, each an octagonal
+  // bar that tapers and then swells into a rounded terminal, bent toward the blade if asked; smooth-shaded
+  const parts=[],bw=Math.max(H*1.3,.022),blk=new THREE.BoxGeometry(bw,H,D*.95,1,1,1);
+  {const p=blk.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);p.setX(i,p.getX(i)*(y<0?.82:1));}}   // narrower on the blade side
+  parts.push(blk.toNonIndexed());
+  const NR=18,NS=8,r0=Math.min(H,D)*.44;
+  for(const sd of [-1,1]){const pos=[],idx=[];const L=S/2-bw/2;
+    for(let i=0;i<=NR;i++){const t=i/NR,x=sd*(bw/2-.002+t*(L+.002)),f=Math.abs(x)/(S/2);
+      const r=r0*(t<.75?1-.32*t/.75:.68+.5*Math.sin((t-.75)/.25*Math.PI*.5))*(t>.97?Math.sqrt(Math.max(0,(1-t)/.03))*.9+.1:1),yo=bend*f*f;
+      for(let k=0;k<NS;k++){const a=(k+.5)/NS*Math.PI*2;pos.push(x,yo+Math.cos(a)*r*(H/Math.min(H,D)),Math.sin(a)*r*(D/Math.min(H,D))*.9);}}
+    for(let i=0;i<NR;i++)for(let k=0;k<NS;k++){const a=i*NS+k,b2=i*NS+(k+1)%NS,c=a+NS,d=b2+NS;if(sd>0)idx.push(a,c,b2,b2,c,d);else idx.push(a,b2,c,b2,d,c);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();parts.push(g.toNonIndexed());}
+  const out=mergeGeometries(parts.map(x=>{if(x.attributes.uv)x.deleteAttribute('uv');return x;}));
+  const uv=new Float32Array(out.attributes.position.count*2);out.setAttribute('uv',new THREE.BufferAttribute(uv,2));return out;}
 // pommels: a bevelled wheel with a peened tang button, or a pear for the greatsword
 function wheelPommel(R,T){const g=lathe([[0,-T/2-.004],[.006,-T/2-.004],[.007,-T/2],[R*.5,-T/2],[R*.9,-T*.32],[R,-T*.1],[R,T*.1],[R*.9,T*.32],[R*.5,T/2],[.007,T/2],[.006,T/2+.004],[0,T/2+.004]].reverse(),28);g.rotateX(Math.PI/2);return g;}
 function pearPommel(R){return lathe([[0,-R*1.25],[R*.25,-R*1.2],[R*.75,-R*.8],[R,-R*.15],[R*.85,R*.5],[R*.45,R*.85],[R*.3,R*1.05],[0,R*1.08]].reverse(),24);}
@@ -3560,6 +3583,18 @@ function makeGreatsword(st=0){if(st)return wpnGroup([[bladeGeo(1.22,.03,.06),bla
   [gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],[pearPommel(.03),steelDark,0,-.41,0]]);}
 const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');
 function edgeShade(g,f){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=f(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=c[i*3+1]=c[i*3+2]=v;}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g;}
+// (Build 127) the head lofted in slices from the eye to the edge: each slice a lens through the head's height, thick by the eye and ground
+// down to a keen edge, so the faces curve and catch the light like forged and ground iron instead of being two flat plates
+function axeLoft(sh){const P=sh.getPoints(48),xs=P.map(p=>p.x),x0=Math.min(...xs),x1=Math.max(...xs),NX=26,NY=14,pos=[],idx=[];
+  const span=x=>{let lo=1e9,hi=-1e9;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length];if((a.x-x)*(b.x-x)>0||a.x===b.x)continue;const t=(x-a.x)/(b.x-a.x),y=a.y+(b.y-a.y)*t;lo=Math.min(lo,y);hi=Math.max(hi,y);}return lo<hi?[lo,hi]:null;};
+  const th=x=>x<.03?.0125:Math.max(.0006,.0125*Math.pow(1-(x-.03)/(x1-.03),1.6));
+  let rows=0;for(let i=0;i<=NX;i++){const x=x0+.0005+(x1-x0-.001)*i/NX,sp=span(x);if(!sp)continue;
+    for(let side of [1,-1])for(let j=0;j<=NY;j++){const v=j/NY,y=sp[0]+(sp[1]-sp[0])*v,lens=Math.pow(Math.sin(Math.PI*v),.35);pos.push(x,y,side*th(x)*(.25+.75*lens));}
+    rows++;}
+  const R2=(NY+1)*2;for(let r=0;r<rows-1;r++)for(let sdi=0;sdi<2;sdi++)for(let j=0;j<NY;j++){const a=r*R2+sdi*(NY+1)+j,b=a+1,c=a+R2,d=b+R2;if(sdi===0)idx.push(a,c,b,b,c,d);else idx.push(a,b,c,b,d,c);}
+  for(let r=0;r<rows-1;r++)for(const j of [0,NY]){const a=r*R2+j,b=r*R2+(NY+1)+j,c=a+R2,d=b+R2;if(j===0)idx.push(a,b,c,b,d,c);else idx.push(a,c,b,b,c,d);}   // top and bottom faces
+  {const a=0,n=NY;for(let j=0;j<n;j++){idx.push(j,(NY+1)+j,j+1,j+1,(NY+1)+j,(NY+1)+j+1);}}   // the back of the head by the eye
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g.toNonIndexed();}
 function makeAxe(st=0){
   // a bearded axe head: thick at the eye round the haft, ground down to a thin cutting edge, the beard sweeping down; the ground edge bright against the dark forged head
   // (patterns: 1 a broad crescent Dane head, 2 a narrow wedge)
@@ -3567,8 +3602,7 @@ function makeAxe(st=0){
   if(st===1){sh.moveTo(-.024,.985);sh.lineTo(.035,.975);sh.quadraticCurveTo(.09,1.0,.17,1.07);sh.quadraticCurveTo(.215,.93,.17,.78);sh.quadraticCurveTo(.09,.86,.035,.89);sh.lineTo(-.024,.88);sh.closePath();}
   else if(st===2){sh.moveTo(-.024,.975);sh.lineTo(.035,.97);sh.lineTo(.15,.985);sh.quadraticCurveTo(.163,.93,.15,.86);sh.lineTo(.035,.89);sh.lineTo(-.024,.885);sh.closePath();}
   else{sh.moveTo(-.024,.985);sh.lineTo(.035,.985);sh.quadraticCurveTo(.1,.99,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.75,.07,.83);sh.quadraticCurveTo(.045,.87,.035,.88);sh.lineTo(-.024,.88);sh.closePath();}
-  const hg=new THREE.ExtrudeGeometry(sh,{depth:.024,bevelEnabled:true,bevelThickness:.002,bevelSize:.002,bevelSegments:1,curveSegments:14});hg.translate(0,0,-.012);
-  {const p=hg.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),k=x<.03?1:Math.max(.06,1-(x-.03)/.15*.94);p.setZ(i,p.getZ(i)*k);}hg.computeVertexNormals();}
+  const hg=axeLoft(sh);
   edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
   const eye=edgeShade(lathe([[.024,-.06],[.028,-.05],[.028,.05],[.024,.06]].reverse(),16),()=>.9);
   const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.995],[0,.995]].reverse(),14);
@@ -7127,7 +7161,7 @@ function frame(now){
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
 function updateBurnFx(f,now,dt){
-  bodyBlood(f);fighterDetail(f,dt);if(!window.__noSway)swayStep(f,dt);
+  bodyBlood(f);fighterDetail(f,dt);if(!window.__noSway)swayStep(f,dt);garbLegStep(f);
   if(!f.alive&&f.burn>0)f.burn-=dt;
   if(f.burn>0){
     if(!f.fireFx)f.fireFx=FX_BONES.map(()=>{const s=new THREE.Sprite(flameMat);s.renderOrder=7;scene.add(s);return s;});
