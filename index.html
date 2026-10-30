@@ -3111,7 +3111,8 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
       if(!at){at=new THREE.BufferAttribute(new Float32Array(gb.attributes.position.count),1);gb.setAttribute('aCov',at);}
       const hs=gb.userData.cov||(gb.userData.cov=new Set());if(!hs.has(id)){for(const i of cov)at.array[i]=(at.array[i]|bit);at.needsUpdate=true;hs.add(id);}
       const HU=body.material&&body.material.userData.HU;if(HU){HU.covAll=(HU.covAll|0)|bit;let cl=false;for(let o=root;o;o=o.parent)if(o.userData.garbClip&&o.userData.garbClip.x<5){cl=true;break;}HU.uCov.value=cl?0:HU.covAll;}}
-    m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard'||kind==='cloth';m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
+    m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard';   // (draped cloth is one double-sided layer: shadowing itself it drew dark acne slashes down the skirts)
+   m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
     if(m.material.userData.legU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.legMeshes||(mo.userData.legMeshes=[])).push(m);}
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9);}}   // (a belt goes under body armour altogether)
