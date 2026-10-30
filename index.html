@@ -388,10 +388,11 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const rand=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[(Math.random()*a.length)|0];
 const FB_PELV=['Hips','LeftUpLeg','RightUpLeg'];
+const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=new THREE.Quaternion(),_m4c=new THREE.Matrix4();
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=128;
+const BUILD=129;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -648,7 +649,7 @@ moonSprite.scale.setScalar(70);scene.add(moonSprite);
 
 const hemi=new THREE.HemisphereLight(0x6a80b8,0x2a2015,0.75);scene.add(hemi);
 const moon=new THREE.DirectionalLight(0xa8bcff,1.25);
-moon.castShadow=true;moon.shadow.mapSize.set(2048,2048);
+moon.castShadow=true;moon.shadow.mapSize.set(2048,2048);moon.shadow.camera.layers.enable(1);   // layer 1: things that cast shadows but the camera doesn't see (your own head in first person)
 const sc=moon.shadow.camera;sc.left=-32;sc.right=32;sc.top=32;sc.bottom=-32;sc.near=1;sc.far=140;
 moon.shadow.bias=-0.0004;moon.shadow.normalBias=0.04;
 scene.add(moon);scene.add(moon.target);
@@ -3107,9 +3108,20 @@ function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?
   const m=new THREE.MeshPhysicalMaterial({map:mhPartTex(T.d,true),color:col,roughness:kind==='lash'?.6:.5,metalness:0,side:THREE.DoubleSide,alphaTest:soft?.18:thr,transparent:!!soft,depthWrite:!soft,
     sheen:kind==='lash'?0:.55,sheenRoughness:.45,sheenColor:new THREE.Color().copy(col).lerp(new THREE.Color(1,.95,.85),.35),specularIntensity:.4});
   if(T.n)m.normalMap=mhPartTex(T.n,false);
+  const kk=kind==='hair'||kind==='beard';
   m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n roughnessFactor=mix(.75,.42,diffuseColor.r/max(diffuseColor.r+.05,.1));')
-    .replace('#include <alphatest_fragment>','#include <alphatest_fragment>'+(soft?'\n if(diffuseColor.a>='+thr.toFixed(2)+')discard;':''));};
-  m.customProgramCacheKey=()=>'bm-mhpart'+(soft?'s':'');MHP_MAT.set(k,m);return m;}
+    .replace('#include <alphatest_fragment>','#include <alphatest_fragment>'+(soft?'\n if(diffuseColor.a>='+thr.toFixed(2)+')discard;':''));
+    // (Build 129) hair's own highlight (Kajiya-Kay): light catches a strand across its length, not as a round spot, so a bright band runs
+    // across the hair where the strands face the light half-way to the eye, and a second, tinted one shifted toward the roots
+    if(kk)sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
+    #if NUM_DIR_LIGHTS>0
+    { vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec2 dux=dFdx(vMapUv),duy=dFdy(vMapUv);float dt=dux.x*duy.y-dux.y*duy.x;
+      vec3 T=normalize((dpy*dux.x-dpx*duy.x)*sign(dt+1e-9));vec3 Nn=normalize(normal);T=normalize(T-Nn*dot(T,Nn));
+      vec3 V=normalize(vViewPosition)*-1.,L=directionalLights[0].direction,Hh=normalize(L+V);float lit=clamp(dot(Nn,L)*.6+.4,0.,1.);
+      float t1=dot(normalize(T+Nn*.12),Hh),t2=dot(normalize(T-Nn*.18),Hh);float s1=pow(sqrt(max(0.,1.-t1*t1)),90.),s2=pow(sqrt(max(0.,1.-t2*t2)),24.);
+      reflectedLight.directSpecular+=directionalLights[0].color*lit*(s1*.16+s2*.1*diffuseColor.rgb*2.)*smoothstep(.2,.6,diffuseColor.a); }
+    #endif`);};
+  m.customProgramCacheKey=()=>'bm-mhpart'+(soft?'s':'')+(kk?'k':'');MHP_MAT.set(k,m);return m;}
 function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_([ABCD])/)||[])[1]||'A';const root=body.parent;
   mhPart(id).then(P=>{if(!P||!body.parent||body.parent!==root)return;let mo=root;while(mo.parent&&!mo.userData.mh&&!mo.userData.sway)mo=mo.parent;const SWU=(kind==='hair'||kind==='beard')&&!mat?mo.userData.sway:null;
     const swm=x=>SWU?looseMat(ownMat(x),SWU,'n'):x;   // (Build 128) hair and beards swing with the head's ring of chains again (swayStep), as the old long hair did
@@ -3136,8 +3148,8 @@ const GARB_CLIP={plate:[.27,.92,1.37],brigandine:[.27,.97,1.39],mail:[.44,.45,9]
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile;
   m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uLegP=U.uLegP;
-    sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);vec3 c=a+ab*t,d=p-c;float l=length(d);return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+
-      sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n transformed=legPush(transformed,uLegP[0],uLegP[1],.118);transformed=legPush(transformed,uLegP[1],uLegP[2],.088);transformed=legPush(transformed,uLegP[3],uLegP[4],.118);transformed=legPush(transformed,uLegP[4],uLegP[5],.088);');};
+    sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R0,float R1){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);float R=mix(R0,R1,smoothstep(0.,.5,t));vec3 c=a+ab*t,d=p-c;float l=length(d);return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+
+      sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n transformed=legPush(transformed,uLegP[0],uLegP[1],.0,.11);transformed=legPush(transformed,uLegP[1],uLegP[2],.085,.08);transformed=legPush(transformed,uLegP[3],uLegP[4],.0,.11);transformed=legPush(transformed,uLegP[4],uLegP[5],.085,.08);');};
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|legs';return m;}
 const _glM=new THREE.Matrix4(),_glN=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
 function garbLegStep(f){const gs=f.model&&f.model.userData.legMeshes;if(!gs||!gs.length||!f.bones)return;
@@ -3148,7 +3160,7 @@ function garbClip(m){const U={uClip:{value:GARB_NOCLIP.clone()}};m.userData.clip
     sh.fragmentShader='uniform vec3 uClip;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if(vBind.y>uClip.y&&vBind.y<uClip.z&&abs(vBind.x)<uClip.x)discard;');};
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|clip';return m;}
 function setGarbClip(model,id){const c=GARB_CLIP[id];const v=c?new THREE.Vector3(c[0],c[1],c[2]):GARB_NOCLIP;model.userData.garbClip=v.clone();model.traverse(o=>{const U=o.material&&o.material.userData;if(!U)return;if(U.clipU){U.clipU.value.copy(v);if(c&&U.isBelt)U.clipU.value.set(9,-9,9);}if(U.HU&&U.HU.uCov)U.HU.uCov.value=c?0:(U.HU.covAll|0);});}   // (under the armour the skin is drawn again: nothing pokes through steel)
-const MH_HAIR=[null,null,'h_crop','h_alpha7','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'bs_full','b_mous'];
+const MH_HAIR=[null,null,'h_crop','h_o4long','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'bs_full','b_mous'];
 const HAIRGEO=new Map();
 function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.len:0)+'|'+beard+'|'+brows;if(HAIRGEO.has(k))return HAIRGEO.get(k);
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
@@ -3321,11 +3333,11 @@ function dressMH(model,look,pal,mats){
   const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
   const skin=std({map:skinPhoto(look),normalMap:T.n,normalScale:new THREE.Vector2(.7,.7),color:new THREE.Color(.93,.92,.92),roughness:.52});
   tintMaterial(skin,2,pal,mats);
-  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.55,.45,.3,.45,.3][look.h]||0},uBeardAmt:{value:[.42,.3,0,.3,.25][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()},uCov:{value:0}};
+  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.55,.45,.3,.45,.3][look.h]||0},uBeardAmt:{value:[.42,.3,0,.3,.25][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()},uCov:{value:0},uHH:{value:new THREE.Vector4(-1,-1,-1,-1)}};
   const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
     // skin under a draped garment is left out (aCov: a bit per garment on the body's vertices, uCov: the garments this fighter wears)
-    sh.vertexShader='attribute float aCov;flat varying float vCov;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCov=aCov;');
-    sh.fragmentShader='flat varying float vCov;uniform float uCov;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if((int(vCov+.5)&int(uCov+.5))!=0)discard;');
+    sh.vertexShader='attribute float aCov;flat varying float vCov;uniform vec4 uHH;varying float vHd;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCov=aCov;vHd=uHH.x<0.?0.:dot(vec4(equal(skinIndex,vec4(uHH.x)))+vec4(equal(skinIndex,vec4(uHH.y)))+vec4(equal(skinIndex,vec4(uHH.z)))+vec4(equal(skinIndex,vec4(uHH.w))),skinWeight);');
+    sh.fragmentShader='flat varying float vCov;uniform float uCov;varying float vHd;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if((int(vCov+.5)&int(uCov+.5))!=0)discard;\n if(vHd>.5)discard;');   /* your own head in first person: not drawn, but the shadow pass (its own depth material) still has it */
     sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol,uEyeB;uniform float uHairAmt,uBeardAmt,uMark;\n'+sh.fragmentShader.replace('float bld=0.;',`
       { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
         float g1=fract(sin(dot(floor(vMapUv*3072.),vec2(12.9898,78.233)))*43758.5453),g2=fract(sin(dot(floor(vMapUv*1400.),vec2(39.346,11.135)))*24634.63);
@@ -3550,7 +3562,7 @@ function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3
   {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0],4,0);put(r0[(k+1)%K],(k+1)%K,0);put(r0[k],k,0);}}   // the shoulder of the blade under the guard
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);return toCreasedNormals(g,.6);}   // (Build 128: smooth across each face, a crease only at the bevels and fuller edges; flat facets banded like a rail)
-const bladeMat=new THREE.MeshPhysicalMaterial({color:0x96938e,metalness:.92,roughness:.24,envMapIntensity:1.2,vertexColors:true,clearcoat:.45,clearcoatRoughness:.14});   // (a polished skin over the brushed steel: crisp highlights)steelDetail(bladeMat,'blade');
+const bladeMat=new THREE.MeshPhysicalMaterial({color:0xa8a6a2,metalness:.96,roughness:.17,envMapIntensity:1.35,vertexColors:true});   /* (Build 129: no clearcoat, it laid a milky plastic sheen over the steel) */   // (a polished skin over the brushed steel: crisp highlights)steelDetail(bladeMat,'blade');
 const gripMat=std({color:0x9a7050,roughness:.72});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1,3);x.anisotropy=MAXANI;}Object.assign(gripMat,{map:ld,normalMap:ln});gripMat.normalScale.set(.6,.6);}
 // a grip bound in leather over cord: the wrap's ridges spiral down it, waisted or swelling along its length
 function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Math.max(8,Math.round(len*260)),true),p=g.attributes.position;
@@ -3564,10 +3576,10 @@ function guardGeo(S,H,D,bend=0){
   const parts=[],bw=Math.max(H*1.3,.022),blk=new THREE.BoxGeometry(bw,H,D*.95,1,1,1);
   {const p=blk.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);p.setX(i,p.getX(i)*(y<0?.82:1));}}   // narrower on the blade side
   parts.push(blk.toNonIndexed());
-  const NR=18,NS=8,r0=Math.min(H,D)*.44;
+  const NR=18,NS=8,r0=Math.min(H,D)*.56;
   for(const sd of [-1,1]){const pos=[],idx=[];const L=S/2-bw/2;
     for(let i=0;i<=NR;i++){const t=i/NR,x=sd*(bw/2-.002+t*(L+.002)),f=Math.abs(x)/(S/2);
-      const r=r0*(t<.75?1-.32*t/.75:.68+.5*Math.sin((t-.75)/.25*Math.PI*.5))*(t>.97?Math.sqrt(Math.max(0,(1-t)/.03))*.9+.1:1),yo=bend*f*f;
+      const r=r0*(t<.75?1-.2*t/.75:.8+.4*Math.sin((t-.75)/.25*Math.PI*.5))*(t>.97?Math.sqrt(Math.max(0,(1-t)/.03))*.9+.1:1),yo=bend*f*f;
       for(let k=0;k<NS;k++){const a=(k+.5)/NS*Math.PI*2;pos.push(x,yo+Math.cos(a)*r*(H/Math.min(H,D)),Math.sin(a)*r*(D/Math.min(H,D))*.9);}}
     for(let i=0;i<NR;i++)for(let k=0;k<NS;k++){const a=i*NS+k,b2=i*NS+(k+1)%NS,c=a+NS,d=b2+NS;if(sd>0)idx.push(a,c,b2,b2,c,d);else idx.push(a,b2,c,b2,d,c);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();parts.push(g.toNonIndexed());}
@@ -3615,22 +3627,36 @@ function makeAxe(st=0){
   else{sh.moveTo(-.026,.97);sh.lineTo(.03,.968);sh.quadraticCurveTo(.05,.958,.07,.964);sh.quadraticCurveTo(.12,.985,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.76,.085,.86);sh.quadraticCurveTo(.065,.905,.03,.902);sh.lineTo(-.026,.9);sh.closePath();}
   const hg=axeLoft(sh);
   edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
-  const eye=edgeShade(lathe([[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042]].reverse(),20),()=>.9);   // a socket with flared lugs above and below
-  const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.995],[0,.995]].reverse(),14);
+  const eye=edgeShade(lathe([[0,-.042],[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042],[.012,.044],[0,.044]].reverse(),20),()=>.9);   // closed over the haft's end (open, it looked like a hollow tube from above)   // a socket with flared lugs above and below
+  const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.975],[0,.975]].reverse(),14);
   return wpnGroup([[haft,woodMat,0,0,0],[hg,headMat,0,0,0],[eye,headMat,0,.935,0],[gripGeo(.24,.0195,.03),gripMat,0,-.2,0],[bandGeo(.021,.01),steelDark,0,-.075,0]]);
 }
 function makeMace(st=0){
-  // a flanged mace: seven pointed steel flanges round a turned core, a knob on top, a leather grip and a disc guard
-  const core=lathe([[.0,.0],[.02,.0],[.026,.03],[.028,.11],[.022,.15],[.0,.16]].reverse(),16);
-  const fl=new THREE.Shape();fl.moveTo(0,0);fl.lineTo(.03,.025);fl.quadraticCurveTo(.05,.07,.034,.13);fl.lineTo(0,.155);fl.closePath();
-  const fg=new THREE.ExtrudeGeometry(fl,{depth:.007,bevelEnabled:true,bevelThickness:.0015,bevelSize:.0015,bevelSegments:1,curveSegments:6});fg.translate(.018,0,-.0035);
-  edgeShade(fg,(x)=>x>.04?1.35:x>.032?1.1:.9);
-  const shaft=lathe([[0,-.23],[.016,-.23],[.015,.3],[.017,.6],[.0,.6]].reverse(),12);
-  const parts=[[shaft,steelDark,0,0,0],[gripGeo(.22,.019,.04),gripMat,0,-.1,0],[bandGeo(.021,.01),steelDark,0,.012,0],[core,steelDark,0,.58,0],[lathe([[0,-.004],[.012,-.004],[.019,.006],[.012,.02],[0,.026]].reverse(),14),steelDark,0,.74,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
-  if(st===1){for(let i=0;i<6;i++){const a=i/6*Math.PI*2;parts.push([new THREE.SphereGeometry(.026,12,8),headMat,Math.cos(a)*.03,.66,Math.sin(a)*.03]);parts.push([new THREE.SphereGeometry(.02,10,7),headMat,Math.cos(a+.5)*.026,.61,Math.sin(a+.5)*.026]);}}   // knobbed
-  else if(st===2){for(let i=0;i<8;i++){const a=i/8*Math.PI*2,g=new THREE.ConeGeometry(.009,.05,6);g.translate(0,.025,0);g.rotateZ(-Math.PI/2);parts.push([g,headMat,Math.cos(a)*.026,.64+(i%2)*.04,Math.sin(a)*.026,0,-a,0]);}
-    const t=new THREE.ConeGeometry(.009,.05,6);t.translate(0,.025,0);parts.push([t,headMat,0,.74,0]);}   // spiked
-  else for(let i=0;i<7;i++){const a=i/7*Math.PI*2;parts.push([fg,headMat,0,.585,0,0,-a,0]);}
+  // (Build 129) three period heads, all of forged steel with their edges ground bright (every part carries vertex colours: headMat
+  // multiplies by them, and parts without them drew black). 0 a Gothic flanged mace: seven thin flanges with an ogee profile round a socket,
+  // pierced finial; 1 a ribbed bulb (a 12th-century knobbed mace): a pear-shaped head with six raised ribs swelling into blunt knobs; 2 a
+  // morning star: a round head set with short four-sided spikes on a mesh of points spread evenly over it
+  const shaft=lathe([[0,-.23],[.016,-.23],[.015,.3],[.0165,.56],[.0,.56]].reverse(),12);
+  const parts=[[shaft,steelDark,0,0,0],[gripGeo(.22,.019,.04),gripMat,0,-.1,0],[bandGeo(.021,.01),steelDark,0,.012,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
+  const shade=g=>edgeShade(g,(x,y,z)=>{const r=Math.hypot(x,z);return r>.04?1.35:r>.03?1.12:.9;});
+  if(st===1){
+    const g=lathe([[0,.0],[.018,.0],[.021,.02],[.027,.05],[.031,.08],[.029,.11],[.021,.135],[.01,.15],[0,.155]].reverse(),72);const p=g.attributes.position;
+    for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,z);if(r<1e-5)continue;const th=Math.atan2(z,x),u=clamp((y-.025)/.12,0,1);
+      const c6=Math.abs(Math.cos(3*th)),rib=Math.pow(c6,5)*Math.sin(Math.PI*u)*.009,knob=Math.pow(c6,9)*Math.exp(-Math.pow((u-.55)/.13,2))*.014;const k=(r+rib+knob)/r;p.setX(i,x*k);p.setZ(i,z*k);}
+    g.computeVertexNormals();parts.push([shade(g),headMat,0,.55,0]);
+    parts.push([shade(lathe([[0,-.003],[.008,-.003],[.009,.006],[.004,.016],[0,.018]].reverse(),16)),headMat,0,.71,0]);}
+  else if(st===2){
+    const ball=lathe(Array.from({length:17},(_,i)=>{const a=-Math.PI/2+i/16*Math.PI;return [Math.max(.0005,Math.cos(a)*.042),Math.sin(a)*.042];}).reverse(),32);parts.push([shade(ball),headMat,0,.62,0]);
+    const N=22,sp=[];for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*2.39996;if(y<-.72)continue;sp.push([Math.cos(a)*r,y,Math.sin(a)*r]);}
+    for(const [x,y,z] of sp){const c=new THREE.ConeGeometry(.0085,.03,4,1);c.translate(0,.015+.038,0);const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(x,y,z));c.applyQuaternion(q);parts.push([shade(c),headMat,0,.62,0]);}
+    parts.push([shade(lathe([[.017,-.03],[.024,-.02],[.022,.0],[.0,.0]].reverse(),16)),headMat,0,.585,0]);}
+  else{
+    const fl=new THREE.Shape();fl.moveTo(0,0);fl.lineTo(.006,0);fl.bezierCurveTo(.02,.01,.03,.045,.026,.08);fl.bezierCurveTo(.023,.105,.014,.128,.004,.145);fl.lineTo(0,.145);fl.closePath();
+    const fg=new THREE.ExtrudeGeometry(fl,{depth:.0045,bevelEnabled:true,bevelThickness:.0012,bevelSize:.0012,bevelSegments:2,curveSegments:14});fg.translate(.016,0,-.00225);fg.computeVertexNormals();
+    edgeShade(fg,(x)=>x>.036?1.4:x>.03?1.15:.88);
+    for(let i=0;i<7;i++){const a=i/7*Math.PI*2;parts.push([fg,headMat,0,.565,0,0,-a,0]);}
+    parts.push([shade(lathe([[.016,-.004],[.019,.0],[.018,.15],[.0,.15]].reverse(),16)),headMat,0,.565,0]);
+    parts.push([shade(lathe([[0,-.002],[.012,-.002],[.014,.008],[.008,.02],[.005,.03],[0,.032]].reverse(),16)),headMat,0,.715,0]);}
   return wpnGroup(parts);
 }
 function makeSpear(st=0){const sock=lathe([[.0175,-.05],[.019,-.04],[.017,.02],[.012,.07],[.008,.09]].reverse(),14);
@@ -4004,16 +4030,34 @@ function riseTwistQ(R,P,pair,group,lx,lz,rate){const a=P[pair[0]],b=P[pair[1]];i
   ang=Math.sign(ang)*Math.min(Math.abs(ang),rate*(Math.abs(ang)>1.6?3:1));
   _twQ.setFromAxisAngle(_twA,ang);_twC.addVectors(a,b).multiplyScalar(.5);
   for(const n of group){const p=P[n],q=R.Q[n];if(!p)continue;const ox=p.x,oy=p.y,oz=p.z;_twL.subVectors(p,_twC).applyQuaternion(_twQ).add(_twC);p.copy(_twL);if(q){q.x+=p.x-ox;q.y+=p.y-oy;q.z+=p.z-oz;}}}
+// (Build 129) your own head in first person: hidden from the camera but not from the sun, so your shadow keeps its head. The body's head
+// region is discarded in its colour pass only (uHH, the head bones' indices), and everything worn on the head (hair, beard, brows, lashes,
+// eyes, helmet) goes to layer 1, which only the shadow camera sees. It used to shrink the Head bone, so the shadow had no head either and
+// a knocked-down first-person fighter lay there headless
+const _fpHB=['Head','HeadTop_End','LeftEye','RightEye'];
+function fpHead(f,on){const m=f.model;if(!m)return;let body=m.userData._fpBody;if(!body||!body.parent){body=null;m.traverse(o=>{if(!body&&o.isSkinnedMesh&&/MH_Body/.test(o.name))body=o;});m.userData._fpBody=body;}
+  if(f.bones&&f.bones.Head&&f.bones.Head.scale.x<.5&&!f.limbs.head.sev)f.bones.Head.scale.setScalar(1);
+  if(!body)return;const HU=body.material&&body.material.userData.HU;
+  if(HU&&HU.uHH){if(on){const bn=body.skeleton.bones,ix=_fpHB.map(n=>bn.findIndex(b=>b.name.replace(/^.*:/,'').replace(/^mixamorig/,'')===n));const a=ix.filter(i=>i>=0);while(a.length<4)a.push(a[0]??-1);HU.uHH.value.set(a[0],a[1],a[2],a[3]);}else HU.uHH.value.set(-1,-1,-1,-1);}
+  if(!on&&m.userData._fpOn===false)return;m.userData._fpOn=on;   // (on: every frame, as hair and helmets arrive late)
+  m.traverse(o=>{if(!o.isMesh||o===body)return;let hd=o.userData.onHead;
+    if(hd==null){hd=false;if(/MH_Part_(hair|beard|brow|lash)|MH_Eyes|Eye/.test(o.name)||o.userData.hair)hd=true;
+      else if(o.isSkinnedMesh&&o.geometry.attributes.skinIndex){const si=o.geometry.attributes.skinIndex,sw=o.geometry.attributes.skinWeight,bn=o.skeleton.bones;let n=0,h=0;const st=Math.max(1,Math.floor(si.count/200));
+        for(let i=0;i<si.count;i+=st){n++;let best=0,bi=0;for(let k=0;k<4;k++){const w=sw.getComponent(i,k);if(w>best){best=w;bi=si.getComponent(i,k);}}const nm=bn[bi]&&bn[bi].name.replace(/^.*:/,'').replace(/^mixamorig/,'');if(_fpHB.includes(nm))h++;}hd=n>0&&h/n>.6;}
+      else{for(let p=o.parent;p;p=p.parent)if(p.isBone&&/Head$/.test(p.name)){hd=true;break;}}
+      o.userData.onHead=hd;}
+    if(hd){if(on)o.layers.set(1);else o.layers.set(0);}});}
 // (Build 128) the trunk can't wring: the shoulder line may turn against the hip line about the spine by at most lim (a living back about
 // 45°, a dead one a little more); past it the chest and the pelvis are turned back toward each other, each by half, positions and their
 // previous positions together so it adds no spin. Bodies on the ground were left wrung round half a turn, chest up and hips down.
 const TW_UP=['Spine2','Neck','Head','HeadTop_End','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand','LeftHandMiddle1','RightHandMiddle1'],
   TW_LO=['Hips','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot','LeftToeBase','RightToeBase'],_tsA=V(),_tsS=V(),_tsH=V(),_tsC=V(),_tsQ=new THREE.Quaternion(),_tsV=V();
-function spineTwistLim(R,lim,k){const P=R.P;if(!P.Hips||!P.Neck||!P.Spine1||!P.LeftArm||!P.RightArm||!P.LeftUpLeg||!P.RightUpLeg)return 0;
+function spineTwistLim(R,lim,k,soft){const P=R.P;if(!P.Hips||!P.Neck||!P.Spine1||!P.LeftArm||!P.RightArm||!P.LeftUpLeg||!P.RightUpLeg)return 0;
   _tsA.subVectors(P.Neck,P.Hips);const al=_tsA.length();if(al<1e-4)return 0;_tsA.multiplyScalar(1/al);
   _tsS.subVectors(P.LeftArm,P.RightArm);_tsS.addScaledVector(_tsA,-_tsS.dot(_tsA));_tsH.subVectors(P.LeftUpLeg,P.RightUpLeg);_tsH.addScaledVector(_tsA,-_tsH.dot(_tsA));
   if(_tsS.lengthSq()<1e-6||_tsH.lengthSq()<1e-6)return 0;_tsS.normalize();_tsH.normalize();
-  const ang=Math.atan2(_tsC.crossVectors(_tsS,_tsH).dot(_tsA),_tsS.dot(_tsH));if(Math.abs(ang)<=lim)return ang;const e=Math.sign(ang)*(Math.abs(ang)-lim)*.5*k;
+  const ang=Math.atan2(_tsC.crossVectors(_tsS,_tsH).dot(_tsA),_tsS.dot(_tsH));if(Math.abs(ang)<=lim)return ang;
+  const ex=Math.abs(ang)-lim,kk=soft?(ex>soft?1:k*(.15+.85*Math.pow(ex/soft,2))):k,e=Math.sign(ang)*(soft&&ex>soft?ex-soft*.8:ex)*.5*kk;   /* soft (the living, Build 129): free to lim, then a spring that stiffens over `soft` radians, hard past it */
   for(const [grp,a] of [[TW_UP,e],[TW_LO,-e]]){_tsQ.setFromAxisAngle(_tsA,a);for(const n of grp){const p=P[n];if(!p)continue;const q=R.Q[n];
     _tsV.subVectors(p,P.Spine1).applyQuaternion(_tsQ).add(P.Spine1);if(q){q.x+=_tsV.x-p.x;q.y+=_tsV.y-p.y;q.z+=_tsV.z-p.z;}p.copy(_tsV);}}
   return ang;}
@@ -4043,7 +4087,7 @@ class Ragdoll{
     this.full={};for(const [a,m,b] of [['LeftArm','LeftForeArm','LeftHand'],['RightArm','RightForeArm','RightHand'],['LeftUpLeg','LeftLeg','LeftFoot'],['RightUpLeg','RightLeg','RightFoot']])if(this.P[a]&&this.P[m]&&this.P[b])this.full[b]=this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]);
   }
   limits(it){const P=this.P,hard=this.lim>=2;if(!P.Hips||!P.Spine1||!P.Neck)return;
-    spineTwistLim(this,hard?.95:.75,.6);
+    if(hard)spineTwistLim(this,.95,.6);else spineTwistLim(this,.55,.5,.5);   // the living: free to 31°, springier to 60°, a stop past it
     // the chest's frame and the pelvis's frame (forward = left × up)
     if(P.LeftArm&&P.RightArm){_jU.subVectors(P.Neck,P.Spine1).normalize();_jL.subVectors(P.LeftArm,P.RightArm);_jL.addScaledVector(_jU,-_jL.dot(_jU)).normalize();_jF.crossVectors(_jL,_jU);
       jointCone(this,'Neck','HeadTop_End',['Head','HeadTop_End'],_jU2.copy(_jU).addScaledVector(_jF,.12).normalize(),.95,hard);   // the head on the neck
@@ -4410,7 +4454,7 @@ class Sword{
     {const ex=rollLimit(this,_wl2);if(ex){const wr=this.w.dot(this.axis);if(wr*ex>0)this.w.addScaledVector(this.axis,-wr);this.w.addScaledVector(this.axis,-Math.sign(ex)*Math.min(Math.abs(ex)*30,8));}
      const wr2=this.w.dot(this.axis);if(Math.abs(wr2)>7)this.w.addScaledVector(this.axis,(Math.sign(wr2)*7-wr2));}   // forearm roll speed limit
     const rwP=f&&f.hrW?f.hrW():0,rsP=rwP>.5?-1:1;
-    if(f&&f.foreF&&this.def.kind!=='fist'&&(rwP<.05||rwP>.95)){const F=f.foreF,c=rsP*this.axis.dot(F);
+    if(f&&f.foreF&&this.def.kind!=='fist'&&this.def.kind!=='spear'&&(rwP<.05||rwP>.95)){const F=f.foreF,c=rsP*this.axis.dot(F);
       if(c<WR_MAX||c>WR_MIN){_wl1.crossVectors(this.axis,F).multiplyScalar(rsP);const sn=_wl1.length();if(sn>1e-5){_wl1.multiplyScalar(1/sn);const sg=c<WR_MAX?1:-1;
         const wn=this.w.dot(_wl1)*sg;if(wn<0)this.w.addScaledVector(_wl1,-wn*sg);   // the wrist stops it going further
         this.w.addScaledVector(_wl1,sg*Math.min((c<WR_MAX?WR_MAX-c:c-WR_MIN)*40,6));}}}
@@ -4488,7 +4532,7 @@ class Sword{
     {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.03)this.T.y=gy+.03;}
     collide(this.T,.02,true);
     this.constrain(h);
-    const of=this.owner,rw0=of&&of.hrW?of.hrW():0,rs=rw0>.5?-1:1;if(of&&of.foreF&&this.def.kind!=='fist'&&(rw0<.05||rw0>.95)){const F=of.foreF,c=rs*this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;   // (while the grip is being turned over the limit waits)
+    const of=this.owner,rw0=of&&of.hrW?of.hrW():0,rs=rw0>.5?-1:1;if(of&&of.foreF&&this.def.kind!=='fist'&&this.def.kind!=='spear'&&(rw0<.05||rw0>.95)){const F=of.foreF,c=rs*this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;   // (while the grip is being turned over the limit waits)
       if(tc!==null){_wl1.copy(this.axis).multiplyScalar(rs).addScaledVector(F,-c);if(_wl1.lengthSq()<1e-8)_wl1.copy(this.edge);_wl1.normalize();
         _wl2.copy(F).multiplyScalar(tc).addScaledVector(_wl1,Math.sqrt(1-tc*tc)).multiplyScalar(rs);_wl3.copy(this.H).addScaledVector(_wl2,this.len).sub(this.T);
         const dl=_wl3.length();if(dl>1e-7){_wl3.multiplyScalar(1/dl);_wl1.subVectors(this.T,this.Tp);const vn=_wl1.dot(_wl3);if(vn<0)_wl1.addScaledVector(_wl3,-vn);   // momentum into the limit is absorbed by the wrist
@@ -5226,7 +5270,7 @@ class Fighter{
       o.vel.addScaledVector(_f,Math.min(4.2,1.5+run*.55+into*.4));o.shove(_f,Math.min(3,1.1*pw));o.stagger=Math.max(o.stagger,.55+.1*pw);o.useStamina(16+6*pw);if(o.sword)swordShove(o.sword,_f,2.4*pw);
       if(o.kickT>=0)o.kickT=-1;sfx('kick',o.chest,Math.min(1.2,.7+.2*pw));o.addFlinch(_f,.28+.06*pw);
       const topple=(o.stamina<12?.9:0)+lean*3+(busy?.4:0)+(facing<.3?(.3-facing)*.7:0)+Math.max(0,run-2)*.25+(o.crouch?-.2:0)+(Math.max(o.limbF('legL'),o.limbF('legR'))>.4?.2:0);
-      if(Math.random()<topple){o.knockdown(rand(1.1,1.9),_v.copy(_f).multiplyScalar(1.6+run*.4).setY(.4),o.chest);tell(this,'Knocked down','gold');}
+      if(topple>0)o.shove(_f,Math.min(4,topple*2.2));   /* (Build 129) what used to be the chance of toppling now pushes the weight further over: the balance decides */
       if(this.isPlayer){note('Kicked','sm');shake(.25);}if(o.isPlayer){hudHurt(10);shake(.7);}
       if(!o.isPlayer){o.ai.phase='guard';o.ai.block=0;}
       break;
@@ -5497,7 +5541,7 @@ class Fighter{
     B.Hips.position.y-=G.drop*100*GW;B.Hips.position.x+=G.sway*100*GW;this.root.updateMatrixWorld(true);}
   // ---------------- per-frame animation
   animate(dt){
-    if(this.ragdoll){this.ragdoll.apply();this.updateCaps();if(PW)this.physTargets(dt,null);if(this.sword&&!this.sword.free){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}if(this.sword)this.sword.sync();return;}
+    if(this.ragdoll){if(this.isPlayer)fpHead(this,camMode==='fp'&&this.alive);this.ragdoll.apply();this.updateCaps();if(PW)this.physTargets(dt,null);if(this.sword&&!this.sword.free){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}if(this.sword)this.sword.sync();return;}
     const B=this.bones;
     this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;
     const sp=Math.hypot(this.vel.x,this.vel.z);this.fwd(_f);const fc=this.vel.x*_f.x+this.vel.z*_f.z;const back=sp>.3&&fc<-.35*sp;
@@ -5515,13 +5559,13 @@ class Fighter{
     // the legs settle into a fencer's guard (Quaternius' sword idle, CC0) when armed and standing, a lower guarded gait when closing in;
     // only leg bones, so the chest, arms and camera stay exactly where the sword handling expects them
     if(GUARD.guard&&this.mainArm&&this.alive){const fightW=(this.stanceAmt||0)/.4;
-      const gw=fightW*wi*.45,cw=fightW*ww*.3;
+      const gw=fightW*wi*.45,cw=fightW*ww*.3*clamp(1-(sp-.6)/.6,0,1);
       if(gw>.01||cw>.01){this._gT=((this._gT||Math.random()*5)+dt);
         for(const [clip,w,tm] of [[GUARD.guard,gw,this._gT%GUARD.guard.d],[GUARD.crouchwalk,cw,(A.walk.time/A.walk.getClip().duration)*GUARD.crouchwalk.d]]){if(!clip||w<=.01)continue;
           for(const t of clip.tracks){const bn=B[t.bone];if(!bn)continue;const v=t.ip.evaluate(tm);_qq.set(v[0],v[1],v[2],v[3]);bn.quaternion.slerp(_qq,w);}}}}
     if(this.pos.y<.02&&sp>.6&&this.slideT<=0&&(this.gaitW||0)<.5){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
-    if(this.isPlayer&&!this.limbs.head.sev)B.Head.scale.setScalar(camMode==='fp'?.001:1);
+    if(this.isPlayer&&!this.limbs.head.sev)fpHead(this,camMode==='fp');
     let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1)*(1-(this.sideW||0));}
     this.hipOff=lerp(this.hipOff,off,1-Math.exp(-8*dt));
     _qr.setFromAxisAngle(Y_AXIS,this.hipOff);B.Hips.quaternion.premultiply(_qr);
@@ -5535,7 +5579,7 @@ class Fighter{
     {const threat=this._foeD<6||simTime-(this._hurtAt??-99)<3||(this.isPlayer&&(input.lmb||input.stab))||simTime-(this._aimAt??-99)<1.2||(this.revW||0)>.05||(this.sword&&this.sword.stuck&&!this.sword.stuck.thrown)||(!!this.sword&&(this.commit||this.thrust))||this.throwHold||this.throwT>=0||!!this.grab;
       this.calmW=lerp(this.calmW??0,threat||!this.alive||this.ragdoll?0:1,1-Math.exp(-(threat?7:1.4)*dt));}
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
-    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:.2)*ease:0,1-Math.exp(-6*dt));
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:sp<1.6?.4-.35*(sp-.8)/.8:.05)*ease:0,1-Math.exp(-6*dt));   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
     // a hurt leg hitches the gait: the body drops each time weight goes onto it
     const lgL=this.limbF('legL'),lgR=this.limbF('legR'),lg=Math.max(lgL,lgR);let limp=0;
     if(lg>.2&&Math.hypot(this.vel.x,this.vel.z)>.3&&this.acts){const A=this.acts,ph=A.walk.time/A.walk.getClip().duration;limp=lg*.5*Math.pow(Math.max(0,Math.sin((ph+(lgL>lgR?0:.5))*6.283)),2);}
@@ -5883,7 +5927,7 @@ function gripHand(B,side,grip,E,A,pole,lens,curl,wrap){
       // wrist only bends when the haft would run along the fingers (under 55°) or back past square (over 100°). Before, the fingers were
       // always square to the haft, so the wrist bent by whatever angle the blade made with the forearm: the hand drooped like a limp wrist
       _ge.subVectors(_gw,_gx);if(_ge.lengthSq()<1e-6)_ge.copy(E);_ge.normalize();_gz.copy(A).normalize();
-      {const c=_ge.dot(_gz),cc=clamp(c,-.17,.57);if(cc!==c){_gy.copy(_ge).addScaledVector(_gz,-c);if(_gy.lengthSq()<1e-6)_gy.copy(E).addScaledVector(_gz,-E.dot(_gz));_gy.normalize();_ge.copy(_gy).multiplyScalar(Math.sqrt(1-cc*cc)).addScaledVector(_gz,cc);}}
+      {const c=_ge.dot(_gz),cc=clamp(c,-.42,.64);if(cc!==c){_gy.copy(_ge).addScaledVector(_gz,-c);if(_gy.lengthSq()<1e-6)_gy.copy(E).addScaledVector(_gz,-E.dot(_gz));_gy.normalize();_ge.copy(_gy).multiplyScalar(Math.sqrt(1-cc*cc)).addScaledVector(_gz,cc);}}
       _gz.addScaledVector(_ge,-_gz.dot(_ge)).normalize();   // the thumb along the haft, square to the fingers
       // the haft lies across the palm inside the curled fingers: the wrist sits back along the hand and off to the back of it
       _gx.copy(_ge).multiplyScalar(side==='Right'?-1:1);_gy.crossVectors(_gz,_gx);
@@ -6321,7 +6365,14 @@ function resolveHit(A,B,cap,t,P,pv){
     else B.bodyHit('Spine1',dir,f0*3);
     if(B.sword&&!phys){B.sword.Hv.addScaledVector(dir,speed*.18);}}
     const heavy=W.weight*speed*(mode==='blunt'?1.5:1);
-    if(!B.ragdoll&&(heavy>16&&(cap.zone==='head'||B.stamina<15)&&Math.random()<.6||(cap.zone==='legL'||cap.zone==='legR')&&heavy>13&&Math.random()<.35||W.kind==='fist'&&cap.zone==='head'&&speed>5&&(B.stamina<30||Math.random()<.12))){B.knockdown(rand(1.3,2.3),imp,P);tell(A,'Knocked down','gold');}
+    // (Build 129) a blow doesn't roll dice for a knockdown any more: it drives the weight off the feet (shove into the balance), harder the
+    // heavier the blow and the wearier the man, and whether he goes down is the balance's own business: he leans, steps, catches himself
+    // on a knee or falls (see `bal` in step). A leg blow also takes the leg's strength for a moment, so the same lean is harder to hold
+    if(!B.ragdoll){const tir=1.25-.55*clamp(B.stamina/100,0,1);_v.copy(imp).setY(0);if(_v.lengthSq()<1e-6)_v.copy(dir).setY(0);
+      const hv=cap.zone==='head'?(heavy-9)*.13:(cap.zone==='legL'||cap.zone==='legR')?(heavy-8)*.1:(heavy-12)*.07;
+      if(hv>0)B.shove(_v,Math.min(4.5,hv*tir));
+      if((cap.zone==='legL'||cap.zone==='legR')&&heavy>10&&B.pbd)B.pbd.buckle=Math.max(B.pbd.buckle||0,Math.min(1,(heavy-10)*.05));
+      if(W.kind==='fist'&&cap.zone==='head'&&speed>5&&B.stamina<25&&speed*(1.4-B.stamina/100)>7.5){B.knockdown(rand(1.3,2.3),imp,P);tell(A,'Knocked out','gold');}}
     if(!B.isPlayer)B.ai.phase='guard';
   }
   if(W.id==='bottle'&&!glance&&speed>3.5)breakBottle(A,P);
@@ -7155,15 +7206,20 @@ function frame(now){
   else if(!player){attractT+=dt*.09;camera.position.set(Math.cos(attractT)*13,5.5,Math.sin(attractT)*13);camera.lookAt(0,1.2,0);camYaw=Math.atan2(-camera.position.x,-camera.position.z);}
   else if(player){
     shakeAmt*=Math.exp(-7*dt);kickStep(Math.min(dt,.05));
-    if(!player.ragdoll&&camMode==='fp'){player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
+    if(!player.ragdoll&&camMode==='fp'){RDCAM.on=false;player.bones.Head.getWorldPosition(_t1);player.fwd(_f);_t1.addScaledVector(_f,.11);camY=lerp(camY,_t1.y+.05,1-Math.exp(-14*dt));camera.position.set(_t1.x,camY,_t1.z);
       camera.rotation.set(player.pitch+KICK.p+(Math.random()-.5)*shakeAmt*.025,player.yaw+Math.PI+KICK.y+(Math.random()-.5)*shakeAmt*.025,KICK.r+(Math.random()-.5)*shakeAmt*.015);}
-    else if(!player.ragdoll){ // over-the-shoulder third person
+    else if(!player.ragdoll){RDCAM.on=false; // over-the-shoulder third person
       const cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);_f.set(Math.sin(player.yaw)*cp,sp,Math.cos(player.yaw)*cp);player.right(_r);
       _t2.set(player.pos.x,player.pos.y+1.7*FSCALE-player.crouchAmt*.4,player.pos.z);camY=lerp(camY,_t2.y,1-Math.exp(-12*dt));if(!Number.isFinite(camY))camY=_t2.y;_t2.y=camY;
       _t3.copy(_t2).addScaledVector(_f,-CAM_TP.dist).addScaledVector(_r,CAM_TP.side);_t3.y+=CAM_TP.up;
       for(let i=1;i<=14;i++){_t1.lerpVectors(_t2,_t3,i/14);const ox=_t1.x,oz=_t1.z;collide(_t1,.22,true);if(Math.abs(_t1.x-ox)+Math.abs(_t1.z-oz)>1e-4||_t1.y<.2){_t3.lerpVectors(_t2,_t3,Math.max(0,(i-1.5)/14));break;}}
       camClear(_t2,_t3,dt);camera.position.copy(_t3);camera.rotation.set(player.pitch+CAM_TP.tilt+KICK.p*.7+(Math.random()-.5)*shakeAmt*.02,player.yaw+Math.PI+KICK.y*.7+(Math.random()-.5)*shakeAmt*.02,KICK.r*.7);}
-    else{const hp=player.ragdoll.P.Hips||player.pos;const t=now*.00025;const rr=player.alive?2.4:3.2;_t1.set(hp.x+Math.cos(t)*rr,hp.y+(player.alive?1.6:2.2),hp.z+Math.sin(t)*rr);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
+    else if(camMode==='fp'&&player.alive&&player.bones.Head){   // (Build 129) knocked down in first person: you stay in your own head and see what it sees, as in Half Sword
+      const H=player.bones.Head;H.getWorldPosition(_t1);H.getWorldQuaternion(_rq1);_t2.set(0,0,1).applyQuaternion(_rq1);_t3.set(0,1,0).applyQuaternion(_rq1);
+      _t1.addScaledVector(_t2,.1).addScaledVector(_t3,.06);camera.position.lerp(_t1,1-Math.exp(-25*dt));_m4c.lookAt(camera.position,_rq1.w!==undefined?_t1.clone().add(_t2):_t1,_t3);_rq2.setFromRotationMatrix(_m4c);camera.quaternion.slerp(_rq2,1-Math.exp(-10*dt));}
+    else{   // knocked down or slain in third person: the camera stays where it was, behind and above, and only follows the body (it used to circle it, which read as the body spinning)
+      const hp=player.ragdoll.P.Hips||player.pos;if(!RDCAM.on){RDCAM.on=true;RDCAM.off.subVectors(camera.position,hp);RDCAM.off.y=0;if(RDCAM.off.lengthSq()<.01)RDCAM.off.set(Math.sin(player.yaw),0,Math.cos(player.yaw)).multiplyScalar(-1);RDCAM.off.setLength(player.alive?2.4:3.0);}
+      _t1.copy(hp).add(RDCAM.off);_t1.y=hp.y+(player.alive?1.5:2.0);collide(_t1,.3);_t2.set(hp.x,hp.y+.4,hp.z);camClear(_t2,_t1,dt);camera.position.lerp(_t1,1-Math.exp(-3*dt));camera.lookAt(hp.x,hp.y+.3,hp.z);}
     camYaw=player.yaw;
     const pv=Math.hypot(player.vel.x,player.vel.z);const wantFov=(camMode==="fp"?72:CAM_TP.fov)+(pv>4.4?5:0)+(player.slideT>0?5:0);
     if(Math.abs(camera.fov-wantFov)>.05){camera.fov=lerp(camera.fov,wantFov,1-Math.exp(-6*dt));camera.updateProjectionMatrix();}
@@ -7942,7 +7998,7 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
-window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
+Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};

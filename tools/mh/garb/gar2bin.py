@@ -53,6 +53,12 @@ def shoulder_hug(b,V,F,cap=.02):
     w=np.clip((V[:,1]-1.36)/.05,0,1)*np.clip((.27-np.abs(V[:,0]))/.04,0,1)
     k=(w>0)&(d>cap)
     V[k]=V[k]+((P[j[k]]+(V[k]-P[j[k]])/d[k,None]*cap)-V[k])*w[k,None]
+    # (Build 129) the upper back too, more loosely: on one build the sim left a flap folded up off the shoulder blades with skin showing under it
+    d,j=cKDTree(P).query(V);cb=.034
+    wb=np.clip((V[:,1]-1.12)/.06,0,1)*np.clip((1.5-V[:,1])/.04,0,1)*np.clip((.25-np.abs(V[:,0]))/.05,0,1)*np.clip((.03-V[:,2])/.04,0,1)
+    k=(wb>0)&(d>cb)
+    V[k]=V[k]+((P[j[k]]+(V[k]-P[j[k]])/d[k,None]*cb)-V[k])*wb[k,None]
+    w=np.maximum(w,wb)
     adj=defaultdict(set)
     for t in F:
         for a,c in ((t[0],t[1]),(t[1],t[2]),(t[2],t[0])):adj[a].add(c);adj[c].add(a)

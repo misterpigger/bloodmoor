@@ -95,13 +95,16 @@ for sd in (1,-1):
     x={'long':h[0]-sd*.035,'short':a[0]+(e[0]-a[0])*.5,'none':a[0]-sd*.04}[sl]
     cut([x,0,0],[sd,0,0],(lambda f:gpos(f.verts[0])[1]>hy+.15) if sl=='none' else (lambda f:True))
 # neck: the head goes, then everything inside an ellipse round the neck above the shoulders, and the hole's edge is laid on the ellipse
-kill=[f for f in bm.faces if np.mean([gpos(v) for v in f.verts],0)[1]>ny+.01 and abs(np.mean([gpos(v) for v in f.verts],0)[0])<.14]
+def _hk(f):
+    c=np.mean([gpos(v) for v in f.verts],0)
+    return (c[1]>ny+.01 and abs(c[0])<.14) or (c[1]>ny-.03 and abs(c[0])<S.get('neck',.085) and c[2]>JP['Neck'][2]+S.get('neckz',.07)*.5)   # the head, and the chin's underside
+kill=[f for f in bm.faces if _hk(f)]
 bmesh.ops.delete(bm,geom=kill,context='FACES')
 nk=S.get('neck',.085);nz=S.get('neckz',.07);ncz=JP['Neck'][2]+S.get('neckdz',.01);ys=JP['LeftShoulder'][1]-.05
 kill=[]
 for f in bm.faces:
     c=np.mean([gpos(v) for v in f.verts],0)
-    if c[1]>ys and (c[0]/nk)**2+((c[2]-ncz)/nz)**2<1:kill.append(f)
+    if c[1]>ys+(.04 if c[2]<ncz else 0) and (c[0]/nk)**2+((c[2]-ncz)/nz)**2<1:kill.append(f)   # (Build 129) not as low at the back: on one build the ellipse cut down the shoulder blades
     elif S.get('vneck') and c[2]>ncz and abs(c[0])<.025*(1+(c[1]-(ny-S['vneck']))/S['vneck']) and c[1]>ny-S['vneck']:kill.append(f)
 bmesh.ops.delete(bm,geom=kill,context='FACES')
 # slits up the front and back of the skirt (as riding and fighting cotes had), so a striding leg parts the cloth instead of going through it
@@ -111,6 +114,17 @@ if S.get('slit'):
         c=np.mean([gpos(v) for v in f.verts],0)
         if c[1]<st_ and abs(c[0]-JP['Hips'][0])<S.get('slitw',.012)*(1+(st_-c[1])*1.5):kill.append(f)
     bmesh.ops.delete(bm,geom=kill,context='FACES')
+# tidy the openings: shave off triangles hanging by two open edges (the cut leaves slivers), then lay the neck's edge on its ellipse
+for _ in range(4):
+    ears=[f for f in bm.faces if sum(1 for e in f.edges if e.is_boundary)>=2]
+    if not ears:break
+    bmesh.ops.delete(bm,geom=ears,context='FACES')
+bm.verts.ensure_lookup_table()
+for v in bm.verts:
+    if not v.is_boundary:continue
+    c=gpos(v)
+    if c[1]>ys-.03 and abs(c[0])<nk*1.5 and not (S.get('vneck') and c[2]>ncz and abs(c[0])<.04):
+        ang=math.atan2((c[2]-ncz)/nz,c[0]/nk);q=np.array([nk*math.cos(ang),c[1],ncz+nz*math.sin(ang)]);v.co=toB(q)[0]
 # drop stray bits: keep only the largest connected piece
 bm.verts.ensure_lookup_table();seen=set();parts=[]
 for v in bm.verts:
