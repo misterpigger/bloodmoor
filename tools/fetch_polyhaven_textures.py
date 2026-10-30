@@ -18,7 +18,7 @@ rx=re.compile(os.environ.get('TEXRE','plaster|timber|thatch|roof|cobble|brick|ca
 n=0
 for k,a in sorted(A.items()):
     s=(k+' '+str(a.get('name') or '')+' '+' '.join(a.get('tags') or [])).lower()
-    if not rx.search(s):continue
+    if not rx.search(k+' '):continue
     try:
         f=json.loads(get('https://api.polyhaven.com/files/'+k));d=os.path.join(OUT,k);os.makedirs(d,exist_ok=True)
         for key,nm in [('Diffuse','d'),('nor_gl','n'),('arm','arm')]:

@@ -9,12 +9,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tools/fetch_polyhaven_textures.py /tmp/out
-      - name: Commit to the scratch branch
+      - run: python3 tools/fetch_polyhaven_textures.py /tmp/out/tex
+        env:
+          TEXRE: '^(rough_linen|caban|hessian_230|brown_leather|fabric_leather_02|poly_wool_herringbone|leather_red_02|jersey_melange|curly_teddy_natural) '
+      - name: MakeHuman CC0 skin packs (natural male and female skins, system assets)
+        run: |
+          mkdir -p /tmp/out/mh && cd /tmp/out/mh
+          for p in skins02/skins02_cc0.zip skins01/skins01_cc0.zip makehuman_system_assets/makehuman_system_assets_cc0.zip; do
+            n=$(basename $p); curl -fsSL --retry 3 -o $n https://files.makehumancommunity.org/asset_packs/$p || curl -fsSL --retry 3 -o $n https://files2.makehumancommunity.org/asset_packs/$p || echo "fail $p" >> log.txt
+          done
+          ls -la >> log.txt
+          for z in *.zip; do mkdir -p ${z%.zip} && (cd ${z%.zip} && unzip -q ../$z) && rm $z; done
+          find . -name "*.png" -size +12M -delete
+      - name: Commit to the garb-raw branch
         run: |
           cd /tmp/out
-          git init -q -b tex-raw
+          git init -q -b garb-raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A && git commit -qm "Poly Haven CC0 textures (1k), fetched by workflow"
-          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" tex-raw
+          git add -A && git commit -qm "CC0 skins and fabric scans, fetched by workflow"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" garb-raw
