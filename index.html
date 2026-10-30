@@ -390,7 +390,7 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=126;
+const BUILD=127;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3889,7 +3889,7 @@ const RISE_A=[['Hips',0,0,.55],['Spine1',.17,0,.59],['Spine2',.35,0,.63],['Neck'
   ['LeftLeg',.02,.13,.06],['RightLeg',.02,-.13,.06],['LeftFoot',-.38,.13,.07],['RightFoot',-.38,-.13,.07]];
 const RISE_B=[['Hips',-.06,0,.6],['Spine1',-.01,0,.8],['Spine2',.06,0,.99],['Neck',.11,0,1.17],['Head',.15,0,1.29],['HeadTop_End',.17,0,1.44],
   ['LeftLeg',-.08,.13,.06],['RightLeg',-.08,-.13,.06],['LeftFoot',-.45,.13,.07],['RightFoot',-.45,-.13,.07],['LeftHand',.22,.2,.72],['RightHand',.22,-.2,.72],['LeftForeArm',.06,.24,.82],['RightForeArm',.06,-.24,.82]];
-const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06],Hand:[.38,.56],ForeArm:[.22,.75]};   // the leading leg: knee up, foot flat ahead, the hand on that knee
+const RISE_B_FRONT={Leg:[.38,.5],Foot:[.4,.06],ToeBase:[.55,.03],Hand:[.38,.56],ForeArm:[.22,.75]};   // the leading leg: knee up, foot flat ahead, the hand on that knee
 const RISE_C=[['Hips',0,0,.84],['Spine1',.04,0,.99],['Spine2',.08,0,1.17],['Neck',.1,0,1.37],['Head',.12,0,1.48],['HeadTop_End',.13,0,1.63],
   ['LeftLeg',.12,.12,.47],['RightLeg',.12,-.12,.47],['LeftFoot',-.04,.15,.07],['RightFoot',-.04,-.15,.07],['LeftHand',.34,.04,1.0],['RightHand',.34,-.04,1.0],['LeftForeArm',.16,.2,.98],['RightForeArm',.16,-.2,.98]];   // hands come together where the grip will be
 // the shoulders and hip joints are held too (Build 117): without them the chest and pelvis kept whatever twist they fell with and the
@@ -3898,6 +3898,12 @@ RISE_P.push(['LeftArm',.44,.17,.52],['RightArm',.44,-.17,.52],['LeftUpLeg',-.06,
 RISE_A.push(['LeftArm',.46,.17,.65],['RightArm',.46,-.17,.65],['LeftUpLeg',-.02,.09,.5],['RightUpLeg',-.02,-.09,.5]);
 RISE_B.push(['LeftArm',.09,.17,1.11],['RightArm',.09,-.17,1.11],['LeftUpLeg',-.06,.09,.56],['RightUpLeg',-.06,-.09,.56]);
 RISE_C.push(['LeftArm',.09,.17,1.3],['RightArm',.09,-.17,1.3],['LeftUpLeg',0,.09,.79],['RightUpLeg',0,-.09,.79]);
+// the toes too (Build 127): nothing held them, so after rolling over from the back the feet stayed toes-up and he knelt and stood on
+// legs wrung round, soles to the sky. Push-up: toes tucked under; hands and knees: insteps flat behind; kneeling and crouching: feet flat, toes ahead
+RISE_P.push(['LeftToeBase',-.72,.13,.02],['RightToeBase',-.72,-.13,.02]);
+RISE_A.push(['LeftToeBase',-.52,.13,.03],['RightToeBase',-.52,-.13,.03]);
+RISE_B.push(['LeftToeBase',-.59,.13,.03],['RightToeBase',-.59,-.13,.03]);
+RISE_C.push(['LeftToeBase',.1,.16,.03],['RightToeBase',.1,-.16,.03]);
 const RISE_ST=[RISE_P,RISE_A,RISE_B,RISE_C];
 const RD_RND=n=>{const s=Math.sin((n.length*12.9898+n.charCodeAt(0)*78.233+n.charCodeAt(n.length-1)*3.7+(RD_RND.k=(RD_RND.k||0)+1))*43758.5453);return s-Math.floor(s);};   // a little difference per limb
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
@@ -3928,6 +3934,18 @@ function jointCone(R,piv,tip,ns,ax,lim,hard){const P=R.P,A=P[piv],T=P[tip];if(!A
 function jointHinge(R,a,m,b,dir,sgn,k){const P=R.P,A=P[a],M=P[m],B=P[b];if(!A||!M||!B)return;_jA.subVectors(B,A);const L2=_jA.lengthSq();if(L2<1e-6)return;
   const t=clamp(_jC.subVectors(M,A).dot(_jA)/L2,0,1);_jX.copy(A).addScaledVector(_jA,t);const off=_jC.subVectors(M,_jX).dot(dir)*sgn;if(off>=0)return;
   M.addScaledVector(dir,-off*sgn*k);A.addScaledVector(dir,off*sgn*k*.25);B.addScaledVector(dir,off*sgn*k*.25);}
+const RISE_LEGS=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot','LeftToeBase','RightToeBase'],RISE_ARMS=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand','LeftHandMiddle1','RightHandMiddle1'];
+const _twA=V(),_twL=V(),_twT=V(),_twC=V(),_twQ=new THREE.Quaternion();
+// turn a group of points about the spine so the line between its pair (left minus right) lies along the pose's left (lx,lz) projected
+// across the spine: a rotation, so nothing is pulled through the body, at most `rate` radians a step (3x when badly wrung); P and Q move alike
+function riseTwistQ(R,P,pair,group,lx,lz,rate){const a=P[pair[0]],b=P[pair[1]];if(!a||!b||!P.Hips||!P.Neck)return;
+  _twA.subVectors(P.Neck,P.Hips);const al=_twA.length();if(al<1e-4)return;_twA.multiplyScalar(1/al);
+  _twL.subVectors(a,b);_twL.addScaledVector(_twA,-_twL.dot(_twA));_twT.set(lx,0,lz);_twT.addScaledVector(_twA,-_twT.dot(_twA));
+  if(_twL.lengthSq()<1e-6||_twT.lengthSq()<1e-6)return;_twL.normalize();_twT.normalize();
+  let ang=Math.atan2(_twC.crossVectors(_twL,_twT).dot(_twA),_twL.dot(_twT));if(Math.abs(ang)<.12)return;const rr=R.rise,sk=pair[0];if(rr&&Math.abs(ang)>2.5){ang=Math.abs(ang)*((rr.sg||(rr.sg={}))[sk]||(rr.sg[sk]=Math.sign(ang)||1));}else if(rr&&rr.sg)rr.sg[sk]=0;   /* near half a turn the sign of the error flips step to step: keep turning the way it started */
+  ang=Math.sign(ang)*Math.min(Math.abs(ang),rate*(Math.abs(ang)>1.6?3:1));
+  _twQ.setFromAxisAngle(_twA,ang);_twC.addVectors(a,b).multiplyScalar(.5);
+  for(const n of group){const p=P[n],q=R.Q[n];if(!p)continue;const ox=p.x,oy=p.y,oz=p.z;_twL.subVectors(p,_twC).applyQuaternion(_twQ).add(_twC);p.copy(_twL);if(q){q.x+=p.x-ox;q.y+=p.y-oy;q.z+=p.z-oz;}}}
 class Ragdoll{
   constructor(bones,names,vel,impulse,impulsePoint){
     this.b=bones;this.names=names.filter(n=>bones[n]);this.P={};this.Q={};
@@ -3940,7 +3958,7 @@ class Ragdoll{
       v.x+=(Math.random()-.5)*.4;v.z+=(Math.random()-.5)*.4;this.Q[n]=p.clone().addScaledVector(v,-H*2);}
     // nothing may start inside the ground: a toe below it gets shoved up so hard the whole body launches
     {let pen=0;for(const n of this.names){const p=this.P[n];pen=Math.max(pen,groundY(p.x,p.z,p.y)+(RD_R[n]||.055)-p.y);}if(pen>0&&pen<.6)for(const n of this.names){this.P[n].y+=pen;this.Q[n].y+=pen;}}
-    this.links=[];for(const [a,b] of RD_LINKS)if(this.P[a]&&this.P[b])this.links.push([a,b,this.P[a].distanceTo(this.P[b])]);
+    this.links=[];for(const [a,b] of RD_LINKS)if(this.P[a]&&this.P[b])this.links.push([a,b,this.P[a].distanceTo(this.P[b]),/Leg$/.test(a)&&/ToeBase$/.test(b)]);   // [3]: the shin-to-toe brace, which holds the ankle at its bind angle
     this.mins=[];for(const [a,b,m,f] of RD_MINS)if(this.P[a]&&this.P[b]&&this.P[m])this.mins.push([a,b,f*(this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]))]);
     this.pairs=[];for(const n of this.names){const c=BONE_CHILD[n];if(c&&this.P[c]&&n!=='Hips'&&n!=='Spine1'&&n!=='Spine2'&&!bones[n].userData.severed)this.pairs.push([n,c]);}
     this.hips=!!(this.P.Hips&&this.P.Spine1&&this.P.LeftUpLeg&&this.P.RightUpLeg);
@@ -3989,7 +4007,7 @@ class Ragdoll{
     if(this.clutch){const c=this.clutch,p=this.P[c.h];if(p&&c.p){const k=.006+.006*Math.sin(this.age*1.3),dx=(c.p.x-p.x)*k,dy=(c.p.y-p.y)*k,dz=(c.p.z-p.z)*k,q=this.Q[c.h];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.9;q.y+=dy*.9;q.z+=dz*.9;}}   // a hand pressed to the wound
     if(PIT&&this.P.Hips)this.under=this.P.Hips.y<-.15;   // gone below the deck: the bridge no longer holds any part of this body up
     for(let it=0;it<7;it++){
-      for(const [a,b,l] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}
+      for(const [a,b,l,ank] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;let k=(d-l)/d*.5;if(ank&&this.rise){if(d>l*.88&&d<l*1.015)continue;k=(d-(d<l?l*.88:l*1.015))/d*.5;}A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}   // getting up the ankle bends (Build 127): held rigid, a foot on a forward-leaning shin couldn't lie flat and turned sideways or back to fit
       if(it===0&&this.tone>0){const c=this.tone;   // muscle tone: joints resist spinning, so a conscious body folds and drops instead of flopping like a doll
         for(const [a,b] of this.links){const A=this.P[a],B=this.P[b],qa=this.Q[a],qb=this.Q[b];
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
@@ -4020,6 +4038,7 @@ class Ragdoll{
         _rv.subVectors(o,R.rc).applyAxisAngle(R.ax,th2).add(R.rc);_rv.y=Math.max(_rv.y,R.rc.y*.6+.05*lift);
         if(n===knee){_rv.y+=.22*lift;_rv.addScaledVector(R.ax,.12*lift);}
         const p=P[n],kk=k*2.2,q=this.Q[n];/* trunk and legs pulled round alike (Build 117: the trunk lagged the legs and the body came over wrung up to 170°) */const dx=(_rv.x-p.x)*kk,dy=(_rv.y-p.y)*kk,dz=(_rv.z-p.z)*kk;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.7;q.y+=dy*.7;q.z+=dz*.7;}}
+      if(P.LeftArm&&P.RightArm){const lx=P.LeftArm.x-P.RightArm.x,lz=P.LeftArm.z-P.RightArm.z;riseTwistQ(this,P,['LeftUpLeg','RightUpLeg'],RISE_LEGS,lx,lz,h*8);}   // the pelvis comes round with the chest (Build 127)
       if(R.t<R.rollT)return;
       R.rollT=0;R.t=0;R.st=-1;const f=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);if(f.lengthSq()>1e-4)R.f.copy(f.normalize());R.base.set(P.Hips.x,0,P.Hips.z);R.gy=groundY(P.Hips.x,P.Hips.z,P.Hips.y);}
     if(R.fail&&R.t>R.p+R.a*.6&&!R.failed){R.failed=true;R.t=-.9;R.fail=false;R.a*=.9;R.st=-1;}   // the arms give and they slump back down for a moment
@@ -4035,7 +4054,18 @@ class Ragdoll{
       let F=fw,U=up;if(st===2&&ss===-sd&&RISE_B_FRONT[n.replace(/^Left|^Right/,'')]){[F,U]=RISE_B_FRONT[n.replace(/^Left|^Right/,'')];}
       const tx=R.base.x+f.x*F+rx*ri,tz=R.base.z+f.z*F+rz*ri,ty=R.gy+U*S;
       const o=R.from[n]||p,gx=o.x+(tx-o.x)*e,gy=o.y+(ty-o.y)*e,gz=o.z+(tz-o.z)*e;
-      const kk=k*(n==='Hips'||n==='Spine1'||n==='Spine2'?1.2:1);p.x+=(gx-p.x)*kk;p.y+=(gy-p.y)*kk;p.z+=(gz-p.z)*kk;}}
+      const kk=k*(n==='Hips'||n==='Spine1'||n==='Spine2'?1.2:/ToeBase/.test(n)?2:1);p.x+=(gx-p.x)*kk;p.y+=(gy-p.y)*kk;p.z+=(gz-p.z)*kk;(R.tg||(R.tg={}))[n]=[tx,ty,tz];}
+    // the pelvis and the shoulders are each turned about the spine to face the way the pose wants (Build 127). Pulling the points alone
+    // can't do it: a hip on the wrong side is dragged straight through the other, and a body that fell twisted (or came round the roll
+    // with only the chest turned) stayed wrung up to 180 deg through the stages, the feet set sideways to the hips in the crouch
+    riseTwistQ(this,P,['LeftUpLeg','RightUpLeg'],RISE_LEGS,rx,rz,h*4.5*R.str);riseTwistQ(this,P,['LeftArm','RightArm'],RISE_ARMS,rx,rz,h*4.5*R.str);
+    // and each foot turned about its shin to point where the pose puts its toes
+    for(const S of ['Left','Right']){const kn=P[S+'Leg'],an=P[S+'Foot'],to=P[S+'ToeBase'],ta=R.tg[S+'Foot'],tt=R.tg[S+'ToeBase'];if(!kn||!an||!to||!ta||!tt)continue;
+      _twA.subVectors(an,kn);const al=_twA.length();if(al<1e-4)continue;_twA.multiplyScalar(1/al);
+      _twL.subVectors(to,an);_twL.addScaledVector(_twA,-_twL.dot(_twA));_twT.set(tt[0]-ta[0],tt[1]-ta[1],tt[2]-ta[2]);_twT.addScaledVector(_twA,-_twT.dot(_twA));
+      if(_twL.lengthSq()<1e-6||_twT.lengthSq()<1e-6)continue;_twL.normalize();_twT.normalize();
+      let ang=Math.atan2(_twC.crossVectors(_twL,_twT).dot(_twA),_twL.dot(_twT));if(Math.abs(ang)<.1)continue;const sk='f'+S;if(Math.abs(ang)>2.5){ang=Math.abs(ang)*((R.sg||(R.sg={}))[sk]||(R.sg[sk]=Math.sign(ang)||1));}else if(R.sg)R.sg[sk]=0;ang=Math.sign(ang)*Math.min(Math.abs(ang),h*7);
+      _twQ.setFromAxisAngle(_twA,ang);const ox=to.x,oy=to.y,oz=to.z;_twL.subVectors(to,an).applyQuaternion(_twQ).add(an);to.copy(_twL);const q=this.Q[S+'ToeBase'];if(q){q.x+=to.x-ox;q.y+=to.y-oy;q.z+=to.z-oz;}}}
   apply(rootDebris){
     const b=this.b,P=this.P;
     if(this.hips){
