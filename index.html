@@ -393,7 +393,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=130;
+const BUILD=131;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3161,7 +3161,7 @@ function garbClip(m){const U={uClip:{value:GARB_NOCLIP.clone()}};m.userData.clip
     sh.fragmentShader='uniform vec3 uClip;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if(vBind.y>uClip.y&&vBind.y<uClip.z&&abs(vBind.x)<uClip.x)discard;');};
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|clip';return m;}
 function setGarbClip(model,id){const c=GARB_CLIP[id];const v=c?new THREE.Vector3(c[0],c[1],c[2]):GARB_NOCLIP;model.userData.garbClip=v.clone();model.traverse(o=>{const U=o.material&&o.material.userData;if(!U)return;if(U.clipU){U.clipU.value.copy(v);if(c&&U.isBelt)U.clipU.value.set(9,-9,9);}if(U.HU&&U.HU.uCov)U.HU.uCov.value=c?0:(U.HU.covAll|0);});}   // (under the armour the skin is drawn again: nothing pokes through steel)
-const MH_HAIR=[null,null,'h_crop','h_cl02','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'b_sigmund','b_mous']   // (Build 130: long hair and the strand-grown full beard are shelved until there are good enough ones; they fall back to the combed hair and the trimmed beard);
+const MH_HAIR=[null,null,'h_crop','h_alpha7','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'b_sigmund','b_mous']   // (Build 130: long hair and the strand-grown full beard are shelved until there are good enough ones; they fall back to the combed hair and the trimmed beard);
 const HAIRGEO=new Map();
 function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.len:0)+'|'+beard+'|'+brows;if(HAIRGEO.has(k))return HAIRGEO.get(k);
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
@@ -3571,10 +3571,10 @@ function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Ma
     prof=1+swell*Math.sin(Math.PI*t)-.06*Math.pow(Math.abs(2*t-1),6),k=(r*prof+cord)/r;p.setX(i,x*k);p.setZ(i,z*k);}
   g.computeVertexNormals();return g;}
 // a cross guard: quillons tapering out from a block and flaring at the tips, edges rounded, bent toward the blade if asked
-function guardGeo(S,H,D,bend=0){
+function guardGeo(S,H,D,bend=0,BW=0){
   // (Build 127) forged, not cut from a plate: a chamfered centre block (the écusson) and two quillons swept out from it, each an octagonal
   // bar that tapers and then swells into a rounded terminal, bent toward the blade if asked; smooth-shaded
-  const parts=[],bw=Math.max(H*1.3,.022),blk=new THREE.BoxGeometry(bw,H,D*.95,1,1,1);
+  const parts=[],bw=Math.max(H*1.3,.022,BW),blk=new THREE.BoxGeometry(bw,H,Math.max(D*.95,BW?.018:0),1,1,1);   /* (Build 131) the centre block is as wide as the blade's shoulder and a little more, so the blade seats in it: it was 2.6 cm against a 4.8 cm blade, and the blade's corners stood out past it into thin air */
   {const p=blk.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);p.setX(i,p.getX(i)*(y<0?.82:1));}}   // narrower on the blade side
   parts.push(blk.toNonIndexed());
   const NR=18,NS=8,r0=Math.min(H,D)*.56;
@@ -3596,12 +3596,12 @@ function scentStopper(R){return lathe([[0,-R*1.5],[R*.35,-R*1.45],[R*.55,-R*1.1]
 function lobedPommel(R){const parts=[];for(const [x,s] of [[-R*.75,.62],[0,.85],[R*.75,.62]]){const g=new THREE.SphereGeometry(R*s,12,8);g.scale(1,.8,.7);g.translate(x,-R*(1-s)*.5,0);parts.push(g);}
   const b=new THREE.BoxGeometry(R*2.3,R*.32,R*.9);b.translate(0,R*.45,0);parts.push(b);return mergeGeometries(parts.map(x=>x.index?x.toNonIndexed():x));}
 function makeBlade(L,w,grip,st=0){const two=grip>.2;
-  const guard=st===1?guardGeo(two?.27:.24,.018,.024,-.016):st===2?guardGeo(.13,.03,.03,0):guardGeo(two?.25:.22,.02,.026,two?.006:-.004);
+  const bw=w*2+.01,guard=st===1?guardGeo(two?.27:.24,.018,.024,-.016,bw):st===2?guardGeo(.13,.03,.03,0,bw):guardGeo(two?.25:.22,.02,.026,two?.006:-.004,bw);
   const pom=st===1?[scentStopper(two?.022:.02),steelDark,0,-.004-grip,0]:st===2?[lobedPommel(two?.024:.022),steelDark,0,-.012-grip,0]:[wheelPommel(two?.034:.031,.022),steelDark,0,-.006-grip,0];
   return wpnGroup([[bladeGeo(L,w,st===2?.044:.039),bladeMat,0,0,0],[guard,steelDark,0,.032,0],[gripGeo(grip+.005,.0158,two?.09:.05),gripMat,0,.0165-grip/2,0],
-    [bandGeo(.018,.009),steelDark,0,.02,0],[bandGeo(.0175,.008),steelDark,0,.012-grip,0],pom]);}
-function makeGreatsword(st=0){if(st)return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(st===1?.4:.3,.026,.032,st===1?-.03:0),steelDark,0,.035,0],[gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],st===1?[scentStopper(.026),steelDark,0,-.4,0]:[lobedPommel(.026),steelDark,0,-.4,0]]);
-  return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(.38,.028,.032,.012),steelDark,0,.035,0],[guardGeo(.1,.016,.02,-.004),steelDark,0,.21,0],
+    [bandGeo(.019,.014),steelDark,0,.018,0],[bandGeo(.0175,.008),steelDark,0,.012-grip,0],pom]);}
+function makeGreatsword(st=0){if(st)return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(st===1?.4:.3,.026,.032,st===1?-.03:0,.07),steelDark,0,.035,0],[gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],st===1?[scentStopper(.026),steelDark,0,-.4,0]:[lobedPommel(.026),steelDark,0,-.4,0]]);
+  return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(.38,.028,.032,.012,.07),steelDark,0,.035,0],[guardGeo(.1,.016,.02,-.004),steelDark,0,.21,0],
   [gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],[pearPommel(.03),steelDark,0,-.41,0]]);}
 const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');
 function edgeShade(g,f){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=f(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=c[i*3+1]=c[i*3+2]=v;}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g;}
@@ -3623,9 +3623,9 @@ function makeAxe(st=0){
   const sh=new THREE.Shape();
   // (Build 128) the eye is a short socket and the head narrows behind the blade into a neck before it flares to the edge, as forged heads do
   // (it was a 10 cm tall slab the full height of the eye, so the head read as a flat plate bolted to the haft)
-  if(st===1){sh.moveTo(.004,.97);sh.lineTo(.04,.965);sh.quadraticCurveTo(.09,1.0,.17,1.07);sh.quadraticCurveTo(.215,.93,.17,.78);sh.quadraticCurveTo(.09,.86,.04,.902);sh.lineTo(.004,.9);sh.closePath();}
-  else if(st===2){sh.moveTo(.004,.97);sh.lineTo(.035,.968);sh.lineTo(.15,.985);sh.quadraticCurveTo(.163,.93,.15,.86);sh.lineTo(.035,.902);sh.lineTo(.004,.9);sh.closePath();}
-  else{sh.moveTo(.004,.97);sh.lineTo(.03,.968);sh.quadraticCurveTo(.05,.958,.07,.964);sh.quadraticCurveTo(.12,.985,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.76,.085,.86);sh.quadraticCurveTo(.065,.905,.03,.902);sh.lineTo(.004,.9);sh.closePath();}
+  if(st===1){sh.moveTo(.02,.97);sh.lineTo(.04,.965);sh.quadraticCurveTo(.09,1.0,.17,1.07);sh.quadraticCurveTo(.215,.93,.17,.78);sh.quadraticCurveTo(.09,.86,.04,.902);sh.lineTo(.02,.9);sh.closePath();}
+  else if(st===2){sh.moveTo(.02,.97);sh.lineTo(.035,.968);sh.lineTo(.15,.985);sh.quadraticCurveTo(.163,.93,.15,.86);sh.lineTo(.035,.902);sh.lineTo(.02,.9);sh.closePath();}
+  else{sh.moveTo(.02,.97);sh.lineTo(.03,.968);sh.quadraticCurveTo(.05,.958,.07,.964);sh.quadraticCurveTo(.12,.985,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.76,.085,.86);sh.quadraticCurveTo(.065,.905,.03,.902);sh.lineTo(.02,.9);sh.closePath();}
   const hg=axeLoft(sh);
   edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
   const eye=edgeShade(lathe([[0,-.042],[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042],[.012,.044],[0,.044]],20),()=>.9);   // closed over the haft's end (open, it looked like a hollow tube from above)   // a socket with flared lugs above and below
@@ -5377,7 +5377,7 @@ class Fighter{
     // turn, from the side a quarter (Build 117: only a body clearly face up rolled, always half a turn, so one lying on its side got up
     // with its shoulders and hips set for the opposite side, wrung round its spine)
     let roll=0,rollTh=0;if(P.Neck&&P.Spine1&&P.LeftArm&&P.RightArm){const up=V().subVectors(P.Neck,P.Spine1),sd=V().subVectors(P.LeftArm,P.RightArm),fr=V().crossVectors(sd,up).normalize(),ax=V(P.Neck.x-P.Hips.x,0,P.Neck.z-P.Hips.z);
-      if(ax.lengthSq()>1e-4){ax.normalize();fr.addScaledVector(ax,-fr.dot(ax));if(fr.lengthSq()>1e-4){fr.normalize();const th=Math.atan2(ax.dot(V().crossVectors(fr,V(0,-1,0))),-fr.y);if(Math.abs(th)>.6){rollTh=th;roll=Math.max(.25,(.55+hurt*.4)*Math.abs(th)/Math.PI);}}}}
+      if(ax.lengthSq()>1e-4){ax.normalize();fr.addScaledVector(ax,-fr.dot(ax));if(fr.lengthSq()>1e-4){fr.normalize();const th=Math.atan2(ax.dot(V().crossVectors(fr,V(0,-1,0))),-fr.y);if(Math.abs(th)>.6){rollTh=th;roll=Math.max(.5,(1.05+hurt*.5)*Math.abs(th)/Math.PI);}}}}
     Rg.rise={t:0,rollT:roll,rollTh,p:.42+hurt*.8,a:.42+hurt*1.0,b:.62+hurt*.9,c:.5+hurt*.5,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
     Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}}
   getUp(){
@@ -5580,7 +5580,7 @@ class Fighter{
     {const threat=this._foeD<6||simTime-(this._hurtAt??-99)<3||(this.isPlayer&&(input.lmb||input.stab))||simTime-(this._aimAt??-99)<1.2||(this.revW||0)>.05||(this.sword&&this.sword.stuck&&!this.sword.stuck.thrown)||(!!this.sword&&(this.commit||this.thrust))||this.throwHold||this.throwT>=0||!!this.grab;
       this.calmW=lerp(this.calmW??0,threat||!this.alive||this.ragdoll?0:1,1-Math.exp(-(threat?7:1.4)*dt));}
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
-    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.8?.4:sp<1.6?.4-.35*(sp-.8)/.8:.05)*ease:0,1-Math.exp(-6*dt));   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?(sp<.3?.26:sp<1.6?.26*(1-(sp-.3)/1.3)+.04:.04)*ease:0,1-Math.exp(-6*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
     // a hurt leg hitches the gait: the body drops each time weight goes onto it
     const lgL=this.limbF('legL'),lgR=this.limbF('legR'),lg=Math.max(lgL,lgR);let limp=0;
     if(lg>.2&&Math.hypot(this.vel.x,this.vel.z)>.3&&this.acts){const A=this.acts,ph=A.walk.time/A.walk.getClip().duration;limp=lg*.5*Math.pow(Math.max(0,Math.sin((ph+(lgL>lgR?0:.5))*6.283)),2);}
