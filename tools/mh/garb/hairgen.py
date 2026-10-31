@@ -6,25 +6,27 @@ import os,sys,json,struct,math,numpy as np
 from scipy.spatial import cKDTree
 from PIL import Image,ImageDraw,ImageFilter
 SC=os.environ.get('GARB_WORK','work')+'/'
-OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../../assets/mhparts/') 
+OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../../assets/mhparts/') if 'tools' in os.path.abspath(__file__) else 'assets/mhparts/'
 BUILDS='ABCD'
 def smooth(x,a,b):t=np.clip((x-a)/(b-a),0,1);return t*t*(3-2*t)
 # ---------------------------------------------------------------- the strand atlas: 4 columns, each a clump of fine strands
-def atlas(path,W=512,H=1024,seed=3):
-    rng=np.random.default_rng(seed);img=Image.new('LA',(W,H),(0,0));cw=W//4
+def atlas(path,W=1024,H=2048,seed=3):
+    # (Build 129) finer: four columns of 1024 px tall clumps, each 560-700 single strands about 1-2 px wide once downsampled, every strand
+    # its own shade and wave, thinning to wisps at the tips; the clump's edges sparse so the cards' borders never show
+    rng=np.random.default_rng(seed);img=Image.new('LA',(W,H),(0,0));cw=W//4;SS=3
     for col in range(4):
-        layer=Image.new('LA',(cw*3,H),(0,0));d=ImageDraw.Draw(layer)
-        n=260+col*30
+        layer=Image.new('LA',(cw*SS,H),(0,0));d=ImageDraw.Draw(layer)
+        n=560+col*45
         for s in range(n):
-            x0=rng.uniform(.08,.92)*cw*3;wav=rng.uniform(0,6);ph=rng.uniform(0,6.28);ln=rng.uniform(.72,1.0);lum=int(rng.uniform(150,255));wd=int(rng.choice([4,5,5,6,7]))
-            pts=[(x0+math.sin(ph+t*rng.uniform(2,5))*wav+(t-.5)*rng.uniform(-14,14),t*H) for t in np.linspace(0,ln,40)]
+            u=rng.beta(2.2,2.2);x0=(.04+.92*u)*cw*SS;wav=rng.uniform(0,7);ph=rng.uniform(0,6.28);fr=rng.uniform(1.5,4.5);ln=rng.uniform(.6,1.0);lum=int(rng.uniform(175,255));wd=int(rng.choice([3,3,4,4,5]))
+            dr=rng.uniform(-18,18);pts=[(x0+math.sin(ph+t*fr)*wav+(t-.5)*dr,t*H) for t in np.linspace(0,ln,60)]
             for i in range(len(pts)-1):
-                a=int(255*min(1,(1-i/len(pts))*2.2));d.line([pts[i],pts[i+1]],fill=(lum,a),width=wd)
+                t=i/len(pts);a=int(255*min(1,(1-t)*2.6)*(.55+.45*rng.random()));d.line([pts[i],pts[i+1]],fill=(lum,a),width=wd)
         layer=layer.resize((cw,H),Image.LANCZOS)
         img.paste(layer,(col*cw,0),layer)
     a=np.array(img).astype(np.float32);L=a[...,0];A=a[...,1]
-    v=np.linspace(0,1,H)[:,None];L=L*(.55+.45*smooth(v,0,.25))   # roots darker
-    out=np.dstack([L,L,L,A]).clip(0,255).astype(np.uint8);Image.fromarray(out,'RGBA').save(path,'WEBP',quality=90,method=6)
+    v=np.linspace(0,1,H)[:,None];L=L*(.82+.18*smooth(v,0,.2))   # roots a little darker
+    out=np.dstack([L,L,L,A]).clip(0,255).astype(np.uint8);Image.fromarray(out,'RGBA').save(path,'WEBP',quality=88,method=6)
 # ---------------------------------------------------------------- per build: the head
 def headinfo(b):
     d=np.load(SC+'body_%s.npz'%b);P=d['P'];N=d['N'];I=d['I'];names=list(d['names']);W=d['W'];J=d['J']
@@ -57,7 +59,7 @@ def flow(style,p,n,rng):
         crown=np.array([0,1.775,-.025]);d=p-crown
         if z>.06 and style!='bowl':d=d+np.array([0,0,.04])   # the front combed forward
     elif style=='long':
-        d=np.array([np.sign(x+1e-4)*.8,-.4,-.15]) if y>1.735 else np.array([0,-1,-.1])   # a centre parting, then down
+        d=np.array([np.sign(x+1e-4)*.35,-.15,-.9]) if y>1.72 else np.array([np.sign(x+1e-4)*.15,-1,-.25])   # swept back from a parting over the crown, then down
     d=d-n*(d@n);l=np.linalg.norm(d)
     if l<1e-5:d=np.cross(n,[1,0,0]);l=np.linalg.norm(d)
     return d/l
@@ -65,7 +67,7 @@ def grow(H,style,root,n,rng):
     if style=='crop':L=rng.uniform(.016,.026);seg=4;lift=.0025;grav=0.;bend=.85
     elif style=='tousle':L=rng.uniform(.035,.06);seg=5;lift=.004;grav=.15;bend=.55
     elif style=='bowl':L=1.0;seg=7;lift=.004;grav=.25;bend=.8
-    else:L=rng.uniform(.24,.31)*(.55 if root[2]>.09 else 1.);seg=9;lift=.005;grav=.55;bend=.6
+    else:L=rng.uniform(.17,.22)*(.35 if root[2]>.07 and abs(root[0])<.045 else .7 if root[2]>.09 else 1.);seg=7;lift=.005;grav=.6;bend=.6   # (Build 134) to the shoulders
     d=flow(style,root,n,rng);d=d+rng.normal(0,.12 if style!='tousle' else .35,3);d=d-n*(d@n)*.7;d/=np.linalg.norm(d)
     pts=[root+n*lift*.4];p=pts[0].copy();sl=L/seg if style!='bowl' else .012
     cut=None
@@ -86,7 +88,7 @@ def card(H,pts,w0,col,taper=.25):
         V+=[p-s*w*.5,p+s*w*.5];UV+=[[col*.25+.01,v],[col*.25+.24,v]]
     for i in range(k-1):a=2*i;T+=[[a,a+1,a+2],[a+1,a+3,a+2]]
     return np.array(V),np.array(UV),np.array(T)
-STY={'hs_crop':('crop',3800,.009),'hs_tousle':('tousle',3200,.011),'hs_bowl':('bowl',3600,.011),'hs_long':('long',3200,.013),
+STY={'hs_crop':('crop',6500,.007),'hs_tousle':('tousle',6500,.009),'hs_bowl':('bowl',6000,.01),'hs_long':('long',6500,.011),
      'bs_short':('bshort',3800,.006),'bs_full':('bfull',4300,.0055),'bs_mous':('bmous',900,.005)}
 def beard_mask(H,kind):
     def m(p):
@@ -116,14 +118,15 @@ def build(pid,b='A'):
     else:roots,nr=sample(H,beard_mask(H,style),n,rng);fn=lambda r,nn:grow_beard(H,style,r,nn,rng)
     Vs=[];UVs=[];Ts=[];off=0;loose=[]
     for r,nn in zip(roots,nr):
+        if style=='long' and r[2]>.06 and r[1]<1.78 and abs(r[0])<.05:continue   # (Build 134) no locks from the hairline over the brow: they fell across the face; the cap covers it, swept back
         pts=fn(r,nn)
         if len(pts)<2:continue
         V,UV,T=card(H,pts,w0*rng.uniform(.75,1.25),int(rng.integers(0,4)));Vs.append(V);UVs.append(UV);Ts.append(T+off);off+=len(V)
-        loose.append(np.clip((1.62-V[:,1])/.25,0,1) if style=='long' else np.zeros(len(V)))
+        loose.append(np.clip((1.64-V[:,1])/.18,0,1) if style=='long' else np.clip((1.70-V[:,1])/.12,0,1)*.4 if style=='bowl' else np.zeros(len(V)))
     V=np.concatenate(Vs);UV=np.concatenate(UVs);T=np.concatenate(Ts);lo=np.concatenate(loose)
     anc=H['tree'].query(V)[1];offv=(V-H['P'][anc]).astype(np.float32)
     arrs=[('anchor',anc.astype(np.uint16)),('off',offv),('uv',np.round(np.clip(UV,0,1)*65535).astype(np.uint16)),('index',T.astype(np.uint32 if len(V)>65535 else np.uint16))]
-    if style=='long':arrs.append(('loose',lo.astype(np.float32)))
+    arrs.append(('loose',lo.astype(np.float32)))
     Hd={'id':pid,'kind':'hair' if pid.startswith('hs') else 'beard','tex':{'d':'strands_d.webp'},'strands':True,'nv':len(V)}
     o_=0;lay={}
     for nm,a_ in arrs:lay[nm]=[o_,str(a_.dtype),list(a_.shape)];o_+=a_.nbytes;o_+=(-o_)%4

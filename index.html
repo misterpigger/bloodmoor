@@ -393,7 +393,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=133;
+const BUILD=134;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -689,13 +689,17 @@ function collide(p,r,useY=false,span=0){
     if(o.t===0){if(p.x<o.x0-r||p.x>o.x1+r||p.z<o.z0-r||p.z>o.z1+r)continue;
       const cx=clamp(p.x,o.x0,o.x1),cz=clamp(p.z,o.z0,o.z1);const dx=p.x-cx,dz=p.z-cz,d2=dx*dx+dz*dz;
       if(d2>1e-10){if(d2<r*r){const d=Math.sqrt(d2);p.x=cx+dx/d*r;p.z=cz+dz/d*r;hit=true;}}
-      else{const l=p.x-o.x0,rr=o.x1-p.x,t=p.z-o.z0,bt=o.z1-p.z,m=Math.min(l,rr,t,bt);if(m===l)p.x=o.x0-r;else if(m===rr)p.x=o.x1+r;else if(m===t)p.z=o.z0-r;else p.z=o.z1+r;hit=true;}}
+      else{const q=CTX.q;   // (Build 134) a body part inside a box goes back out the side it came in by, or, already deep inside, out the side nearest the body's hips, so the whole body leaves together (it used to be shoved out to each part's nearest side, a different side for each limb, and a body that fell across a barrier was torn about and flopped like a landed fish)
+        if(q&&CTX.hip&&q.x>=o.x0&&q.x<=o.x1&&q.z>=o.z0&&q.z<=o.z1){const hx=CTX.hip.x,hz=CTX.hip.z,dl=hx-o.x0,dr=o.x1-hx,dt=hz-o.z0,db=o.z1-hz,mm=Math.min(dl,dr,dt,db);   // deep inside: every part goes out the side the hips are nearest, together
+          if(mm===dl)p.x=o.x0-r;else if(mm===dr)p.x=o.x1+r;else if(mm===dt)p.z=o.z0-r;else p.z=o.z1+r;hit=true;continue;}
+        if(q&&(q.x<o.x0||q.x>o.x1||q.z<o.z0||q.z>o.z1)){const ox=q.x<o.x0?o.x0-q.x:q.x>o.x1?q.x-o.x1:0,oz=q.z<o.z0?o.z0-q.z:q.z>o.z1?q.z-o.z1:0;if(ox>=oz)p.x=q.x<o.x0?o.x0-r:o.x1+r;else p.z=q.z<o.z0?o.z0-r:o.z1+r;hit=true;continue;}
+        const l=p.x-o.x0,rr=o.x1-p.x,t=p.z-o.z0,bt=o.z1-p.z,m=Math.min(l,rr,t,bt);if(m===l)p.x=o.x0-r;else if(m===rr)p.x=o.x1+r;else if(m===t)p.z=o.z0-r;else p.z=o.z1+r;hit=true;}}
     else if(o.t===1){const dx=p.x-o.x,dz=p.z-o.z,R=r+o.r,d2=dx*dx+dz*dz;if(d2<R*R&&d2>1e-10){const d=Math.sqrt(d2);p.x=o.x+dx/d*R;p.z=o.z+dz/d*R;hit=true;}}
     else{const dx=p.x-o.cx,dz=p.z-o.cz,ex=o.hx,ez=o.hz;if(Math.abs(dx)>o.rr+r||Math.abs(dz)>o.rr+r||(useY&&o.yu&&p.y+span<o.yu))continue;   /* (under a table top is open: only a standing body is stopped by it) */   // a loose heavy thing: a box turned about the vertical, and it gives way (dynShove)
       const lx=dx*o.c-dz*o.s,lz=dx*o.s+dz*o.c;if(Math.abs(lx)>ex+r||Math.abs(lz)>ez+r)continue;
       const qx=clamp(lx,-ex,ex),qz=clamp(lz,-ez,ez),ux=lx-qx,uz=lz-qz,d2=ux*ux+uz*uz;let nx=lx,nz=lz;
       if(d2>1e-10){if(d2>=r*r)continue;const d=Math.sqrt(d2);nx=qx+ux/d*r;nz=qz+uz/d*r;}
-      else{const m=Math.min(ex-lx,ex+lx,ez-lz,ez+lz);if(m===ex-lx)nx=ex+r;else if(m===ex+lx)nx=-ex-r;else if(m===ez-lz)nz=ez+r;else nz=-ez-r;}
+      else{const q=CTX.q;if(q&&useY&&!CTX.noTop&&(q.y>=o.h-.02||o.h-p.y<.12)){p.y=o.h+r*.6;if(q.y<p.y)q.y=p.y;hit=true;continue;}const m=Math.min(ex-lx,ex+lx,ez-lz,ez+lz);if(m===ex-lx)nx=ex+r;else if(m===ex+lx)nx=-ex-r;else if(m===ez-lz)nz=ez+r;else nz=-ez-r;}
       const wx=o.cx+nx*o.c+nz*o.s,wz=o.cz-nx*o.s+nz*o.c;if(CTX.m&&o.dyn)dynShove(o.dyn,p,wx-p.x,wz-p.z,r);p.x=wx;p.z=wz;hit=true;}
   }
   if(p.x<-MAP){p.x=-MAP;hit=true;}if(p.x>MAP){p.x=MAP;hit=true;}if(p.z<-MAP){p.z=-MAP;hit=true;}if(p.z>MAP){p.z=MAP;hit=true;}
@@ -3133,7 +3137,7 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
       const hs=gb.userData.cov||(gb.userData.cov=new Set());if(!hs.has(id)){for(const i of cov)at.array[i]=(at.array[i]|bit);at.needsUpdate=true;hs.add(id);}
       const HU=body.material&&body.material.userData.HU;if(HU){HU.covAll=(HU.covAll|0)|bit;let cl=false;for(let o=root;o;o=o.parent)if(o.userData.garbClip&&o.userData.garbClip.x<5){cl=true;break;}HU.uCov.value=cl?0:HU.covAll;}}
     m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard';   // (draped cloth is one double-sided layer: shadowing itself it drew dark acne slashes down the skirts)
-   m.receiveShadow=true;m.frustumCulled=false;m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
+   m.receiveShadow=!P.H.strands;m.frustumCulled=false;   /* (strand hair shadowing itself drew black streaks) */m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
     if(m.material.userData.legU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.legMeshes||(mo.userData.legMeshes=[])).push(m);}
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9,9);}}   // (a belt goes under body armour altogether)
@@ -3161,7 +3165,7 @@ function garbClip(m){const U={uClip:{value:GARB_NOCLIP.clone()}};m.userData.clip
     sh.fragmentShader='uniform vec3 uClip;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if(vBind.y>uClip.y&&vBind.y<uClip.z&&abs(vBind.x)<uClip.x)discard;');};
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|clip';return m;}
 function setGarbClip(model,id){const c=GARB_CLIP[id];const v=c?new THREE.Vector3(c[0],c[1],c[2]):GARB_NOCLIP;model.userData.garbClip=v.clone();model.traverse(o=>{const U=o.material&&o.material.userData;if(!U)return;if(U.clipU){U.clipU.value.copy(v);if(c&&U.isBelt)U.clipU.value.set(9,-9,9);}if(U.HU&&U.HU.uCov)U.HU.uCov.value=c?0:(U.HU.covAll|0);});}   // (under the armour the skin is drawn again: nothing pokes through steel)
-const MH_HAIR=[null,null,'h_crop','h_alpha7','h_cl02','h_short4'],MH_BEARD=[null,'b_sigmund',null,'b_sigmund','b_mous']   // (Build 130: long hair and the strand-grown full beard are shelved until there are good enough ones; they fall back to the combed hair and the trimmed beard);
+const MH_HAIR=[null,null,'hs_crop','hs_long','hs_tousle','hs_bowl'],MH_BEARD=[null,'b_sigmund',null,'b_sigmund','b_mous']   // (Build 130: long hair and the strand-grown full beard are shelved until there are good enough ones; they fall back to the combed hair and the trimmed beard);
 const HAIRGEO=new Map();
 function hairShells(body,style,beard,brows){const k=body.name+'|'+(style?style.len:0)+'|'+beard+'|'+brows;if(HAIRGEO.has(k))return HAIRGEO.get(k);
   const src=body.geometry,P=src.attributes.position,N=src.attributes.normal,C=src.attributes.color,SI=src.attributes.skinIndex,SW=src.attributes.skinWeight,I=src.index;
@@ -3403,7 +3407,13 @@ function dressMH(model,look,pal,mats){
     // hair, beard, brows and lashes are MakeHuman's own (Build 126; the shells and the painted cap are no longer used)
     const pc=new THREE.Color().setRGB(hc[0]*.5,hc[1]*.44,hc[2]*.4);
     const HL=window.__mhHair||MH_HAIR,BL=window.__mhBeard||MH_BEARD;   // (test hooks)
-    if(HL[look.h]&&!(look.hd|0))addMHPart(body,HL[look.h],pc,'hair',true);
+    if(HL[look.h]&&!(look.hd|0)){
+      // (Build 134) hair is a painted cap shaped to the head (so no scalp shows between strands) with thousands of fine strands grown over
+      // it (tools/mh/garb/hairgen.py, one ribbon per lock, tied to the body vertex under its root, so it fits every build)
+      if(/^hs_/.test(HL[look.h])&&!body.name.includes('~')){try{const hh=look.h===3?3:2,cg=hairCap(body,hh),cm=new THREE.SkinnedMesh(cg,hairCapMat(pc.clone().multiplyScalar(.62),body,hh));
+        cm.bind(body.skeleton,body.bindMatrix);cm.frustumCulled=false;cm.castShadow=true;cm.receiveShadow=true;cm.name='MH_Part_hair_cap';cm.userData.hair=true;
+        for(let o=body.parent;o;o=o.parent)if(o.userData.hideHair){cm.visible=false;break;}body.parent.add(cm);}catch(e){console.warn('hair cap',e&&e.message);}}
+      addMHPart(body,HL[look.h],pc,'hair',true);}
     if(BL[look.bd|0])addMHPart(body,BL[look.bd|0],pc.clone().multiplyScalar(.9),'beard',false);
     addMHPart(body,'brow1',pc.clone().multiplyScalar(.8),'brow',false);addMHPart(body,'lash1',new THREE.Color(.06,.045,.035),'lash',false);}
   // (Build 123 hung a pouch and dagger on every belt; gone in Build 125: a sidearm should be there only when the fighter really carries one. beltGear is kept for that)
@@ -3653,16 +3663,24 @@ function makeMace(st=0){
   const parts=[[shaft,steelDark,0,0,0],[gripGeo(.22,.019,.04),gripMat,0,-.1,0],[bandGeo(.021,.01),steelDark,0,.012,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
   const shade=g=>edgeShade(g,(x,y,z)=>{const r=Math.hypot(x,z);return r>.04?1.35:r>.03?1.12:.9;});
   if(st===1){
-    const g=lathe([[0,.0],[.018,.0],[.021,.02],[.027,.05],[.031,.08],[.029,.11],[.021,.135],[.01,.15],[0,.155]].reverse(),72);const p=g.attributes.position;
-    for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,z);if(r<1e-5)continue;const th=Math.atan2(z,x),u=clamp((y-.025)/.12,0,1);
-      const c6=Math.abs(Math.cos(3*th)),rib=Math.pow(c6,5)*Math.sin(Math.PI*u)*.009,knob=Math.pow(c6,9)*Math.exp(-Math.pow((u-.55)/.13,2))*.014;const k=(r+rib+knob)/r;p.setX(i,x*k);p.setZ(i,z*k);}
-    g.computeVertexNormals();parts.push([shade(g),headMat,0,.55,0]);
-    parts.push([shade(lathe([[0,-.003],[.008,-.003],[.009,.006],[.004,.016],[0,.018]].reverse(),16)),headMat,0,.71,0]);}
+    // (Build 134) a knobbed mace, after the cast heads of the 12th–13th centuries: a waisted iron core with moulded rims and three
+    // staggered rings of pyramidal knobs, each a squat four-sided point with its faces ground bright
+    parts.push([shade(lathe([[.018,0],[.024,.006],[.022,.012],[.025,.03],[.027,.075],[.025,.12],[.022,.138],[.024,.144],[.016,.152],[0,.155]].reverse(),28)),headMat,0,.55,0]);
+    const knob=new THREE.ConeGeometry(.0135,.022,4,1);knob.rotateY(Math.PI/4);knob.translate(0,.011,0);
+    edgeShade(knob,(x,y)=>y>.016?1.4:y>.008?1.12:.88);
+    for(let r=0;r<3;r++){const y=.585+r*.038,n=6,off=(r%2)*Math.PI/n,R=r===1?.026:.024;
+      for(let i=0;i<n;i++){const a=i/n*Math.PI*2+off,g=knob.clone();g.applyMatrix4(new THREE.Matrix4().makeRotationZ(-Math.PI/2));g.applyMatrix4(new THREE.Matrix4().makeRotationY(-a));parts.push([g,headMat,Math.cos(a)*R,y,Math.sin(a)*R]);}}
+    const top=new THREE.ConeGeometry(.012,.02,4,1);top.rotateY(Math.PI/4);top.translate(0,.01,0);parts.push([edgeShade(top,(x,y)=>y>.014?1.4:1),headMat,0,.703,0]);}
   else if(st===2){
-    const ball=lathe(Array.from({length:17},(_,i)=>{const a=-Math.PI/2+i/16*Math.PI;return [Math.max(.0005,Math.cos(a)*.042),Math.sin(a)*.042];}).reverse(),32);parts.push([shade(ball),headMat,0,.62,0]);
-    const N=22,sp=[];for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*2.39996;if(y<-.72)continue;sp.push([Math.cos(a)*r,y,Math.sin(a)*r]);}
-    for(const [x,y,z] of sp){const c=new THREE.ConeGeometry(.0085,.03,4,1);c.translate(0,.015+.038,0);const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(x,y,z));c.applyQuaternion(q);parts.push([shade(c),headMat,0,.62,0]);}
-    parts.push([shade(lathe([[.017,-.03],[.024,-.02],[.022,.0],[.0,.0]].reverse(),16)),headMat,0,.585,0]);}
+    // (Build 134) a morning star as foot soldiers carried it: an oak club head bound with two iron hoops and set with rows of square iron
+    // spikes, a long spike on top; the shaft wood (the haft is the same length as the other maces)
+    parts[0]=[lathe([[0,-.23],[.017,-.23],[.016,.3],[.018,.56],[.0,.56]].reverse(),12),woodMat,0,0,0];
+    parts.push([lathe([[.02,0],[.032,.02],[.036,.06],[.036,.1],[.031,.14],[.018,.155],[0,.16]].reverse(),24),woodMat,0,.545,0]);
+    for(const [y,r] of [[.565,.0335],[.685,.0335]])parts.push([shade(lathe([[r*.97,-.006],[r+.002,-.004],[r+.002,.004],[r*.97,.006]].reverse(),24)),headMat,0,y,0]);
+    const sp=new THREE.ConeGeometry(.0055,.034,4,1);sp.translate(0,.017,0);edgeShade(sp,(x,y)=>y>.024?1.35:.95);
+    for(let r=0;r<3;r++){const y=.59+r*.034,n=7,off=(r%2)*Math.PI/n,R=.034;
+      for(let i=0;i<n;i++){const a=i/n*Math.PI*2+off,g=sp.clone();g.applyMatrix4(new THREE.Matrix4().makeRotationZ(-Math.PI/2));g.applyMatrix4(new THREE.Matrix4().makeRotationY(-a));parts.push([g,headMat,Math.cos(a)*R,y,Math.sin(a)*R]);}}
+    const t=new THREE.ConeGeometry(.007,.06,4,1);t.translate(0,.03,0);parts.push([edgeShade(t,(x,y)=>y>.04?1.35:.95),headMat,0,.7,0]);}
   else{
     // (Build 133) Gothic flanges: each a two-pointed blade of steel (a long lower point, a short upper one, a notch between), pierced
     // with a trefoil-ish hole by the socket, ground to an edge (thick at the root, thin at the points); the socket has moulded collars,
@@ -4157,7 +4175,7 @@ class Ragdoll{
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
     }
-    for(const n of this.names){if(this.P[n].y<5){const p=this.P[n],q=this.Q[n];CTX.m=5;CTX.v.set((p.x-q.x)/h,0,(p.z-q.z)/h);CTX.y=p.y;CTX.q=q;CTX.h=h;collide(p,RD_R[n]||.055,true);CTX.m=0;CTX.q=null;}}
+    CTX.hip=this.P.Hips||null;for(const n of this.names){if(this.P[n].y<5){const p=this.P[n],q=this.Q[n];CTX.m=5;CTX.v.set((p.x-q.x)/h,0,(p.z-q.z)/h);CTX.y=p.y;CTX.q=q;CTX.h=h;const bx=p.x,bz=p.z,by=p.y;if(collide(p,RD_R[n]||.055,true)){q.x+=(p.x-bx)*.85;q.z+=(p.z-bz)*.85;q.y+=(p.y-by)*.85;}   /* (Build 134) a push out of a wall or a box moves the part, not its speed: verlet turned every push into velocity, and a body lying across a barrier gained speed each step and thrashed */CTX.m=0;CTX.q=null;}}
     // no part of a body is thrown faster than a man could be: sideways or upward at most 9 m/s (falling is free). A fighter's pose can
     // start outside the joint limits, and the first step's correction went in as speed: hands and toes left at 30-90 m/s and whole bodies
     // skidded off at 16 m/s (measured in a battle royale, Build 117)
@@ -8025,7 +8043,7 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
-Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
+Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
