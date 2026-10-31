@@ -393,7 +393,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=135;
+const BUILD=136;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4185,6 +4185,14 @@ class Ragdoll{
     // start outside the joint limits, and the first step's correction went in as speed: hands and toes left at 30-90 m/s and whole bodies
     // skidded off at 16 m/s (measured in a battle royale, Build 117)
     {const vm=9*h;for(const n of this.names){const p=this.P[n],q=this.Q[n],vx=p.x-q.x,vz=p.z-q.z,vu=Math.max(0,p.y-q.y),w2=vx*vx+vz*vz+vu*vu;if(w2>vm*vm){const k=vm/Math.sqrt(w2);q.x=p.x-vx*k;q.z=p.z-vz*k;if(vu>0)q.y=p.y-vu*k;}}}
+    // (Build 136) a body on the ground can't turn itself round: nothing inside it (joint limits, the twist limit, muscle pulls, a hand on a
+    // wound) can give it a net spin, but those constraints pulling against each other while the ground grips one part more than another
+    // did, step after step, and a dead or dying body slowly turned in circles until something stopped it. Once a fall has played out
+    // (1.2 s since the last blow), whatever net turn about the vertical the step left is taken back out of the whole body
+    if(!this.rise&&this.age>1.2&&!this.pin&&!this.dragged){let cx=0,cz=0,nn=0;for(const n of this.names){cx+=this.P[n].x;cz+=this.P[n].z;nn++;}cx/=nn;cz/=nn;let L=0,I=0;
+      for(const n of this.names){const p=this.P[n],q=this.Q[n],rx=p.x-cx,rz=p.z-cz;L+=rx*(p.z-q.z)-rz*(p.x-q.x);I+=rx*rx+rz*rz;}
+      if(I>1e-4){const w=L/I;if(Math.abs(w)<4*h)for(const n of this.names){const p=this.P[n],q=this.Q[n];q.x+=-w*(p.z-cz);q.z+=w*(p.x-cx);}}}
+    this.dragged=false;
     if(this.pin&&this.P[this.pin]){this.P[this.pin].copy(this.pinP);this.Q[this.pin].copy(this.pinP);}   // run through on a stake
     if(this.age>4&&maxv<1e-7&&!this.rise)this.sleep=true;   // (never mid-effort: a body asleep halfway up would stay there)
   }
