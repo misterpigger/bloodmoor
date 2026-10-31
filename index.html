@@ -393,7 +393,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=134;
+const BUILD=135;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4160,7 +4160,12 @@ class Ragdoll{
         if(sp>.25){_rv.multiplyScalar(1/(sp*h));const gy=groundY(c.x,c.z,c.y),k=Math.min(1,sp*.5)*.035;
           for(const [hn,sd] of [['LeftHand',1],['RightHand',-1]]){const p=P[hn];if(!p)continue;const tx=c.x+_rv.x*.5-_rv.z*sd*.24,tz=c.z+_rv.z*.5+_rv.x*sd*.24,ty=Math.max(gy+.06,c.y-.5);
             const dx=(tx-p.x)*k,dy=(ty-p.y)*k,dz=(tz-p.z)*k,q=this.Q[hn];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.6;q.y+=dy*.6;q.z+=dz*.6;}}}}   // mostly placed, a little thrown
-    if(this.clutch){const c=this.clutch,p=this.P[c.h];if(p&&c.p){const k=.006+.006*Math.sin(this.age*1.3),dx=(c.p.x-p.x)*k,dy=(c.p.y-p.y)*k,dz=(c.p.z-p.z)*k,q=this.Q[c.h];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.9;q.y+=dy*.9;q.z+=dz*.9;}}   // a hand pressed to the wound
+    if(this.clutch){const c=this.clutch,p=this.P[c.h];if(p&&c.p){const k=.006+.006*Math.sin(this.age*1.3),dx=(c.p.x-p.x)*k,dy=(c.p.y-p.y)*k,dz=(c.p.z-p.z)*k,q=this.Q[c.h];p.x+=dx;p.y+=dy;p.z+=dz;q.x+=dx*.9;q.y+=dy*.9;q.z+=dz*.9;
+      // (Build 135) the body pushes back as much as the hand pulls: the trunk points near the wound take the opposite of the hand's move, so
+      // the pull is internal. It used to pull the hand alone toward a point on its own body, which dragged the whole body after it every
+      // step, and a man down clutching a wound on his far side slowly turned round and round on the ground
+      let ws=0;const W=[];for(const n of ['Hips','Spine1','Spine2','Neck']){const t=this.P[n];if(!t)continue;const w=1/(.05+t.distanceToSquared(c.p));W.push([n,w]);ws+=w;}
+      for(const [n,w] of W){const t=this.P[n],tq=this.Q[n],f=w/ws*.9;t.x-=dx*f;t.y-=dy*f;t.z-=dz*f;tq.x-=dx*f*.9;tq.y-=dy*f*.9;tq.z-=dz*f*.9;}}}   // a hand pressed to the wound
     if(PIT&&this.P.Hips)this.under=this.P.Hips.y<-.15;   // gone below the deck: the bridge no longer holds any part of this body up
     for(let it=0;it<7;it++){
       for(const [a,b,l,ank] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;let k=(d-l)/d*.5;if(ank&&this.rise){if(d>l*.88&&d<l*1.015)continue;k=(d-(d<l?l*.88:l*1.015))/d*.5;}A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}   // getting up the ankle bends (Build 127): held rigid, a foot on a forward-leaning shin couldn't lie flat and turned sideways or back to fit
@@ -5185,7 +5190,7 @@ class Fighter{
         else if(hy<-PIT.d+1.6&&simTime-this.pitT>9){this.die(null,'fell into the pit');return;}}   // wedged on the way down of the shaft kills
       if(this.alive&&(this.downed||this.bleeds&&this.bleeds.length)){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<10?this.lastHitBy:null,'burned alive',null);return;}}
-      if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();
+      if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&(!this.downed||grabbedBy(this).length)&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();   /* (Build 135) a bot that's down and dying doesn't keep thrashing to get up */
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.startRise();}
       else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(this.sword&&!this.sword.free){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}   // the weapon comes up with the hand that holds it
         if(r.t>=r.p+r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
@@ -5405,7 +5410,11 @@ class Fighter{
   // rock A and D while down or held: thrash, tear loose of hands on you, and get up sooner. It costs breath.
   struggle(){if(this.stamina<5||simTime<(this.strugT||0))return;this.strugT=simTime+.12;this.useStamina(4);
     if(this.knocked>0)this.knocked=Math.max(.05,this.knocked-.18);else if(this.ragdoll&&this.ragdoll.rise)this.ragdoll.rise.t+=.08;
-    const R=this.ragdoll;if(R){R.sleep=false;for(const n of ['LeftForeArm','RightForeArm','LeftLeg','RightLeg']){const P=R.P[n],Q=R.Q[n];if(P&&Q){Q.x-=rand(-.5,.5)*H*3.2;Q.z-=rand(-.5,.5)*H*3.2;Q.y-=rand(0,.25)*H*3.2;}}}   /* (Build 130) a writhe, not a fling: each press threw the forearms and shins at up to 5 m/s, and bots pressed ~1.2 times a second, so the downed flopped about like landed fish */
+    const R=this.ragdoll;if(R&&R.P.Hips){R.sleep=false;let sx=0,sz=0,L=0;const C=R.P.Hips;for(const n of ['LeftForeArm','RightForeArm','LeftLeg','RightLeg']){const P=R.P[n],Q=R.Q[n];if(P&&Q){const dx=rand(-.5,.5)*H*3.2,dz=rand(-.5,.5)*H*3.2;Q.x-=dx;Q.z-=dz;Q.y-=rand(0,.25)*H*3.2;sx+=dx;sz+=dz;L+=(P.x-C.x)*dz-(P.z-C.z)*dx;}}
+      // (Build 135) a writhe pushes off the body itself: whatever push and turn the limbs' kicks add up to is taken back out of the whole
+      // body, so press after press they don't add up into the body sliding and slowly turning round on the ground
+      let I=0,nn=0;for(const n of R.names){const P=R.P[n];I+=(P.x-C.x)**2+(P.z-C.z)**2;nn++;}const w=I>1e-4?L/I:0;
+      for(const n of R.names){const P=R.P[n],Q=R.Q[n];Q.x+=sx/nn-w*(P.z-C.z);Q.z+=sz/nn+w*(P.x-C.x);}}   /* (Build 130) a writhe, not a fling: each press threw the forearms and shins at up to 5 m/s, and bots pressed ~1.2 times a second, so the downed flopped about like landed fish */
     for(const arm of grabbedBy(this)){const G=arm.grab;G.esc=(G.esc||0)+rand(.6,1.2)*(this.stamina>40?1:.6);const A=fighters.find(f=>f.fists.R===arm||f.fists.L===arm);if(G.esc>4+(A?A.stamina/100*4:2)){arm.grab=null;arm.cd=.6;if(A)tell(A,'They tore free','red');tell(this,'Broke free','gold');sThud(this.chest,.3);}}}
   // getting up is work: roll onto hands and knees, push up onto one knee, then stand. Hurt, it is slow and shaky and can fail.
   startRise(){const Rg=this.ragdoll;if(!Rg||Rg.rise)return;const P=Rg.P;this.knocked=0;
@@ -7426,7 +7435,7 @@ function fighterDetail(f,dt){
   if(host&&f.ragdoll){const R=f.ragdoll;
     if(f.alive&&f.downed&&f.bloodSrc&&f.bloodSrc.length){if(!f._clW||simTime>f._clW.t||!f._clW.b.o.parent){let b=null;for(const x of f.bloodSrc)if(x.o.parent&&(!b||x.amt>b.amt))b=x;f._clW=b?{b,t:simTime+4}:null;}
       if(f._clW){const b=f._clW.b;b.o.localToWorld(_fd.copy(b.c));let h=null,bd=1e9;
-        for(const n of ['LeftHand','RightHand']){const p=R.P[n],fa=R.P[n==='LeftHand'?'LeftForeArm':'RightForeArm'];if(!p||!fa)continue;if(fa.distanceToSquared(_fd)<.03||p.distanceToSquared(_fd)<.006)continue;const d=p.distanceToSquared(_fd);if(d<bd){bd=d;h=n;}}
+        for(const n of ['LeftHand','RightHand']){const p=R.P[n],fa=R.P[n==='LeftHand'?'LeftForeArm':'RightForeArm'];if(!p||!fa)continue;if(fa.distanceToSquared(_fd)<.03||p.distanceToSquared(_fd)<.006)continue;const sh=R.P[n==='LeftHand'?'LeftArm':'RightArm'];if(sh&&sh.distanceToSquared(_fd)>.3)continue;const d=p.distanceToSquared(_fd);if(d<bd){bd=d;h=n;}}
         if(h){if(!R.clutch||R.clutch.h!==h)R.clutch={h,p:V()};R.clutch.p.copy(_fd);R.sleep=false;}else R.clutch=null;}}
     else R.clutch=null;
     if(!f.alive){const t=simTime-(f.deathT||0);if(t>.5&&t<7&&Math.random()<dt*3.2*(1-t/7)){const n=TWITCH[(Math.random()*TWITCH.length)|0],q=R.Q[n];if(q){q.x+=(Math.random()-.5)*.004;q.y-=Math.random()*.003;q.z+=(Math.random()-.5)*.004;R.sleep=false;}}}}
@@ -8043,7 +8052,7 @@ loadFighters(async g=>{
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
-Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
+window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
 window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
