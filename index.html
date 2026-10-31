@@ -266,6 +266,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
       <button class="map eng" data-eng="physics" role="radio" aria-checked="false"><b>Rigid body</b><span>Real weight, solid blades and limbs</span></button>
       <button class="map" id="fullBtn" role="switch" aria-checked="false"><b>Full-body physics</b><span>Every standing body is one ragdoll held up by its muscles: blows, bumps and walls move it where you see it</span></button>
+      <button class="map" id="hsBtn" role="switch" aria-checked="false"><b>Jointed body (test)</b><span>Half Sword-style: every fighter is jointed rigid parts with weight, posed by muscles at each joint. Early test</span></button>
     </div>
     <div class="mp">
       <div class="mprow"><button class="map" id="hostBtn"><b>Host for friends</b><span>Get a room code to share</span></button>
@@ -393,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=136;
+const BUILD=137;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4759,6 +4760,97 @@ function dynWorld(){if(!RP||NET.mode==='client'||(PRW&&dynKey===mapKey))return;d
   mapStatics(RP,cd=>PRW.createCollider(cd.setCollisionGroups(DGR_S).setFriction(.7).setRestitution(.05)),false);
   for(const d of DYN)if(d.sh&&!d.gone&&!d.body)dynBody(d);}
 function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);}catch(e){}d.pw=null;d.body=null;}PROX.clear();if(PRW){try{PRW.free();}catch(e){}PRW=null;}dynKey=-1;}
+// ==================== active body (Build 137, experimental: ?hsbody) ====================
+// Half Sword's way: each fighter is a jointed body of rigid parts with mass, held up and posed by muscles (torques at each joint
+// toward the animated pose, joint motors) and, for now, a pelvis held toward where the animation puts it.
+// Blows are impulses on the part struck and carry on through the joints. Its own Rapier world; bodies meet the map and each other.
+let HSBODY=/[?&]hsbody/.test(location.search)||(()=>{try{return localStorage.getItem('bloodmoor-hsbody')==='1';}catch(e){return false;}})();
+let HSW=null,hsKeyM=-1,hsSlot=0;const HS_H=1/240,HSF=new Set(),HS_P={pw:16,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:3.2};
+// id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
+const HS_SEG=[['pel','Hips','Hips',null,null,11,.11,0,0],['abd','Spine1','Spine1','Spine2','pel',8,.12,22,320],['che','Spine2','Spine2','Neck','abd',16,.135,22,320],['hed','Head','Neck','HeadTop_End','che',5,.105,20,60]];
+const HS_OWN={Hips:'pel',Spine1:'abd',Spine2:'che',Neck:'che',Head:'hed',HeadTop_End:'hed'};
+for(const s of ['Left','Right']){const k=s[0];
+  HS_SEG.push(['ua'+k,s+'Arm',s+'Arm',s+'ForeArm','che',2.2,.055,20,110],['fa'+k,s+'ForeArm',s+'ForeArm',s+'Hand','ua'+k,1.4,.045,20,70],['ha'+k,s+'Hand',s+'Hand',s+'HandMiddle1','fa'+k,.5,.04,18,20],
+    ['th'+k,s+'UpLeg',s+'UpLeg',s+'Leg','pel',9,.075,26,420],['sh'+k,s+'Leg',s+'Leg',s+'Foot','th'+k,4,.055,26,320],['ft'+k,s+'Foot',s+'Foot',s+'ToeBase','sh'+k,1.1,.035,24,120]);
+  Object.assign(HS_OWN,{[s+'Arm']:'ua'+k,[s+'ForeArm']:'fa'+k,[s+'Hand']:'ha'+k,[s+'HandMiddle1']:'ha'+k,[s+'UpLeg']:'th'+k,[s+'Leg']:'sh'+k,[s+'Foot']:'ft'+k,[s+'ToeBase']:'ft'+k});}
+const _hq=new THREE.Quaternion(),_hq2=new THREE.Quaternion(),_hqt=new THREE.Quaternion(),_hv1=V(),_hv2=V(),_hv3=V(),_hv4=V();
+function hsWorld(){if(!RP||NET.mode==='client')return false;if(HSW&&hsKeyM===mapKey)return true;hsFreeAll();
+  HSW=new RP.World({x:0,y:-9.81,z:0});HSW.timestep=HS_H;hsKeyM=mapKey;
+  mapStatics(RP,cd=>HSW.createCollider(cd.setCollisionGroups(grp(1,0xffff)).setFriction(.9).setRestitution(0)),false);return true;}
+function hsFree(f){const S=f.hs;if(!S)return;if(HSW)for(const s of S.list){try{HSW.removeRigidBody(s.b);}catch(e){}}f.hs=null;HSF.delete(f);}
+function hsFreeAll(){for(const f of HSF){f.hs=null;f.ar=null;}HSF.clear();if(HSW){try{HSW.free();}catch(e){}HSW=null;}hsKeyM=-1;}
+// rotation from a to b as a vector (axis × angle), shortest way
+function qErr(a,b,out){_hq2.copy(b).invert().premultiply(a);if(_hq2.w<0){_hq2.x=-_hq2.x;_hq2.y=-_hq2.y;_hq2.z=-_hq2.z;_hq2.w=-_hq2.w;}const s=Math.hypot(_hq2.x,_hq2.y,_hq2.z);if(s<1e-9)return out.set(0,0,0);const ang=2*Math.atan2(s,_hq2.w);return out.set(_hq2.x,_hq2.y,_hq2.z).multiplyScalar(ang/s);}
+function hsMake(f){const B=f.bones;f.root.updateMatrixWorld(true);const bit=1+(hsSlot++%15),G=grp(1<<bit,0xffff&~(1<<bit));
+  const W={};for(const n of RD_NAMES)if(B[n])W[n]=V().setFromMatrixPosition(B[n].matrixWorld);
+  const S={seg:{},list:[],T:{},pts:{},M:0},sev=n=>!B[n]||B[n].userData.severed;
+  for(const [id,fb,a,e,par,m,r,wn,tm] of HS_SEG){if(sev(fb)||(e&&sev(e))||(par&&!S.seg[par]))continue;
+    const qbn=new THREE.Quaternion();B[fb].getWorldQuaternion(qbn);const q=S.qb||(S.qb=qbn.clone()),cq=qbn.clone().invert().multiply(q);   // every part starts in the pelvis's frame, so the joints' turns are measured from this pose (small), not from the bones' own axes
+    const o=W[fb].clone(),qi=q.clone().invert(),loc=p=>p.clone().sub(o).applyQuaternion(qi);
+    const b=HSW.createRigidBody(RP.RigidBodyDesc.dynamic().setTranslation(o.x,o.y,o.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}).setLinvel(f.vel.x,0,f.vel.z).setLinearDamping(.05).setAngularDamping(.6).setCanSleep(false));
+    let A,E;if(id==='pel'){A=W.LeftUpLeg;E=W.RightUpLeg;}
+    else if(id[0]==='f'){const gy=groundY(o.x,o.z,o.y+.3);A=W[a].clone();E=W[e].clone();_hv1.subVectors(E,A).setY(0).normalize();A.addScaledVector(_hv1,-.06);A.y=Math.min(A.y,gy+r);E.y=Math.min(E.y,gy+r);}   // the sole, heel to toe
+    else{A=W[a];E=W[e];}
+    A=loc(A);E=loc(E);const L=A.distanceTo(E),mid=A.clone().add(E).multiplyScalar(.5);let cd;
+    if(id==='hed')cd=RP.ColliderDesc.ball(r);
+    else{cd=RP.ColliderDesc.capsule(Math.max(.005,L/2-r),r);_hv1.subVectors(E,A);if(_hv1.lengthSq()>1e-8){_hq.setFromUnitVectors(Y_AXIS,_hv1.normalize());cd.setRotation({x:_hq.x,y:_hq.y,z:_hq.z,w:_hq.w});}}
+    HSW.createCollider(cd.setTranslation(mid.x,mid.y,mid.z).setMass(m).setFriction(id[0]==='f'?1.1:.6).setRestitution(0).setCollisionGroups(G),b);
+    const s={id,b,m,par,wn,tm,fb,qt0:q.clone(),qt1:q.clone(),cq,wt:V(),x0:o.clone(),x1:o.clone(),jw:W[a].clone(),cw:id==='pel'?W.Hips.clone():W[a].clone().lerp(W[e],.5),I:0};
+    if(par){const P=S.seg[par],pa=W[a].clone().sub(P.o0).applyQuaternion(P.qi0),ca=loc(W[a]);s.j=HSW.createImpulseJoint(RP.JointData.spherical({x:pa.x,y:pa.y,z:pa.z},{x:ca.x,y:ca.y,z:ca.z}),P.b,b,true);s.sa=a;}
+    s.o0=o;s.qi0=qi;S.seg[id]=s;S.list.push(s);S.M+=m;
+    for(const n in HS_OWN)if(HS_OWN[n]===id&&W[n])S.pts[n]={s,o:loc(W[n])};}
+  for(const s of S.list){let I=0;for(const t of S.list){let u=t;while(u&&u!==s)u=S.seg[u.par];if(u===s)I+=t.m*(t.cw.distanceToSquared(s.jw)+.004);}s.I=I;}
+  return S;}
+// this frame's animated pose becomes the body's target (called at the end of animate, in place of the verlet full body)
+function hsTarget(f,dt){const B=f.bones;f.root.updateMatrixWorld(true);let S=f.hs;const sevN=f.sevNames.length;
+  if(S){const t=S.seg.pel&&S.seg.pel.b.translation();if(S.sev!==sevN||dt>.2||!t||!Number.isFinite(t.x+t.y+t.z)||_hv1.set(t.x,t.y,t.z).distanceToSquared(_hv2.setFromMatrixPosition(B.Hips.matrixWorld))>.6){hsFree(f);S=null;}}
+  if(!S){S=f.hs=hsMake(f);S.sev=sevN;HSF.add(f);const A=f.ar=new Ragdoll(B,RD_NAMES,V(),null,null);A.rest=false;A.hs=1/120;for(const n of A.names)A.Q[n].copy(A.P[n]);}
+  for(const n of RD_NAMES)if(B[n])(S.T[n]||(S.T[n]=V())).setFromMatrixPosition(B[n].matrixWorld);
+  for(const s of S.list){s.qt0.copy(s.qt1);B[s.fb].getWorldQuaternion(s.qt1).multiply(s.cq);qErr(s.qt1,s.qt0,s.wt).multiplyScalar(1/Math.max(dt,1e-3));s.x0.copy(s.x1);s.x1.copy(S.T[s.fb]);}
+  for(const s of S.list)if(s.j){const P=S.seg[s.par];_hq.copy(P.qt1).invert();_hv1.subVectors(S.T[s.sa],S.T[P.fb]).applyQuaternion(_hq);s.j.setAnchor1({x:_hv1.x,y:_hv1.y,z:_hv1.z});}   // the joint sits where the animation has it in the parent (a shrug, the lower spine bending)
+  const pin=S.pin||(S.pin=new Set());pin.clear();
+  if(f.sword&&f.mainArm){const m=f.mainArm==='R'?'R':'L';pin.add('ha'+m);if(twoH(f.sword.def)||f.sword.def.kind==='spear')pin.add('ha'+(m==='R'?'L':'R'));}
+  if(!f.sword){pin.add('haL').add('haR');}
+  if(f.isPlayer&&camMode==='fp')pin.add('hed');
+  if(HS_P.nopin)pin.clear();
+  f.fbRelax=Math.max(0,(f.fbRelax||0)-dt*1.6);   // a blow's slackening wears off
+  S.dt=dt;}
+function hsDrive(f,a,h){const S=f.hs,str=f.pbd?f.pbd.str:1,rl=f.fbRelax||0,mus=(.35+.65*str)*(1-.6*rl)*HS_P.km,dt=S.dt||1/60;
+  for(const s of S.list)(s.qs||(s.qs=new THREE.Quaternion())).copy(s.qt0).slerp(s.qt1,a);
+  // muscles: each joint's motors are told how fast to turn (toward the animated pose, plus the pose's own turning) and solved with the
+  // joints, so they are stiff without blowing up. Driving the motors' angle targets directly fails for big turns (Rapier measures them per axis).
+  for(const s of S.list){if(!s.j)continue;const P=S.seg[s.par],rp=P.b.rotation(),rc=s.b.rotation(),qpi=_hq.set(rp.x,rp.y,rp.z,rp.w).invert();
+    _hq2.set(rc.x,rc.y,rc.z,rc.w).premultiply(qpi);const qt=_hqt.copy(P.qs).invert().multiply(s.qs);qErr(qt,_hq2,_hv3);   // in the parent's frame
+    _hv1.copy(s.wt).sub(P.wt).applyQuaternion(qpi);
+    const wn=s.wn*HS_P.wk*Math.sqrt(mus),c=2*wn*s.I,kp=wn/2,R=s.j.rawSet,hd=s.j.handle;
+    if(!s.mset){for(let i=0;i<3;i++)R.jointConfigureMotorModel(hd,3+i,1);s.mset=1;}
+    R.jointConfigureMotorVelocity(hd,3,_hv1.x+kp*_hv3.x,c);R.jointConfigureMotorVelocity(hd,4,_hv1.y+kp*_hv3.y,c);R.jointConfigureMotorVelocity(hd,5,_hv1.z+kp*_hv3.z,c);}
+  for(const s of S.list){const b=s.b,isP=s.id==='pel',isF=s.id[0]==='f'&&s.id[1]==='t',pin=S.pin.has(s.id);if(!isP&&!isF&&!pin)continue;
+    const p=b.translation(),v=b.linvel();_hv1.lerpVectors(s.x0,s.x1,a);_hv2.subVectors(s.x1,s.x0).multiplyScalar(1/dt);
+    if(isP){   // the pelvis is held toward the animation, place and turn: stage 1's crutch (stage 2 replaces it with balance)
+      const M=S.M,w0=HS_P.pw,k=w0*w0,c=2*w0;let ex=_hv1.x-p.x,ey=_hv1.y-p.y,ez=_hv1.z-p.z;const el=Math.hypot(ex,ey,ez);if(el>.3){ex*=.3/el;ey*=.3/el;ez*=.3/el;}
+      const as=M*(.4+.6*str)/(1+c*h+k*h*h)*h;b.applyImpulse({x:(k*ex+c*(_hv2.x-v.x))*as,y:(k*ey+c*(_hv2.y-v.y))*as+M*9.81*HS_P.pg*h,z:(k*ez+c*(_hv2.z-v.z))*as},true);
+      const r=b.rotation(),w=b.angvel(),aw=HS_P.aw,I=HS_P.pi/(1+2*aw*h+aw*aw*h*h)*h;qErr(s.qs,_hq2.set(r.x,r.y,r.z,r.w),_hv3);
+      b.applyTorqueImpulse({x:I*(aw*aw*_hv3.x+2*aw*(s.wt.x-w.x)),y:I*(aw*aw*_hv3.y+2*aw*(s.wt.y-w.y)),z:I*(aw*aw*_hv3.z+2*aw*(s.wt.z-w.z))},true);continue;}
+    // feet guided to where the animation steps, and hands that hold something to the grip (and the first-person head): stage 1
+    const w0=pin?HS_P.hw:HS_P.fa,k=w0*w0,c=2*w0,m=(s.id==='hed'?5:pin?3:2)*h/(1+c*h+k*h*h);
+    b.applyImpulse({x:m*(k*(_hv1.x-p.x)+c*(_hv2.x-v.x)),y:m*(k*(_hv1.y-p.y)+c*(_hv2.y-v.y)),z:m*(k*(_hv1.z-p.z)+c*(_hv2.z-v.z))},true);}}
+// the body as it now is drawn: each joint point carried on its part
+function hsDraw(f){const S=f.hs,A=f.ar;if(!S||!A)return;
+  for(const n of A.names){const pt=S.pts[n],P=A.P[n],Q=A.Q[n];if(!pt){if(S.T[n]){P.copy(S.T[n]);Q.copy(P);}continue;}
+    const b=pt.s.b,t=b.translation(),r=b.rotation();_hq.set(r.x,r.y,r.z,r.w);P.copy(pt.o).applyQuaternion(_hq);P.x+=t.x;P.y+=t.y;P.z+=t.z;
+    if(!Number.isFinite(P.x+P.y+P.z)){hsFree(f);return;}
+    const v=b.linvel(),w=b.angvel(),c=b.worldCom?b.worldCom():t;_hv1.set(P.x-c.x,P.y-c.y,P.z-c.z);_hv2.set(w.x,w.y,w.z).cross(_hv1);
+    Q.set(P.x-(v.x+_hv2.x)*A.hs,P.y-(v.y+_hv2.y)*A.hs,P.z-(v.z+_hv2.z)*A.hs);
+    if(S.pin.has(pt.s.id)&&S.T[n]){Q.sub(P).add(S.T[n]);P.copy(S.T[n]);}}
+  A.apply();f.root.updateMatrixWorld(true);f.updateCaps();}
+function hsStep(dt){if(!HSW)return;for(const f of [...HSF])if(!f.alive||f.ragdoll||!fighters.includes(f)||!f.hs.dt){hsFree(f);if(!f.alive||f.ragdoll)f.ar=null;}
+  if(!HSF.size||!(dt>0))return;const n=clamp(Math.round(dt/HS_H),1,10),h=dt/n;HSW.timestep=h;
+  for(let i=1;i<=n;i++){const a=i/n;for(const f of HSF)hsDrive(f,a,h);HSW.step();}
+  for(const f of [...HSF]){hsDraw(f);if(f.hs)f.hs.dt=0;}}
+// a blow on the active body: an impulse on the part struck, at the point struck
+function hsHit(f,n,dir,dv){const S=f.hs,s=S&&S.seg[HS_OWN[n]||'che'];if(!s)return;const J=dv*HS_P.blow,p=f.ar&&f.ar.P[n];
+  if(p)s.b.applyImpulseAtPoint({x:dir.x*J,y:dir.y*J,z:dir.z*J},{x:p.x,y:p.y,z:p.z},true);else s.b.applyImpulse({x:dir.x*J,y:dir.y*J,z:dir.z*J},true);f.fbRelax=Math.min(1,(f.fbRelax||0)+dv*.25);}
 function dynColl(R,S,m){let cd;if(S.t==='box')cd=R.ColliderDesc.cuboid(S.h[0],S.h[1],S.h[2]);else if(S.t==='cyl'){cd=R.ColliderDesc.cylinder(S.h[0],S.h[1]);if(S.rz)cd.setRotation({x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2});else if(S.rx)cd.setRotation({x:Math.SQRT1_2,y:0,z:0,w:Math.SQRT1_2});}else cd=R.ColliderDesc.ball(S.h[0]);
   return cd.setTranslation(S.o[0],S.o[1],S.o[2]).setMass(m);}
 function dynBody(d){if(d.body||!d.sh||d.gone)return;const p=d.obj.position,q=d.obj.quaternion;
@@ -5105,7 +5197,7 @@ class Fighter{
     for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length();if(d>.25){A.P[n].copy(t).addScaledVector(_wl1,.25/d);}else if(!(d>=0)){A.P[n].copy(t);A.Q[n].copy(t);}}
     A.apply();this.root.updateMatrixWorld(true);}
   // a blow lands on the full body: the struck point and its neighbours are driven
-  fbHit(n,dir,dv){const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];let wp=0;for(const m of FB_PELV)if(A.P[m])wp=Math.max(wp,m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08));
+  fbHit(n,dir,dv){if(this.hs){hsHit(this,n,dir,dv);return;}const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];let wp=0;for(const m of FB_PELV)if(A.P[m])wp=Math.max(wp,m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08));
     for(const m of A.names){const w=FB_PELV.includes(m)?wp:m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-dv*w/55);}   /* (Build 128) the pelvis is pushed as one piece: pushing one hip more than the other spun the hips round */this.fbRelax=Math.min(1,(this.fbRelax||0)+dv*.25);}   // a blow knocks the wind out: the muscles give for a moment and the body rides it
   // an elbow: the IK's bend point is a weight carried by the body, sprung to where the arm wants it, so it swings and is knocked about
   physPole(side,t,dt,held){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
@@ -5800,7 +5892,8 @@ class Fighter{
 }
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
-    this.fullBody(dt);if(this.ar)this.updateCaps();   // a blow lands where the body is drawn
+    if(HSBODY&&this.alive&&!this.ragdoll&&dt>0&&dt<=.2&&hsWorld())hsTarget(this,dt);   // the active body (drawn after the world steps, in logic)
+    else{if(this.hs)hsFree(this);this.fullBody(dt);if(this.ar)this.updateCaps();}   // a blow lands where the body is drawn
   }
   startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
     if(this.ai&&!this.isPlayer)this.ai.cd=Math.max(this.ai.cd||0,d*.6);if(NET.mode==='host')netEv(['q',this.id,part,r3(d)]);if(this.isPlayer)tell(this,part==='neck'?'Your throat is cut':'You clutch the wound','red');}
@@ -7004,6 +7097,7 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
+{const hb=document.getElementById('hsBtn');const show=()=>{hb.classList.toggle('on',HSBODY);hb.setAttribute('aria-checked',HSBODY?'true':'false');};show();hb.addEventListener('click',()=>{HSBODY=!HSBODY;if(!HSBODY)hsFreeAll();try{localStorage.setItem('bloodmoor-hsbody',HSBODY?'1':'0');}catch(e){}show();});}
 {const fb=document.getElementById('fullBtn');const show=()=>{fb.classList.toggle('on',FULLBODY);fb.setAttribute('aria-checked',FULLBODY?'true':'false');};show();fb.addEventListener('click',()=>{FULLBODY=!FULLBODY;try{localStorage.setItem('bloodmoor-fullbody',FULLBODY?'1':'0');}catch(e){}show();});}
 try{localStorage.removeItem('bloodmoor-hybrid');}catch(e){}
 function startGame(){
@@ -7213,6 +7307,7 @@ function logic(dt){
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   for(const f of fighters)f.animate(dt);
+  if(HSW)hsStep(dt);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
@@ -8063,6 +8158,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
