@@ -45,6 +45,15 @@ def hem_rim(V,F,t=.0045):
     V2=np.concatenate([V,np.array([V[v]-N[v]*t for v in vs],np.float32)]);F2=[*F]
     for a,b in be:F2.append([b,a,m[a]]);F2.append([b,m[a],m[b]])
     return V2,np.array(F2)
+def push_out(b,V,F,off=.006):
+    # (Build 129) no cloth inside the body: the sim let the back of a garment sink into the shoulder blades on one build, and the skin
+    # drawn there showed through as a ragged hole. Each vertex is lifted to at least `off` outside the nearest skin (5 nearest, along its normal)
+    from scipy.spatial import cKDTree
+    P=BODY[b]['P'];N=BODY[b]['N'];d,j=cKDTree(P).query(V,k=5);V=V.copy()
+    for k in range(5):
+        q=P[j[:,k]];n=N[j[:,k]];s=((V-q)*n).sum(1);m=(s<off)&(d[:,k]<.06)
+        V[m]+=n[m]*(off-s[m])[:,None]
+    return V
 def shoulder_hug(b,V,F,cap=.02):
     # over the shoulders and round the neck the cloth lies on the body: the sim sometimes left a fold standing up there like an epaulette
     from scipy.spatial import cKDTree
@@ -94,18 +103,46 @@ def bind_edges(V,F,r=.0042,sides=6):
         loop=[];x=s
         while x not in seen and x in nxt:seen.add(x);loop.append(x);x=nxt[x]
         if len(loop)<6:continue
+        closed=(x==s)   # (Build 133) an open path (the walk ran into a vertex another loop had taken) must not be closed: joining its two ends drew a long thin tube across the garment, the 'stringy thing'
         P=V[loop];L=len(loop)
         for i in range(L):
             t=P[(i+1)%L]-P[i-1];t/=np.linalg.norm(t)+1e-9;n=N[loop[i]];n=n-t*(n@t);n/=np.linalg.norm(n)+1e-9;b=np.cross(t,n)
             ring=[P[i]+r*(np.cos(a)*n+np.sin(a)*b)-n*r*.6 for a in np.linspace(0,2*np.pi,sides,endpoint=False)]
             Vs.append(np.array(ring,np.float32))
-        for i in range(L):
+        for i in range(L if closed else L-1):
             j=(i+1)%L
+            if np.linalg.norm(P[j]-P[i])>.04:continue   # never bridge a gap
             for k in range(sides):
                 a=n0+i*sides+k;b2=n0+i*sides+(k+1)%sides;c=n0+j*sides+k;d=n0+j*sides+(k+1)%sides
                 Fs.append(np.array([[a,c,b2],[b2,c,d]]))
         n0+=L*sides
     return np.concatenate(Vs).astype(np.float32),np.concatenate(Fs)
+def skin_cloth(b,V,F,N,smooth_it=6):
+    # (Build 133) cloth weights from the skin straight under each vertex (along its inward normal), not simply the nearest skin: cloth that
+    # hung down under the T-pose arm took the arm at one vertex and the torso at the next, and when the arm moved that edge stretched into
+    # a long thin string or sheet. Then the weights are smoothed over the garment's own surface so no edge is torn between two bones
+    from scipy.spatial import cKDTree
+    B=BODY[b];P=B['P'];J=B['J'];W=B['W'];nb=len(B['names']);t=cKDTree(P);d,j=t.query(V,k=24)
+    acc=np.zeros((len(V),nb),np.float32)
+    for i in range(len(V)):
+        q=P[j[i]]-V[i];n=-N[i];depth=q@n;perp=np.linalg.norm(q-np.outer(depth,n),axis=1)
+        sc=perp*2.2+np.abs(d[i])*.6+np.where(depth<-.005,1.,0.)   # under the vertex, close, and on the inside
+        o=np.argsort(sc)[:4];ww=1/(sc[o]+.004)**2;ww/=ww.sum()
+        for kk,oi in enumerate(o):
+            bj=j[i,oi]
+            for c in range(4):
+                if W[bj,c]>0:acc[i,J[bj,c]]+=ww[kk]*W[bj,c]
+    from collections import defaultdict
+    adj=defaultdict(set)
+    for tri in F:
+        for a,c in ((tri[0],tri[1]),(tri[1],tri[2]),(tri[2],tri[0])):adj[a].add(c);adj[c].add(a)
+    nbrs=[np.array(sorted(adj[i])) if adj[i] else np.array([i]) for i in range(len(V))]
+    for _ in range(smooth_it):
+        acc=.5*acc+.5*np.stack([acc[nb_].mean(0) for nb_ in nbrs])
+    jj=np.zeros((len(V),4),np.uint8);wq=np.zeros((len(V),4),np.uint8)
+    for i in range(len(V)):
+        o=np.argsort(-acc[i])[:4];w=acc[i,o];w=w/max(w.sum(),1e-6);jj[i]=o;wq[i]=np.round(w*255)
+    return jj,wq
 def uvs(V,F):
     # box mapping in metres (the cloth texture tiles by world size): pick the projection axis per face by its normal
     n=normals(V,F);ax=np.abs(n).argmax(1);uv=np.zeros((len(V),2),np.float32)
@@ -117,10 +154,10 @@ def write(g,builds='ABCD',kind='cloth',extra={}):
     def add(n,a):arrs.append((n,np.ascontiguousarray(a)))
     for b in builds:
         d=np.load(SC+'gar_%s_%s.npz'%(g,b));V=d['V'].astype(np.float32);F=d['F'].astype(np.int64)
-        V=shoulder_hug(b,V,F);V=smooth_edges(V,F,40);V=ring_smooth(V,F)
+        V=push_out(b,V,F);V=shoulder_hug(b,V,F);V=push_out(b,V,F,.004);V=smooth_edges(V,F,40);V=ring_smooth(V,F)
         if kind=='cloth':
             n_body=len(V);V,F=bind_edges(V,F)
-        N=normals(V,F);j,w=skin(b,V)
+        N=normals(V,F);j,w=skin_cloth(b,V,F,N) if kind=='cloth' else skin(b,V)
         B=BODY[b];names=list(B['names']);IBM=B['IBM'];hy=np.linalg.inv(IBM[names.index('Hips')])[1,3]
         # skirt weights: below the crotch blend toward Hips + UpLegs
         iH,iL,iR=names.index('Hips'),names.index('LeftUpLeg'),names.index('RightUpLeg')

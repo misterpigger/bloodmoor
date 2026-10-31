@@ -393,7 +393,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=132;
+const BUILD=133;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3583,20 +3583,21 @@ function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Ma
   g.computeVertexNormals();return g;}
 // a cross guard: quillons tapering out from a block and flaring at the tips, edges rounded, bent toward the blade if asked
 function guardGeo(S,H,D,bend=0,BW=0){
-  // (Build 127) forged, not cut from a plate: a chamfered centre block (the écusson) and two quillons swept out from it, each an octagonal
-  // bar that tapers and then swells into a rounded terminal, bent toward the blade if asked; smooth-shaded
-  const parts=[],bw=Math.max(H*1.3,.022,BW),blk=new THREE.BoxGeometry(bw,H,Math.max(D*.95,BW?.018:0),1,1,1);   /* (Build 131) the centre block is as wide as the blade's shoulder and a little more, so the blade seats in it: it was 2.6 cm against a 4.8 cm blade, and the blade's corners stood out past it into thin air */
-  {const p=blk.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);p.setX(i,p.getX(i)*(y<0?.82:1));}}   // narrower on the blade side
-  parts.push(blk.toNonIndexed());
-  const NR=18,NS=8,r0=Math.min(H,D)*.56;
-  for(const sd of [-1,1]){const pos=[],idx=[];const L=S/2-bw/2;
-    for(let i=0;i<=NR;i++){const t=i/NR,x=sd*(bw/2-.002+t*(L+.002)),f=Math.abs(x)/(S/2);
-      const r=r0*(t<.75?1-.2*t/.75:.8+.4*Math.sin((t-.75)/.25*Math.PI*.5))*(t>.97?Math.sqrt(Math.max(0,(1-t)/.03))*.9+.1:1),yo=bend*f*f;
-      for(let k=0;k<NS;k++){const a=(k+.5)/NS*Math.PI*2;pos.push(x,yo+Math.cos(a)*r*(H/Math.min(H,D)),Math.sin(a)*r*(D/Math.min(H,D))*.9);}}
-    for(let i=0;i<NR;i++)for(let k=0;k<NS;k++){const a=i*NS+k,b2=i*NS+(k+1)%NS,c=a+NS,d=b2+NS;if(sd>0)idx.push(a,c,b2,b2,c,d);else idx.push(a,b2,c,b2,d,c);}
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();parts.push(g.toNonIndexed());}
-  const out=mergeGeometries(parts.map(x=>{if(x.attributes.uv)x.deleteAttribute('uv');return x;}));
-  const uv=new Float32Array(out.attributes.position.count*2);out.setAttribute('uv',new THREE.BufferAttribute(uv,2));return out;}
+  // (Build 133) one forged piece lofted end to end: a rounded-octagon section that is full height and as deep as the blade's shoulder at
+  // the middle (the écusson the blade seats in), necks in smoothly into the quillons, tapers along them and swells into knob terminals.
+  // It was a box with two separate bars pushed into it, which left steps and gaps where they met
+  const bw=Math.max(H*1.3,.022,BW),dc=Math.max(D*.95,BW?.018:0),r0=Math.min(H,D)*.56,NS=16,NX=64,pos=[],idx=[];
+  const prof=x=>{const ax=Math.abs(x),h=S/2,c=bw/2;let hy,hz;
+    if(ax<=c){hy=H/2;hz=dc/2;}
+    else{const t=(ax-c)/Math.max(1e-4,h-c),n=Math.min(1,(ax-c)/.012),e=n*n*(3-2*n);   // neck from the block into the bar over 1.2 cm
+      const r=r0*(t<.75?1-.2*t/.75:.8+.4*Math.sin((t-.75)/.25*Math.PI*.5))*(t>.96?Math.sqrt(Math.max(0,(1-t)/.04))*.85+.15:1);
+      const ry=r*(H/Math.min(H,D)),rz=r*(D/Math.min(H,D))*.9;hy=H/2+(ry-H/2)*e;hz=dc/2+(rz-dc/2)*e;}
+    return [hy,hz];};
+  for(let i=0;i<=NX;i++){const u=i/NX,x=-S/2+S*(.5-.5*Math.cos(Math.PI*u)),[hy,hz]=prof(x),f=Math.abs(x)/(S/2),yo=bend*f*f;
+    for(let k=0;k<NS;k++){const a=k/NS*Math.PI*2,c=Math.cos(a),s2=Math.sin(a),p=4,m=Math.pow(Math.pow(Math.abs(c),p)+Math.pow(Math.abs(s2),p),-1/p);pos.push(x,yo+c*m*hy,s2*m*hz);}}
+  for(let i=0;i<NX;i++)for(let k=0;k<NS;k++){const a=i*NS+k,b2=i*NS+(k+1)%NS,c=a+NS,d=b2+NS;idx.push(a,c,b2,b2,c,d);}
+  const e0=pos.length/3;pos.push(-S/2,0,0);const e1=pos.length/3;pos.push(S/2,bend,0);for(let k=0;k<NS;k++){idx.push(e0,k,(k+1)%NS);idx.push(e1,NX*NS+(k+1)%NS,NX*NS+k);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(pos.length/3*2),2));g.computeVertexNormals();return g;}
 // pommels: a bevelled wheel with a peened tang button, or a pear for the greatsword
 function wheelPommel(R,T){const g=lathe([[0,-T/2-.004],[.006,-T/2-.004],[.007,-T/2],[R*.5,-T/2],[R*.9,-T*.32],[R,-T*.1],[R,T*.1],[R*.9,T*.32],[R*.5,T/2],[.007,T/2],[.006,T/2+.004],[0,T/2+.004]].reverse(),28);g.rotateX(Math.PI/2);return g;}
 function pearPommel(R){return lathe([[0,-R*1.25],[R*.25,-R*1.2],[R*.75,-R*.8],[R,-R*.15],[R*.85,R*.5],[R*.45,R*.85],[R*.3,R*1.05],[0,R*1.08]].reverse(),24);}
@@ -3663,12 +3664,21 @@ function makeMace(st=0){
     for(const [x,y,z] of sp){const c=new THREE.ConeGeometry(.0085,.03,4,1);c.translate(0,.015+.038,0);const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(x,y,z));c.applyQuaternion(q);parts.push([shade(c),headMat,0,.62,0]);}
     parts.push([shade(lathe([[.017,-.03],[.024,-.02],[.022,.0],[.0,.0]].reverse(),16)),headMat,0,.585,0]);}
   else{
-    const fl=new THREE.Shape();fl.moveTo(0,0);fl.lineTo(.006,0);fl.bezierCurveTo(.02,.01,.03,.045,.026,.08);fl.bezierCurveTo(.023,.105,.014,.128,.004,.145);fl.lineTo(0,.145);fl.closePath();
-    const fg=new THREE.ExtrudeGeometry(fl,{depth:.0045,bevelEnabled:true,bevelThickness:.0012,bevelSize:.0012,bevelSegments:2,curveSegments:14});fg.translate(.016,0,-.00225);fg.computeVertexNormals();
-    edgeShade(fg,(x)=>x>.036?1.4:x>.03?1.15:.88);
+    // (Build 133) Gothic flanges: each a two-pointed blade of steel (a long lower point, a short upper one, a notch between), pierced
+    // with a trefoil-ish hole by the socket, ground to an edge (thick at the root, thin at the points); the socket has moulded collars,
+    // and a pair of langets runs down the shaft
+    const fl=new THREE.Shape();fl.moveTo(0,0);fl.lineTo(.004,0);fl.quadraticCurveTo(.018,.012,.034,.05);fl.quadraticCurveTo(.024,.062,.02,.072);
+    fl.quadraticCurveTo(.03,.095,.028,.122);fl.quadraticCurveTo(.016,.134,.004,.148);fl.lineTo(0,.148);fl.closePath();
+    const hole=new THREE.Path();hole.absarc(.012,.045,.0055,0,Math.PI*2,true);fl.holes.push(hole);
+    const hole2=new THREE.Path();hole2.absarc(.011,.1,.004,0,Math.PI*2,true);fl.holes.push(hole2);
+    const fg=new THREE.ExtrudeGeometry(fl,{depth:.0042,bevelEnabled:true,bevelThickness:.0016,bevelSize:.0014,bevelSegments:3,curveSegments:16});fg.translate(.016,0,-.0021);
+    {const p=fg.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i)-.016,k=Math.max(.35,1-x/.04);p.setZ(i,p.getZ(i)*k);}fg.computeVertexNormals();}   // thinner toward the points
+    edgeShade(fg,(x)=>x>.042?1.45:x>.034?1.18:.9);
     for(let i=0;i<7;i++){const a=i/7*Math.PI*2;parts.push([fg,headMat,0,.565,0,0,-a,0]);}
-    parts.push([shade(lathe([[.016,-.004],[.019,.0],[.018,.15],[.0,.15]].reverse(),16)),headMat,0,.565,0]);
-    parts.push([shade(lathe([[0,-.002],[.012,-.002],[.014,.008],[.008,.02],[.005,.03],[0,.032]].reverse(),16)),headMat,0,.715,0]);}
+    parts.push([shade(lathe([[.0175,-.004],[.0205,.0],[.0195,.006],[.018,.14],[.0195,.144],[.017,.15],[.0,.15]].reverse(),24)),headMat,0,.565,0]);
+    for(const [y,r] of [[.555,.022],[.575,.0205],[.705,.0195]])parts.push([shade(lathe([[r*.86,-.004],[r,-.002],[r,.002],[r*.86,.004]].reverse(),24)),headMat,0,y,0]);
+    parts.push([shade(lathe([[0,-.002],[.011,-.002],[.014,.006],[.007,.018],[.0095,.026],[.004,.036],[0,.04]].reverse(),20)),headMat,0,.715,0]);   // a turned finial
+    for(const sd of [-1,1]){const lg=new THREE.BoxGeometry(.006,.12,.0035);lg.translate(0,-.06,0);parts.push([shade(lg),headMat,sd*.0165,.56,0]);}}
   return wpnGroup(parts);
 }
 function makeSpear(st=0){const sock=lathe([[.0175,-.05],[.019,-.04],[.017,.02],[.012,.07],[.008,.09]].reverse(),14);
@@ -7589,6 +7599,7 @@ function spawnEntrant(en,x,z,kit,skill){
 // spawnEntrant turns), so no two rounds open from the same spots
 let SHIP_SLOTS=null;function shipSlot(i,n){if(!SHIP_SLOTS||SHIP_SLOTS.length!==n||i===0&&!SHIP_SLOTS.used){SHIP_SLOTS=[...Array(n).keys()].sort(()=>Math.random()-.5);}SHIP_SLOTS.used=i!==n-1;return SHIP_SLOTS[i];}
 function duelSpots(gap=6){const M=MAPS[curMap],ship=curMap==='ship';
+  if(PIT&&!PIT.down&&gap>0){const d=PIT.r+1.7;return [[PIT.x-d,PIT.z],[PIT.x+d,PIT.z]];}   // (Build 133) in the Pit a bout starts at the two ends of the bridge, facing each other across it
   for(let k=0;k<240;k++){let cx,cz,d;if(ship){cx=(Math.random()-.5)*2;cz=(Math.random()-.5)*(k<160?18:6);d=(Math.random()-.5)*.5;}
     else{const cr=k<160?Math.min(M.spawn[1]*.6,7):1.5,a=Math.random()*6.283,r=Math.sqrt(Math.random())*cr;cx=Math.cos(a)*r;cz=Math.sin(a)*r+MO();d=Math.random()*6.283;}
     const dx=Math.sin(d)*gap/2,dz=Math.cos(d)*gap/2,A=[cx-dx,cz-dz],B=[cx+dx,cz+dz];
