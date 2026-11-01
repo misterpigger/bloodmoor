@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=142;
+const BUILD=143;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4032,6 +4032,7 @@ RISE_C.push(['LeftToeBase',.1,.16,.03],['RightToeBase',.1,-.16,.03]);
 const RISE_ST=[RISE_P,RISE_A,RISE_B,RISE_C];
 const RD_RND=n=>{const s=Math.sin((n.length*12.9898+n.charCodeAt(0)*78.233+n.charCodeAt(n.length-1)*3.7+(RD_RND.k=(RD_RND.k||0)+1))*43758.5453);return s-Math.floor(s);};   // a little difference per limb
 const SPINE_UP=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1'];
+let STUM_MAX=1.5,STUM_RELIEF=1.6;
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
 const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck','Head'],['Head','HeadTop_End'],['Head','Spine2'],['HeadTop_End','Neck'],
   ['Spine2','LeftArm'],['Spine2','RightArm'],['Neck','LeftArm'],['Neck','RightArm'],['LeftArm','RightArm'],['Spine1','LeftArm'],['Spine1','RightArm'],['Hips','LeftArm'],['Hips','RightArm'],
@@ -4769,7 +4770,7 @@ function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);
 // toward the animated pose, joint motors) and, for now, a pelvis held toward where the animation puts it.
 // Blows are impulses on the part struck and carry on through the joints. Its own Rapier world; bodies meet the map and each other.
 let HSBODY=/[?&]hsbody/.test(location.search)||!/[?&]nohsbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-hsbody2');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on)
-let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={st0:.8,st1:5,dv:3,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:.35,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
+let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={st0:.8,st1:5,dv:3,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
 // id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
 const HS_SEG=[['pel','Hips','Hips',null,null,11,.11,0,0],['abd','Spine1','Spine1','Spine2','pel',8,.12,22,320],['che','Spine2','Spine2','Neck','abd',16,.135,22,320],['hed','Head','Neck','HeadTop_End','che',5,.105,20,60]];
 const HS_OWN={Hips:'pel',Spine1:'abd',Spine2:'che',Neck:'che',Head:'hed',HeadTop_End:'hed'};
@@ -5423,13 +5424,13 @@ class Fighter{
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
-    const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(3.2,(bm-.1)*15+bout*1.4):0;
+    const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(STUM_MAX,(bm-.1)*9+bout):0;   /* Build 143: stumble steps at most STUM_MAX (was 3.2 m/s: a shove ran you 1–2 m with no input); each step takes more of the lean out, below, so balance holds as before */
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
     const vx0=this.vel.x,vz0=this.vel.z;if(HYBRID&&(stum>0||bm>.11))this.distT=simTime;
     if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=(onGround?(stum>0?20:run?4.5:7):1.6)/(HYBRID&&stum<=0?1+armN*.09:1);   // (hybrid: armour is weight to get moving and to stop)   // a body takes a moment to get going and to stop
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
-    if(stum>0){this.balV.x-=(this.vel.x-vx0)*.85;this.balV.z-=(this.vel.z-vz0)*.85;}   // the feet catching up with the falling body is what stops the fall
+    if(stum>0){this.balV.x-=(this.vel.x-vx0)*STUM_RELIEF;this.balV.z-=(this.vel.z-vz0)*STUM_RELIEF;}   // the feet catching up with the falling body is what stops the fall
     if(!this.isPlayer&&!this.remote&&Math.random()<h*2.5&&grabbedBy(this).length)this.struggle();
     if(this.rockAD()&&grabbedBy(this).length)this.struggle();
     if(this.jumpReq){this.jumpReq=false;if(onGround&&legs&&!this._wade&&this.stamina>10&&this.kickT<0&&this.slideT<=0){this.crouch=false;this.fwd(_f);const oh=obstacleHeight(this.pos.x+_f.x*.7,this.pos.z+_f.z*.7,.35);if(oh>.3&&oh<1.7){this.vy=Math.sqrt(2*9.8*(oh+.32));this.vel.addScaledVector(_f,1.4);}else this.vy=4.4;this.useStamina(10);}}
@@ -5502,7 +5503,7 @@ class Fighter{
       o.fwd(_r);const facing=-(_r.x*_f.x+_r.z*_f.z);   // 1: kicked square in the chest; 0: from the side; -1: from behind
       const bm=Math.hypot(o.bal.x,o.bal.z),lean=bm>1e-3?Math.max(0,(o.bal.x*_f.x+o.bal.z*_f.z)/bm)*bm:0;
       const busy=o.commit||(!o.isPlayer&&!o.remote&&o.ai.phase==='strike')||o.kickT>=0||(o.sword&&o.sword.power>.5);
-      o.vel.addScaledVector(_f,Math.min(4.2,1.5+run*.55+into*.4));o.shove(_f,Math.min(3,1.1*pw));o.stagger=Math.max(o.stagger,.55+.1*pw);o.useStamina(16+6*pw);if(o.sword)swordShove(o.sword,_f,2.4*pw);
+      o.vel.addScaledVector(_f,Math.min(2.4,(1.5+run*.55+into*.4)*.55));o.shove(_f,Math.min(3,1.1*pw));o.stagger=Math.max(o.stagger,.55+.1*pw);o.useStamina(16+6*pw);if(o.sword)swordShove(o.sword,_f,2.4*pw);
       if(o.kickT>=0)o.kickT=-1;sfx('kick',o.chest,Math.min(1.2,.7+.2*pw));o.addFlinch(_f,.28+.06*pw);
       const topple=(o.stamina<12?.9:0)+lean*3+(busy?.4:0)+(facing<.3?(.3-facing)*.7:0)+Math.max(0,run-2)*.25+(o.crouch?-.2:0)+(Math.max(o.limbF('legL'),o.limbF('legR'))>.4?.2:0);
       if(topple>0)o.shove(_f,Math.min(4,topple*2.2));   /* (Build 129) what used to be the chance of toppling now pushes the weight further over: the balance decides */
@@ -6338,7 +6339,7 @@ function clash(A,B){
   const crush=ak==='blunt'||ak==='axe'||aw>=1.5;
   def.useStamina(4+attSp*.9*aw*Math.pow(ratio,1.5)*(crush?1.4:1));
   if(def.stamina>1&&crush&&attSp>(ak==='blunt'?3.5:5)){ // a heavy blow drives the guard back: the defender is rocked, the attacker keeps their balance
-    def.stagger=Math.max(def.stagger,.3+.15*ratio);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.vel.addScaledVector(_v,1.2+attSp*.12);def.sword.Hv.addScaledVector(_v,attSp*.35);def.shove(_v,.8+attSp*.12*ratio);
+    def.stagger=Math.max(def.stagger,.3+.15*ratio);_v.subVectors(def.chest,att.chest).setY(0).normalize();def.vel.addScaledVector(_v,Math.min(1.2,(1.2+attSp*.12)*.45));def.sword.Hv.addScaledVector(_v,attSp*.35);def.shove(_v,.8+attSp*.12*ratio);
     if(ak==='blunt'){def.damage(Math.min(14,(attSp-4)*2.2),att,'crushed');sThud(_t3,.9);}
     tell(def,'The blow drives through your guard','red');tell(att,'Through the guard','gold');
     if(att.isPlayer||def.isPlayer){shake(.35);hitstop(.05);}
@@ -6596,7 +6597,7 @@ function resolveHit(A,B,cap,t,P,pv){
   if(B.alive&&!B.ragdoll&&dmg<3&&!glance){if(!phys)B.addFlinch(dir,.06);B.useStamina(1.5);}
   else if(B.alive&&!B.ragdoll&&armour){if(!phys)B.addFlinch(dir,.12);B.useStamina(4);B.stagger=Math.max(B.stagger,.06);if(A.isPlayer||B.isPlayer)tell(B,'You power through','gold');}
   else if(B.alive&&!B.ragdoll){
-    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,(speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02)*1.35);
+    _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min((speed*(mode==='blunt'?.32:.2)+dmg*.02)*.45,1.6));   /* Build 143: blows push a man back about half as far (a cut threw him back at up to 4 m/s on top of the stumble steps); the lean (shove) carries the reaction */B.shove(dir,(speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02)*1.35);
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
     if(cap.zone==='legL'||cap.zone==='legR'){B.crouchK=Math.min(1,Math.max(B.crouchK||0,B.crouchAmt)+.55);B.stagger=Math.max(B.stagger,.4);if(B.pbd)B.pbd.buckle=Math.min(1,B.pbd.buckle+.3+dmg*.02);}   // the knee gives
@@ -6786,7 +6787,7 @@ function fistCheck(A,arm){
       dmg=Math.min(dmg,38);const body=(c.zone==='torso'||face)?dmg:dmg*.5;
       sThud(P,.5+arm.power);yardHit(A,'Fists','punch',c.zone,dmg,speed,false,prot);B.shove(dir,.5+arm.power*1.6+(face?.5:0));if(dmg>8)addWound(B,B.caps.indexOf(c),P,dir,dmg,'bruise');camKick(A,dir,-.25-arm.power*.3);camKick(B,dir,.4+arm.power*.9+(face?.4:0));if(dmg>9)spawnBlood(P,_v.copy(dir).multiplyScalar(1.5).setY(.5),(dmg*.5)|0,1,.7);
       B.addFlinch(dir,.2+arm.power*.7);if(face)B.bodyHit('Head',dir,2.5+arm.power*4,.12+arm.power*.25);B.stagger=Math.max(B.stagger,.25+arm.power*.5);B.useStamina(6+arm.power*14);
-      _v.copy(dir).setY(0);B.vel.addScaledVector(_v,1.4+arm.power*3.6);if(B.sword)swordShove(B.sword,dir,speed*.25);
+      _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(2,(1.4+arm.power*3.6)*.45));if(B.sword)swordShove(B.sword,dir,speed*.25);
       B.damage(body,A,'beaten');
       if(B.alive&&!B.ragdoll&&(face&&arm.power>.75&&(B.stamina<35||Math.random()<.3)||B.stamina<5&&arm.power>.6)){B.knockdown(rand(1.8,3),_v.copy(dir).multiplyScalar(2+arm.power*2),P);tell(A,'Knocked out','gold');cheer(.5);}
       if(A.isPlayer){hitMarker(false);hitstop(.03+arm.power*.05);shake(.12+arm.power*.25);}
@@ -7350,9 +7351,9 @@ function sim(h){
   physTick=!!PW&&(physPhase^=1)===1;
   for(const f of fighters)f.step(h);
   lodgeSweep();
-  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),k=(.6-d)/d*.5;a.pos.x-=dx*k;a.pos.z-=dz*k;b.pos.x+=dx*k;b.pos.z+=dz*k;
+  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz;if(d2<.36&&d2>1e-6){const d=Math.sqrt(d2),sa=1+2.5*Math.max(0,1-Math.hypot(a.vel.x,a.vel.z)/1.2),sb=1+2.5*Math.max(0,1-Math.hypot(b.vel.x,b.vel.z)/1.2),k=(.6-d)/d,ka=k*sb/(sa+sb),kb=k*sa/(sa+sb);a.pos.x-=dx*ka;a.pos.z-=dz*ka;b.pos.x+=dx*kb;b.pos.z+=dz*kb;   /* Build 143: someone standing his ground is set (up to 3.5× as hard to move as a walker): bots walking into a still player used to plough him along */
       // bodies collide: closing speed is shared out, and running into someone knocks both off balance (the one who was standing more)
-      const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0),mb=1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0),ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
+      const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=(1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0))*sa,mb=(1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0))*sb,ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
         a.vel.x-=nx*ja;a.vel.z-=nz*ja;b.vel.x+=nx*jb;b.vel.z+=nz*jb;if(-vn>1&&simTime>(a.bumpT||0)&&simTime>(b.bumpT||0)){a.bumpT=b.bumpT=simTime+.35;_v.set(nx,0,nz);b.bodyHit('Spine2',_v,jb*1.1);_v.negate();a.bodyHit('Spine2',_v,ja*1.1);}if(-vn>1.6){_v.set(nx,0,nz);b.shove(_v,jb*.7);_v.negate();a.shove(_v,ja*.45);if(-vn>2.6)sThud(a.chest,.4);}}}}}
   if((bodyPhase^=1)===1)bodyPress();
   if(PW){if(physTick){const h=PH_H;
@@ -8253,6 +8254,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
