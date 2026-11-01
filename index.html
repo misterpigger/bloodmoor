@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=141;
+const BUILD=142;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3398,7 +3398,7 @@ function dressMH(model,look,pal,mats){
     shell(ftw===2?'boots':'shoes',{keep:(v,P,w)=>ftw===2?(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.3||(w(v,['LeftLeg','RightLeg'])>.5&&P.getY(v)<M.J.LeftLeg.y-.09)):(w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.11),off:ftw===2?.013:.01,smooth:14,minK:.95,rim:.003,shape:footShape(.13,M.J.LeftToeBase.z-.03),bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'},bm2);}
   if(o>=1&&C.belt){const bm=new THREE.SkinnedMesh(C.belt,std({color:o===2?0x2a1a10:0x4a3020,roughness:.7,metalness:0}));bm.bind(body.skeleton,body.bindMatrix);bm.castShadow=true;bm.frustumCulled=false;bm.name='MH_Belt';bm.userData.shellGarb=true;body.parent.add(bm);}
   // ---- draped garments (Build 126): modelled in Blender and hung on each build by cloth simulation (tools/mh/garb), see GARB
-  {const G=GARB[o];if(G&&!body.name.includes('~')){
+  {const G=GARB[o];if(G&&!body.name.includes('~')&&!/[?&]shellgarb/.test(location.search)){
     const gm=G.mat==='quilt'?(()=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';return mt;})()
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
@@ -4031,6 +4031,7 @@ RISE_B.push(['LeftToeBase',-.59,.13,.03],['RightToeBase',-.59,-.13,.03]);
 RISE_C.push(['LeftToeBase',.1,.16,.03],['RightToeBase',.1,-.16,.03]);
 const RISE_ST=[RISE_P,RISE_A,RISE_B,RISE_C];
 const RD_RND=n=>{const s=Math.sin((n.length*12.9898+n.charCodeAt(0)*78.233+n.charCodeAt(n.length-1)*3.7+(RD_RND.k=(RD_RND.k||0)+1))*43758.5453);return s-Math.floor(s);};   // a little difference per limb
+const SPINE_UP=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1'];
 const RD_NAMES=['Hips','Spine1','Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
 const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck','Head'],['Head','HeadTop_End'],['Head','Spine2'],['HeadTop_End','Neck'],
   ['Spine2','LeftArm'],['Spine2','RightArm'],['Neck','LeftArm'],['Neck','RightArm'],['LeftArm','RightArm'],['Spine1','LeftArm'],['Spine1','RightArm'],['Hips','LeftArm'],['Hips','RightArm'],
@@ -4129,6 +4130,9 @@ class Ragdoll{
   }
   limits(it){const P=this.P,hard=this.lim>=2;if(!P.Hips||!P.Spine1||!P.Neck)return;
     if(hard)spineTwistLim(this,.95,.6);else spineTwistLim(this,.55,.5,.5);   // the living: free to 31°, springier to 60°, a stop past it
+    // Build 142: the spine bends only so far: the chest (Spine1 to Neck) within a cone round the pelvis's up, tipped forward, so a body folds forward up to ~60° but arches back at most ~38° and sideways ~49° (there was no limit at all and a fallen body could lie in a 140° backbend)
+    if(P.Spine2&&P.LeftUpLeg&&P.RightUpLeg){_jU2.subVectors(P.Spine1,P.Hips).normalize();_jL2.subVectors(P.LeftUpLeg,P.RightUpLeg);_jL2.addScaledVector(_jU2,-_jL2.dot(_jU2)).normalize();_jF2.crossVectors(_jL2,_jU2);
+      _jX.copy(_jU2).addScaledVector(_jF2,.35).normalize();jointCone(this,'Spine1','Neck',SPINE_UP,_jX,.85,hard);}
     // the chest's frame and the pelvis's frame (forward = left × up)
     if(P.LeftArm&&P.RightArm){_jU.subVectors(P.Neck,P.Spine1).normalize();_jL.subVectors(P.LeftArm,P.RightArm);_jL.addScaledVector(_jU,-_jL.dot(_jU)).normalize();_jF.crossVectors(_jL,_jU);
       jointCone(this,'Neck','HeadTop_End',['Head','HeadTop_End'],_jU2.copy(_jU).addScaledVector(_jF,.12).normalize(),.95,hard);   // the head on the neck
@@ -4548,7 +4552,7 @@ class Sword{
       const gone=lost||(down&&!st.down);
       if(gone||st.t<=0||(pull>pl&&st.age>.12)){this.unstick();this.Hv.set(0,0,0);this.Tp.copy(this.T);this.Hp.copy(this.H);
         if(pull>pl)ripOut(this,B,this.owner,st.rip);else spawnBlood(this.T,_v.copy(this.axis).multiplyScalar(-1.2).setY(.6),10,1.2,1);}
-      else{if(!down){_v.subVectors(target,this.H).setY(0);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));}
+      else{if(!down){_v.subVectors(target,this.H).setY(0);if(_v.lengthSq()>.0625)_v.setLength(.25);B.vel.addScaledVector(_v,24*h).multiplyScalar(Math.exp(-5*h));}   /* Build 142: capped (a bot still thrusting past the body drove the man it had stabbed backwards at up to ~5 m/s, leaning back like a lunge); now at most ~1.2 m/s */
         this.Hv.set(0,0,0);this.Hp.copy(this.H);this.Tp.copy(this.T);this.tipVel.set(0,0,0);return;}
     }
     // the hand is sprung toward where you aim, limited by how hard the weapon's weight makes it work (HANDLING)
@@ -4765,7 +4769,7 @@ function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);
 // toward the animated pose, joint motors) and, for now, a pelvis held toward where the animation puts it.
 // Blows are impulses on the part struck and carry on through the joints. Its own Rapier world; bodies meet the map and each other.
 let HSBODY=/[?&]hsbody/.test(location.search)||!/[?&]nohsbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-hsbody2');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on)
-let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:.35,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
+let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={st0:.8,st1:5,dv:3,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:.35,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
 // id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
 const HS_SEG=[['pel','Hips','Hips',null,null,11,.11,0,0],['abd','Spine1','Spine1','Spine2','pel',8,.12,22,320],['che','Spine2','Spine2','Neck','abd',16,.135,22,320],['hed','Head','Neck','HeadTop_End','che',5,.105,20,60]];
 const HS_OWN={Hips:'pel',Spine1:'abd',Spine2:'che',Neck:'che',Head:'hed',HeadTop_End:'hed'};
@@ -4793,7 +4797,7 @@ const _hqe=new THREE.Quaternion();
 function qErr(a,b,out){const e=_hqe.copy(b).invert().premultiply(a);if(e.w<0){e.x=-e.x;e.y=-e.y;e.z=-e.z;e.w=-e.w;}const s=Math.hypot(e.x,e.y,e.z);if(s<1e-9)return out.set(0,0,0);const ang=2*Math.atan2(s,e.w);return out.set(e.x,e.y,e.z).multiplyScalar(ang/s);}
 // the bind pose's turn of bone c relative to its ancestor p (the product of the bind local turns between them)
 function hsBindRel(B,p,c){const q=new THREE.Quaternion(),t=new THREE.Quaternion();let o=B[c];const L=[];while(o&&o!==B[p]){L.push(o);o=o.parent;}for(let i=L.length-1;i>=0;i--){const bq=L[i].userData.bq;if(bq)q.multiply(t.fromArray(bq));}return q;}
-function hsMake(f){const bit=1+(hsSlot++%15),S=hsBuild(f,grp(1<<bit,0xffff&~(1<<bit)));S.T={};
+function hsMake(f){const bit=1+(hsSlot++%15),S=hsBuild(f,grp(1<<bit,HS_P.bb?0xffff&~(1<<bit)&~(3<<14):1));   /* Build 142: bodies touch only the world (bb 0): two fighters' rigid bodies pressing together in a clinch threw each other about and dragged their fighters at up to 13 m/s through hsSync; the game's own fighter collision and bumps (bodyHit) handle contact between people */S.T={};
   if(HS_P.shadow)S.sh=hsBuild(f,grp(1<<14,1));   // the shadow: the same body driven the same way, touching nothing but the ground and never struck
   return S;}
 function hsBuild(f,G){const B=f.bones;f.root.updateMatrixWorld(true);
@@ -4819,8 +4823,8 @@ function hsBuild(f,G){const B=f.bones;f.root.updateMatrixWorld(true);
   return S;}
 // this frame's animated pose becomes the body's target (called at the end of animate, in place of the verlet full body)
 function hsTarget(f,dt){const B=f.bones;f.root.updateMatrixWorld(true);let S=f.hs;const sevN=f.sevNames.length;
-  if(S){const t=S.seg.pel&&S.seg.pel.b.translation();if(S.sev!==sevN||dt>.2||!t||!Number.isFinite(t.x+t.y+t.z)||_hv1.set(t.x,t.y,t.z).distanceToSquared(_hv2.setFromMatrixPosition(B.Hips.matrixWorld))>.6){hsFree(f);S=null;}}
-  if(!S){S=f.hs=hsMake(f);S.sev=sevN;HSF.add(f);const A=f.ar=new Ragdoll(B,RD_NAMES,V(),null,null);A.rest=false;A.hs=1/120;for(const n of A.names)A.Q[n].copy(A.P[n]);}
+  let keep=null;if(S){const t=S.seg.pel&&S.seg.pel.b.translation(),z=S.sh&&S.sh.seg.pel&&S.sh.seg.pel.b.translation();if(S.sev!==sevN||dt>.2||!t||!Number.isFinite(t.x+t.y+t.z)||(z?_hv1.set(t.x-z.x,t.y-z.y,t.z-z.z).lengthSq()>.6||_hv1.set(z.x,z.y,z.z).distanceToSquared(_hv2.setFromMatrixPosition(B.Hips.matrixWorld))>1.2:_hv1.set(t.x,t.y,t.z).distanceToSquared(_hv2.setFromMatrixPosition(B.Hips.matrixWorld))>.6)){keep={dO:S.dO,env:S.env};hsFree(f);S=null;}}   /* Build 142: too far from its shadow (or the shadow from the pose), not just from the pose: a fast crouch left both behind and rebuilt the body every catch */
+  if(!S){S=f.hs=hsMake(f);if(keep){S.dO=keep.dO;S.env=keep.env;}S.sev=sevN;HSF.add(f);const A=f.ar=new Ragdoll(B,RD_NAMES,V(),null,null);A.rest=false;A.hs=1/120;for(const n of A.names)A.Q[n].copy(A.P[n]);}
   for(const n of RD_NAMES)if(B[n])(S.T[n]||(S.T[n]=V())).setFromMatrixPosition(B[n].matrixWorld);
   for(const X of [S,S.sh]){if(!X)continue;
     for(const s of X.list){s.qt0.copy(s.qt1);B[s.fb].getWorldQuaternion(s.qt1).multiply(s.cq);qErr(s.qt1,s.qt0,s.wt).multiplyScalar(1/Math.max(dt,1e-3));s.x0.copy(s.x1);s.x1.copy(S.T[s.fb]);}
@@ -4852,6 +4856,7 @@ function hsDrive(f,a,h,X,mo=true){const Z=f.hs,S=X||Z,F=Z.fall,str=f.pbd?f.pbd.s
     if(lim){const cl=Math.max(c,2*HS_P.lw*s.I);R.jointConfigureMotorVelocity(hd,3,tvx,cl);R.jointConfigureMotorVelocity(hd,4,tvy,cl);R.jointConfigureMotorVelocity(hd,5,tvz,cl);continue;}   // past a joint's limit: driven straight back to it, however slack the muscles
     R.jointConfigureMotorVelocity(hd,3,_hv1.x+kp*_hv3.x,c);R.jointConfigureMotorVelocity(hd,4,_hv1.y+kp*_hv3.y,c);R.jointConfigureMotorVelocity(hd,5,_hv1.z+kp*_hv3.z,c);}
   if(F)return;   // a falling body has nothing holding it up
+  let pox=0,poy=0,poz=0;if(!X&&Z.sh&&Z.seg.che&&Z.sh.seg.che){const r=Z.seg.che.b.translation(),q=Z.sh.seg.che.b.translation();pox=r.x-q.x;poy=r.y-q.y;poz=r.z-q.z;const l=Math.hypot(pox,poy,poz);if(l>.4){pox*=.4/l;poy*=.4/l;poz*=.4/l;}}   /* Build 142: the real body's gripping hands are held where the animation has them relative to the chest as it really is, not at the world spot: a blow that moved the chest had the hands yank it straight back (forearms flung up to 2 m from their shadow) */
   for(const s of S.list){const b=s.b,isP=s.id==='pel',isF=s.id[0]==='f'&&s.id[1]==='t',pin=Z.pin.has(s.id);if(!isP&&!isF&&!pin)continue;
     const p=b.translation(),v=b.linvel();_hv1.lerpVectors(s.x0,s.x1,a);_hv2.subVectors(s.x1,s.x0).multiplyScalar(1/dt);
     if(isP){   // the pelvis is held toward the animation, place and turn: stage 1's crutch (stage 2 replaces it with balance)
@@ -4862,6 +4867,7 @@ function hsDrive(f,a,h,X,mo=true){const Z=f.hs,S=X||Z,F=Z.fall,str=f.pbd?f.pbd.s
       b.applyTorqueImpulse({x:I*(aw*aw*_hv3.x+2*aw*(s.wt.x-w.x)),y:I*(aw*aw*_hv3.y+2*aw*(s.wt.y-w.y)),z:I*(aw*aw*_hv3.z+2*aw*(s.wt.z-w.z))},true);continue;}
     // feet guided to where the animation steps, and hands that hold something to the grip (and the first-person head): stage 1
     const w0=pin?HS_P.hw:HS_P.fa,k=w0*w0,c=2*w0,m=(s.id==='hed'?5:pin?3:2)*h/(1+c*h+k*h*h);
+    if(pin){_hv1.x+=pox;_hv1.y+=poy;_hv1.z+=poz;}
     b.applyImpulse({x:m*(k*(_hv1.x-p.x)+c*(_hv2.x-v.x)),y:m*(k*(_hv1.y-p.y)+c*(_hv2.y-v.y)),z:m*(k*(_hv1.z-p.z)+c*(_hv2.z-v.z))},true);}}
 // the body as it now is drawn: each joint point carried on its part
 function hsPt(pt,out){const b=pt.s.b,t=b.translation(),r=b.rotation();_hq.set(r.x,r.y,r.z,r.w);out.copy(pt.o).applyQuaternion(_hq);out.x+=t.x;out.y+=t.y;out.z+=t.z;return out;}
@@ -4871,7 +4877,7 @@ function hsDraw(f){const S=f.hs,A=f.ar;if(!S||!A)return;const SH=S.sh;
   for(const n of A.names){const pt=S.pts[n],P=A.P[n],Q=A.Q[n];if(!pt){if(S.T[n]){P.copy(S.T[n]);Q.copy(P);}continue;}
     hsPt(pt,P);const b=pt.s.b,t=b.translation();
     if(!Number.isFinite(P.x+P.y+P.z)){hsFree(f);return;}
-    const ps=SH&&SH.pts[n];if(ps&&S.T[n]){hsPt(ps,_hv3);_hv3.subVectors(P,_hv3);const dl=_hv3.length(),mx=/Foot|Toe|Leg/.test(n)&&!/UpLeg/.test(n)?HS_P.dleg:HS_P.dmax;/* feet stay where the animation plants them: a foot caught on someone else's body flicked back and forth */if(dl>mx)_hv3.multiplyScalar(mx/dl);_hv4.copy(P);P.copy(S.T[n]).add(_hv3);(S.dd||(S.dd={}))[n]=dl;}
+    const ps=SH&&SH.pts[n];if(ps&&S.T[n]){hsPt(ps,_hv3);_hv3.subVectors(P,_hv3);const dl=_hv3.length(),mx=/Foot|Toe|Leg/.test(n)&&!/UpLeg/.test(n)?HS_P.dleg:HS_P.dmax;/* feet stay where the animation plants them: a foot caught on someone else's body flicked back and forth */if(dl>mx)_hv3.multiplyScalar(mx/dl);{const e=S.env||0;_hv3.multiplyScalar(e*e*(3-2*e));const DO=S.dO||(S.dO={}),o=DO[n]||(DO[n]=V()),mv=HS_P.dv*(S.dt||1/60);_hv4.subVectors(_hv3,o);const ml=_hv4.length();if(ml>mv)_hv4.multiplyScalar(mv/ml);o.add(_hv4);_hv3.copy(o);}/* and it changes at most dv m/s, so a part never jumps between frames *//* Build 142: only what a blow did is drawn, fading over ~1.2 s; between blows the body is the animation (the drift between the real body and its shadow drew arms and chests flicking about) */_hv4.copy(P);P.copy(S.T[n]).add(_hv3);(S.dd||(S.dd={}))[n]=dl;}
     const v=b.linvel(),w=b.angvel(),c=b.worldCom?b.worldCom():t;_hv1.set(P.x-c.x,P.y-c.y,P.z-c.z);_hv2.set(w.x,w.y,w.z).cross(_hv1);
     Q.set(P.x-(v.x+_hv2.x)*A.hs,P.y-(v.y+_hv2.y)*A.hs,P.z-(v.z+_hv2.z)*A.hs);
     if(S.pin.has(pt.s.id)&&S.T[n]){Q.sub(P).add(S.T[n]);P.copy(S.T[n]);}}
@@ -4886,14 +4892,24 @@ function hsStep(dt){if(!HSW)return;
     if(!f.alive||R||!fighters.includes(f)||!S.dt){hsFree(f);if(!f.alive||R)f.ar=null;}}   // (a body that can't fall this way hands over to the ragdoll with each part's speed: makeRagdoll reads f.ar)
   if(!HSF.size||!(dt>0))return;hsAcc+=dt;const h=1/HS_P.hz,n=Math.min(12,Math.floor(hsAcc/h+1e-6));hsAcc-=n*h;if(hsAcc>h)hsAcc=0;HSW.timestep=h;   // always the same small step: at a low frame rate (a match starting, shaders compiling) bigger steps blew bodies apart; past 50 ms a frame the body just falls behind
   for(let i=1;i<=n;i++){const a=i/n,mo=(i&1)||i===n;hsTick++;for(const f of HSF){hsDrive(f,a,h,null,mo);if(f.hs.sh)hsDrive(f,a,h,f.hs.sh,mo);}HSW.step();}   // (the joints' motors are re-aimed every other step: they're solved implicitly, so that's plenty, and it halves the cost)
-  for(const f of [...HSF])if(!f.hs.fall){hsBalance(f,dt);if(HS_P.sync)hsSync(f,dt);}
+  for(const f of [...HSF])if(!f.hs.fall){f.hs.env=Math.max(0,(f.hs.env||0)-dt/1.2);hsSettle(f,dt);hsBalance(f,dt);if(HS_P.sync)hsSync(f,dt);}
   for(const f of [...HSF]){if(f.hs.fall)hsFallDraw(f);else{hsDraw(f);if(f.hs)f.hs.dt=0;}}}
+// what a blow did fades (Build 142): the real body and its shadow are the same bodies driven the same way, but contact with the ground,
+// the legs' push limit and plain chaos let them drift apart over seconds with no blow at all (feet a metre apart, a forearm 90 cm off
+// after 6 s of nothing), and that difference was drawn, so arms and chests flicked about for no reason. The real body is eased back onto
+// its shadow: slowly while a blow is still working (`env`, set by hsHit), within about a quarter of a second once it has passed
+const _hsq1=new THREE.Quaternion(),_hsq2=new THREE.Quaternion();
+function hsSettle(f,dt){const S=f.hs,SH=S&&S.sh;if(!SH||!(dt>0))return;const k=Math.exp(-dt*((S.env||0)>.4?HS_P.st0:HS_P.st1));
+  for(const s of S.list){const z=SH.seg[s.id];if(!z)continue;const b=s.b,c=z.b,a=b.translation(),t=c.translation(),r=b.rotation(),q=c.rotation(),v=b.linvel(),u=c.linvel(),w=b.angvel(),o=c.angvel();
+    b.setTranslation({x:t.x+(a.x-t.x)*k,y:t.y+(a.y-t.y)*k,z:t.z+(a.z-t.z)*k},true);
+    _hsq1.set(r.x,r.y,r.z,r.w);_hsq2.set(q.x,q.y,q.z,q.w);_hsq1.slerp(_hsq2,1-k);b.setRotation({x:_hsq1.x,y:_hsq1.y,z:_hsq1.z,w:_hsq1.w},true);
+    b.setLinvel({x:u.x+(v.x-u.x)*k,y:u.y+(v.y-u.y)*k,z:u.z+(v.z-u.z)*k},true);b.setAngvel({x:o.x+(w.x-o.x)*k,y:o.y+(w.y-o.y)*k,z:o.z+(w.z-o.z)*k},true);}}
 // the body has a say in where the fighter is (Build 140): movement and the AI propose (f.pos moved by f.vel in sim, which the hips are pulled
 // toward, as hard as the legs can push); when the physical hips end up further from that than their ordinary sway, the fighter's place
 // follows them. A shove, a body in the way or a blow that rocks the hips moves the fighter for real; walking freely nothing changes.
 function hsSync(f,dt){const S=f.hs,pel=S.seg.pel;if(!pel||!f.alive||f.ragdoll||!S.off||S.age<.6)return;/* (a body just made settles first) */const p=pel.b.translation(),zp=S.sh?S.sh.seg.pel.b.translation():null,ex=zp?p.x-zp.x:p.x-S.off.x-f.pos.x,ez=zp?p.z-zp.z:p.z-S.off.z-f.pos.z,e=Math.hypot(ex,ez),dz=HS_P.dz;
-  if(!(e>dz)||e>.8)return;const k=(1-dz/e)*HS_P.sync;f.pos.x+=ex*k;f.pos.z+=ez*k;f.balV.x+=ex*k/dt*HS_P.cb;f.balV.z+=ez*k/dt*HS_P.cb;   // the weight carried that way is a lean the feet have to catch   // only what's past the hips' ordinary sway (dz): standing, walking and running are the controller's as before
-  const v=pel.b.linvel(),ux=ex/e,uz=ez/e,pv=v.x*ux+v.z*uz,fv=f.vel.x*ux+f.vel.z*uz;if(pv>fv){const a=(pv-fv)*HS_P.sv;f.vel.x+=ux*a;f.vel.z+=uz*a;}}   // and the fighter takes on the hips' speed that way (a shove carries on)
+  if(!(e>dz)||e>.8)return;const k=Math.min((1-dz/e)*HS_P.sync,2.5*dt/e);   /* Build 142: the place follows the hips at most 2.5 m/s */f.pos.x+=ex*k;f.pos.z+=ez*k;f.balV.x+=ex*k/dt*HS_P.cb;f.balV.z+=ez*k/dt*HS_P.cb;   // the weight carried that way is a lean the feet have to catch   // only what's past the hips' ordinary sway (dz): standing, walking and running are the controller's as before
+  const v=pel.b.linvel(),ux=ex/e,uz=ez/e,pv=v.x*ux+v.z*uz,fv=f.vel.x*ux+f.vel.z*uz;if(pv>fv){const a=Math.min((pv-fv)*HS_P.sv,Math.max(0,2.5-fv));f.vel.x+=ux*a;f.vel.z+=uz*a;}}   // and the fighter takes on the hips' speed that way (a shove carries on)
 // balance from the body: a blow or a shove that rocks the trunk far past where the animation holds it (the chest's lean from the hips,
 // physical against animated) carries the weight over and the fighter goes down that way; the legs can't push the hips back harder than
 // `pa` either (hsDrive). Staggers short of that are still the game's lean (`bal`).
@@ -4924,7 +4940,7 @@ function hsFallDraw(f){const S=f.hs,R=f.ragdoll;if(!S||!R)return;
 // a blow on the active body: an impulse on the part struck, at the point struck
 function hsHit(f,n,dir,dv){const S=f.hs,s=S&&S.seg[HS_OWN[n]||'che'];if(!s)return;let J=dv*HS_P.blow;if(s.id==='hed')J=Math.min(J,HS_P.hcap);const pel=S.seg.pel,bp=HS_P.bp;   // part of the blow moves the whole body (it goes in at the pelvis), the rest turns the part struck
   if(pel&&s!==pel){pel.b.applyImpulse({x:dir.x*J*bp,y:dir.y*J*bp*.3,z:dir.z*J*bp},true);J*=1-bp;}const p=f.ar&&f.ar.P[n];
-  if(p)s.b.applyImpulseAtPoint({x:dir.x*J,y:dir.y*J,z:dir.z*J},{x:p.x,y:p.y,z:p.z},true);else s.b.applyImpulse({x:dir.x*J,y:dir.y*J,z:dir.z*J},true);f.fbRelax=Math.min(1,(f.fbRelax||0)+dv*.25);}
+  if(p)s.b.applyImpulseAtPoint({x:dir.x*J,y:dir.y*J,z:dir.z*J},{x:p.x,y:p.y,z:p.z},true);else s.b.applyImpulse({x:dir.x*J,y:dir.y*J,z:dir.z*J},true);f.fbRelax=Math.min(1,(f.fbRelax||0)+dv*.25);if(f.hs)f.hs.env=1;}
 function dynColl(R,S,m){let cd;if(S.t==='box')cd=R.ColliderDesc.cuboid(S.h[0],S.h[1],S.h[2]);else if(S.t==='cyl'){cd=R.ColliderDesc.cylinder(S.h[0],S.h[1]);if(S.rz)cd.setRotation({x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2});else if(S.rx)cd.setRotation({x:Math.SQRT1_2,y:0,z:0,w:Math.SQRT1_2});}else cd=R.ColliderDesc.ball(S.h[0]);
   return cd.setTranslation(S.o[0],S.o[1],S.o[2]).setMass(m);}
 function dynBody(d){if(d.body||!d.sh||d.gone)return;const p=d.obj.position,q=d.obj.quaternion;
@@ -5135,7 +5151,7 @@ const ATTACKS=[
   {n:'diagR',s:[.48,.52],e:[-.42,-.36]},{n:'diagL',s:[-.48,.52],e:[.42,-.36]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
 const X_AXIS=V(1,0,0);
 let fid=0;
-const _f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
+const _kt4=V(),_f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
 
 // fighters are drawn and built 7% bigger than the MakeHuman bodies come (Build 122): they stood 1.62 m to the top of the head in the fighting
 // stance (about 1.74 m upright), against Half Sword's ~1.8 m men, and read small next to them. The skeleton's lengths, hit capsules and
@@ -5457,7 +5473,7 @@ class Fighter{
       // past the ankles' limit: a lean that isn't too far is caught (Build 120): the fighter drops low onto bent knees, a hand goes down
       // toward the ground, and they come back up out of it, instead of every lean past .42 ending flat on the ground. Too far, or caught
       // again within a second and a half, and they go down as before
-      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchAmt=1;this.vel.multiplyScalar(.4);
+      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=1;this.vel.multiplyScalar(.4);
         if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6)this.bodyHit('Spine2',_v.normalize(),2.5,.15);}if(this.isPlayer)tell(this,'You catch yourself','red');}
       else if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
@@ -5795,7 +5811,7 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03||this.fallT!=null;
-    this.crouchAmt=lerp(this.crouchAmt,this.crouch||this.stoop||(this.catchT||0)>simTime+.15?1:airborne?.45:0,1-Math.exp(-10*dt));
+    /* Build 142: a catch or a leg blow sets a crouch to reach (crouchK) instead of snapping crouchAmt in one frame (the hips dropped at 20 m/s) */this.crouchK=Math.max(0,(this.crouchK||0)-dt*1.5);this.crouchAmt=lerp(this.crouchAmt,Math.max(this.crouch||this.stoop||(this.catchT||0)>simTime+.15?1:airborne?.45:0,this.crouchK),1-Math.exp(-(this.crouchK>.3||(this.catchT||0)>simTime?16:10)*dt));
     // calm: nobody within reach of a fight and nothing has happened lately, so the body stands easy (fighting stance and guard come up when a foe comes near)
     this._calmT=(this._calmT||0)-dt;if(this._calmT<=0){this._calmT=.25;let dq=1e9;for(const o of fighters)if(o!==this&&o.alive){const q=o.pos.distanceToSquared(this.pos);if(q<dq)dq=q;}this._foeD=Math.sqrt(dq);}
     if(this.hp<(this._hp0??this.hp))this._hurtAt=simTime;this._hp0=this.hp;
@@ -5906,9 +5922,9 @@ class Fighter{
           if(k.w>0){t.x+=(k.p.x-t.x)*k.w;t.z+=(k.p.z-t.z)*k.w;}}}
       for(const s in feet){
         let tgt=feet[s];
-        if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);tgt=_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);tgt.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);}
+        if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);_t3.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);/* Build 142: eased in and out from the foot's own place (the leg jumped up to 50 cm in one frame as a kick began and ended) */{const rl=(this.legLen[0]+this.legLen[1])*.94;_kt4.subVectors(_t3,_t2);if(_kt4.length()>rl)_t3.copy(_t2).addScaledVector(_kt4.normalize(),rl);}/* kept short of a locked knee, where the leg IK flips */const kw=clamp(kk*1.4,0,1),ke=kw*kw*(3-2*kw);tgt=_t3.lerp(tgt,1-ke);}
         _pl.copy(tgt).addScaledVector(_f,.9).addScaledVector(Y_AXIS,.4);
-        const flw=this.footP!=null&&!(s==='Right'&&kk>0)?clamp(1-((PL[s]&&PL[s].lift)||0)/.05,0,1)*(1-(this.gaitW||0))*clamp(1-(tgt.y-groundY(tgt.x,tgt.z,tgt.y+.3)-this.ankY-.03)/.06,0,1):0;   /* only a foot that's down: a walking clip's swinging foot keeps its own angle */if(flw>0){if(tgt!==_t3)tgt=_t3.copy(tgt);tgt.y-=.03*flw;}   // a flat foot puts the ankle lower than the heel-up one did
+        const flw=this.footP!=null&&!(s==='Right'&&kk>=.72)?(s==='Right'?1-clamp(kk*1.4,0,1):1)*clamp(1-((PL[s]&&PL[s].lift)||0)/.05,0,1)*(1-(this.gaitW||0))*clamp(1-(tgt.y-groundY(tgt.x,tgt.z,tgt.y+.3)-this.ankY-.03)/.06,0,1):0;   /* only a foot that's down: a walking clip's swinging foot keeps its own angle */if(flw>0){if(tgt!==_t3)tgt=_t3.copy(tgt);tgt.y-=.03*flw;}   // a flat foot puts the ankle lower than the heel-up one did
         ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1]);
         // the sole goes flat on the ground: the clip's foot kept its angle to the shin, so the bent-knee stance (shin tipped forward)
         // pointed the toes into the ground and everyone stood on tiptoe (sole tilted heel-up 29-46°, toes 1-7 cm under the ground). The bind pose itself has the heel 20° up (ankle to toe base 39°), so flat is 0.35 rad less
@@ -6583,7 +6599,7 @@ function resolveHit(A,B,cap,t,P,pv){
     _v.copy(dir).setY(0);B.vel.addScaledVector(_v,Math.min(speed*(mode==='blunt'?.32:.2)+dmg*.02,4));B.shove(dir,(speed*Math.pow(W.weight,1.5)*(mode==='blunt'?1.5:1)*.1+dmg*.02)*1.35);
     let st=(mode==='thrust'?.35:mode==='blunt'?.45+(cap.zone==='head'?.5:0):glance?.12:.25)+dmg/150;B.stagger=Math.max(B.stagger,st);B.useStamina(mode==='blunt'?14:5);
     if(!phys&&(cap.zone==='armL'||cap.zone==='armR')){if(B.sword)B.sword.Hv.addScaledVector(dir,speed*.4);}
-    if(cap.zone==='legL'||cap.zone==='legR'){B.crouchAmt=Math.min(1,B.crouchAmt+.55);B.stagger=Math.max(B.stagger,.4);if(B.pbd)B.pbd.buckle=Math.min(1,B.pbd.buckle+.3+dmg*.02);}   // the knee gives
+    if(cap.zone==='legL'||cap.zone==='legR'){B.crouchK=Math.min(1,Math.max(B.crouchK||0,B.crouchAmt)+.55);B.stagger=Math.max(B.stagger,.4);if(B.pbd)B.pbd.buckle=Math.min(1,B.pbd.buckle+.3+dmg*.02);}   // the knee gives
     {
     const bl=mode==='blunt'?1.5:1,f0=clamp(speed*.06*bl+dmg*.006,.1,1.1);   // where it lands decides how the body takes it
     if(cap.zone==='head'||cap.zone==='neck')B.bodyHit(cap.zone==='head'?'Head':'Neck',dir,Math.min(11,speed*.6*bl),Math.min(.5,speed*.03*bl));   // the head snaps; a moment dazed
