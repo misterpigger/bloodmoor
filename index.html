@@ -4570,6 +4570,9 @@ class Sword{
   }
   step(h,target,guide,commit,strength){
     this.Hprev.copy(this.H);
+    if(this.hsw&&!this.stuck&&hsWeaponRead(this)){   /* Build 154: on physical arms the weapon is where its body is (hsWeapon); only the swing's bookkeeping is done here */
+      const sp=this.tipVel.length();if(sp>2.2){_e.copy(this.tipVel).multiplyScalar(1/sp);if(_e.dot(this.lastDir)>.5)this.arc+=sp*h;else{this.arc=sp*h;if(sp>5)this.swings++;}this.lastDir.lerp(_e,.1).normalize();}else this.arc=Math.max(0,this.arc-h*3);
+      const pw=clamp(.3+this.arc*.75,.3,1.15)*clamp((sp-2.5)/9,0,1);this.power=Math.max(pw,this.power-h*1.6);return;}
     if(!(this.H.distanceToSquared(target)<=4)||!Number.isFinite(this.T.x+this.T.y+this.T.z+this.Tp.x+this.Hp.x)){if(!Number.isFinite(target.x+target.y+target.z))return;this.stuck=null;this.reset(target,guide);return;}   // (also a safety net: a weapon that has gone NaN starts again in the hand)
     if(this.stuck){ // embedded in a body: it stays in, dragging them by the haft, until it works loose or you rip it out
       const st=this.stuck,B=st.B;st.t-=h;st.age+=h;
@@ -4832,7 +4835,12 @@ function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);
 // toward the animated pose, joint motors) and, for now, a pelvis held toward where the animation puts it.
 // Blows are impulses on the part struck and carry on through the joints. Its own Rapier world; bodies meet the map and each other.
 let HSBODY=/[?&]hsbody/.test(location.search)||!/[?&]nohsbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-hsbody2');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on)
-let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
+/* Build 154: held weapons on physical arms (ARMS, `?arms`, stored as bloodmoor-arms). The weapon is a rigid body in the jointed body's world,
+   fixed to the gripping hand (and the off hand's grip for a two-hander, on a ball joint); the arms are driven to where you aim by their
+   joints' muscles, of finite strength, so a weapon's weight loads the arm: it starts slowly, carries on and is hard to stop, and its edge
+   turns only as the hand turns. The game reads the weapon's pose back from the body (Sword.step). See `hsWeapon`. */
+let ARMS=/[?&]arms/.test(location.search)||!/[?&]noarms/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-arms')==='1';}catch(e){return false;}})();
+let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={gev:3,gek:12,gem:18,rx:.1,g2h:1.8,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};
 // id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
 const HS_SEG=[['pel','Hips','Hips',null,null,11,.11,0,0],['abd','Spine1','Spine1','Spine2','pel',8,.12,22,320],['che','Spine2','Spine2','Neck','abd',16,.135,22,320],['hed','Head','Neck','HeadTop_End','che',5,.105,20,60]];
 const HS_OWN={Hips:'pel',Spine1:'abd',Spine2:'che',Neck:'che',Head:'hed',HeadTop_End:'hed'};
@@ -4850,11 +4858,64 @@ function qExp(v,out){const a=v.length();if(a<1e-9)return out.set(0,0,0,1);const 
 function qLog(q,out){let x=q.x,y=q.y,z=q.z,w=q.w;if(w<0){x=-x;y=-y;z=-z;w=-w;}const s=Math.hypot(x,y,z);if(s<1e-9)return out.set(0,0,0);const k=2*Math.atan2(s,w)/s;return out.set(x*k,y*k,z*k);}
 const _hq=new THREE.Quaternion(),_hq2=new THREE.Quaternion(),_hqt=new THREE.Quaternion(),_hv1=V(),_hv2=V(),_hv3=V(),_hv4=V(),_hv5=V();
 function hsWorld(){if(!RP||NET.mode==='client')return false;if(HSW&&hsKeyM===mapKey)return true;hsFreeAll();
-  HSW=new RP.World({x:0,y:-9.81,z:0});HSW.timestep=HS_H;hsKeyM=mapKey;
+  HSW=new RP.World({x:0,y:-9.81,z:0});HSW.timestep=HS_H;if(HS_P.it)HSW.numSolverIterations=HS_P.it;hsKeyM=mapKey;
   mapStatics(RP,cd=>HSW.createCollider(cd.setCollisionGroups(grp(1,0xffff)).setFriction(.9).setRestitution(0)),false);return true;}
-function hsFree(f){const S=f.hs;if(!S)return;if(HSW){for(const s of S.list){try{HSW.removeRigidBody(s.b);}catch(e){}}hsFreeShadow(S);}f.hs=null;HSF.delete(f);}
+function hsFree(f){const S=f.hs;if(!S)return;if(HSW){hsWeaponFree(S);for(const s of S.list){try{HSW.removeRigidBody(s.b);}catch(e){}}hsFreeShadow(S);}f.hs=null;HSF.delete(f);}
 function hsFreeShadow(S){if(S.sh&&HSW)for(const s of S.sh.list){try{HSW.removeRigidBody(s.b);}catch(e){}}S.sh=null;}
-function hsFreeAll(){for(const f of HSF){f.hs=null;f.ar=null;}HSF.clear();if(HSW){try{HSW.free();}catch(e){}HSW=null;}hsKeyM=-1;}
+function hsWeaponFree(S){if(S&&S.wb){for(const u of S.list)if(u.Iw){u.I-=u.Iw;u.Iw=0;}if(HSW){if(S.wb.att){for(const c of S.wb.cols){try{HSW.removeCollider(c,true);}catch(e){}}if(S.wb.j1&&S.wb.j1.K){try{HSW.removeRigidBody(S.wb.j1.K);}catch(e){}}}else if(S.wb.fw){try{HSW.removeRigidBody(S.wb.j1.K);}catch(e){}try{HSW.removeRigidBody(S.wb.b);}catch(e){}}else{try{HSW.removeRigidBody(S.wb.b);}catch(e){}}}if(S.wb.s)S.wb.s.hsw=null;S.wb=null;S.grip=null;}}
+const _hq3=new THREE.Quaternion(),_hqI=new THREE.Quaternion(),_hwq=new THREE.Quaternion(),_hwq2=new THREE.Quaternion(),_hwm=new THREE.Matrix4(),_hwv=new THREE.Vector3(),_hwz=new THREE.Vector3();
+function hsWeapon(f){const S=f.hs,s=f.sword;if(!S)return;
+  const want=ARMS&&HSW&&!S.fall&&s&&!s.rb&&!s.free&&!s.flying&&!s.stuck&&s.owner===f&&s.def.kind!=='fist'&&f.alive&&!f.ragdoll&&!(f.throwHold||f.throwT>=0)&&(f.revW||0)<.05&&f.mainArm&&Number.isFinite(s.H.x+s.H.y+s.H.z);
+  if(S.wb&&(!want||S.wb.s!==s))hsWeaponFree(S);
+  if(!want||S.wb)return;
+  const m=f.mainArm==='L'?'L':'R',o=m==='R'?'L':'R',hp=S.seg['ha'+m];if(!hp)return;
+  if(hp.x1.distanceToSquared(s.H)>.25*.25)return;   // (only once the weapon is in the hand: a new weapon, a teleport or a pick-up first lands there the old way; a joint made across a gap kept the gap)
+  _hwz.crossVectors(s.edge,s.axis);_hwm.makeBasis(s.edge,s.axis,_hwz);_hwq.setFromRotationMatrix(_hwm);
+  const parts=wepParts(s.def)||[['cap',[Math.max(.02,s.len/2-.02),.02],[0,s.len/2,0],s.def.weight||1]];
+  const hi=hp.qt1.clone().invert();   // the grip in the hand as the animation holds it (the hand bone posed on the grip), not wherever the physical hand happens to lag this frame
+  const a1=_hwv.copy(s.H).sub(hp.x1).applyQuaternion(hi).clone(),f1=hi.clone().multiply(_hwq);let b,j1=null,cols=null;
+  if(HS_P.att&&!HS_P.fw){b=hp.b;cols=[];   // the weapon's colliders and mass go on the hand itself: nothing can pull it out of the grip, and the wrist and arm carry its weight and swing
+    for(const [t,d,p,mm] of parts){const cd=t==='box'?RP.ColliderDesc.cuboid(d[0],d[1],d[2]):t==='cap'?RP.ColliderDesc.capsule(d[0],d[1]):RP.ColliderDesc.ball(d[0]);const pp=_hwz.set(p[0],p[1],p[2]).applyQuaternion(f1).add(a1);
+      cols.push(HSW.createCollider(cd.setTranslation(pp.x,pp.y,pp.z).setRotation({x:f1.x,y:f1.y,z:f1.z,w:f1.w}).setMass(mm*HS_P.wm).setFriction(.35).setRestitution(.05).setCollisionGroups(grp(1<<13,HS_P.wc?1|(1<<13):0)),b));}}
+  if(HS_P.att&&!HS_P.fw){const ht=hp.b.translation(),hr=hp.b.rotation();j1={K:HSW.createRigidBody(RP.RigidBodyDesc.kinematicPositionBased().setTranslation(ht.x,ht.y,ht.z).setRotation(hr))};   // the aim: a point the hand is sprung to by a joint the solver works out with everything else (implicit, so stiff and steady); it's kept within what the arm's strength can pull
+    j1.j=HSW.createImpulseJoint(RP.JointData.generic({x:0,y:0,z:0},HS_P.ga2?{x:a1.x,y:a1.y,z:a1.z}:{x:0,y:0,z:0},{x:1,y:0,z:0},0),j1.K,hp.b,true);j1.ga=HS_P.ga2;const R_=j1.j.rawSet,hd=j1.j.handle;for(let i=0;i<6;i++)R_.jointConfigureMotorModel(hd,i,1);j1.qK=new THREE.Quaternion();}
+  else{b=HSW.createRigidBody(RP.RigidBodyDesc.dynamic().setTranslation(s.H.x,s.H.y,s.H.z).setRotation({x:_hwq.x,y:_hwq.y,z:_hwq.z,w:_hwq.w}).setLinvel(s.Hv.x,s.Hv.y,s.Hv.z).setLinearDamping(.02).setAngularDamping(.2).setCanSleep(false));
+  for(const [t,d,p,mm] of parts){const cd=t==='box'?RP.ColliderDesc.cuboid(d[0],d[1],d[2]):t==='cap'?RP.ColliderDesc.capsule(d[0],d[1]):RP.ColliderDesc.ball(d[0]);
+    HSW.createCollider(cd.setTranslation(p[0],p[1],p[2]).setMass(mm).setFriction(.35).setRestitution(.05).setCollisionGroups(grp(1<<13,1|(1<<13))),b);}
+  if(HS_P.fw){j1={K:HSW.createRigidBody(RP.RigidBodyDesc.kinematicPositionBased().setTranslation(s.H.x,s.H.y,s.H.z).setRotation({x:_hwq.x,y:_hwq.y,z:_hwq.z,w:_hwq.w})),ga:true,fw:true};   // the weapon is its own body, steered by the hands' strength through a joint to the aim body K; the arms are posed onto it
+    j1.j=HSW.createImpulseJoint(RP.JointData.generic({x:0,y:0,z:0},{x:0,y:0,z:0},{x:1,y:0,z:0},0),j1.K,b,true);const R_=j1.j.rawSet,hd=j1.j.handle;for(let i=0;i<(HS_P.gex?3:6);i++)R_.jointConfigureMotorModel(hd,i,1);j1.qK=new THREE.Quaternion();}   /* (with the wrists as torques the joint's turning axes get no motor at all: a velocity motor with no damping locks its axis solid) */
+  else{const jd=RP.JointData.fixed({x:a1.x,y:a1.y,z:a1.z},{x:f1.x,y:f1.y,z:f1.z,w:f1.w},{x:0,y:0,z:0},{x:0,y:0,z:0,w:1});j1=HSW.createImpulseJoint(jd,hp.b,b,true);}}
+  let j2=null;const op=S.seg['ha'+o],two=twoH(s.def)&&s.def.kind!=='spear'&&s.def.grip2;S.grip=new Set([m]);if(j1&&j1.fw){S.grip=new Set();S.wb={b,s,j1,j2:null,m,o,att:false,fw:true,cols,a1,f1,t:V(),q:new THREE.Quaternion(),v:V(),w:V()};s.hsw=S.wb;let Mw=0;for(const pp of parts)Mw+=pp[3];S.wb.Mw=Mw;return;}
+  if(two&&op&&(f.offW??1)>.5){const g2=s.def.grip2,P2=_hwv.copy(s.H).addScaledVector(s.axis,g2),ot=op.b.translation(),orr=op.b.rotation();_hwq2.set(orr.x,orr.y,orr.z,orr.w).invert();P2.sub(ot).applyQuaternion(_hwq2);
+    j2={op,la:P2.clone(),g2};S.grip.add(o);}   /* (the off hand is held to the grip by a stiff spring, not a joint: a second rigid joint closed the loop through both arms and their muscles fought, the weapon thrashing 30-70 cm) */
+  S.wb={b,s,j1,j2,m,o,att:!!HS_P.att,cols,a1,f1,t:V(),q:new THREE.Quaternion(),v:V(),w:V()};s.hsw=S.wb;
+  // the weapon is part of what each joint up the arm carries, so the muscles' damping scales with it (without it the wrist couldn't hold a sword still)
+  let Mw=0,cy=0;for(const [t,d,p,mm] of parts){Mw+=mm;cy+=mm*p[1];}cy/=Mw||1;const com=_hwv.copy(s.H).addScaledVector(s.axis,cy);
+  for(const sd of S.grip){let u=S.seg['ha'+sd];const share=S.grip.size>1?(sd===m?.6:.4):1;while(u){const t=u.b.translation(),add=Mw*share*(com.distanceToSquared(_hwz.set(t.x,t.y,t.z))+.01);u.Iw=(u.Iw||0)+add;u.I+=add;u=u.par?S.seg[u.par]:null;}}
+  S.wb.Mw=Mw;}
+// the weapon's pose as the game sees it: the body's, carried with the drawn shoulder (the arm is drawn from where the shoulder is drawn)
+// where the weapon's grip is and how it's turned and moving (W.t/q/v/w): its own body's, or worked out from the hand it's fixed to
+function hsWP(W){const b=W.b,t=b.translation(),r=b.rotation(),v=b.linvel(),w=b.angvel();W.w.set(w.x,w.y,w.z);
+  if(W.att){W.q.set(r.x,r.y,r.z,r.w);const o=_hwz.copy(W.a1).applyQuaternion(W.q);W.t.set(t.x+o.x,t.y+o.y,t.z+o.z);W.v.set(v.x,v.y,v.z).add(_hwv.crossVectors(W.w,o));W.q.multiply(W.f1);}
+  else{W.t.set(t.x,t.y,t.z);W.q.set(r.x,r.y,r.z,r.w);W.v.set(v.x,v.y,v.z);}return Number.isFinite(W.t.x+W.t.y+W.t.z+W.q.w);}
+function hsWeaponRead(s){const W=s.hsw;if(!W||!W.b)return false;if(W.fw&&W.lH&&HS_P.push)hsWeaponPush(W,s);if(!hsWP(W))return false;const t=W.t,r=W.q,v=W.v,w=W.w;
+  _hwq.set(r.x,r.y,r.z,r.w);const d=W.d||_zero3;s.Hp.copy(s.H);s.Tp.copy(s.T);s.H.set(t.x+d.x,t.y+d.y,t.z+d.z);s.axis.set(0,1,0).applyQuaternion(_hwq);s.edge.set(1,0,0).applyQuaternion(_hwq);
+  s.T.copy(s.H).addScaledVector(s.axis,s.len);s.Hv.set(v.x,v.y,v.z);_hwv.set(w.x,w.y,w.z);_hwz.copy(s.axis).multiplyScalar(s.len);s.tipVel.crossVectors(_hwv,_hwz).add(s.Hv);
+  if(W.fw){(W.lH||(W.lH=V())).copy(s.H);(W.lT||(W.lT=V())).copy(s.T);}return true;}
+// what the game did to the weapon since it was read (a blade kept out of a body, a blow that stopped it, a parry: bladeContact, resolveHit,
+// clash) goes back into its body: moved where the game put it, and its speed into whatever it was pushed out of taken off at grip and point
+const _wpA=V(),_wpB=V(),_wpC=V(),_wpD=V(),_wpE=V(),_wpF=V(),_wpQ=new THREE.Quaternion();
+function hsWeaponPush(W,s){const dH=_wpA.subVectors(s.H,W.lH),dT=_wpB.subVectors(s.T,W.lT),lh=dH.length(),lt=dT.length();if(lh<.002&&lt<.002)return;if(lh>.5||lt>.8)return;   // (a jump that big is a reset, not a push)
+  const b=W.b,t=b.translation(),r=b.rotation(),L=s.len;_wpQ.set(r.x,r.y,r.z,r.w);const A=_wpC.set(0,1,0).applyQuaternion(_wpQ);
+  const nT=_wpD.copy(W.lT).add(dT).sub(_wpE.copy(W.lH).add(dH)).normalize();_hq.setFromUnitVectors(A,nT);_wpQ.premultiply(_hq);
+  b.setTranslation({x:t.x+dH.x,y:t.y+dH.y,z:t.z+dH.z},true);b.setRotation({x:_wpQ.x,y:_wpQ.y,z:_wpQ.z,w:_wpQ.w},true);
+  // speed into the push, at the grip and at the point, is taken off (the push's direction is the way it was sent back)
+  const v=b.linvel(),w=b.angvel(),vg=_wpE.set(v.x,v.y,v.z),wv=_wpF.set(w.x,w.y,w.z),pe=HS_P.pe;
+  if(lh>.002){const n=dH.multiplyScalar(1/lh),u=vg.dot(n);if(u<0)vg.addScaledVector(n,-u*pe);}
+  if(lt>.002){const n=dT.multiplyScalar(1/lt),tv=_wpC.crossVectors(wv,_hv5.copy(nT).multiplyScalar(L)).add(vg),u=tv.dot(n);
+    if(u<0){_hv5.copy(n).multiplyScalar(-u*pe);_hv5.addScaledVector(nT,-_hv5.dot(nT));wv.add(_wpC.crossVectors(nT,_hv5).multiplyScalar(1/L));}}   // (the point's change made by turning about the grip)
+  b.setLinvel({x:vg.x,y:vg.y,z:vg.z},true);b.setAngvel({x:wv.x,y:wv.y,z:wv.z},true);}
+function hsFreeAll(){for(const f of HSF){if(f.hs&&f.hs.wb&&f.hs.wb.s)f.hs.wb.s.hsw=null;f.hs=null;f.ar=null;}HSF.clear();if(HSW){try{HSW.free();}catch(e){}HSW=null;}hsKeyM=-1;}
 // rotation from a to b as a vector (axis × angle), shortest way
 const _hqe=new THREE.Quaternion();
 function qErr(a,b,out){const e=_hqe.copy(b).invert().premultiply(a);if(e.w<0){e.x=-e.x;e.y=-e.y;e.z=-e.z;e.w=-e.w;}const s=Math.hypot(e.x,e.y,e.z);if(s<1e-9)return out.set(0,0,0);const ang=2*Math.atan2(s,e.w);return out.set(e.x,e.y,e.z).multiplyScalar(ang/s);}
@@ -4892,8 +4953,8 @@ function hsTarget(f,dt){const B=f.bones;f.root.updateMatrixWorld(true);let S=f.h
   for(const X of [S,S.sh]){if(!X)continue;
     for(const s of X.list){s.qt0.copy(s.qt1);B[s.fb].getWorldQuaternion(s.qt1).multiply(s.cq);qErr(s.qt1,s.qt0,s.wt).multiplyScalar(1/Math.max(dt,1e-3));s.x0.copy(s.x1);s.x1.copy(S.T[s.fb]);}
     for(const s of X.list)if(s.j){const P=X.seg[s.par];_hq.copy(P.qt1).invert();_hv1.subVectors(S.T[s.sa],S.T[P.fb]).applyQuaternion(_hq);s.j.setAnchor1({x:_hv1.x,y:_hv1.y,z:_hv1.z});}}   // the joint sits where the animation has it in the parent (a shrug, the lower spine bending)
-  const pin=S.pin||(S.pin=new Set());pin.clear();
-  if(f.sword&&f.mainArm){const m=f.mainArm==='R'?'R':'L';pin.add('ha'+m);if(twoH(f.sword.def)||f.sword.def.kind==='spear')pin.add('ha'+(m==='R'?'L':'R'));}
+  const pin=S.pin||(S.pin=new Set());pin.clear();hsWeapon(f);
+  if(f.sword&&f.mainArm){const m=f.mainArm==='R'?'R':'L';if(!(S.grip&&S.grip.has(m)))pin.add('ha'+m);const o=m==='R'?'L':'R';if((twoH(f.sword.def)||f.sword.def.kind==='spear')&&!(S.grip&&S.grip.has(o)))pin.add('ha'+o);}
   if(!f.sword){pin.add('haL').add('haR');}
   if(f.isPlayer&&camMode==='fp')pin.add('hed');
   if(HS_P.nopin)pin.clear();
@@ -4905,18 +4966,19 @@ function hsDrive(f,a,h,X,mo=true){const Z=f.hs,S=X||Z,F=Z.fall,str=f.pbd?f.pbd.s
   // muscles: each joint's motors are told how fast to turn (toward the animated pose, plus the pose's own turning) and solved with the
   // joints, so they are stiff without blowing up. Driving the motors' angle targets directly fails for big turns (Rapier measures them per axis).
   if(mo)for(const s of S.list){if(!s.j)continue;const P=S.seg[s.par],rp=P.b.rotation(),rc=s.b.rotation(),qpi=_hq.set(rp.x,rp.y,rp.z,rp.w).invert();
-    _hq2.set(rc.x,rc.y,rc.z,rc.w).premultiply(qpi);const qt=_hqt.copy(P.qs).invert().multiply(s.qs);qErr(qt,_hq2,_hv3);   // in the parent's frame
+    _hq2.set(rc.x,rc.y,rc.z,rc.w).premultiply(qpi);const qt=_hqt.copy(P.qs).invert().multiply(!X&&HS_P.gqk&&Z.wb&&Z.wb.j1&&Z.wb.j1.qK&&s.id==='ha'+Z.wb.m?Z.wb.j1.qK:s.qs);qErr(qt,_hq2,_hv3);   /* (the gripping hand turns to where the weapon's aim needs it, not to the animation's own idea of the grip) */   // in the parent's frame
     _hv1.copy(s.wt).sub(P.wt).applyQuaternion(qpi);
-    const g=F&&(s.id[0]==='t'||s.id[0]==='s'||s.id[0]==='f'&&s.id[1]==='t')?HS_P.fl:s.id[0]==='u'||s.id[0]==='f'&&s.id[1]==='a'||s.id[0]==='h'&&s.id[1]==='a'?(Z.pin.has('ha'+s.id[2])?1:HS_P.wa):s.id==='abd'||s.id==='che'?HS_P.wt:s.id==='hed'?HS_P.wh:s.id[0]==='f'&&s.id[1]==='t'?HS_P.wa2:1;   // ankles are weak against the body's weight: pushed, the body tips over its feet instead of standing like a post   // free arms hang looser than a trunk that holds the body together
+    const g=F&&(s.id[0]==='t'||s.id[0]==='s'||s.id[0]==='f'&&s.id[1]==='t')?HS_P.fl:s.id[0]==='u'||s.id[0]==='f'&&s.id[1]==='a'||s.id[0]==='h'&&s.id[1]==='a'?(Z.grip&&Z.grip.has(s.id[2])?(s.id[0]==='h'?HS_P.gh:HS_P.ga):Z.pin.has('ha'+s.id[2])?1:HS_P.wa):s.id==='abd'||s.id==='che'?HS_P.wt:s.id==='hed'?HS_P.wh:s.id[0]==='f'&&s.id[1]==='t'?HS_P.wa2:1;   // ankles are weak against the body's weight: pushed, the body tips over its feet instead of standing like a post   // free arms hang looser than a trunk that holds the body together
     let tvx=_hv1.x+0,tvy=_hv1.y,tvz=_hv1.z,lim=false;
-    if(s.lim){const cp=P.cq,L=s.lim;_hql.copy(cp).multiply(_hq2).multiply(s.cqi).premultiply(s.R0i);qLog(_hql,_hvl);   // the bone's turn under its parent, from the bind pose
+    if(s.lim&&!(HS_P.ghl&&!X&&Z.grip&&s.id==='ha'+(Z.wb&&Z.wb.m))){const cp=P.cq,L=s.lim;_hql.copy(cp).multiply(_hq2).multiply(s.cqi).premultiply(s.R0i);qLog(_hql,_hvl);   // the bone's turn under its parent, from the bind pose
       const x=clamp(_hvl.x,L[0],L[1]),y=clamp(_hvl.y,L[2],L[3]),z=clamp(_hvl.z,L[4],L[5]);
       if(Math.abs(x-_hvl.x)+Math.abs(y-_hvl.y)+Math.abs(z-_hvl.z)>.01){lim=true;qExp(_hvl.set(x,y,z),_hql).premultiply(s.R0);_hql2.copy(cp).invert().multiply(_hql).multiply(s.cq);   // the nearest allowed turn, as the body's relative turn
         qErr(_hql2,_hq2,_hvl);const k=HS_P.lk;tvx=k*_hvl.x;tvy=k*_hvl.y;tvz=k*_hvl.z;}}
     const ex=Math.max(0,_hv3.length()-HS_P.lf),lg=1+HS_P.lig*ex*ex;   // ligaments: far from the pose the joint stiffens hard, so a neck can't fold the head into the chest
-    const wn=s.wn*HS_P.wk*g*(F?mus:Math.sqrt(mus))*lg,c=2*wn*s.I,kp=wn/2,R=s.j.rawSet,hd=s.j.handle;   // falling, strength and damping both go with the muscles' tone, or the body falls stiff as a plank
+    const wn=s.wn*HS_P.wk*g*(F?mus:Math.sqrt(mus))*lg,c=Math.max(1e-5,2*wn*s.I),kp=wn/2,R=s.j.rawSet,hd=s.j.handle;   // falling, strength and damping both go with the muscles' tone, or the body falls stiff as a plank
     if(!s.mset){for(let i=0;i<3;i++)R.jointConfigureMotorModel(hd,3+i,1);s.mset=1;}
-    if(lim){const cl=Math.max(c,2*HS_P.lw*s.I);R.jointConfigureMotorVelocity(hd,3,tvx,cl);R.jointConfigureMotorVelocity(hd,4,tvy,cl);R.jointConfigureMotorVelocity(hd,5,tvz,cl);continue;}   // past a joint's limit: driven straight back to it, however slack the muscles
+    s._lim=lim;    if(lim){const cl=Math.max(c,2*HS_P.lw*s.I);R.jointConfigureMotorVelocity(hd,3,tvx,cl);R.jointConfigureMotorVelocity(hd,4,tvy,cl);R.jointConfigureMotorVelocity(hd,5,tvz,cl);continue;}   // past a joint's limit: driven straight back to it, however slack the muscles
+    if(Z.grip&&!F&&Z.grip.has(s.id[2])&&(s.id[0]==='u'||s.id[1]==='a')){_hv1.multiplyScalar(HS_P.gff).addScaledVector(_hv3,kp);const l=_hv1.length(),m=HS_P.gmv;if(l>m)_hv1.multiplyScalar(m/l);R.jointConfigureMotorVelocity(hd,3,_hv1.x,c);R.jointConfigureMotorVelocity(hd,4,_hv1.y,c);R.jointConfigureMotorVelocity(hd,5,_hv1.z,c);continue;}   // (an arm holding the weapon: no faster than an arm turns, and little of the pose's own turning, which jumps when the arm's bend flips)
     R.jointConfigureMotorVelocity(hd,3,_hv1.x+kp*_hv3.x,c);R.jointConfigureMotorVelocity(hd,4,_hv1.y+kp*_hv3.y,c);R.jointConfigureMotorVelocity(hd,5,_hv1.z+kp*_hv3.z,c);}
   if(F)return;   // a falling body has nothing holding it up
   let pox=0,poy=0,poz=0;if(!X&&Z.sh&&Z.seg.che&&Z.sh.seg.che){const r=Z.seg.che.b.translation(),q=Z.sh.seg.che.b.translation();pox=r.x-q.x;poy=r.y-q.y;poz=r.z-q.z;const l=Math.hypot(pox,poy,poz);if(l>.4){pox*=.4/l;poy*=.4/l;poz*=.4/l;}}   /* Build 142: the real body's gripping hands are held where the animation has them relative to the chest as it really is, not at the world spot: a blow that moved the chest had the hands yank it straight back (forearms flung up to 2 m from their shadow) */
@@ -4931,7 +4993,77 @@ function hsDrive(f,a,h,X,mo=true){const Z=f.hs,S=X||Z,F=Z.fall,str=f.pbd?f.pbd.s
     // feet guided to where the animation steps, and hands that hold something to the grip (and the first-person head): stage 1
     const w0=pin?HS_P.hw:HS_P.fa,k=w0*w0,c=2*w0,m=(s.id==='hed'?5:pin?3:2)*h/(1+c*h+k*h*h);
     if(pin){_hv1.x+=pox;_hv1.y+=poy;_hv1.z+=poz;}
-    b.applyImpulse({x:m*(k*(_hv1.x-p.x)+c*(_hv2.x-v.x)),y:m*(k*(_hv1.y-p.y)+c*(_hv2.y-v.y)),z:m*(k*(_hv1.z-p.z)+c*(_hv2.z-v.z))},true);}}
+    b.applyImpulse({x:m*(k*(_hv1.x-p.x)+c*(_hv2.x-v.x)),y:m*(k*(_hv1.y-p.y)+c*(_hv2.y-v.y)),z:m*(k*(_hv1.z-p.z)+c*(_hv2.z-v.z))},true);}
+  if(!X&&Z.wb)hsGrip(f,Z,h,a);}
+/* Build 154: the hands drive the weapon. A force at the grip pulls it toward where you aim and a torque at the wrists turns it onto the line
+   you aim it along, each no stronger than an arm and a pair of wrists can be (HS_P.gF/gT, more in a committed swing), so a heavy weapon gets
+   going slowly, carries on past where you aimed and takes effort to stop. The weapon is fixed to the hand, so the arm is dragged with it and
+   its own muscles (the joints, as for the rest of the body) only hold its posture. Its roll is left to the hands as they are */
+function hsGrip(f,Z,h,a=1){const W=Z.wb,b=W.b,s=W.s,tg=f._wT,gd=f._wG;if(!tg||!gd||!hsWP(W))return;const cm=!!(f.commit||f.thrust),str=(f.pbd?f.pbd.str:1)*(f.stamina<10?.6:1)*(f.stagger>0?.5:1);
+  const t=W.t,v=W.v,r=W.q,wv=W.w,M=(W.Mw||1)+1.6,d=W.d||_zero3;
+  if((W.att||W.fw)&&W.j1&&W.j1.K)return hsGripK(f,W,h,cm,str,a);
+  const w0=HS_P.gw,k=w0*w0,c=2*w0*HS_P.gz;let ax=k*(tg.x-d.x-t.x)+c*(f.vel.x-v.x),ay=k*(tg.y-d.y-t.y)+c*(-v.y),az=k*(tg.z-d.z-t.z)+c*(f.vel.z-v.z);
+  ay+=9.81*HS_P.ggc*((W.Mw||1)+1.6)/M;   // the arm holds up the weapon's weight and its own
+  const Fm=(cm?HS_P.gF:HS_P.gFg)*str,al=Math.hypot(ax,ay,az);if(al*M>Fm){const q=Fm/(al*M);ax*=q;ay*=q;az*=q;}
+  b.applyImpulse({x:ax*M*h,y:ay*M*h,z:az*M*h},true);   // (through the centre of mass: pushed at the grip, off-centre, the force spun the hand)
+  // wrists: turn the blade's axis toward the guide, damped; roll about the axis only damped
+  _hwq.set(r.x,r.y,r.z,r.w);const A=_hwv.set(0,1,0).applyQuaternion(_hwq);_hwz.crossVectors(A,gd);const sn=_hwz.length(),cs=A.dot(gd),ang=Math.atan2(sn,cs);if(sn>1e-6)_hwz.multiplyScalar(ang/sn);
+  const wr=w0*1.1,kr=wr*wr,cr=2*wr*HS_P.grz,wa=wv.x*A.x+wv.y*A.y+wv.z*A.z,rd=HS_P.grd;
+  const ux=kr*_hwz.x-cr*(wv.x-A.x*wa)-rd*A.x*wa,uy=kr*_hwz.y-cr*(wv.y-A.y*wa)-rd*A.y*wa,uz=kr*_hwz.z-cr*(wv.z-A.z*wa)-rd*A.z*wa;   // the turn wanted (rad/s²)
+  const E=b.effectiveAngularInertia().elements;   /* (times the body's own inertia, axis by axis: a blade's inertia about its own length is a hundredth of that across it, and damping the roll with the cross inertia overshot every step and spun the hand up to its limit) */
+  let tx=E[0]*ux+E[1]*uy+E[2]*uz,ty=E[1]*ux+E[3]*uy+E[4]*uz,tz=E[2]*ux+E[4]*uy+E[5]*uz;
+  const Tm=(cm?HS_P.gT:HS_P.gTg)*str*(twoH(s.def)?1.4:1),tl=Math.hypot(tx,ty,tz);if(tl>Tm){const q=Tm/tl;tx*=q;ty*=q;tz*=q;}
+  b.applyTorqueImpulse({x:tx*h,y:ty*h,z:tz*h},true);
+  if(W.j2)hsOffHand(W,h);}
+// the hand is driven through a joint to the aim body K (hsWeapon): K stands where the hand must be for the weapon to sit on the aim, but
+// no further from the hand than the arm's strength can pull (Fmax / stiffness), and turned to put the blade on the line you aim along,
+// within the wrists' strength. The joint's motors are springs the solver works out with the arm and body, so they don't overshoot
+function hsGripK(f,W,h,cm,str,a){if(W.fw)hsReach(f,W);const b=W.b,J=W.j1,K=J.K,s=W.s,gd=f._wG,t=W.t,M=(W.Mw||1)+HS_P.gam2,d=W.d||_zero3;
+  const tg=_hv4.lerpVectors(f._wTp||f._wT,f._wT,a);   // (the aim between frames, so K moves smoothly: the joint's damping works against K's own speed)
+  const w0=HS_P.gw,kl=M*w0*w0,cl=M*2*w0*HS_P.gz,Fm=(cm?HS_P.gF:HS_P.gFg)*str,ht=b.translation();
+  // K: where the hand's centre has to be for the grip to sit on the aim (plus a little for the weight, which the spring then holds up)
+  const ox=J.ga?0:ht.x-t.x,oy=J.ga?0:ht.y-t.y,oz=J.ga?0:ht.z-t.z,gy=9.81*HS_P.ggc*M/kl;K.setNextKinematicTranslation({x:tg.x-d.x+ox,y:tg.y-d.y+oy+gy,z:tg.z-d.z+oz});
+  const el=Math.hypot(tg.x-d.x-t.x,tg.y-d.y+gy-t.y,tg.z-d.z-t.z),ks=Math.min(kl,Fm/Math.max(el,1e-4)),cs=cl;   // (damping stays full: a weak spring with weak damping let the weapon orbit the aim)   // the pull grows with the distance up to what the arm can do, no further
+  // the blade's axis onto the guide (shortest turn: the roll stays the hands')
+  const A=_hwv.set(0,1,0).applyQuaternion(W.q);_hwz.crossVectors(A,gd);const sn=_hwz.length(),ang=Math.atan2(sn,A.dot(gd)),Tm=(cm?HS_P.gT:HS_P.gTg)*str*(twoH(s.def)?1.4:1);
+  if(sn>1e-6)_hq.setFromAxisAngle(_hwz.multiplyScalar(1/sn),ang);else _hq.identity();
+  const hr=b.rotation();J.qK.set(hr.x,hr.y,hr.z,hr.w).premultiply(_hq);K.setNextKinematicRotation({x:J.qK.x,y:J.qK.y,z:J.qK.z,w:J.qK.w});
+  const E=b.effectiveAngularInertia().elements,Ix=(E[0]+E[3]+E[5])/3,wr=w0*1.1,cr=Ix*2*wr*HS_P.grz,kp=wr/(2*HS_P.grz);
+  // (velocity motors for the turn, as for the body's joints: Rapier measures a motor's angle per axis, wrong for big turns)
+  _hq2.copy(J.qK).invert().multiply(_hq3.set(hr.x,hr.y,hr.z,hr.w));qErr(_hqI,_hq2,_hv5).multiplyScalar(kp);const vm=Math.min(Tm/Math.max(cr,1e-6),cm?HS_P.gwc:HS_P.gwv),vl=_hv5.length();   // (and no faster than wrists turn a weapon: the blade's own turning is mostly the arm's)if(vl>vm)_hv5.multiplyScalar(vm/vl);
+  const R_=J.j.rawSet,hd=J.j.handle;for(let i=0;i<3;i++)R_.jointConfigureMotor(hd,i,0,0,ks,cs);if(window.__KD)window.__KD.push([ks,cs,el,J.j.isValid?J.j.isValid():-1,hd,HSW.impulseJoints.len?HSW.impulseJoints.len():-1]);
+  if(HS_P.gex){
+    // the wrists, as a torque on the hand: the turn wanted is toward the guide at up to vm, reached over a few steps through the hand's own
+    // inertia (so it can't overshoot), the roll only lightly damped
+    const pI=b.principalInertia(),lc=b.localCom(),Imn=Math.min(pI.x,pI.y,pI.z),Imx=Math.max(pI.x,pI.y,pI.z)+(W.fw?b.mass()*(lc.x*lc.x+lc.y*lc.y+lc.z*lc.z):0),sc=Math.min(1.2,Math.pow(HS_P.gIr/Imx,HS_P.gIe)*(twoH(s.def)?HS_P.g2h:1));   /* (turned about the grip, which the hands hold where it is, not about its centre of mass: a mace's head is most of it; and the heavier it is to turn, the slower the wrists can whirl it) */
+    const wv=b.angvel(),Ax=A.x,Ay=A.y,Az=A.z;_hwz.set(0,0,0);if(sn>1e-6){_hwz.crossVectors(A,gd).normalize().multiplyScalar(Math.min(ang*kp,vm*sc));}
+    const wa=wv.x*Ax+wv.y*Ay+wv.z*Az,rr=HS_P.grr,q=1/(HS_P.gst*h);
+    // the edge: in a committed swing the hands roll the weapon so its edge leads the way the point is moving (an axe chops with its bit,
+    // not its side), as quick as wrists roll; otherwise the roll is just damped and the weapon keeps the turn it has in the hand
+    let wr0=0;if(cm&&s.def.kind!=='blunt'&&s.def.kind!=='fist'&&s.def.kind!=='spear'){const L=s.len,tvx=W.v.x+(wv.y*Az-wv.z*Ay)*L,tvy=W.v.y+(wv.z*Ax-wv.x*Az)*L,tvz=W.v.z+(wv.x*Ay-wv.y*Ax)*L,ta=tvx*Ax+tvy*Ay+tvz*Az;
+      const px=tvx-Ax*ta,py=tvy-Ay*ta,pz=tvz-Az*ta,pl=Math.hypot(px,py,pz);
+      if(pl>HS_P.gev){const E_=_hv5.set(1,0,0).applyQuaternion(W.q),c=(E_.x*px+E_.y*py+E_.z*pz)/pl,sx=E_.y*pz-E_.z*py,sy=E_.z*px-E_.x*pz,sz=E_.x*py-E_.y*px,sa=(sx*Ax+sy*Ay+sz*Az)/pl,er=Math.atan2(sa,c);
+        if(s.def.kind!=='axe'&&Math.abs(er)>Math.PI/2)er-=Math.PI*Math.sign(er);   // (a sword has two edges: whichever is nearer)
+        wr0=clamp(er*HS_P.gek,-HS_P.gem,HS_P.gem)*Math.min(1,(pl-HS_P.gev)/3);}}
+    const rt=wr0?wr0-wa:-rr*wa;   // the roll: toward the edge's lead, or just damped
+    const ux=(_hwz.x-(wv.x-Ax*wa)+Ax*rt)*q,uy=(_hwz.y-(wv.y-Ay*wa)+Ay*rt)*q,uz=(_hwz.z-(wv.z-Az*wa)+Az*rt)*q;
+    if(HS_P.gdo){const qq=1/(HS_P.gst*h);_hv5.set(-wv.x*qq,-wv.y*qq,-wv.z*qq);}const U=HS_P.gdo?_hv5:{x:ux,y:uy,z:uz};
+    const ua=U.x*Ax+U.y*Ay+U.z*Az;   /* (the blade's inertia across it and about its own length: effectiveAngularInertia() didn't come out in world axes here, and torques from it pumped the spin up) */
+    let tx=Imx*(U.x-Ax*ua)+Imn*Ax*ua,ty=Imx*(U.y-Ay*ua)+Imn*Ay*ua,tz=Imx*(U.z-Az*ua)+Imn*Az*ua;const tl=Math.hypot(tx,ty,tz);if(tl>Tm){tx*=Tm/tl;ty*=Tm/tl;tz*=Tm/tl;}
+    if(window.__GD)window.__GD.push([ang,Tm,Math.hypot(tx,ty,tz),E[0],E[3],E[5],_hwz.length()]);    const sg=HS_P.gsg;b.applyTorqueImpulse({x:sg*tx*h,y:sg*ty*h,z:sg*tz*h},true);}
+  else{R_.jointConfigureMotorVelocity(hd,3,_hv5.x,cr);R_.jointConfigureMotorVelocity(hd,4,_hv5.y,cr);R_.jointConfigureMotorVelocity(hd,5,_hv5.z,cr);}
+  if(W.j2)hsOffHand(W,h);}
+// the grip can't be further from the shoulder than the arm reaches: put back at arm's length, the speed outward taken off (the arm is
+// a hard stop, not a spring: hands never come off the weapon)
+function hsReach(f,W){const b=W.b,t=b.translation(),sh=f.mainArm==='L'?f.shL:f.shR,R0=f.armLen[0]+f.armLen[1]+HS_P.rx;let dx=t.x-sh.x,dy=t.y-sh.y,dz=t.z-sh.z;const d=Math.hypot(dx,dy,dz);if(!(d>R0))return;
+  dx/=d;dy/=d;dz/=d;b.setTranslation({x:sh.x+dx*R0,y:sh.y+dy*R0,z:sh.z+dz*R0},true);const v=b.linvel(),u=v.x*dx+v.y*dy+v.z*dz-(f.vel.x*dx+f.vel.z*dz);if(u>0)b.setLinvel({x:v.x-dx*u,y:v.y-dy*u,z:v.z-dz*u},true);}
+function hsOffHand(W,h){const b=W.b,t=W.t,v=W.v,wv=W.w,A=_hwv.set(0,1,0).applyQuaternion(W.q),J=W.j2,ob=J.op.b,ot=ob.translation(),orr=ob.rotation(),ov=ob.linvel();_hwq2.set(orr.x,orr.y,orr.z,orr.w);const hp=_wl1.copy(J.la).applyQuaternion(_hwq2).add(_wl2.set(ot.x,ot.y,ot.z));
+    const gp=_wl2.copy(A).multiplyScalar(J.g2).add(_wl3.set(t.x,t.y,t.z)),wk=40,kk=wk*wk,cc=2*wk,m2=.9;let ex=gp.x-hp.x,ey=gp.y-hp.y,ez=gp.z-hp.z;
+    const gvx=v.x+(wv.y*(gp.z-t.z)-wv.z*(gp.y-t.y)),gvy=v.y+(wv.z*(gp.x-t.x)-wv.x*(gp.z-t.z)),gvz=v.z+(wv.x*(gp.y-t.y)-wv.y*(gp.x-t.x));
+    let jx=m2*(kk*ex+cc*(gvx-ov.x))*h,jy=m2*(kk*ey+cc*(gvy-ov.y))*h,jz=m2*(kk*ez+cc*(gvz-ov.z))*h;const jl=Math.hypot(jx,jy,jz),jm=380*h;if(jl>jm){jx*=jm/jl;jy*=jm/jl;jz*=jm/jl;}
+    ob.applyImpulseAtPoint({x:jx,y:jy,z:jz},{x:hp.x,y:hp.y,z:hp.z},true);b.applyImpulseAtPoint({x:-jx*.5,y:-jy*.5,z:-jz*.5},{x:gp.x,y:gp.y,z:gp.z},true);
+    J.gap=Math.hypot(ex,ey,ez);}
+function hsWepI(s){const parts=wepParts(s.def);if(!parts)return .05;let M=0,I=0;for(const [t,d,p,m] of parts){M+=m;I+=m*(p[1]*p[1]+p[0]*p[0]);}return Math.max(.02,I);}
 // the body as it now is drawn: each joint point carried on its part
 function hsPt(pt,out){const b=pt.s.b,t=b.translation(),r=b.rotation();_hq.set(r.x,r.y,r.z,r.w);out.copy(pt.o).applyQuaternion(_hq);out.x+=t.x;out.y+=t.y;out.z+=t.z;return out;}
 // drawn: the animated pose plus what has really happened to the body (the real body less its untouched shadow), so the lag of muscles
@@ -4944,6 +5076,11 @@ function hsDraw(f){const S=f.hs,A=f.ar;if(!S||!A)return;const SH=S.sh;
     const v=b.linvel(),w=b.angvel(),c=b.worldCom?b.worldCom():t;_hv1.set(P.x-c.x,P.y-c.y,P.z-c.z);_hv2.set(w.x,w.y,w.z).cross(_hv1);
     Q.set(P.x-(v.x+_hv2.x)*A.hs,P.y-(v.y+_hv2.y)*A.hs,P.z-(v.z+_hv2.z)*A.hs);
     if(S.pin.has(pt.s.id)&&S.T[n]){Q.sub(P).add(S.T[n]);P.copy(S.T[n]);}}
+  /* Build 154: an arm that holds a physical weapon is drawn as it really is (it isn't the animation plus a blow: it's what moved the weapon),
+     hung from the shoulder as drawn; the weapon is carried with it */
+  if(S.grip&&S.wb)for(const sd of S.grip){const nm=sd==='R'?'Right':'Left',sh=A.P[nm+'Arm'],ps=S.pts[nm+'Arm'];if(!sh||!ps)continue;hsPt(ps,_hv1);const d=_hv2.subVectors(sh,_hv1);if(d.lengthSq()>.04)d.setLength(.2);
+    for(const n of [nm+'ForeArm',nm+'Hand',nm+'HandMiddle1']){const pt=S.pts[n],P=A.P[n],Q=A.Q[n];if(!pt||!P)continue;hsPt(pt,P);P.add(d);const b=pt.s.b,v=b.linvel(),w=b.angvel(),c=b.worldCom?b.worldCom():b.translation();_hv3.set(P.x-d.x-c.x,P.y-d.y-c.y,P.z-d.z-c.z);_hv4.set(w.x,w.y,w.z).cross(_hv3);Q.set(P.x-(v.x+_hv4.x)*A.hs,P.y-(v.y+_hv4.y)*A.hs,P.z-(v.z+_hv4.z)*A.hs);}
+    if(sd===S.wb.m)(S.wb.d||(S.wb.d=V())).copy(d);}
   /* Build 145: a gripping arm is solved again from the shoulder as drawn to the hand on the grip. A blow or a bump drew the chest (and so
      the shoulder) away while the hand stayed on the weapon, and the arm's fixed lengths then pulled the drawn hand 20-50 cm off the hilt */
   for(const sd of ['R','L']){if(!S.pin.has('ha'+sd))continue;const nm=sd==='R'?'Right':'Left',Sh=A.P[nm+'Arm'],El=A.P[nm+'ForeArm'],Hn=A.P[nm+'Hand'],T0=S.T[nm+'Arm'],T1=S.T[nm+'ForeArm'],T2=S.T[nm+'Hand'];
@@ -4976,8 +5113,8 @@ function hsStep(dt){if(!HSW)return;
       if(bad||!R||R.pin||R.rise||R.dragged||!fighters.includes(f)||f.sevNames.length!==S.sev||S.fall.t>HS_P.fallT||S.fall.t>.7&&hsStill(S)){hsHandOver(f);}continue;}
     if(!f.alive||R||!fighters.includes(f)||!S.dt){hsFree(f);if(!f.alive||R)f.ar=null;}}   // (a body that can't fall this way hands over to the ragdoll with each part's speed: makeRagdoll reads f.ar)
   if(!HSF.size||!(dt>0))return;hsAcc+=dt;const h=1/HS_P.hz,n=Math.min(12,Math.floor(hsAcc/h+1e-6));hsAcc-=n*h;if(hsAcc>h)hsAcc=0;HSW.timestep=h;   // always the same small step: at a low frame rate (a match starting, shaders compiling) bigger steps blew bodies apart; past 50 ms a frame the body just falls behind
-  for(let i=1;i<=n;i++){const a=i/n,mo=(i&1)||i===n;hsTick++;for(const f of HSF){hsDrive(f,a,h,null,mo);if(f.hs.sh)hsDrive(f,a,h,f.hs.sh,mo);}HSW.step();hsClampV();}
-  function hsClampV(){for(const f of HSF){const S=f.hs;for(const X of [S,S.sh]){if(!X)continue;for(const sg of X.list){const b=sg.b,v=b.linvel(),dx=v.x-f.vel.x,dz=v.z-f.vel.z,l=Math.hypot(dx,v.y,dz),mx=S.fall?7:5;if(l>mx){const k=mx/l;b.setLinvel({x:f.vel.x+dx*k,y:v.y*k,z:f.vel.z+dz*k},true);}const w=b.angvel(),wl=Math.hypot(w.x,w.y,w.z);if(wl>22){const k=22/wl;b.setAngvel({x:w.x*k,y:w.y*k,z:w.z*k},true);}}}}}   /* (every substep) Build 149: no part of a jointed body may fly off: pressed into a wall, a plank or the pit's rim, the solver's push-out threw people several metres (seen swinging by the Pit bridge) */   // (the joints' motors are re-aimed every other step: they're solved implicitly, so that's plenty, and it halves the cost)
+  for(let i=1;i<=n;i++){const a=i/n,mo=(i&1)||i===n||HS_P.moAll;hsTick++;for(const f of HSF){hsDrive(f,a,h,null,mo);if(f.hs.sh)hsDrive(f,a,h,f.hs.sh,mo);}HSW.step();hsClampV();}
+  function hsClampV(){for(const f of HSF){const S=f.hs;if(S.wb&&!S.wb.att){const b=S.wb.b,w=b.angvel(),wl=Math.hypot(w.x,w.y,w.z);if(wl>40){const k=40/wl;b.setAngvel({x:w.x*k,y:w.y*k,z:w.z*k},true);}const v=b.linvel(),vl=Math.hypot(v.x,v.y,v.z);if(vl>HS_P.wv){const k=HS_P.wv/vl;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);}}for(const X of [S,S.sh]){if(!X)continue;for(const sg of X.list){const b=sg.b,v=b.linvel(),dx=v.x-f.vel.x,dz=v.z-f.vel.z,l=Math.hypot(dx,v.y,dz),gp=X===S&&S.grip&&(sg.id[0]==='u'||sg.id[0]==='f'&&sg.id[1]==='a'||sg.id[0]==='h'&&sg.id[1]==='a')&&S.grip.has(sg.id[2]),mx=S.fall?7:gp?HS_P.gav:5;if(l>mx){const k=mx/l;b.setLinvel({x:f.vel.x+dx*k,y:v.y*k,z:f.vel.z+dz*k},true);}const w=b.angvel(),wl=Math.hypot(w.x,w.y,w.z),wm=gp?45:22;if(wl>wm){const k=wm/wl;b.setAngvel({x:w.x*k,y:w.y*k,z:w.z*k},true);}}}}}   /* (every substep) Build 149: no part of a jointed body may fly off: pressed into a wall, a plank or the pit's rim, the solver's push-out threw people several metres (seen swinging by the Pit bridge) */   // (the joints' motors are re-aimed every other step: they're solved implicitly, so that's plenty, and it halves the cost)
   for(const f of [...HSF])if(!f.hs.fall){f.hs.env=Math.max(0,(f.hs.env||0)-dt/1.2);hsSettle(f,dt);hsBalance(f,dt);if(HS_P.sync)hsSync(f,dt);}
   for(const f of [...HSF]){if(f.hs.fall)hsFallDraw(f);else{hsDraw(f);if(f.hs)f.hs.dt=0;}}}
 // what a blow did fades (Build 142): the real body and its shadow are the same bodies driven the same way, but contact with the ground,
@@ -4986,7 +5123,7 @@ function hsStep(dt){if(!HSW)return;
 // its shadow: slowly while a blow is still working (`env`, set by hsHit), within about a quarter of a second once it has passed
 const _wl4b=new THREE.Vector3(),_wl5b=new THREE.Vector3(),_wl6b=new THREE.Vector3(),_wq1=new THREE.Quaternion(),_hsSh=new THREE.Vector3(),_hsq1=new THREE.Quaternion(),_hsq2=new THREE.Quaternion();
 function hsSettle(f,dt){const S=f.hs,SH=S&&S.sh;if(!SH||!(dt>0))return;const k=Math.exp(-dt*((S.env||0)>.4?HS_P.st0:HS_P.st1));
-  for(const s of S.list){const z=SH.seg[s.id];if(!z)continue;const b=s.b,c=z.b,a=b.translation(),t=c.translation(),r=b.rotation(),q=c.rotation(),v=b.linvel(),u=c.linvel(),w=b.angvel(),o=c.angvel();
+  for(const s of S.list){const z=SH.seg[s.id];if(!z)continue;if(S.grip&&(s.id[0]==='u'||s.id[0]==='f'&&s.id[1]==='a'||s.id[0]==='h'&&s.id[1]==='a')&&S.grip.has(s.id[2]))continue;   /* (Build 154: an arm holding a physical weapon is its own: not eased onto the shadow, which holds nothing) */const b=s.b,c=z.b,a=b.translation(),t=c.translation(),r=b.rotation(),q=c.rotation(),v=b.linvel(),u=c.linvel(),w=b.angvel(),o=c.angvel();
     b.setTranslation({x:t.x+(a.x-t.x)*k,y:t.y+(a.y-t.y)*k,z:t.z+(a.z-t.z)*k},true);
     _hsq1.set(r.x,r.y,r.z,r.w);_hsq2.set(q.x,q.y,q.z,q.w);_hsq1.slerp(_hsq2,1-k);b.setRotation({x:_hsq1.x,y:_hsq1.y,z:_hsq1.z,w:_hsq1.w},true);
     b.setLinvel({x:u.x+(v.x-u.x)*k,y:u.y+(v.y-u.y)*k,z:u.z+(v.z-u.z)*k},true);b.setAngvel({x:o.x+(w.x-o.x)*k,y:o.y+(w.y-o.y)*k,z:o.z+(w.z-o.z)*k},true);}}
@@ -5596,6 +5733,7 @@ class Fighter{
     if(this.sword&&this.mainArm){
       const tgt=this.handTarget(_t1.clone());if(this.recH){this.recHT=(this.recHT||0)+h;const u=clamp(this.recHT/1.0,0,1);tgt.lerpVectors(this.recH,tgt,u*u*(3-2*u));if(u>=1)this.recH=null;}   // just up: the weapon is brought up to guard, not snapped there
       const guide=this.guideDir(tgt,V());
+      (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else this.sword.step(h,tgt,guide,cm,str);
       if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55,this.voice);}if(ts<5)this._sw=false;
@@ -6062,7 +6200,7 @@ class Fighter{
     {const sp2=Math.hypot(this.vel.x,this.vel.z);let sw=0;if(sp2>.25&&B.LeftFoot&&B.RightFoot&&this.alive&&!this.ragdoll){this.fwd(_f);B.LeftFoot.getWorldPosition(_wl1);B.RightFoot.getWorldPosition(_wl2);sw=clamp(_wl2.sub(_wl1).dot(_f)/.55,-1,1)*clamp(sp2/1.6,0,1);}
       this.armSw=lerp(this.armSw||0,sw,1-Math.exp(-14*dt));}   // + = right foot ahead: the arms swing against the legs when walking easy
     if(this.sword&&this.mainArm){
-      const s=this.sword;this.fwd(_f);this.right(_r);
+      const s0=this.sword,s=this.hs&&this.hs.wb&&!this.hs.wb.fw&&this.hs.wb.s===s0&&this._wT?Object.assign(Object.create(s0),{H:this._wT,axis:this._wG,sync(){s0.sync();}}):s0;this.fwd(_f);this.right(_r);   /* (Build 154: on physical arms the arms are posed where the weapon should be, and their muscles take it there) */
       const main=this.mainArm==='R'?'Right':'Left',offS=this.mainArm==='R'?'Left':'Right';
       const sgn=this.mainArm==='R'?1:-1;
       const shM=this.mainArm==='R'?this.shR:this.shL,shO=this.mainArm==='R'?this.shL:this.shR;
