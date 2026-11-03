@@ -4331,6 +4331,7 @@ function guardThreat(f){if(f._gtT===simTime)return f._gt;f._gtT=simTime;f._gt=nu
    little finger or the thumb), and which way the thumb points is the forearm's twist away from a neutral handshake (the thumb up when the
    forearm points forward, back when it points up), at most NF_PSI either way. Asked for more, the blade goes to the nearest place the hand can
    reach, so the drawn hand never has to wrap along the grip, bend past a wrist or turn inside out to follow it */
+let HF_LAT=.3,HF_CE=.15;try{const q=location.search,a=q.match(/[?&]hlat=([\d.]+)/),b=q.match(/[?&]hce=([\d.]+)/);if(a)HF_LAT=+a[1];if(b)HF_CE=+b[1];}catch(e){}
 let ELB_UP=1,ROOF_K=1,ROOF_BACK=.6;try{const q=location.search,a=q.match(/[?&]roof=([\d.]+)/),b=q.match(/[?&]roofb=([\d.]+)/);if(a)ROOF_K=+a[1];if(b)ROOF_BACK=+b[1];}catch(e){}
 try{const m=location.search.match(/[?&]elb=([\d.]+)/);if(m)ELB_UP=+m[1];}catch(e){}
 let HAND_FIRST=/[?&]hf/.test(location.search),NF_TMIN=40*Math.PI/180,NF_TMAX=105*Math.PI/180,NF_PSI=110*Math.PI/180;
@@ -5603,7 +5604,7 @@ class Fighter{
        edge of reach. A left-shoulder guard (for a right-hander) has the hands by that shoulder, elbows down, blade up and back */
     /* Build 160 (with ?hf, after the longsword guards vom Tag and Ochs): raised hands go up beside the head on the sword's side, at about
        head height and only a little in front, not up in front of the face (where any arm pose ends with a forearm across the face) */
-    if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.commit&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
+    if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
       if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
     if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
       if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
@@ -5668,7 +5669,7 @@ class Fighter{
     /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
        up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
     if(HAND_FIRST&&!cm&&this.sword&&this.sword.def.kind!=='spear'){const rk=clamp((this.ctrl.y-.2)/.35,0,1)*ROOF_K;if(rk>0)out.addScaledVector(f,-ROOF_BACK*rk);}   // Build 160 (?hf): raised, the point goes up and back over the shoulder (vom Tag), not just up
-    if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*GUIDE_LAT;if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
+    if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*(HAND_FIRST?HF_LAT:GUIDE_LAT);if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
     return out.normalize();
   }
   // how far the grip is turned over, blade out of the little-finger side: the reverse grip, and carrying a weapon easy (it hangs back from the fist)
@@ -5797,10 +5798,14 @@ class Fighter{
     if(!this.sword&&this.mainArm)this.stepFists(h);
     if(this.sword&&this.mainArm){
       const tgt=this.handTarget(_t1.clone());if(this.recH){this.recHT=(this.recHT||0)+h;const u=clamp(this.recHT/1.0,0,1);tgt.lerpVectors(this.recH,tgt,u*u*(3-2*u));if(u>=1)this.recH=null;}   // just up: the weapon is brought up to guard, not snapped there
-      const guide=this.guideDir(tgt,V());if(HAND_FIRST&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
+      let guide=this.guideDir(tgt,V());
+      /* Build 161 (?hf): clicking into a committed swing eases the blade's line from the guard's to the swing's over ~0.12 s instead of
+         switching it in one frame (the hand twisted over as the line jumped) */
+      if(HAND_FIRST&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);if(this._cmB>0&&this._cmB<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;guide.copy(gA).lerp(gB,this._cmB*this._cmB*(3-2*this._cmB)).normalize();}}
+      if(HAND_FIRST&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
       (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
-      const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else{this.sword.step(h,tgt,guide,cm,str);if(HAND_FIRST&&!cm&&this._nfEdge&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'){const sw=this.sword,E=_nfK.copy(this._nfEdge);E.addScaledVector(sw.axis,-E.dot(sw.axis));if(E.lengthSq()>1e-4){E.normalize();if(sw.def.kind==='blade'&&E.dot(sw.edge)<0)E.negate();sw.edge.lerp(E,.25);sw.edge.addScaledVector(sw.axis,-sw.edge.dot(sw.axis)).normalize();}}}   /* Build 160: in guard the edge is where the hand holds it, not turned by the motion */
+      const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else{this.sword.step(h,tgt,guide,cm,str);if(HAND_FIRST&&this._nfEdge&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&(!cm||HF_CE>0)){const sw=this.sword,E=_nfK.copy(this._nfEdge);E.addScaledVector(sw.axis,-E.dot(sw.axis));if(E.lengthSq()>1e-4){E.normalize();if(sw.def.kind==='blade'&&E.dot(sw.edge)<0)E.negate();sw.edge.lerp(E,cm?HF_CE:.25);sw.edge.addScaledVector(sw.axis,-sw.edge.dot(sw.axis)).normalize();}}}   /* Build 160: in guard the edge is where the hand holds it, not turned by the motion */
       if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<.22)sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55,this.voice);}if(ts<5)this._sw=false;
     }
   }
