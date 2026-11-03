@@ -4317,7 +4317,7 @@ const TWO_HANDED={longsword:1,greatsword:1,axe:1,spear:1,legLimb:1,plank:1},twoH
 const _rr=new THREE.Vector3(),_rp=new THREE.Vector3();
 // the nearest foe's blade coming at a fighter (Build 146): a point on it near the fighter's chest, its velocity and axis, and how much of a threat
 // it is (w: closer and faster, and closing). Cached per fighter per step
-const _gw4=new THREE.Vector3(),_gw5=new THREE.Vector3(),_gw6=new THREE.Vector3(),_gw7=new THREE.Vector3(),_gw8=new THREE.Vector3();
+const _glR=new THREE.Vector3(),_gw4=new THREE.Vector3(),_gw5=new THREE.Vector3(),_gw6=new THREE.Vector3(),_gw7=new THREE.Vector3(),_gw8=new THREE.Vector3();
 function guardThreat(f){if(f._gtT===simTime)return f._gt;f._gtT=simTime;f._gt=null;let best=0;const G=f._gto||(f._gto={p:new THREE.Vector3(),v:new THREE.Vector3(),ax:new THREE.Vector3(),w:0});
   for(const o of fighters){if(o===f||!o.alive||o.ragdoll||!o.sword||o.sword.free||o.sword.def.kind==='fist')continue;const s=o.sword;
     const d0=Math.hypot(o.pos.x-f.pos.x,o.pos.z-f.pos.z);if(d0>3.2)continue;
@@ -5620,8 +5620,13 @@ class Fighter{
     const cm=this.commit&&this.sword&&this.sword.def.kind!=='fist',Hd=this.sword?handling(this.sword.def):null;
     const hi=cm?0:clamp((this.ctrl.y-.25)/.3,0,1),heavyW=this.sword&&(this.sword.def.kind==='axe'||this.sword.def.kind==='blunt'||this.sword.def.weight>=1.4);   // raised high, the head cocks back over the shoulder
     // a human's sword guard holds the point toward the opponent's face (about 25 degrees up), so a jab is a straight poke, not a drop from upright
-    const pg=(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'&&!cm&&hi<.5;
-    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:pg?.36:.26-hi*(heavyW?.95:.45)).addScaledVector(u,cm?Hd.swingUp:pg?.36:.5);
+    /* Build 158: the point-at-the-face guard fades out as the hands rise instead of switching off at a height: it used to cut out at
+       hi .5 and the blade jumped (about 20°) every time the hands crossed that line, so circling the aim up high swung the sword back and forth */
+    const pgW=(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'&&!cm?(GUIDE_FIX?clamp((.7-hi)/.4,0,1):(hi<.5?1:0)):0;
+    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp:lerp(.5,.36,pgW));
+    /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
+       up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
+    if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*GUIDE_LAT;if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
     return out.normalize();
   }
   // how far the grip is turned over, blade out of the little-finger side: the reverse grip, and carrying a weapon easy (it hangs back from the fist)
@@ -6426,7 +6431,7 @@ window.__grip=(a,b)=>{GRIP_IN=a;GRIP_UP=b;};
 // Without this the whole roll lands on the wrist joint and the skin there wrings like a towel. The forearm takes most of it,
 // within the ~170° a real forearm can turn; only what's left shows at the wrist.
 const _fq=new THREE.Quaternion(),_fq2=new THREE.Quaternion(),_fq3=new THREE.Quaternion(),_fa=V();
-let FR_FIX=!/[?&]nofr/.test(location.search),FR_TICK=0;
+let GUIDE_FIX=!/[?&]nogf/.test(location.search),GUIDE_LAT=.65;try{const m=location.search.match(/[?&]glat=([\d.]+)/);if(m)GUIDE_LAT=+m[1];}catch(e){}let FR_FIX=!/[?&]nofr/.test(location.search),FR_TICK=0;
 function forearmRoll(B,side,qHand){const F=B[side+'ForeArm'],Hd=B[side+'Hand'];if(!F||!Hd)return 0;
   const rqa=Hd.userData.rq,rq=Array.isArray(rqa)?_fq3.fromArray(rqa):rqa||(Hd.userData.rq=Hd.quaternion.toArray(),_fq3.fromArray(Hd.userData.rq));   // the relaxed hand (its bind turn under the forearm). (Build 150: Build 125 made userData.rq the bind turn as an array for the ragdoll, and this read it as a quaternion: every twist came out NaN, so no forearm has rolled since and every turn of the grip was taken by wringing the wrist)
   F.updateWorldMatrix(true,false);F.matrixWorld.decompose(_pp,_fq,_ps);Hd.updateWorldMatrix(false,false);_fa.setFromMatrixPosition(Hd.matrixWorld).sub(_pp);
