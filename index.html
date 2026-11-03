@@ -4331,7 +4331,8 @@ function guardThreat(f){if(f._gtT===simTime)return f._gt;f._gtT=simTime;f._gt=nu
    little finger or the thumb), and which way the thumb points is the forearm's twist away from a neutral handshake (the thumb up when the
    forearm points forward, back when it points up), at most NF_PSI either way. Asked for more, the blade goes to the nearest place the hand can
    reach, so the drawn hand never has to wrap along the grip, bend past a wrist or turn inside out to follow it */
-let ELB_UP=1;try{const m=location.search.match(/[?&]elb=([\d.]+)/);if(m)ELB_UP=+m[1];}catch(e){}
+let ELB_UP=1,ROOF_K=1,ROOF_BACK=.6;try{const q=location.search,a=q.match(/[?&]roof=([\d.]+)/),b=q.match(/[?&]roofb=([\d.]+)/);if(a)ROOF_K=+a[1];if(b)ROOF_BACK=+b[1];}catch(e){}
+try{const m=location.search.match(/[?&]elb=([\d.]+)/);if(m)ELB_UP=+m[1];}catch(e){}
 let HAND_FIRST=/[?&]hf/.test(location.search),NF_TMIN=40*Math.PI/180,NF_TMAX=105*Math.PI/180,NF_PSI=110*Math.PI/180;
 try{const q=location.search;const a=q.match(/[?&]nft0=([\d.]+)/),b=q.match(/[?&]nft1=([\d.]+)/),c=q.match(/[?&]nfp=([\d.]+)/);if(a)NF_TMIN=+a[1]*Math.PI/180;if(b)NF_TMAX=+b[1]*Math.PI/180;if(c)NF_PSI=+c[1]*Math.PI/180;}catch(e){}
 const _nfR=V(),_nfT=V(),_nfN=V(),_nfP=V(),_nfQ=new THREE.Quaternion();
@@ -5600,6 +5601,10 @@ class Fighter{
        on a grip can't reach out past the far shoulder, and the box took them 55 cm across at head height, so the sword arm reached its limit,
        the forearms crossed in front of the face, the off elbow winged out level with the shoulder and the cut from there dragged along the
        edge of reach. A left-shoulder guard (for a right-hander) has the hands by that shoulder, elbows down, blade up and back */
+    /* Build 160 (with ?hf, after the longsword guards vom Tag and Ochs): raised hands go up beside the head on the sword's side, at about
+       head height and only a little in front, not up in front of the face (where any arm pose ends with a forearm across the face) */
+    if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.commit&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
+      if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
     if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
       if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
@@ -5662,6 +5667,7 @@ class Fighter{
     out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp:lerp(.5,.36,pgW));
     /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
        up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
+    if(HAND_FIRST&&!cm&&this.sword&&this.sword.def.kind!=='spear'){const rk=clamp((this.ctrl.y-.2)/.35,0,1)*ROOF_K;if(rk>0)out.addScaledVector(f,-ROOF_BACK*rk);}   // Build 160 (?hf): raised, the point goes up and back over the shoulder (vom Tag), not just up
     if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*GUIDE_LAT;if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
     return out.normalize();
   }
