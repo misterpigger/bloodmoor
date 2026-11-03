@@ -4336,6 +4336,7 @@ function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind===
   const sg=Math.sign(_wl1.crossVectors(_rr,s.edge).dot(A))||1;out.copy(_rr).multiplyScalar(Math.cos(mx)).addScaledVector(_rp,Math.sin(mx));return (th-mx)*sg;}
 // wrist joint limit: a gripped weapon stays between 12 and 112 degrees of the forearm line; it can't fold back past the hand
 const _rvG=new THREE.Vector3(),_rvA=new THREE.Vector3();
+let EDGE_GUARD=.35,EDGE_HOME=.04,EDGE_DZ=.7;try{const m=location.search.match(/[?&]eg=([\d.]+)/);if(m)EDGE_GUARD=+m[1];const n=location.search.match(/[?&]eh=([\d.]+)/);if(n)EDGE_HOME=+n[1];const z=location.search.match(/[?&]edz=([-\d.]+)/);if(z)EDGE_DZ=+z[1];}catch(e){}
 const WR_MAX=Math.cos(112*Math.PI/180),WR_MIN=Math.cos(12*Math.PI/180),_wl1=new THREE.Vector3(),_wl2=new THREE.Vector3(),_wl3=new THREE.Vector3();
 const PT={kc:1250,kg:820,ac:540,ag:340,ktc:520,ktg:430,zc:.45,zg:.8,tc:110,tg:40,gc:.92,hold:.8,thr:3.2};
 const _pq=new THREE.Quaternion(),_pq2=new THREE.Quaternion(),_pv=V(),_pw=V(),_pe=V(),_zero3=V();
@@ -4683,10 +4684,10 @@ class Sword{
       if(eh&&tsp>7&&this.owner&&this.owner.commit&&_e.dot(eh)<0)eh.negate();   /* (Build 152: and the limit is about whichever side is leading) */
       if(eh){const c=_e.dot(eh);if(c<EDGE_C){_wl1.copy(_e).addScaledVector(eh,-c);const l=_wl1.length();if(l>1e-4)_e.copy(eh).multiplyScalar(EDGE_C).addScaledVector(_wl1,EDGE_S/l);}}   /* never more than 70° off the body's edge direction */
       let tr=0;if(this._ped&&this._pax){_wq1.setFromUnitVectors(this._pax,this.axis);_wl2.copy(this._ped).applyQuaternion(_wq1);tr=Math.acos(clamp(Math.abs(_wl1.copy(this.tipVel).addScaledVector(this.axis,-this.tipVel.dot(this.axis)).normalize().dot(_wl2)),-1,1))/h;}(this._ped||(this._ped=V())).copy(this.tipVel).addScaledVector(this.axis,-this.tipVel.dot(this.axis)).normalize();(this._pax||(this._pax=V())).copy(this.axis);   /* (the travel's turn measured in the blade's own frame: a cut sweeping the blade round an arc is a straight line there; Build 146 measured it in the world and so never turned the edge into a real cut) */
-      const kt=handling(this.def).edgeTurn*(eh?clamp((tsp-3)/7,0,1)*clamp(1-((this._trs=lerp(this._trs||0,Math.min(tr,40),1-Math.exp(-h/.15)))-6)/8,0,1)*(this.owner&&this.owner.commit?1:.35):1);   /* a cut along a line turns the edge into it; circling the point (its travel turning round fast) doesn't, so the blade doesn't roll round and round */   /* and only a real swing turns it: drifting the aim about doesn't roll the blade */
+      const kt=handling(this.def).edgeTurn*(eh?clamp((tsp-3)/7,0,1)*clamp(1-((this._trs=lerp(this._trs||0,Math.min(tr,40),1-Math.exp(-h/.15)))-6)/8,0,1)*(this.owner&&this.owner.commit?1:EDGE_GUARD):1);   /* a cut along a line turns the edge into it; circling the point (its travel turning round fast) doesn't, so the blade doesn't roll round and round */   /* and only a real swing turns it: drifting the aim about doesn't roll the blade */
       if(window.__edbg&&this.owner===player&&(this._edn=(this._edn||0)+1)%4==0)window.__edbg.push([+tr.toFixed(1),+(this._trs||0).toFixed(1),+kt.toFixed(3),+tsp.toFixed(1),+_e.dot(eh||this.edge).toFixed(2)]);
       if(this.def.kind==='blade'||_e.dot(this.edge)>(this.def.kind==='axe'?-.35:.2)&&(this.def.kind!=='axe'||!this.owner||this.owner.commit))this.edge.lerp(_e,kt);}   /* (Build 150: an axe drawn back to wind up doesn't turn its edge to lead the drawing back; it did, and then chopped with the back) */
-    else if(eh){if(eh.dot(this.edge)<0)eh.negate();this.edge.lerp(eh,.04);}
+    else if(eh&&EDGE_HOME>0){if(eh.dot(this.edge)<0)eh.negate();const c=eh.dot(this.edge);if(c<EDGE_DZ)this.edge.lerp(eh,EDGE_HOME*clamp((EDGE_DZ-c)/.25,0,1));}   /* Build 157: only an edge well off the body's line drifts back (beyond ~45°): drifting all the time rolled the sword in the hand as the guard moved about (most of the blade's roll in guard) */
     if(this.def.kind==='axe'&&this.owner&&!this.free&&this.tipVel.lengthSq()<9){const o=this.owner;o.fwd(_g);_g.multiplyScalar(.9).add(o.chest).sub(this.H);_g.addScaledVector(this.axis,-_g.dot(this.axis));if(_g.lengthSq()>.01){_g.normalize();this.edge.lerp(_g,.035);}}   /* (Build 153: only when the axe is nearly still (it can be turned over then, as a man settles his grip): spinning round with it carried the hand to the other shoulder and the head flipped to face front again, against its own momentum) */   /* (Build 150) the axe's edge faces where the blow will go: from the hand toward a point in front of the chest (from the left shoulder that's right and forward), not the body's front; and only while it isn't already swinging fast: pulled to the front mid-chop, an axe swung from the left shoulder rolled its edge over */
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
     if(rollLimit(this,_wl2))this.edge.lerp(_wl2,.25).normalize();   /* Build 148: back on for blades, wider (RL1/RL2): with none the wrists wrung to follow the edge in a committed swing and the hands tangled */   /* Build 147: not for blades: edgeHome already keeps their roll bounded, and this forearm-based limit (40° for two-handers) held a raised longsword's edge sideways, so cuts landed flat */   // the grip can't spin the head round the haft
@@ -6425,13 +6426,19 @@ window.__grip=(a,b)=>{GRIP_IN=a;GRIP_UP=b;};
 // Without this the whole roll lands on the wrist joint and the skin there wrings like a towel. The forearm takes most of it,
 // within the ~170° a real forearm can turn; only what's left shows at the wrist.
 const _fq=new THREE.Quaternion(),_fq2=new THREE.Quaternion(),_fq3=new THREE.Quaternion(),_fa=V();
+let FR_FIX=!/[?&]nofr/.test(location.search),FR_TICK=0;
 function forearmRoll(B,side,qHand){const F=B[side+'ForeArm'],Hd=B[side+'Hand'];if(!F||!Hd)return 0;
   const rqa=Hd.userData.rq,rq=Array.isArray(rqa)?_fq3.fromArray(rqa):rqa||(Hd.userData.rq=Hd.quaternion.toArray(),_fq3.fromArray(Hd.userData.rq));   // the relaxed hand (its bind turn under the forearm). (Build 150: Build 125 made userData.rq the bind turn as an array for the ragdoll, and this read it as a quaternion: every twist came out NaN, so no forearm has rolled since and every turn of the grip was taken by wringing the wrist)
   F.updateWorldMatrix(true,false);F.matrixWorld.decompose(_pp,_fq,_ps);Hd.updateWorldMatrix(false,false);_fa.setFromMatrixPosition(Hd.matrixWorld).sub(_pp);
   if(_fa.lengthSq()<1e-8)return 0;_fa.normalize().applyQuaternion(_fq2.copy(_fq).invert());   // the forearm's own long axis (elbow to wrist), in its frame: rolling about it can't move the hand
   _fq2.copy(_fq).invert().multiply(qHand).multiply(_fq.copy(rq).invert());   // how far the wanted hand is turned from relaxed, in the forearm's frame
   const t=_fq2.x*_fa.x+_fq2.y*_fa.y+_fq2.z*_fa.z;let tw=wrapA(2*Math.atan2(t,_fq2.w));   // its twist about that axis
-  const roll=clamp(tw*.8,-1.45,1.45);if(Math.abs(roll)>1e-3){_fq.setFromAxisAngle(_fa,roll);F.quaternion.multiply(_fq);F.updateWorldMatrix(false,false);}
+  /* Build 157: the twist is taken nearest the one it had (it used to wrap at ±180°, and a grip turned past that snapped the forearm from
+     fully one way to fully the other in a frame: the hand flipping over on the grip), and the forearm turns at most ~20° a frame */
+  const ud=Hd.userData;if(FR_FIX&&ud._ptw!=null){while(tw-ud._ptw>Math.PI)tw-=2*Math.PI;while(tw-ud._ptw<-Math.PI)tw+=2*Math.PI;if(Math.abs(tw)>2.6*Math.PI/2)tw=wrapA(tw);}
+  let roll=clamp(tw*.8,-1.45,1.45);if(FR_FIX&&ud._prl!=null&&ud._prT===FR_TICK-1)roll=ud._prl+clamp(roll-ud._prl,-.35,.35);
+  if(window.__rstat&&ud._prl!=null&&ud._prT===FR_TICK-1){const d=Math.abs(roll-ud._prl);window.__rstat.n++;if(d>.7)window.__rstat.big++;window.__rstat.sum+=d;}
+  ud._ptw=tw;ud._prl=roll;ud._prT=FR_TICK;if(Math.abs(roll)>1e-3){_fq.setFromAxisAngle(_fa,roll);F.quaternion.multiply(_fq);F.updateWorldMatrix(false,false);}
   const W=window.__wstat;if(W){W.n++;W.raw+=Math.abs(tw);W.res+=Math.abs(tw-roll);if(Math.abs(tw-roll)>.9)W.bad++;if(Math.abs(tw)>.9)W.rawBad++;}
   return tw-roll;}
 function gripHand(B,side,grip,E,A,pole,lens,curl,wrap){
@@ -7733,7 +7740,7 @@ function bodyPress(){
       if(A.sleep){const q=A.Q[a];q.x-=dx*k;q.y-=dy*k;q.z-=dz*k;}if(B.sleep){const q=B.Q[b];q.x+=dx*k;q.y+=dy*k;q.z+=dz*k;}if(r-d>.015)hit=true;}}   // (a body at rest is moved without being set in motion; only a real overlap wakes it)
     if(hit){if(A.sleep&&!held.has(A)){A.sleep=false;A.age=Math.min(A.age,3.5);}if(B.sleep&&!held.has(B)){B.sleep=false;B.age=Math.min(B.age,3.5);}}}
 }
-function logic(dt){
+function logic(dt){FR_TICK++;
   if(NET.mode==='client'){clientFrame(dt);return;}
   if(!(dt>0))return;   // no time has passed (a host's frame right after the background ticker ran): animating over zero time divided by zero and filled bodies with NaN
   // impact weight: a short eased slow-down (never a freeze: freezing a fixed-step sim makes it stutter 1,0,1,0 steps a frame)
