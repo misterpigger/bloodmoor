@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=154;
+const BUILD=155;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4834,13 +4834,13 @@ function dynFree(){for(const d of DYN){if(d.pw&&PW)try{PW.removeRigidBody(d.pw);
 // Half Sword's way: each fighter is a jointed body of rigid parts with mass, held up and posed by muscles (torques at each joint
 // toward the animated pose, joint motors) and, for now, a pelvis held toward where the animation puts it.
 // Blows are impulses on the part struck and carry on through the joints. Its own Rapier world; bodies meet the map and each other.
-let HSBODY=/[?&]hsbody/.test(location.search)||!/[?&]nohsbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-hsbody2');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on)
+let HSBODY=/[?&]hsbody/.test(location.search)||!/[?&]nohsbody/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-hsbody3')==='1';}catch(e){return false;}})();   // Build 155: off unless switched on (the player found the game better without it); a new key so an old 'on' doesn't stick
 /* Build 154: held weapons on physical arms (ARMS, `?arms`, stored as bloodmoor-arms). The weapon is a rigid body in the jointed body's world,
    fixed to the gripping hand (and the off hand's grip for a two-hander, on a ball joint); the arms are driven to where you aim by their
    joints' muscles, of finite strength, so a weapon's weight loads the arm: it starts slowly, carries on and is hard to stop, and its edge
    turns only as the hand turns. The game reads the weapon's pose back from the body (Sword.step). See `hsWeapon`. */
 let ARMS=/[?&]arms/.test(location.search)||!/[?&]noarms/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-arms')==='1';}catch(e){return false;}})();
-let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
+let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={xs:.45,xd:.3,xf:.18,sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
 // id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
 const HS_SEG=[['pel','Hips','Hips',null,null,11,.11,0,0],['abd','Spine1','Spine1','Spine2','pel',8,.12,22,320],['che','Spine2','Spine2','Neck','abd',16,.135,22,320],['hed','Head','Neck','HeadTop_End','che',5,.105,20,60]];
 const HS_OWN={Hips:'pel',Spine1:'abd',Spine2:'che',Neck:'che',Head:'hed',HeadTop_End:'hed'};
@@ -5556,6 +5556,12 @@ class Fighter{
     // while the point drops onto the line the hands rise, so the blade pivots about its middle and the point stays on target
     const thx=this.sword&&this.sword.def.kind==='blade'&&(this.revW||0)<.5?Math.max(0,cz-.46)*THR_EXT:0;   /* and the hands drive further out along the line */
     out.copy(this.chest).addScaledVector(_r,this.ctrl.x).addScaledVector(u,this.ctrl.y+Hd.guardY+this.jabLift).addScaledVector(f,cz+(Hd.reach||0)+thx);
+    /* Build 155: carried across to the other shoulder, the hands stop at that shoulder's line and sit lower and further out in front: both hands
+       on a grip can't reach out past the far shoulder, and the box took them 55 cm across at head height, so the sword arm reached its limit,
+       the forearms crossed in front of the face, the off elbow winged out level with the shoulder and the cut from there dragged along the
+       edge of reach. A left-shoulder guard (for a right-hander) has the hands by that shoulder, elbows down, blade up and back */
+    if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
+      if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
@@ -7521,7 +7527,7 @@ async function setEngine(on){
   spawnMatch(false);attractRestart=performance.now();showEngine();if(PW||!on)el('loading').classList.add('hide');
 }
 document.querySelectorAll('.eng').forEach(b=>b.addEventListener('click',()=>setEngine(b.dataset.eng==='physics')));
-{const hb=document.getElementById('hsBtn');const show=()=>{hb.classList.toggle('on',HSBODY);hb.setAttribute('aria-checked',HSBODY?'true':'false');};show();hb.addEventListener('click',()=>{HSBODY=!HSBODY;if(!HSBODY)hsFreeAll();try{localStorage.setItem('bloodmoor-hsbody2',HSBODY?'1':'0');}catch(e){}show();});}
+{const hb=document.getElementById('hsBtn');const show=()=>{hb.classList.toggle('on',HSBODY);hb.setAttribute('aria-checked',HSBODY?'true':'false');};show();hb.addEventListener('click',()=>{HSBODY=!HSBODY;if(!HSBODY)hsFreeAll();try{localStorage.setItem('bloodmoor-hsbody3',HSBODY?'1':'0');}catch(e){}show();});}
 {const fb=document.getElementById('fullBtn');const show=()=>{fb.classList.toggle('on',FULLBODY);fb.setAttribute('aria-checked',FULLBODY?'true':'false');};show();fb.addEventListener('click',()=>{FULLBODY=!FULLBODY;try{localStorage.setItem('bloodmoor-fullbody',FULLBODY?'1':'0');}catch(e){}show();});}
 try{localStorage.removeItem('bloodmoor-hybrid');}catch(e){}
 function startGame(){
