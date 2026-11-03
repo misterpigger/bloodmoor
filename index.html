@@ -5605,7 +5605,13 @@ class Fighter{
     /* Build 160 (with ?hf, after the longsword guards vom Tag and Ochs): raised hands go up beside the head on the sword's side, at about
        head height and only a little in front, not up in front of the face (where any arm pose ends with a forearm across the face) */
     if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
-      if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
+      const xc=this.ctrl.x*sgx;
+      if(xc<-.05){   /* Build 162: carried across to the other shoulder and up, the hands go to that shoulder, about chin height and out in front of
+           it (the left-shoulder vom Tag: right forearm across the chest under the chin, elbows down, blade up and back over the left shoulder),
+           not up over the head, where the arms crossed over the top of it and the forearm went across the face */
+        const kx=clamp((-xc-.05)/.35,0,1),hy=out.y-this.chest.y,cap=.24,lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);
+        if(hy>cap)out.y-=(hy-cap)*kx*.9;out.addScaledVector(_r,(lerp(lat,-sgx*.16,kx*.8)-lat)).addScaledVector(f,(lerp(fw,Math.max(fw,.32),kx)-fw));}
+      else if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
     if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
       if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
