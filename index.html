@@ -5637,7 +5637,7 @@ class Fighter{
         const kx=clamp((-xc-.05)/.35,0,1),hy=out.y-this.chest.y,cap=.24,lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);
         if(hy>cap)out.y-=(hy-cap)*kx*.9;out.addScaledVector(_r,(lerp(lat,-sgx*.16,kx*.8)-lat)).addScaledVector(f,(lerp(fw,Math.max(fw,.32),kx)-fw));}
       else if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
-    if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
+    if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs&&!(REF_G&&!this.thrust)){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
       if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
@@ -5654,7 +5654,7 @@ class Fighter{
       out.lerp(_wl3,rw*rw*(3-2*rw));}
     // Build 144: winding up. The aim taken out to a high corner draws the hand back past the shoulder (it stopped 16 cm in front of the
     // chest, so every cut started from in front of you and had no room to get going); swept across from there the blade has a long arc
-    const ck=this.sword&&this.sword.def.kind!=='spear'&&rw<.5&&!this.thrust&&cz<.5?clamp((Math.abs(this.ctrl.x)-.16)/.26,0,1)*clamp((this.ctrl.y+.12)/.4,0,1)*WIND_K:0;this._ck=ck;
+    const ck=this.sword&&!REF_G&&this.sword.def.kind!=='spear'&&rw<.5&&!this.thrust&&cz<.5?clamp((Math.abs(this.ctrl.x)-.16)/.26,0,1)*clamp((this.ctrl.y+.12)/.4,0,1)*WIND_K:0;this._ck=ck;
     if(ck>0)out.addScaledVector(f,-.32*ck).addScaledVector(_r,Math.sign(this.ctrl.x)*.06*ck).addScaledVector(u,.05*ck);
     // Build 146: a real guard. Scrolled back past the resting guard (ctrl.z under .42), the hands come up before the face with the blade up and
     // across, covering head and body, and the guard goes to meet a blade coming in (guardCover): it moves toward where the foe's blade will
@@ -5834,7 +5834,7 @@ class Fighter{
       /* Build 161 (?hf): clicking into a committed swing eases the blade's line from the guard's to the swing's over ~0.12 s instead of
          switching it in one frame (the hand twisted over as the line jumped) */
       if(HAND_FIRST&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);if(this._cmB>0&&this._cmB<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;guide.copy(gA).lerp(gB,this._cmB*this._cmB*(3-2*this._cmB)).normalize();}}
-      if(HAND_FIRST&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
+      if(HAND_FIRST&&!(REF_G&&!this.commit&&!this.thrust)&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
       (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&!exhausted;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else{this.sword.step(h,tgt,guide,cm,str);if(HAND_FIRST&&this._nfEdge&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&(!cm||HF_CE>0)){const sw=this.sword,E=_nfK.copy(this._nfEdge);E.addScaledVector(sw.axis,-E.dot(sw.axis));if(E.lengthSq()>1e-4){E.normalize();if(sw.def.kind==='blade'&&E.dot(sw.edge)<0)E.negate();sw.edge.lerp(E,cm?HF_CE:.25);sw.edge.addScaledVector(sw.axis,-sw.edge.dot(sw.axis)).normalize();}}}   /* Build 160: in guard the edge is where the hand holds it, not turned by the motion */
