@@ -6568,6 +6568,10 @@ function gripHand(B,side,grip,E,A,pole,lens,curl,wrap){
    at the shoulder instead: the elbow swings round the shoulder-to-hand line. Where the wrist would be wrung, the elbow is tried a little
    either way round that line and eased toward wherever the hand sits straightest, then back home when it no longer needs to be */
 let _gripBend=0;const _gbQ0=new THREE.Quaternion(),_gbQ1=new THREE.Quaternion(),_gbQ2=new THREE.Quaternion(),_gbA=new THREE.Vector3(),_gbP=new THREE.Vector3(),_gbS=new THREE.Vector3(),_gbQ=new THREE.Quaternion(),_gbE=new THREE.Vector3(),_gbH=new THREE.Vector3(),_gbM=new THREE.Vector3(),_gbN=new THREE.Vector3();
+let SWIVEL=/[?&]sw/.test(location.search);
+const _sdU=V(),_sdV=V(),_sdW=V();
+function segDist(a,b,c,d){_sdU.subVectors(b,a);_sdV.subVectors(d,c);_sdW.subVectors(a,c);const A=_sdU.dot(_sdU),Bq=_sdU.dot(_sdV),C=_sdV.dot(_sdV),D=_sdU.dot(_sdW),E=_sdV.dot(_sdW),den=A*C-Bq*Bq;let sc=den>1e-9?clamp((Bq*E-C*D)/den,0,1):0,tc=C>1e-9?clamp((Bq*sc+E)/C,0,1):0;sc=A>1e-9?clamp((Bq*tc-D)/A,0,1):0;
+  const px=a.x+_sdU.x*sc-c.x-_sdV.x*tc,py=a.y+_sdU.y*sc-c.y-_sdV.y*tc,pz=a.z+_sdU.z*sc-c.z-_sdV.z*tc;return Math.hypot(px,py,pz);}
 function gripBest(f,key,B,side,grip,E,A,pole,lens,curl,wrap,dt){
   if(window.__noGB)return gripHand(B,side,grip,E,A,pole,lens,curl,wrap);
   const st=f._pth||(f._pth={});let th=st[key]||0;
@@ -6580,19 +6584,28 @@ function gripBest(f,key,B,side,grip,E,A,pole,lens,curl,wrap,dt){
      to a grip by the far shoulder went through the chest 15% of the time) counts against a way round, as a wrung wrist does */
   const own=()=>{if(!f.caps)return 0;B[side+'ForeArm'].updateWorldMatrix(true,false);_gbE.setFromMatrixPosition(B[side+'ForeArm'].matrixWorld);B[side+'Hand'].updateWorldMatrix(true,false);_gbH.setFromMatrixPosition(B[side+'Hand'].matrixWorld);_gbH.add(_gbE).multiplyScalar(.5);let w=0;
     for(const c of f.caps){if(!c.on||c.zone!=='torso')continue;_gbM.subVectors(c.b,c.a);const L2=_gbM.lengthSq()||1e-9;for(const x of [_gbE,_gbH]){const u=clamp(_gbN.subVectors(x,c.a).dot(_gbM)/L2,0,1);const d=x.distanceTo(_gbN.copy(c.a).addScaledVector(_gbM,u)),r=c.r-.025;if(d<r)w=Math.max(w,r-d);   /* (the trunk capsules are fuller than the skin, ~4 cm at the belly) */}}return w;};
-  const score=t=>{reset();rot(t);_gripBend=0;const r=Math.abs(gripHand(B,side,grip,E,A,_gbP,lens,curl,wrap)),bd=Math.max(0,_gripBend-.55);const p=own();P0.copy(pole0);return {v:r+p*14+bd*1.5+.12*Math.abs(t),r:r+bd,p};};   /* (Build 152: a wrist folded past 30° counts against it too: the off hand on the pommel bent back up to 160°) */
+  /* Build 164 (?sw): how natural the arm looks that way round, as well as how well the hand fits the grip: the elbow raised above its
+     shoulder with the hand not above it (a winged elbow), the elbow behind the shoulder, and this forearm crossing the other arm all count
+     against it. (The arms used to be judged only by the grip, so any bend that fitted the hand would do, and they tangled) */
+  const nat=()=>{if(!SWIVEL)return 0;bA.updateWorldMatrix(true,false);bF.updateWorldMatrix(true,false);bH.updateWorldMatrix(true,false);_gbE.setFromMatrixPosition(bF.matrixWorld);_gbH.setFromMatrixPosition(bH.matrixWorld);
+    let c=0;const up=_gbE.y-_gbS.y,hu=_gbH.y-_gbS.y;if(up>0)c+=up*(hu>up?1.5:5);f.fwd(_gbM);const back=-_gbM.dot(_gbN.subVectors(_gbE,_gbS));if(back>.05)c+=(back-.05)*4;
+    const o=side==='Right'?'Left':'Right',oF=B[o+'ForeArm'],oH=B[o+'Hand'],oA=B[o+'Arm'];if(oF&&oH&&oA){oA.updateWorldMatrix(true,false);oF.updateWorldMatrix(true,false);oH.updateWorldMatrix(true,false);_gbM.setFromMatrixPosition(oF.matrixWorld);_gbN.setFromMatrixPosition(oH.matrixWorld);_gbN.lerp(_gbM,.4);_gbH.lerp(_gbE,.4);   /* (only the forearms' elbow-side 60%: on a two-handed grip the hands are meant to be together) */
+      const d=segDist(_gbE,_gbH,_gbM,_gbN);if(d<.07)c+=(.07-d)*12;_gbN.setFromMatrixPosition(oA.matrixWorld);const d2=segDist(_gbE,_gbH,_gbN,_gbM);if(d2<.07)c+=(.07-d2)*12;}
+    return c;};
+  const score=t=>{reset();rot(t);_gripBend=0;const r=Math.abs(gripHand(B,side,grip,E,A,_gbP,lens,curl,wrap)),bd=Math.max(0,_gripBend-.55);const p=own(),n=nat();P0.copy(pole0);return {v:r+p*14+bd*1.5+n+.12*Math.abs(t),r:r+bd+n,p};};   /* (Build 152: a wrist folded past 30° counts against it too: the off hand on the pommel bent back up to 160°) */
   const pole0=P0.clone();const s0=score(th);
   let best=th,bv=s0.v;
   /* (Build 153: it settles. It used to ease home whenever the current way round was good enough, then find it bad and swing back, so the
      hand turned ~3° every frame even holding still; now it only goes home when home is as good, only moves for a clear gain, slower, and
      never more than 1.3 rad round) */
   const TG=st.tg||(st.tg={}),tk=TG[key]||(TG[key]={t:0,next:0});best=tk.t;
-  if(simTime>=tk.next||s0.p>.01){tk.next=simTime+.2;const sT=Math.abs(tk.t-th)<1e-3?s0:score(tk.t);let bt=tk.t,bvv=sT.v;
-    if(sT.r>.25||sT.p>.004){for(const d of [-.9,-.45,.45,.9]){const t=clamp(tk.t+d,-1.3,1.3);const sc=score(t);if(sc.v<bvv-.1){bvv=sc.v;bt=t;}}}
+  if(simTime>=tk.next||s0.p>.01){tk.next=simTime+(SWIVEL?.12:.2);const sT=Math.abs(tk.t-th)<1e-3?s0:score(tk.t);let bt=tk.t,bvv=sT.v;
+    if(SWIVEL){for(const t of [-1.5,-1.1,-.7,-.35,0,.35,.7,1.1,1.5]){if(Math.abs(t-tk.t)<.05)continue;const sc=score(t);if(sc.v<bvv-.06){bvv=sc.v;bt=t;}}}
+    else if(sT.r>.25||sT.p>.004){for(const d of [-.9,-.45,.45,.9]){const t=clamp(tk.t+d,-1.3,1.3);const sc=score(t);if(sc.v<bvv-.1){bvv=sc.v;bt=t;}}}
     else if(Math.abs(tk.t)>.02&&_gbS.distanceTo(grip)>0&&(tk.hp?tk.hp.distanceTo(grip)>.35:false)){const h0=score(0);if(h0.r<.2&&h0.p<.001)bt=0;}   /* (home again only once the hand has moved well away from where it turned) */
     if(bt!==tk.t||!tk.hp)(tk.hp||(tk.hp=V())).copy(grip);
     tk.t=bt;best=bt;}
-  const rate=s0.p>.004?6:2.5;th+=clamp(best-th,-rate*dt,rate*dt);st[key]=th;reset();rot(th);_gripBend=0;const res=gripHand(B,side,grip,E,A,_gbP,lens,curl,wrap);(f._gb||(f._gb={}))[key]=_gripBend;return res;}
+  const rate=s0.p>.004?6:SWIVEL?4.5:2.5;th+=clamp(best-th,-rate*dt,rate*dt);st[key]=th;reset();rot(th);_gripBend=0;const res=gripHand(B,side,grip,E,A,_gbP,lens,curl,wrap);(f._gb||(f._gb={}))[key]=_gripBend;return res;}
 
 function ik2(up,lo,target,pole,a,c){
   up.updateWorldMatrix(true,false);_iS2.setFromMatrixPosition(up.matrixWorld);
