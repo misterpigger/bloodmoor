@@ -4331,12 +4331,36 @@ function guardThreat(f){if(f._gtT===simTime)return f._gt;f._gtT=simTime;f._gt=nu
    little finger or the thumb), and which way the thumb points is the forearm's twist away from a neutral handshake (the thumb up when the
    forearm points forward, back when it points up), at most NF_PSI either way. Asked for more, the blade goes to the nearest place the hand can
    reach, so the drawn hand never has to wrap along the grip, bend past a wrist or turn inside out to follow it */
+let REF_G=/[?&]ref/.test(location.search);
 let HF_LAT=.3,HF_CE=.15;try{const q=location.search,a=q.match(/[?&]hlat=([\d.]+)/),b=q.match(/[?&]hce=([\d.]+)/);if(a)HF_LAT=+a[1];if(b)HF_CE=+b[1];}catch(e){}
 let ELB_UP=1,ROOF_K=1,ROOF_BACK=.6;try{const q=location.search,a=q.match(/[?&]roof=([\d.]+)/),b=q.match(/[?&]roofb=([\d.]+)/);if(a)ROOF_K=+a[1];if(b)ROOF_BACK=+b[1];}catch(e){}
 try{const m=location.search.match(/[?&]elb=([\d.]+)/);if(m)ELB_UP=+m[1];}catch(e){}
-let HAND_FIRST=/[?&]hf/.test(location.search),NF_TMIN=40*Math.PI/180,NF_TMAX=105*Math.PI/180,NF_PSI=110*Math.PI/180;
+let HAND_FIRST=/[?&](hf|ref)/.test(location.search),NF_TMIN=40*Math.PI/180,NF_TMAX=105*Math.PI/180,NF_PSI=110*Math.PI/180;
 try{const q=location.search;const a=q.match(/[?&]nft0=([\d.]+)/),b=q.match(/[?&]nft1=([\d.]+)/),c=q.match(/[?&]nfp=([\d.]+)/);if(a)NF_TMIN=+a[1]*Math.PI/180;if(b)NF_TMAX=+b[1]*Math.PI/180;if(c)NF_PSI=+c[1]*Math.PI/180;}catch(e){}
 const _nfR=V(),_nfT=V(),_nfN=V(),_nfP=V(),_nfQ=new THREE.Quaternion();
+/* Build 163 (?ref): guards from the historical longsword references. Each is an anchor in the aim box (ctrl x, y) with where the
+   sword hand sits relative to the chest (right, up, forward, metres; mirrored for the left hand) and which way the point goes. Where you aim
+   blends the nearest guards, so the target pose is always between real stances; the physical body is pulled toward it. Sources: the
+   principal guards (vom Tag, Ochs, Pflug, Alber, Langort) as described by e.g. swordfight.uk/?p=1041 */
+const REF_GUARDS=[
+  // name,         ctrl x, y,   hand r, u, f,          point r, u, f
+  ['tag-R',          .42, .72,  [ .17, .24, .06],  [ .12, 1.0,-.55]],   // vom Tag over the right shoulder: hands by the shoulder, point up and back
+  ['tag-L',         -.42, .72,  [-.15, .20, .16],  [-.15, 1.0,-.55]],   // vom Tag over the left shoulder: forearm across the chest under the chin
+  ['tag-top',        .0,  .85,  [ .06, .40, .10],  [ .05, 1.0,-.45]],   // vom Tag above the head
+  ['ochs-R',         .45, .32,  [ .23, .22, .18],  [-.28, .05, 1.0]],   // Ochs right: hands beside the head, elbows out, point at the face
+  ['ochs-L',        -.45, .32,  [-.12, .20, .22],  [ .28, .05, 1.0]],   // Ochs left
+  ['middle',         .0,  .1,   [ .04,-.08, .40],  [ .0,  .45, 1.0]],   // middle guard: hands before the belly, point at the throat
+  ['langort',        .0,  .35,  [ .02, .05, .55],  [ .0,  .12, 1.0]],   // long point: arms out, point at the face
+  ['pflug-R',        .45,-.3,   [ .16,-.28, .18],  [-.18, .35, 1.0]],   // Pflug right: hands by the right hip, point at the chest
+  ['pflug-L',       -.45,-.3,   [-.10,-.28, .22],  [ .18, .35, 1.0]],   // Pflug left
+  ['alber',          .0, -.5,   [ .02,-.40, .32],  [ .0, -.75, 1.0]],   // Alber: hands low in front, point to the ground
+];
+const _rgH=V(),_rgP=V();
+function refGuard(f,outH,outP){const sg=f.mainArm==='L'?-1:1,cx=f.ctrl.x*sg,cy=f.ctrl.y;let ws=0;_rgH.set(0,0,0);_rgP.set(0,0,0);
+  for(const [,gx,gy,h,p] of REF_GUARDS){const d2=(cx-gx)*(cx-gx)+(cy-gy)*(cy-gy),w=1/Math.pow(d2+.004,1.6);ws+=w;_rgH.x+=h[0]*w;_rgH.y+=h[1]*w;_rgH.z+=h[2]*w;const l=Math.hypot(p[0],p[1],p[2]);_rgP.x+=p[0]/l*w;_rgP.y+=p[1]/l*w;_rgP.z+=p[2]/l*w;}
+  _rgH.multiplyScalar(1/ws);_rgP.normalize();f.fwd(_nfD);f.right(_nfR);
+  if(outH)outH.copy(f.chest).addScaledVector(_nfR,_rgH.x*sg).addScaledVector(Y_AXIS,_rgH.y).addScaledVector(_nfD,_rgH.z);
+  if(outP)outP.set(0,0,0).addScaledVector(_nfR,_rgP.x*sg).addScaledVector(Y_AXIS,_rgP.y).addScaledVector(_nfD,_rgP.z).normalize();return true;}
 // where the forearm will point: a two-bone arm from the shoulder to the hand target, the elbow bent toward a natural pole (down and a little
 // out at the side; up and out to the side with the hands raised above the shoulders, as in a high guard)
 const _nfS=V(),_nfD=V(),_nfE=V(),_nfPo=V();
@@ -5604,7 +5628,8 @@ class Fighter{
        edge of reach. A left-shoulder guard (for a right-hander) has the hands by that shoulder, elbows down, blade up and back */
     /* Build 160 (with ?hf, after the longsword guards vom Tag and Ochs): raised hands go up beside the head on the sword's side, at about
        head height and only a little in front, not up in front of the face (where any arm pose ends with a forearm across the face) */
-    if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
+    if(REF_G&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.thrust&&!(this.revW>.05)){refGuard(this,out,null);out.addScaledVector(f,(this.ctrl.z-.42)+(Hd.reach||0)+thx);}
+    else if(HAND_FIRST&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!this.thrust){const sgx=this.mainArm==='L'?-1:1,k=clamp((this.ctrl.y+Hd.guardY-.05)/.35,0,1)*ROOF_K;
       const xc=this.ctrl.x*sgx;
       if(xc<-.05){   /* Build 162: carried across to the other shoulder and up, the hands go to that shoulder, about chin height and out in front of
            it (the left-shoulder vom Tag: right forearm across the chest under the chin, elbows down, blade up and back over the left shoulder),
@@ -5674,6 +5699,7 @@ class Fighter{
     out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp:lerp(.5,.36,pgW));
     /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
        up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
+    if(REF_G&&!cm&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'){refGuard(this,null,out);return out;}
     if(HAND_FIRST&&!cm&&this.sword&&this.sword.def.kind!=='spear'){const rk=clamp((this.ctrl.y-.2)/.35,0,1)*ROOF_K;if(rk>0)out.addScaledVector(f,-ROOF_BACK*rk);}   // Build 160 (?hf): raised, the point goes up and back over the shoulder (vom Tag), not just up
     if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*(HAND_FIRST?HF_LAT:GUIDE_LAT);if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
     return out.normalize();
