@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=170;
+const BUILD=171;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3504,6 +3504,50 @@ const GEAR={uSteelR:{value:null},uMailD:{value:null},uMailO:{value:null}};
   GEAR.uSteelR.value=t('steel_r.jpg');GEAR.uMailD.value=t('mail_d.jpg',1);GEAR.uMailO.value=t('mail_orm.jpg');
   const ld=t('leather_d.jpg',1),ln=t('leather_n.jpg');ld.repeat.set(2,5);ln.repeat.set(2,5);Object.assign(leatherMat,{map:ld,normalMap:ln,roughness:.68});leatherMat.color.setHex(0x9a7a62);
   GEAR.wood=[t('wood2_d.jpg',1),t('wood2_n.jpg')];for(const x of GEAR.wood){x.center.set(.5,.5);x.rotation=Math.PI/2;x.repeat.set(4,1);}}
+/* ---- Build 171: surface work on steel, after real pieces. All procedural in the shaders (no new downloads), in each piece's own frame so
+   it rides with it, and faded out where it would be finer than a pixel (no shimmer at a distance).
+   'blade': a blade is ground along its length, so fine lengthwise grinding lines vary the polish and catch the light; long faint
+            streaks of a darker temper, a few pits of old forge scale near the hilt, and a slightly darker steel overall (blades read
+            as washed-out white under the sky).
+   'forged': cross, pommel, socket, langets and axe/mace heads were forged and filed, not turned: small hammer facets in the surface
+            and dark scale left in the hollows.
+   'plate': armour plates were raised and then planished with a hammer, so the polish is broken by shallow overlapping dents and
+            follows them; the dents are 1.5-2.5 cm across */
+const SURF_GLSL=`float sfh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float sfn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(sfh(i),sfh(i+vec2(1,0)),f.x),mix(sfh(i+vec2(0,1)),sfh(i+vec2(1,1)),f.x),f.y);}
+float sfDim(vec2 p){vec2 i=floor(p),f=fract(p);float h=0.;for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 g=vec2(float(x),float(y)),o=vec2(sfh(i+g),sfh(i+g+7.31))*.8+.1;float d=length(g+o-f);h=max(h,1.-smoothstep(0.,.72,d));}return h;}
+vec2 sfPlane(vec3 p,vec3 n){vec3 a=abs(n);return a.z>a.x&&a.z>a.y?p.xy:a.x>a.y?p.zy:p.xz;}
+float mailRing(vec2 p){float h=0.,row=floor(p.y*2.);for(int dy=-1;dy<=1;dy++){float r=row+float(dy),off=mod(r,2.)*.5,cy=(r+.5)*.5,cx0=floor(p.x-off)+.5+off;for(int dx=-1;dx<=1;dx++){vec2 d=(p-vec2(cx0+float(dx),cy))*vec2(1.,1.35);float w=1.-smoothstep(.06,.13,abs(length(d)-.4));float sg=mod(r,2.)<1.?1.:-1.;h=max(h,w*(.55+.45*clamp(sg*d.x/.45,-1.,1.)));}}return h;}
+vec3 sfBump(vec3 nrm,float hgt,vec3 vp){vec3 dpx=dFdx(-vp),dpy=dFdy(-vp);vec3 r1=cross(dpy,nrm),r2=cross(nrm,dpx);float det=dot(dpx,r1);return normalize(abs(det)*nrm-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));}`;
+function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
+  sh.vertexShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSfP=position;vSfN=normal;\n#ifdef USE_UV\nvSfU=uv;\n#else\nvSfU=vec2(0.);\n#endif');
+  let col='',rough='',nrm='';
+  if(kind==='blade'){
+    // lengthwise grinding: the steel's own frame, across the blade (x and z) against along it (y)
+    col=`float sfA=vSfP.y,sfX=vSfP.x+vSfP.z*.7;float sfF=clamp(1.-fwidth(sfX*700.)*1.5,0.,1.);
+      float sfG=(sfn(vec2(sfX*700.,sfA*3.))*.55+sfn(vec2(sfX*180.,sfA*1.2))*.45);float sfT=sfn(vec2(sfX*40.,sfA*.6));
+      float sfPit=smoothstep(.86,.95,sfn(vec2(sfX*900.,sfA*900.)))*smoothstep(.22,.05,sfA);
+      diffuseColor.rgb*=.86*(1.-.12*(sfT-.5))*(1.-.5*sfPit);`;
+    rough=`roughnessFactor=clamp(roughnessFactor*mix(1.,.55+.9*sfG,sfF)+sfPit*.4,.05,1.);`;
+    nrm=`normal=sfBump(normal,(sfG-.5)*.00018*sfF,vViewPosition);`;}
+  else if(kind==='forged'){
+    col=`vec2 sfQ=sfPlane(vSfP,vSfN)*110.;float sfF=clamp(1.-fwidth(sfQ.x)*.8,0.,1.);float sfD=sfDim(sfQ),sfS=sfn(sfQ*.5);   /* (filed and polished after forging: the facets are faint, scale lingers in the hollows) */
+      diffuseColor.rgb*=mix(1.,.92+.08*sfD,sfF)*(1.-.14*smoothstep(.62,.9,sfS));`;
+    rough=`roughnessFactor=clamp(roughnessFactor+(1.-sfD)*.05*sfF+smoothstep(.62,.9,sfS)*.12,.05,1.);`;
+    nrm=`normal=sfBump(normal,sfD*.00012*sfF,vViewPosition);`;}
+  else if(kind==='leather'){   // handled leather: fine creases and grain, darker and smoother where hands and wear have polished it
+    col=`vec2 sfQ=sfPlane(vSfP,vSfN)*420.;float sfF=clamp(1.-fwidth(sfQ.x)*.6,0.,1.);float sfC=sfn(sfQ*vec2(1.,.25)),sfG=sfn(sfQ*2.3),sfW=sfn(sfPlane(vSfP,vSfN)*30.);
+      diffuseColor.rgb*=(.82+.3*sfW)*mix(1.,.85+.25*sfG,sfF)*(1.-.25*smoothstep(.7,.9,sfC)*sfF);`;
+    rough=`roughnessFactor=clamp(roughnessFactor*(.7+.5*sfW)+(sfG-.5)*.15*sfF,.25,1.);`;
+    nrm=`normal=sfBump(normal,(sfG*.6+smoothstep(.7,.9,sfC)*.6)*.00014*sfF,vViewPosition);`;}
+  else{   // plate
+    col=`vec2 sfQ=sfPlane(vSfP,vSfN)*36.;float sfF=clamp(1.-fwidth(sfQ.x)*.7,0.,1.);float sfD=sfDim(sfQ),sfW=sfn(sfQ*.21);   /* (planished then polished: the dents are faint ripples in the reflection, not a hammered texture) */
+      diffuseColor.rgb*=1.-.025*(1.-sfD)*sfF;`;
+    rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);`;
+    nrm=`normal=sfBump(normal,sfD*.00022*sfF,vViewPosition);`;}
+  sh.fragmentShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);};
+  const k0=m.customProgramCacheKey.bind(m);m.customProgramCacheKey=()=>k0()+'|sf'+kind;return m;}
+
 function steelDetail(m,key){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);Object.assign(sh.uniforms,GEAR);
   sh.vertexShader='varying vec3 vSP;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSP=position;');
   sh.fragmentShader='varying vec3 vSP;uniform sampler2D uSteelR;\n'+sh.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
@@ -3515,13 +3559,14 @@ function steelDetail(m,key){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)
       normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2)); }`);};
   m.customProgramCacheKey=()=>'steel';}
 function mailDetail(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);Object.assign(sh.uniforms,GEAR);
-  sh.vertexShader='varying vec3 vSP;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSP=position;');
-  sh.fragmentShader='varying vec3 vSP;uniform sampler2D uMailD,uMailO;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      vec2 mu=vec2(vSP.x+vSP.z,vSP.y)*8.;vec3 mo=texture2D(uMailO,mu).rgb;diffuseColor.rgb*=mix(vec3(.16,.13,.1),texture2D(uMailD,mu).rgb*1.5,mo.r);`)   // rings over the padded coat showing through
+  sh.vertexShader='varying vec3 vSP,vMN;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSP=position;vMN=normal;');
+  sh.fragmentShader='varying vec3 vSP,vMN;uniform sampler2D uMailD,uMailO;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+      vec2 mp=sfPlane(vSP,vMN)*112.;float mfw=clamp(1.-fwidth(mp.x)*2.,0.,1.),mh=mailRing(mp),mc=mix(.72,smoothstep(.04,.2,mh),mfw);vec3 mo=vec3(mc,mix(.55,.3+.4*(1.-mh),mfw),0.);   /* (Build 171) riveted rings, four through each, worked out in the shader in rows round the body: the photo texture was mapped flat and read as blobs */
+      diffuseColor.rgb*=mix(vec3(.16,.13,.1),vec3(1.05)*(.6+.55*mh),mc);`)   // rings over the padded coat showing through
     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.95,mo.g*.9+.1,mo.r);')
     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mo.r*.9;')
     .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
-    { float hgt=mo.r*.0025;vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
+    { float hgt=mh*.0011*mfw;vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
       normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2)); }`);};
   m.customProgramCacheKey=()=>'mail-gear';}
 const stumpMat=std({color:0x5a0707,roughness:.35,metalness:.1});
@@ -3585,7 +3630,7 @@ function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3
   {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0],4,0);put(r0[(k+1)%K],(k+1)%K,0);put(r0[k],k,0);}}   // the shoulder of the blade under the guard
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);return toCreasedNormals(g,.6);}   // (Build 128: smooth across each face, a crease only at the bevels and fuller edges; flat facets banded like a rail)
-const bladeMat=new THREE.MeshPhysicalMaterial({color:0xa8a6a2,metalness:.96,roughness:.17,envMapIntensity:1.35,vertexColors:true});steelDetail(bladeMat,'blade');   /* (Build 129: no clearcoat, it laid a milky plastic sheen over the steel. Build 130: the steel's photo-scanned grain and grinding marks are back; since Build 127 the call sat inside a comment, so blades were bare untextured shapes) */
+const bladeMat=new THREE.MeshPhysicalMaterial({color:0xa8a6a2,metalness:.96,roughness:.17,envMapIntensity:1.12,vertexColors:true});steelDetail(bladeMat,'blade');surfDetail(bladeMat,'blade');   /* (Build 129: no clearcoat, it laid a milky plastic sheen over the steel. Build 130: the steel's photo-scanned grain and grinding marks are back; since Build 127 the call sat inside a comment, so blades were bare untextured shapes) */
 const gripMat=std({color:0x9a7050,roughness:.72});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1,3);x.anisotropy=MAXANI;}Object.assign(gripMat,{map:ld,normalMap:ln});gripMat.normalScale.set(.6,.6);}
 // a grip bound in leather over cord: the wrap's ridges spiral down it, waisted or swelling along its length
 function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Math.max(8,Math.round(len*260)),true),p=g.attributes.position;
@@ -3629,8 +3674,9 @@ function lobedPommel(R){const parts=[];for(const [x,s] of [[-R*.75,.62],[0,.85],
    over the shoulders of the blade; wheel pommels with sunken faces and a raised boss (some with a latten disc set in), faceted
    scent-stopper and pear pommels, and the tang peened over a small block on top. Every part is stacked from the grip's real length, so
    nothing floats (the greatsword's pommel hung 2 cm below its grip). The greatsword lost its parrying lugs: those are 16th-century */
-const steelHilt=steelDark;const latten=std({color:0xb48c4c,metalness:.92,roughness:.32,vertexColors:false});steelDetail(latten,'c');latten.side=THREE.DoubleSide;
-const chappeMat=std({color:0x8a5c3a,roughness:.78});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.anisotropy=MAXANI;}Object.assign(chappeMat,{map:ld,normalMap:ln});}
+const hiltMat=std({color:0x6a6761,metalness:.9,roughness:.3,envMapIntensity:1.05});surfDetail(hiltMat,'forged');   /* (its own steel: the shared brushed-steel texture is mapped in metres and drew coarse diagonal hatching across a cross) */
+surfDetail(gripMat,'leather');const steelHilt=hiltMat;const latten=std({color:0xb48c4c,metalness:.92,roughness:.32,vertexColors:false});steelDetail(latten,'c');latten.side=THREE.DoubleSide;
+const chappeMat=std({color:0x8a5c3a,roughness:.78});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.anisotropy=MAXANI;}Object.assign(chappeMat,{map:ld,normalMap:ln});}surfDetail(chappeMat,'leather');
 function bladeP(L,w,o={}){
   const NS=64,NX=12,sec=o.sec||'diamond',ful=o.ful??0,fw=o.fw??.3,ric=o.ric??0,base=o.base??.04,th0=o.th0??.0036,th1=o.th1??.0012,pt=o.pt??.22,tw=o.tw??.72,eb=.09;
   const width=u=>{if(o.leaf)return w*(.32+.68*Math.sin(Math.PI*Math.pow(u,.72)))*(1-Math.pow(u,6));const u0=1-pt;return u<u0?w*(1-(1-tw)*u/u0):w*tw*Math.cos((u-u0)/pt*Math.PI/2);};
@@ -3728,7 +3774,7 @@ function makeGreatsword(st=0){
   // a great sword of war (Type XIIa): a long broad blade with a fuller two-thirds down, a long straight cross, a long grip and a heavy wheel pommel
   const b=bladeP(1.22,.032,{sec:'lens',ful:.62,fw:.28,ric:.06,base:.045,th0:.0042,pt:.2,tw:.72});return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.14,.014,1),latten,0,0,0],...hiltP({gc:.035,cross:[.38,.026,.03,{term:'flare',bend:.008,bw:.032,ec:.026}],grip:[.36,.0178,{waist:.06,ris:[.22,.5,.78]}],pom:'wheel',pR:.038,pT:.028,disc:true,wh:{boss:.06},chappe:[.03,.03]},b)]);}
 
-const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');
+const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');surfDetail(headMat,'forged');
 function edgeShade(g,f){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=f(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=c[i*3+1]=c[i*3+2]=v;}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g;}
 // (Build 127) the head lofted in slices from the eye to the edge: each slice a lens through the head's height, thick by the eye and ground
 // down to a keen edge, so the faces curve and catch the light like forged and ground iron instead of being two flat plates
@@ -3956,7 +4002,7 @@ function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const
   let ey=0,ez=-9,ec=0;const eyes=body.parent&&body.parent.children.find(c=>c.isMesh&&/Eyes/.test(c.name));if(eyes){const p=eyes.geometry.attributes.position;for(let i=0;i<p.count;i+=7){ey+=p.getY(i);ez=Math.max(ez,p.getZ(i));ec++;}ey/=ec||1;}else{ey=J.Head.y+.09;ez=J.Head.z+.09;}
   const bp=body.geometry.attributes.position;let x0=9,x1=-9,z0=9,z1=-9;let nz=-9;for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(x)>.2)continue;if(y>ey-.075&&y<ey+.04&&Math.abs(x)<.03)nz=Math.max(nz,z);if(y<ey-.02||y>ey+.06)continue;x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);}
   return body.userData.marks={J,ey,ez,hx:(x0+x1)/2,hz:(z0+z1)/2,rx:(x1-x0)/2,rz:(z1-z0)/2,nose:Math.max(z1,nz)};}
-const steelFitMat=steelMat.clone();steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;
+const steelFitMat=steelMat.clone();steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;surfDetail(steelFitMat,'plate');
 // the breastplate's own detail (Build 124), from a per-vertex (round the body, up the plate) coordinate `aCu` set when the cuirass is
 // grown: a row of domed rivets round the waist edge and across the top at the front, a rolled top edge, leather side straps with brass
 // buckles, and shoulder straps over the back. Leather is dark and matte, brass warm and metallic
@@ -4024,7 +4070,7 @@ for(const m of [steelMat,steelDark,mailMat,steelFitMat,cuirassMat,faulMat,helmSl
    greaves and sabatons. Every vertex rides one or two bones (`bones(t)`), so plates slide over each other as the body bends instead of
    stretching. `?oldplate` brings back the body-grown shells */
 const OLD_PLATE=/[?&]oldplate/.test(location.search),ROPE=false;   /* (roping the rolled edges needs a much finer mesh than the plates have: it drew saw teeth) */
-const strapMat=std({color:0x4a2e1c,roughness:.8});
+const strapMat=std({color:0x4a2e1c,roughness:.8});surfDetail(strapMat,'leather');
 function bodyBoneW(body){const SI=body.geometry.attributes.skinIndex,SW=body.geometry.attributes.skinWeight,bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
   return {bi,W:(v,names)=>{let s=0;for(let k=0;k<4;k++){const b=SI.getComponent(v,k);for(const nm of names)if(bi[nm]===b){s+=SW.getComponent(v,k);break;}}return s;}};}
 // the body's section round an axis: the largest radius in each band along it and each 10° round it, filled and smoothed
@@ -4097,16 +4143,16 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     S(plateLoft(T,{tb:tW,tt:th=>tN-.03,thc:Math.PI,span:u=>lerp(2.3,1.5,sstep(.7,1,u)),clr:.045,ridge:[.25,.004],roll:{t:1,b:1,s:1,rt:1},NU:30,NV:40,bones:blend2('Spine1','Spine2',tW+.06,tW+.3)},body),steelFitMat);
     S(plateLoft(T,{tb:tP,tt:tW+.08,thc:Math.PI,span:2.4,clr:.053,roll:{t:1,b:1,s:1},NU:12,NV:36,rivets:[[tP+.015,Math.PI-.9],[tP+.015,Math.PI+.9]],bones:blend2('Spine','Spine1',tP,tW+.05)},body),steelFitMat);
     // fauld: four lames below the waist, each a little wider than the one above it, rivets at their ends; culet at the back
-    const tF0=tP+.02;for(let k=0;k<4;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:0,span:3.0+k*.12,clr:.06+k*.007+(-b)*.05,roll:{t:0,b:1,s:1},NU:8,NV:44,rivets:[[(a+b)/2,-1.35-k*.06],[(a+b)/2,1.35+k*.06]],bones:()=>[['Hips',.75],['Spine',.25]]},body),faulMat);}
-    for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:2.2,clr:.06+k*.007,roll:{t:0,b:1,s:1},NU:6,NV:30,bones:()=>[['Hips',1]]},body),faulMat);}
+    const tF0=tP+.02;for(let k=0;k<4;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:0,span:3.0+k*.12,clr:.06+k*.007+(-b)*.05,roll:{t:0,b:1,s:1},NU:8,NV:44,rivets:[[(a+b)/2,-1.35-k*.06],[(a+b)/2,1.35+k*.06]],bones:()=>[['Hips',.75],['Spine',.25]]},body),steelFitMat);}
+    for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:2.2,clr:.06+k*.007,roll:{t:0,b:1,s:1},NU:6,NV:30,bones:()=>[['Hips',1]]},body),steelFitMat);}
     // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
     {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.24&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.03,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy-.02,flare:.1},bones:null}),mailMat);}
     // tassets: a plate hanging from the fauld over each thigh, on two straps
     for(const sd of ['Left','Right']){const L=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh',t0:-.3,t1:1.1,sw:5,st:2}),xs=sd==='Left'?1:-1;
-      S(plateLoft(L,{tb:-.1,tt:.32,thc:-.25*xs,span:1.7,clr:.05,roll:{t:1,b:1,s:1,rt:1},NU:12,NV:22,rivets:[[-.06,-.25*xs-.45],[-.06,-.25*xs+.45]],bones:()=>[['Hips',.55],[sd+'UpLeg',.45]]},body),faulMat);}
+      S(plateLoft(L,{tb:-.1,tt:.32,thc:-.25*xs,span:1.7,clr:.05,roll:{t:1,b:1,s:1,rt:1},NU:12,NV:22,rivets:[[-.06,-.25*xs-.45],[-.06,-.25*xs+.45]],bones:()=>[['Hips',.55],[sd+'UpLeg',.45]]},body),steelFitMat);}
     // spaulders: four lames from the top of the shoulder down the arm, the upper overlapping the lower; a besagew over the front of the armpit
     for(const sd of ['Left','Right']){const A=limbMap(body,J[sd+'Arm'],J[sd+'ForeArm'],(v,W)=>W(v,[sd+'Arm',sd+'Shoulder'])>.5,{key:sd+'uarm',ref:V(0,1,0),t0:-.6,t1:1.15,sw:5,st:2});
-      for(let k=0;k<4;k++){const a=-.22+k*.17,b=a+.2;S(plateLoft(A,{tb:a,tt:b,thc:0,span:3.4-k*.25,clr:.04+(3-k)*.006,roll:{t:k===0,b:1,s:1,rb:k===3},NU:8,NV:30,rivets:[[(a+b)/2,0,.0038]],bones:blend2(sd+'Shoulder',sd+'Arm',-.25,.1)},body),faulMat);}
+      for(let k=0;k<4;k++){const a=-.22+k*.17,b=a+.2;S(plateLoft(A,{tb:a,tt:b,thc:0,span:3.4-k*.25,clr:.04+(3-k)*.006,roll:{t:k===0,b:1,s:1,rb:k===3},NU:8,NV:30,rivets:[[(a+b)/2,0,.0038]],bones:blend2(sd+'Shoulder',sd+'Arm',-.25,.1)},body),steelFitMat);}
       const xs=sd==='Left'?1:-1,bp=V(J[sd+'Arm'].x-xs*.01,J[sd+'Arm'].y-.075,0);bp.z=J[sd+'Arm'].z+.075;S(discPlate(.046,.013,body,sd+'Shoulder',bp,V(xs*.25,-.1,1)),steelFitMat);}
   }
   if(def.id==='vambraces'){
@@ -4122,10 +4168,10 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       // gauntlet: a flared cuff and a plate over the back of the hand
       const H=limbMap(body,J[sd+'Hand'],J[sd+'HandMiddle1']||J[sd+'Hand'].clone().add(V(sd==='Left'?.09:-.09,0,0)),(v,W)=>W(v,[sd+'Hand'])>.4,{key:sd+'hand',ref:V(0,1,0),t0:-.6,t1:1.2,sw:4,st:2});
       S(plateLoft(H,{tb:-.55,tt:-.05,thc:0,span:Math.PI*2,clr:.016,clrF:(t)=>.03*sstep(-.25,-.55,t),roll:{t:1,b:1,s:0,rt:1},NU:12,NV:36,bones:blend2(sd+'ForeArm',sd+'Hand',-.4,-.15)},body),steelFitMat);
-      S(plateLoft(H,{tb:-.05,tt:.95,thc:0,span:2.1,clr:.012,ridge:[.25,.003],roll:{t:1,b:0,s:1},NU:12,NV:22,bones:one(sd+'Hand')},body),faulMat);}
+      S(plateLoft(H,{tb:-.05,tt:.95,thc:0,span:2.1,clr:.012,ridge:[.25,.003],roll:{t:1,b:0,s:1},NU:12,NV:22,bones:one(sd+'Hand')},body),steelFitMat);}
   }
   if(def.id==='greaves'){
-    for(const sd of ['Left','Right']){const U=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh2',t0:-.1,t1:1.15,sw:5,st:2}),L=limbMap(body,J[sd+'Leg'],J[sd+'Foot'],(v,W)=>W(v,[sd+'Leg'])>.5,{key:sd+'shin',t0:-.15,t1:1.05,sw:5,st:2});
+    for(const sd of ['Left','Right']){const U=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh2',t0:-.1,t1:1.15,sw:3,st:5}),L=limbMap(body,J[sd+'Leg'],J[sd+'Foot'],(v,W)=>W(v,[sd+'Leg'])>.5,{key:sd+'shin',t0:-.15,t1:1.05,sw:3,st:6});
       const xs=sd==='Left'?1:-1;
       // cuisse: the front of the thigh, with a medial ridge, strapped round the back
       S(plateLoft(U,{tb:.28,tt:.9,thc:0,span:3.6,clr:.012,ridge:[.4,.004],roll:{t:1,b:1,s:1,rt:1},NU:16,NV:34,bones:one(sd+'UpLeg')},body),steelFitMat);
@@ -4137,7 +4183,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       S(plateLoft(L,{tb:.08,tt:.88,thc:0,span:Math.PI*2,clr:.009,ridge:[.3,.003],roll:{t:1,b:1,s:0,rt:1},NU:20,NV:40,rivets:[[.25,Math.PI/2*xs],[.65,Math.PI/2*xs]],bones:one(sd+'Leg')},body),steelFitMat);
       // sabaton: lames over the top of the foot
       const F=limbMap(body,J[sd+'Foot'],J[sd+'ToeBase'],(v,W)=>W(v,[sd+'Foot',sd+'ToeBase'])>.5,{key:sd+'foot',ref:V(0,1,0),t0:-.3,t1:1.5,sw:4,st:1});
-      for(let k=0;k<4;k++){const a=-.1+k*.32,b=a+.36;S(plateLoft(F,{tb:a,tt:b,thc:0,span:2.4,clr:.012+k*.002,roll:{t:0,b:1,s:1},NU:6,NV:22,bones:k<2?one(sd+'Foot'):blend2(sd+'Foot',sd+'ToeBase',.9,1.1)},body),faulMat);}}
+      for(let k=0;k<4;k++){const a=-.1+k*.32,b=a+.36;S(plateLoft(F,{tb:a,tt:b,thc:0,span:2.4,clr:.012+k*.002,roll:{t:0,b:1,s:1},NU:6,NV:22,bones:k<2?one(sd+'Foot'):blend2(sd+'Foot',sd+'ToeBase',.9,1.1)},body),steelFitMat);}}
   }
   FIT_CACHE.set(ck,out);return out;}
 
@@ -4181,18 +4227,18 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambrac
    size (bodyMarks), bound to the head */
 function visorParts(body,M){const k='visor|'+body.name;if(FIT_CACHE.has(k))return FIT_CACHE.get(k);
   const cx=M.hx,cz=M.hz,ey=M.ey,RX=M.rx+.03,RZ=M.rz+.032,y0=ey-.115,y1=ey+.045,ys=ey+.004,gap=.011;
-  const mk=(ya,yb,flange)=>{const NU=14,NV=34,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,y=ya+(yb-ya)*u;for(let j=0;j<=NV;j++){const v=j/NV,th=(v-.5)*2.7,c=Math.cos(th);
-      const sn=.13*Math.pow(Math.max(0,c),5)*Math.pow(Math.max(0,1-Math.abs(y-(ey-.03))/.1),1.2);   // the snout, drawn out to a blunt point
+  const mk=(ya,yb,flange)=>{const NU=18,NV=48,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,y=ya+(yb-ya)*u;for(let j=0;j<=NV;j++){const v=j/NV,th=(v-.5)*2.7,c=Math.cos(th);
+      const sn=.12*Math.pow(Math.max(0,1-Math.abs(Math.sin(th))/.95),1.7)*Math.max(0,c)*Math.pow(Math.max(0,1-Math.abs(y-(ey-.035))/.105),1.1);   // the snout: a V in plan, drawn out to a blunt point
       const fl=flange&&u<.18?.006*(1-u/.18):0,rim=(u<.06||u>.94||v<.04||v>.96)?.002:0;
       pos.push(cx+Math.sin(th)*(RX+fl+rim),y,cz+Math.cos(th)*(RZ+fl+rim)+sn);}}
-    for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,c,b,b,c,d);}
+    for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}   // wound to face out: the ambient-occlusion pass draws front faces only, and a visor facing in was left out of it (the face's shading showed through it)
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g.toNonIndexed();};
   const parts=[mk(y0,ys-gap/2,false),mk(ys+gap/2,y1,true)];
   for(const sd of [-1,1]){const pv=new THREE.SphereGeometry(.009,10,6);pv.translate(cx+sd*(RX+.004),ys+.006,cz+.01);parts.push(pv.toNonIndexed());}   // the pivots
   const steel=mergeGeometries(parts.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;}));bindRigid(steel,'Head',body);
   // breaths: dark holes in rows on the right side of the snout
   const holes=[];for(let r=0;r<3;r++)for(let c=0;c<4;c++){const th=-.35-c*.13,y=ey-.045-r*.02;const h=new THREE.CircleGeometry(.0035,8);const nx=Math.sin(th),nz=Math.cos(th);
-    h.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(nx,0,nz)));const sn=.13*Math.pow(Math.max(0,Math.cos(th)),5)*Math.pow(Math.max(0,1-Math.abs(y-(ey-.03))/.1),1.2);
+    h.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(nx,0,nz)));const sn=.12*Math.pow(Math.max(0,1-Math.abs(Math.sin(th))/.95),1.7)*Math.max(0,Math.cos(th))*Math.pow(Math.max(0,1-Math.abs(y-(ey-.035))/.105),1.1);
     h.translate(cx+nx*(RX+.0015),y,cz+nz*(RZ+.0015)+sn);holes.push(h.toNonIndexed());}
   const hg=mergeGeometries(holes.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;}));bindRigid(hg,'Head',body);
   const out=[[steel,steelFitMat],[hg,slitMat]];FIT_CACHE.set(k,out);return out;}
@@ -4770,7 +4816,7 @@ function propVisual(dt){for(const p of PROPS){if(p.jig>0&&!(p.dyn&&p.dyn.body)){
 const _hbv=V(),_hba=V();
 // the wardrobe on weapons: whoever holds a weapon puts their steel finish and grip colour on it (looks only)
 function wepMat(base,wf,wg){if(base===gripMat){if(!wg)return base;const k=base.uuid+'|g'+wg;let x=FIN_CACHE.get(k);if(!x){x=base.clone();x.color.set(WARD.wg[wg]).multiplyScalar(1.8);FIN_CACHE.set(k,x);}return x;}
-  const blade=base===bladeMat||base===headMat,hilt=base===steelDark;if(!(blade||hilt)||!wf)return base;if(wf===2&&!hilt)return base;
+  const blade=base===bladeMat||base===headMat,hilt=base===steelDark||base===hiltMat;if(!(blade||hilt)||!wf)return base;if(wf===2&&!hilt)return base;
   const k=base.uuid+'|w'+wf;let x=FIN_CACHE.get(k);if(x)return x;x=base.clone();x.onBeforeCompile=base.onBeforeCompile;if(base.customProgramCacheKey)x.customProgramCacheKey=base.customProgramCacheKey;
   if(wf===1){x.color.multiplyScalar(.3);x.roughness=.45;x.metalness=.7;}else if(wf===2){x.color.setHex(0xc29a48);x.roughness=.26;x.metalness=.96;}else{x.color.setHex(blade?0x4a5c80:0x3a4866);x.roughness=.28;x.metalness=.92;}
   FIN_CACHE.set(k,x);return x;}
