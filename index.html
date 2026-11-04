@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=171;
+const BUILD=172;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3798,7 +3798,7 @@ function makeAxe(st=0){
   else if(st===2){sh.moveTo(.02,.97);sh.lineTo(.035,.968);sh.lineTo(.15,.985);sh.quadraticCurveTo(.163,.93,.15,.86);sh.lineTo(.035,.902);sh.lineTo(.02,.9);sh.closePath();}
   else{sh.moveTo(.02,.97);sh.lineTo(.03,.968);sh.quadraticCurveTo(.05,.958,.07,.964);sh.quadraticCurveTo(.12,.985,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.76,.085,.86);sh.quadraticCurveTo(.065,.905,.03,.902);sh.lineTo(.02,.9);sh.closePath();}
   const hg=axeLoft(sh);
-  edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
+  edgeShade(hg,(x,y,z)=>{const t=Math.abs(z);return t<.0018?2.1:t<.0028?1.5:t<.0034?.35:.5;});   /* (Build 172) by the steel's thickness: the edge ground bright, the weld line of the steel bit dark, the iron body left in its dark forge scale */
   const eye=edgeShade(toCreasedNormals(lathe([[0,-.042],[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042],[.012,.044],[0,.044]],8).toNonIndexed(),.4),()=>.9);   // (Build 168: an eight-sided forged socket, not a turned one)   // closed over the haft's end (open, it looked like a hollow tube from above)   // a socket with flared lugs above and below
   const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.975],[0,.975]].reverse(),14);
   /* (Build 168) langets: iron straps forged with the socket running down both cheeks of the haft, riveted through, so a blow can't split the
@@ -3977,6 +3977,8 @@ function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))re
     let rx=0,rz=0,cx=0,cz=0;const R=sb.map((a,i)=>{if(a.x1>a.x0){cx=(a.x0+a.x1)/2;cz=(a.z0+a.z1)/2;rx=Math.max(rx,(a.x1-a.x0)/2);rz=Math.max(rz,(a.z1-a.z0)/2);}return {cx,cz,rx:rx+fl*i*.02,rz:rz+fl*i*.02};});   // never narrower going down, flaring
     for(let g=0;g<G;g++){const y=gpos[g*3+1];if(y>=y0)continue;const t=clamp((y0-y)/.07,0,1),r=R[bin(q[g*3+1])],dx=(q[g*3]-r.cx)/r.rx,dz=(q[g*3+2]-r.cz)/r.rz,l=Math.hypot(dx,dz)||1;
       q[g*3]+=(r.cx+dx/l*r.rx-q[g*3])*t;q[g*3+2]+=(r.cz+dz/l*r.rz-q[g*3+2])*t;}}
+  if(o.skirt&&o.skirt.hem){const ys=[];for(let g=0;g<G;g++)if(rim[g]&&gpos[g*3+1]<o.skirt.y0-.06)ys.push(q[g*3+1]);   /* (Build 172) a straight hem: the kept triangles left the bottom edge in stair steps; everything below the hem line is brought up onto it */
+    if(ys.length>4){ys.sort((a,b)=>a-b);const hy=ys[Math.floor(ys.length*.8)];for(let g=0;g<G;g++)if(q[g*3+1]<hy)q[g*3+1]=hy;}}
   if(o.rim)for(let g=0;g<G;g++)if(rim[g])for(let a=0;a<3;a++)q[g*3+a]+=gn[g*3+a]*o.rim;   // a rolled edge
   // the new geometry: kept vertices only, weights limited to the bones the piece rides on
   const used=[...new Set(tris)],map=new Map(used.map((v,i)=>[v,i])),m=used.length;
@@ -4146,7 +4148,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     const tF0=tP+.02;for(let k=0;k<4;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:0,span:3.0+k*.12,clr:.06+k*.007+(-b)*.05,roll:{t:0,b:1,s:1},NU:8,NV:44,rivets:[[(a+b)/2,-1.35-k*.06],[(a+b)/2,1.35+k*.06]],bones:()=>[['Hips',.75],['Spine',.25]]},body),steelFitMat);}
     for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:2.2,clr:.06+k*.007,roll:{t:0,b:1,s:1},NU:6,NV:30,bones:()=>[['Hips',1]]},body),steelFitMat);}
     // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
-    {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.24&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.03,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy-.02,flare:.1},bones:null}),mailMat);}
+    {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.3&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.034,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy-.02,flare:.1,hem:true},bones:null}),mailMat);}
     // tassets: a plate hanging from the fauld over each thigh, on two straps
     for(const sd of ['Left','Right']){const L=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh',t0:-.3,t1:1.1,sw:5,st:2}),xs=sd==='Left'?1:-1;
       S(plateLoft(L,{tb:-.1,tt:.32,thc:-.25*xs,span:1.7,clr:.05,roll:{t:1,b:1,s:1,rt:1},NU:12,NV:22,rivets:[[-.06,-.25*xs-.45],[-.06,-.25*xs+.45]],bones:()=>[['Hips',.55],[sd+'UpLeg',.45]]},body),steelFitMat);}
@@ -4187,7 +4189,71 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
   }
   FIT_CACHE.set(ck,out);return out;}
 
-function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambraces'||def.id==='greaves'))return platePieces(body,def);const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
+/* ---- Build 172: helmets raised from one sheet, as they were, instead of grown from the scalp. A helmet is a closed loft round the head's
+   centre (bodyMarks: hx, hz, rx, rz, ey): a rim that can rise over the brow and drop at the nape (`rimY(θ)`), a skull whose section
+   shrinks above the crown to the profile of its type ('round' for a kettle hat's bowl, 'point' for a conical or bascinet skull drawn to
+   an apex set back a little, 'flat' for a great helm's barely domed top), a medial ridge front to back where asked, a turned rim and a
+   ring of liner rivets above it. Built outward-facing (the ambient-occlusion pass draws front faces only), bound to the head. */
+function helmLoft(M,o){const NU=o.NU||26,NV=o.NV||72,pos=[],idx=[],cx=M.hx,cz=M.hz,RX=M.rx+(o.clr??.022),RZ=M.rz+(o.clr??.022),yC=o.yC,yT=o.yT;
+  const prof=s=>o.kind==='round'?Math.sqrt(Math.max(0,1-s*s)):o.kind==='flat'?(s<.82?1:Math.sqrt(Math.max(0,1-Math.pow((s-.82)/.18,2)))):Math.pow(Math.max(0,1-s),o.pw||.75)*(1+.12*Math.sin(Math.PI*s));
+  const q=V();
+  for(let i=0;i<=NU;i++){const u=i/NU;for(let j=0;j<=NV;j++){const th=j/NV*Math.PI*2,yr=o.rimY(th),y=yr+(yT-yr)*Math.pow(u,o.up||1),s=clamp((y-yC)/(yT-yC),0,1),p=prof(s);
+    let rx=RX*p,rz=RZ*p;if(o.flatF&&Math.cos(th)>0)rz=lerp(rz,RZ*p*(1-.12*Math.pow(Math.abs(Math.sin(th)),2)),o.flatF);   // a great helm's face plate is flatter
+    let x=cx+Math.sin(th)*rx,z=cz+Math.cos(th)*rz+(o.apexBack||0)*s*s;
+    if(o.ridge){const k=Math.max(0,1-Math.abs(Math.sin(th))/o.ridge[0]);const r=o.ridge[1]*k*k*sstep(yC-.03,yC+.02,y);x+=Math.sin(th)*r;z+=Math.cos(th)*r;y;}
+    const bead=u*(yT-yr)<.007?.0035*Math.sqrt(Math.max(0,1-Math.pow(u*(yT-yr)/.007,2))):0;x+=Math.sin(th)*bead;z+=Math.cos(th)*bead;
+    pos.push(x,y,z);}}
+  for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();const parts=[g.toNonIndexed()];
+  // liner rivets round the skull just above the rim
+  if(o.rivets){for(let k=0;k<o.rivets;k++){const th=k/o.rivets*Math.PI*2,y=o.rimY(th)+.016,s=clamp((y-yC)/(yT-yC),0,1),p=prof(s),nx=Math.sin(th),nz=Math.cos(th);
+    const dm=new THREE.SphereGeometry(.0034,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.55,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,V(nx,0,nz)));dm.translate(cx+nx*RX*p,y,cz+nz*RZ*p);parts.push(dm.toNonIndexed());}}
+  return mergeGeometries(parts.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;}));}
+// a band lofted round the head between two heights (brow band, great helm's sight band), turned at both edges
+function helmBand(M,o){const NU=6,NV=72,pos=[],idx=[],cx=M.hx,cz=M.hz;for(let i=0;i<=NU;i++){const u=i/NU,y=lerp(o.y0,o.y1,u);for(let j=0;j<=NV;j++){const th=o.th0+(o.th1-o.th0)*j/NV,e=(i===0||i===NU)?0:.0015;
+    let rx=(M.rx+o.clr+e),rz=(M.rz+o.clr+e);if(o.flatF&&Math.cos(th)>0)rz*=1-.12*o.flatF*Math.pow(Math.abs(Math.sin(th)),2);pos.push(cx+Math.sin(th)*rx,y,cz+Math.cos(th)*rz);}}
+  for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g.toNonIndexed();}
+function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='helm|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
+  const ey=M.ey,top=(J.HeadTop_End?J.HeadTop_End.y:ey+.11),out=[],cx=M.hx,cz=M.hz;
+  const S=(g,mat,bone='Head')=>{bindRigid(g,bone,body);out.push([g,mat]);};
+  const aventail=(yb)=>out.push([fitShell(body,'aventail'+yb.toFixed(3),{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['Neck','Head','Spine2','LeftShoulder','RightShoulder'])>.5&&w(v,['LeftArm','RightArm'])<.2&&y>J.Neck.y-.09&&y<yb&&(y<ey-.1||P.getZ(v)<M.ez-.07)&&!(P.getZ(v)>M.ez-.06&&y>ey-.13);},off:.03,smooth:6,rim:.003,bones:['Neck','Head','Spine2'],fallback:'Neck'}),mailMat]);
+  if(def.id==='kettle'){
+    // a kettle hat: a round bowl with a low comb, riveted to a broad brim that slopes down and out
+    S(helmLoft(M,{kind:'round',clr:.024,yC:ey+.035,yT:top+.035,rimY:()=>ey+.035,ridge:[.18,.004],rivets:14}),steelFitMat);
+    const r0x=M.rx+.026,r0z=M.rz+.026,NV=72,NU=8,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,w=.095*u,dy=-.05*Math.pow(u,1.3)-(u>.92?(u-.92)*.04:0);for(let j=0;j<=NV;j++){const th=j/NV*Math.PI*2;
+      const bead=u>.93?.003*Math.sin((u-.93)/.07*Math.PI):0;pos.push(cx+Math.sin(th)*(r0x+w),ey+.04+dy+bead,cz+Math.cos(th)*(r0z+w));}}
+    for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,c,b,b,c,d);}
+    const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();S(bg.toNonIndexed(),steelFitMat);
+    aventail(ey+.02);}
+  else if(def.id==='nasal'){
+    // a conical helm: raised to a point over the crown, a brow band riveted round it and a nasal down over the nose
+    S(helmLoft(M,{kind:'point',pw:.9,clr:.02,yC:ey+.03,yT:top+.07,rimY:th=>ey+.022-.04*Math.pow(Math.max(0,-Math.cos(th)),2),ridge:[.12,.003],apexBack:-.012,rivets:0}),steelFitMat);
+    S(helmBand(M,{y0:ey+.02,y1:ey+.047,clr:.026,th0:0,th1:Math.PI*2}),steelFitMat);
+    {const parts=[];for(let k=0;k<12;k++){const th=k/12*Math.PI*2,nx=Math.sin(th),nz=Math.cos(th),dm=new THREE.SphereGeometry(.0036,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.55,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,V(nx,0,nz)));dm.translate(cx+nx*(M.rx+.027),ey+.0335,cz+nz*(M.rz+.027));parts.push(dm.toNonIndexed());}
+      const nb=new THREE.BoxGeometry(.018,.085,.004);nb.translate(0,-.03,0);const pn=nb.attributes.position;for(let i=0;i<pn.count;i++){const y=pn.getY(i);pn.setX(i,pn.getX(i)*(1-.35*clamp(-y/.07,0,1)));pn.setZ(i,pn.getZ(i)-.012*clamp(-y/.07,0,1));}nb.computeVertexNormals();nb.translate(cx,ey+.035,cz+M.rz+.03);parts.push(nb.toNonIndexed());
+      S(mergeGeometries(parts.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),steelFitMat);}
+    aventail(ey-.03);}
+  else if(def.id==='bascinet'){
+    // a bascinet: a tall skull drawn to a point set back over the crown, coming down round the sides and the nape, the face open for the visor
+    S(helmLoft(M,{kind:'point',pw:.65,clr:.022,yC:ey+.02,yT:top+.09,rimY:th=>{const c=Math.cos(th);return c>.35?ey+.034:c>-.2?lerp(ey-.1,ey+.034,(c+.2)/.55):ey-.115;},apexBack:-.03,rivets:16}),steelFitMat);
+    for(const p of visorParts(body,M))out.push(p);aventail(ey-.105);}
+  else if(def.id==='greathelm'){
+    // a great helm: a deep drum round the whole head on a slightly domed top, the face plate flatter with a ridge down it, a sight in two
+    // slits under a flange, breaths on the right, a brass cross riveted over the face
+    const RX=M.rx+.04,RZ=M.rz+.035,y0=ey-.16,ys=ey+.006,g=.012,yT=top+.05;
+    const sky=helmLoft(M,{kind:'flat',clr:.04,yC:ys+g/2,yT,rimY:()=>ys+g/2,flatF:1,ridge:[.1,.005]});
+    const low=helmBand(M,{y0,y1:ys-g/2,clr:.04,th0:0,th1:Math.PI*2,flatF:1});
+    S(mergeGeometries([sky,low].map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),steelFitMat);
+    // the dark inside seen through the sight and the breaths
+    S(helmBand(M,{y0:y0+.01,y1:yT-.02,clr:.032,th0:0,th1:Math.PI*2,flatF:1}),slitMat);
+    {const holes=[];for(let r=0;r<4;r++)for(let c=0;c<3;c++){const th=-.4-c*.16-(r%2)*.08,y=ey-.05-r*.022,nx=Math.sin(th),nz=Math.cos(th),h=new THREE.CircleGeometry(.0042,8);h.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0,0,1),V(nx,0,nz)));
+        const rz=(M.rz+.04)*(nz>0?1-.12*nx*nx:1);h.translate(cx+nx*(M.rx+.0415),y,cz+nz*(rz+.0015));holes.push(h.toNonIndexed());}
+      S(mergeGeometries(holes.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),slitMat);}
+    S(greatHelmCross(M,RX,RZ).clone(),brassFitMat);}
+  FIT_CACHE.set(ck,out);return out;}
+
+function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambraces'||def.id==='greaves'))return platePieces(body,def);if(!OLD_PLATE&&def.slot==='head')return helmPieces(body,def);const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
   const arm=['LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],torso=['Hips','Spine','Spine1','Spine2'],neck=['Neck','Head'];
   const S=(key,o,mat,bones)=>{const g=fitShell(body,key,Object.assign({bones},o));if(key==='cuirass'&&!g.attributes.aCu){const P=g.attributes.position,a=new Float32Array(P.count*3),zc=J.Spine1.z;let y0=9,y1=-9;for(let i=0;i<P.count;i++){y0=Math.min(y0,P.getY(i));y1=Math.max(y1,P.getY(i));}
       for(let i=0;i<P.count;i++){const an=Math.atan2(P.getX(i),P.getZ(i)-zc);a[i*3]=Math.sin(an);a[i*3+1]=Math.cos(an);a[i*3+2]=(P.getY(i)-y0)/(y1-y0);}g.setAttribute('aCu',new THREE.BufferAttribute(a,3));}   /* (Build 128) the angle as sine and cosine: a triangle across the back seam interpolated it from +π through 0 to −π and drew the front's straps in a streak down the spine */return [g,mat];};
@@ -4197,8 +4263,8 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambrac
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.09;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06},loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
-    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy-.04,flare:.1},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
+    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06,hem:true},loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
       S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
