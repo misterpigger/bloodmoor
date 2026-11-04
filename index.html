@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=169;
+const BUILD=170;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3458,7 +3458,7 @@ function tabard(body,her,pal,mats,SWU){const M=bodyMarks(body),J=M.J,hy=J.Hips.y
   const torso=['Hips','Spine','Spine1','Spine2','LeftShoulder','RightShoulder'],mt=looseMat(tabardMat(her,pal,mats,hy,ny),SWU,'h');
   const g=fitShell(body,'tabard',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso)>.55&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.2&&w(v,['Neck','Head'])<.3&&y>hy-.07&&y<ny-.03;},
     off:.08,smooth:30,bodySmooth:24,minK:.9,rim:.004,shape:convexTorso(0,.4,.22,.5,4),bones:torso,fallback:'Spine'});
-  const add=geo=>{const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};add(g);
+  const add=geo=>{const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';sm.userData.tabard=true;body.parent.add(sm);};add(g);
   // the flaps: hang from the hips, weighted toward the thighs at the hem so a step carries them
   const ck='flaps|'+body.name;let fg=FIT_CACHE.get(ck);
   if(!fg){const bp=body.geometry.attributes.position;let zf=-9,zb=9,hw=0;for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(y-(hy-.02))<.05){if(Math.abs(x)<.1){zf=Math.max(zf,z);zb=Math.min(zb,z);}hw=Math.max(hw,Math.abs(x));}}
@@ -4016,7 +4016,132 @@ function convexTorso(ridge=0,backK=.3,lim=9,pw=.5,sq=2,flat=0){let S=null;return
 const FINISHABLE=new Set();
 const plumeMat=std({color:0xffffff,roughness:.85,side:THREE.DoubleSide});
 for(const m of [steelMat,steelDark,mailMat,steelFitMat,cuirassMat,faulMat,helmSlitMat])FINISHABLE.add(m);
-function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
+/* ---- Build 170: plate armour as forged plates (c. 1420–1450 Italian/German harness), not skin pushed out. Each plate is a rigid sheet
+   lofted round a bone's axis at a clearance over the body's own measured section (limbMap), so it fits every build and odd shape, smoothed
+   hard so it reads as hammered steel rather than a second skin. Plates have turned and roped edges, rivets, a medial ridge where the period
+   put one, and overlap as real armour does: the breastplate with a plackart over its lower half, a fauld of lames, tassets, spaulders of
+   lames with besagews over the armpits, upper and lower cannons, couters with fans, gauntlets with flared cuffs, cuisses, poleyns with wings,
+   greaves and sabatons. Every vertex rides one or two bones (`bones(t)`), so plates slide over each other as the body bends instead of
+   stretching. `?oldplate` brings back the body-grown shells */
+const OLD_PLATE=/[?&]oldplate/.test(location.search),ROPE=false;   /* (roping the rolled edges needs a much finer mesh than the plates have: it drew saw teeth) */
+const strapMat=std({color:0x4a2e1c,roughness:.8});
+function bodyBoneW(body){const SI=body.geometry.attributes.skinIndex,SW=body.geometry.attributes.skinWeight,bi={};body.skeleton.bones.forEach((b,i)=>bi[b.name.replace('mixamorig','').replace(':','')]=i);
+  return {bi,W:(v,names)=>{let s=0;for(let k=0;k<4;k++){const b=SI.getComponent(v,k);for(const nm of names)if(bi[nm]===b){s+=SW.getComponent(v,k);break;}}return s;}};}
+// the body's section round an axis: the largest radius in each band along it and each 10° round it, filled and smoothed
+const LIMB_CACHE=new Map();   /* (not in userData: a cloned model copies userData through JSON, which turned the cached vectors into plain objects and dropped the functions) */
+function limbMap(body,A,B,keep,o={}){A=V(A.x,A.y,A.z);B=V(B.x,B.y,B.z);const key='lm|'+body.name+'|'+o.key;if(LIMB_CACHE.has(key))return LIMB_CACHE.get(key);
+  const P=body.geometry.attributes.position,{W}=bodyBoneW(body),d=V().subVectors(B,A),L=d.length();d.multiplyScalar(1/L);
+  const e1=(o.ref||V(0,0,1)).clone();e1.addScaledVector(d,-e1.dot(d));if(e1.lengthSq()<1e-6)e1.set(1,0,0).addScaledVector(d,-d.x);e1.normalize();const e2=V().crossVectors(d,e1);
+  const t0=o.t0??-.3,t1=o.t1??1.3,NT=Math.max(8,Math.ceil((t1-t0)*L/.015)),NH=36,R=new Float32Array(NT*NH).fill(-1),q=V();
+  for(let v=0;v<P.count;v++){if(!keep(v,W,P))continue;q.set(P.getX(v),P.getY(v),P.getZ(v)).sub(A);const s=q.dot(d)/L;if(s<t0||s>t1)continue;q.addScaledVector(d,-s*L);const r=q.length();
+    let th=Math.atan2(q.dot(e2),q.dot(e1));if(th<0)th+=Math.PI*2;const i=Math.min(NT-1,Math.floor((s-t0)/(t1-t0)*NT)),j=Math.floor(th/(Math.PI*2)*NH)%NH;if(r>R[i*NH+j])R[i*NH+j]=r;}
+  // fill gaps round each band, then along the axis
+  for(let i=0;i<NT;i++){let any=false;for(let j=0;j<NH;j++)if(R[i*NH+j]>0)any=true;if(!any)continue;for(let it=0;it<NH;it++)for(let j=0;j<NH;j++)if(R[i*NH+j]<0){const a=R[i*NH+(j+NH-1)%NH],b=R[i*NH+(j+1)%NH];if(a>0||b>0)R[i*NH+j]=Math.max(a,b);}}
+  for(let i=0;i<NT;i++)for(let j=0;j<NH;j++)if(R[i*NH+j]<0){let k=1,f=-1;while(f<0&&k<NT){const a=i-k>=0?R[(i-k)*NH+j]:-1,b=i+k<NT?R[(i+k)*NH+j]:-1;f=Math.max(a,b);k++;}R[i*NH+j]=f>0?f:.05;}
+  // a plate can't follow every hollow: the largest radius nearby round the band, then averaged, then averaged along the axis
+  const sw=o.sw??3,st=o.st??3,M1=new Float32Array(NT*NH),M2=new Float32Array(NT*NH),M3=new Float32Array(NT*NH);
+  for(let i=0;i<NT;i++)for(let j=0;j<NH;j++){let m=0;for(let k=-sw;k<=sw;k++)m=Math.max(m,R[i*NH+(j+k+NH)%NH]);for(let k=-1;k<=1;k++)if(i+k>=0&&i+k<NT)m=Math.max(m,R[(i+k)*NH+j]);M1[i*NH+j]=m;}
+  for(let i=0;i<NT;i++)for(let j=0;j<NH;j++){let s=0;for(let k=-sw;k<=sw;k++)s+=M1[i*NH+(j+k+NH)%NH];M2[i*NH+j]=s/(2*sw+1);}
+  for(let i=0;i<NT;i++)for(let j=0;j<NH;j++){let s=0,c=0;for(let k=-st;k<=st;k++)if(i+k>=0&&i+k<NT){s+=M2[(i+k)*NH+j];c++;}M3[i*NH+j]=s/c;}
+  const r=(t,th)=>{let u=(t-t0)/(t1-t0)*NT-.5;u=clamp(u,0,NT-1);let w=th/(Math.PI*2);w=(w%1+1)%1*NH-.5;const i0=Math.floor(u),i1=Math.min(NT-1,i0+1),fu=u-i0,j0=(Math.floor(w)+NH)%NH,j1=(j0+1)%NH,fw=w-Math.floor(w);
+    const a=M3[i0*NH+j0]*(1-fw)+M3[i0*NH+j1]*fw,b=M3[i1*NH+j0]*(1-fw)+M3[i1*NH+j1]*fw;return a*(1-fu)+b*fu;};
+  const out={A,d,e1,e2,L,r};LIMB_CACHE.set(key,out);return out;}
+// a plate lofted over a limbMap: u along the axis (t from tb to tt(θ)), v round it (θ over span(u) about θc), outward clearance plus shape
+//  o: {tb,tt (number or θ=>t),thc,span (number or u=>rad),clr,clrF(t,θ), ridge:[w,h], roll:{t:1,b:1,s:1}, NU,NV, bones:(t)=>[[name,w],..], rivets:[[t,θ]..]}
+function plateLoft(M,o,body){const NU=o.NU||28,NV=o.NV||40,tb=o.tb,ttF=typeof o.tt==='function'?o.tt:()=>o.tt,spF=typeof o.span==='function'?o.span:()=>o.span,thc=o.thc||0,roll=o.roll||{t:1,b:1,s:1},rw=.008,rr=o.rr??.0045;
+  // rows bunched toward the edges so the rolls are smooth
+  const bunch=n=>{const a=[];for(let i=0;i<=n;i++){const x=i/n;a.push(x<.12?.12*Math.pow(x/.12,1.6)*.5+x*.5:x>.88?1-(.12*Math.pow((1-x)/.12,1.6)*.5+(1-x)*.5):x);}return a;};
+  const US=bunch(NU),VS=bunch(NV),pos=[],uv=[],tt=[],idx=[],q=V();
+  const radius=(t,th)=>M.r(t,th)+(o.clr||.03)+(o.clrF?o.clrF(t,th):0);
+  for(let i=0;i<=NU;i++){const u=US[i];for(let j=0;j<=NV;j++){const v=VS[j],sp=spF(u),th=thc+(v-.5)*sp,tT=ttF(th),t=tb+u*(tT-tb);
+    let rad=radius(t,th);
+    if(o.ridge){const [w,h]=o.ridge;const dth=Math.atan2(Math.sin(th-thc),Math.cos(th-thc));rad+=h*Math.max(0,1-Math.abs(dth)/w)**2*(o.ridgeT?o.ridgeT(t):1);}
+    // turned edges: a rounded bead along the edges, roped (twisted) where asked
+    const sT=(tT-t)*M.L,sB=(t-tb)*M.L,arc=rad*sp,sS=Math.min(v,1-v)*arc;let bead=0;
+    for(const [s,on,rope] of [[sT,roll.t,roll.rt],[sB,roll.b,roll.rb],[sS,roll.s&&sp<Math.PI*1.95,roll.rs]]){if(!on||s>rw)continue;const k=Math.sqrt(Math.max(0,1-Math.pow(s/rw,2)));let b=rr*k;if(rope&&ROPE)b*=1+.18*Math.sin((v*arc+u*(tT-tb)*M.L)*260);bead=Math.max(bead,b);}
+    rad+=bead;
+    q.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th)).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);if(o.warp)o.warp(q,t,th);
+    pos.push(q.x,q.y,q.z);uv.push(v,u);tt.push(t);}}
+  for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}   // wound so the normals face out
+  let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  const parts=[g];
+  // rivets: low domes standing on the plate along its normal
+  if(o.rivets){const nn=V();for(const [t,th,s] of o.rivets){const rad=radius(t,th)+(o.ridge?0:0)+.0004;nn.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th));q.copy(nn).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);
+    const dm=new THREE.SphereGeometry(s||.0042,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.55,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nn));dm.translate(q.x,q.y,q.z);
+    const tA=new Float32Array(dm.attributes.position.count).fill(t);dm.setAttribute('aT',new THREE.BufferAttribute(tA,1));parts.push(dm);}}
+  g.setAttribute('aT',new THREE.Float32BufferAttribute(tt,1));
+  const m=mergeGeometries(parts.map(p=>{if(!p.attributes.uv)p.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(p.attributes.position.count*2),2));return p.index?p.toNonIndexed():p;}));
+  // skin: one or two bones by where along the axis each vertex is
+  const {bi}=bodyBoneW(body),n=m.attributes.position.count,si=new Uint16Array(n*4),swt=new Float32Array(n*4),T=m.attributes.aT;
+  for(let i=0;i<n;i++){const bw=o.bones(T.getX(i));let s=0;bw.forEach(([nm,w],k)=>{if(k<4&&bi[nm]!=null){si[i*4+k]=bi[nm];swt[i*4+k]=w;s+=w;}});if(s>0)for(let k=0;k<4;k++)swt[i*4+k]/=s;else{swt[i*4]=1;}}
+  m.setAttribute('skinIndex',new THREE.BufferAttribute(si,4));m.setAttribute('skinWeight',new THREE.BufferAttribute(swt,4));m.deleteAttribute('aT');return m;}
+const sstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+const blend2=(a,b,t0,t1)=>t=>{const k=sstep(t0,t1,t);return [[a,1-k],[b,k]];};
+const one=a=>()=>[[a,1]];
+// a disc (besagew, poleyn wing, couter fan): domed, with a turned rim and a boss, bound to one bone
+function discPlate(R,dome,body,bone,pos,nrm,boss=true){const pts=[[0,dome+(boss?.012:0)],[R*.12,dome+(boss?.01:0)],[R*.18,dome*.96],[R*.6,dome*.6],[R*.9,dome*.15],[R*.97,dome*.05+.003],[R,0],[R*.97,-.002]];
+  const g=lathe(pts.reverse(),32);g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nrm.clone().normalize()));g.translate(pos.x,pos.y,pos.z);const ng=g.toNonIndexed();ng.computeVertexNormals();bindRigid(ng,bone,body);return ng;}
+function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='plate|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
+  const {W}=bodyBoneW(body),arms=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],legs=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'],out=[];
+  const S=(g,mat)=>out.push([g,mat]);
+  if(def.id==='plate'){
+    const sx=Math.abs(J.LeftArm.x-J.Hips.x)*.78;const T=limbMap(body,J.Hips,J.Neck,(v,W,P)=>W(v,arms)<.15&&W(v,legs)<.35&&W(v,['Neck','Head'])<.4&&Math.abs(P.getX(v)-J.Hips.x)<sx,{key:'torso2',t0:-.45,t1:1.15,sw:4,st:3});
+    const ts=y=>(y-J.Hips.y)/T.L,tN=ts(J.Neck.y-.035),tW=ts(J.Spine1.y-.015);
+    // breastplate: globose, a low medial ridge, armholes cut away at the top, a scooped neck with a roped roll
+    S(plateLoft(T,{tb:tW,tt:th=>tN-.09*Math.exp(-Math.pow(Math.atan2(Math.sin(th),Math.cos(th))/.5,2)),thc:0,span:u=>lerp(2.2,1.25,Math.pow(sstep(.62,1,u),.8)),clr:.05,ridge:[.5,.007],ridgeT:t=>sstep(tW,tW+.15,t),roll:{t:1,b:1,s:1,rt:1,rs:1},NU:34,NV:44,bones:blend2('Spine1','Spine2',tW+.06,tW+.3)},body),steelFitMat);
+    // plackart: over the lower breastplate, rising to a point at the middle, riveted, with a strap and buckle at the point
+    const tP=ts(J.Spine.y-.03),tPk=tW+.27;
+    S(plateLoft(T,{tb:tP,tt:th=>{const a=Math.abs(Math.atan2(Math.sin(th),Math.cos(th)));return tW+.04+(tPk-tW-.04)*Math.max(0,1-a/1.05);},thc:0,span:2.25,clr:.058,ridge:[.4,.004],roll:{t:1,b:1,s:1,rt:0},NU:22,NV:44,
+      rivets:[[tPk-.012,0,.005],[tP+.015,-.85],[tP+.015,.85],[tP+.015,0]],bones:blend2('Spine','Spine1',tP,tW+.05)},body),steelFitMat);
+    // backplate and its lower plate
+    S(plateLoft(T,{tb:tW,tt:th=>tN-.03,thc:Math.PI,span:u=>lerp(2.3,1.5,sstep(.7,1,u)),clr:.045,ridge:[.25,.004],roll:{t:1,b:1,s:1,rt:1},NU:30,NV:40,bones:blend2('Spine1','Spine2',tW+.06,tW+.3)},body),steelFitMat);
+    S(plateLoft(T,{tb:tP,tt:tW+.08,thc:Math.PI,span:2.4,clr:.053,roll:{t:1,b:1,s:1},NU:12,NV:36,rivets:[[tP+.015,Math.PI-.9],[tP+.015,Math.PI+.9]],bones:blend2('Spine','Spine1',tP,tW+.05)},body),steelFitMat);
+    // fauld: four lames below the waist, each a little wider than the one above it, rivets at their ends; culet at the back
+    const tF0=tP+.02;for(let k=0;k<4;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:0,span:3.0+k*.12,clr:.06+k*.007+(-b)*.05,roll:{t:0,b:1,s:1},NU:8,NV:44,rivets:[[(a+b)/2,-1.35-k*.06],[(a+b)/2,1.35+k*.06]],bones:()=>[['Hips',.75],['Spine',.25]]},body),faulMat);}
+    for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.1;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:2.2,clr:.06+k*.007,roll:{t:0,b:1,s:1},NU:6,NV:30,bones:()=>[['Hips',1]]},body),faulMat);}
+    // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
+    {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.24&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.03,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy-.02,flare:.1},bones:null}),mailMat);}
+    // tassets: a plate hanging from the fauld over each thigh, on two straps
+    for(const sd of ['Left','Right']){const L=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh',t0:-.3,t1:1.1,sw:5,st:2}),xs=sd==='Left'?1:-1;
+      S(plateLoft(L,{tb:-.1,tt:.32,thc:-.25*xs,span:1.7,clr:.05,roll:{t:1,b:1,s:1,rt:1},NU:12,NV:22,rivets:[[-.06,-.25*xs-.45],[-.06,-.25*xs+.45]],bones:()=>[['Hips',.55],[sd+'UpLeg',.45]]},body),faulMat);}
+    // spaulders: four lames from the top of the shoulder down the arm, the upper overlapping the lower; a besagew over the front of the armpit
+    for(const sd of ['Left','Right']){const A=limbMap(body,J[sd+'Arm'],J[sd+'ForeArm'],(v,W)=>W(v,[sd+'Arm',sd+'Shoulder'])>.5,{key:sd+'uarm',ref:V(0,1,0),t0:-.6,t1:1.15,sw:5,st:2});
+      for(let k=0;k<4;k++){const a=-.22+k*.17,b=a+.2;S(plateLoft(A,{tb:a,tt:b,thc:0,span:3.4-k*.25,clr:.04+(3-k)*.006,roll:{t:k===0,b:1,s:1,rb:k===3},NU:8,NV:30,rivets:[[(a+b)/2,0,.0038]],bones:blend2(sd+'Shoulder',sd+'Arm',-.25,.1)},body),faulMat);}
+      const xs=sd==='Left'?1:-1,bp=V(J[sd+'Arm'].x-xs*.01,J[sd+'Arm'].y-.075,0);bp.z=J[sd+'Arm'].z+.075;S(discPlate(.046,.013,body,sd+'Shoulder',bp,V(xs*.25,-.1,1)),steelFitMat);}
+  }
+  if(def.id==='vambraces'){
+    for(const sd of ['Left','Right']){const A=limbMap(body,J[sd+'Arm'],J[sd+'ForeArm'],(v,W)=>W(v,[sd+'Arm'])>.45,{key:sd+'uarm2',ref:V(0,1,0),t0:-.2,t1:1.25,sw:5,st:2}),F=limbMap(body,J[sd+'ForeArm'],J[sd+'Hand'],(v,W)=>W(v,[sd+'ForeArm'])>.45,{key:sd+'farm',ref:V(0,1,0),t0:-.25,t1:1.15,sw:5,st:2});
+      // upper cannon, closed, a hinge's rivets along the inside
+      S(plateLoft(A,{tb:.38,tt:.86,thc:0,span:Math.PI*2,clr:.014,roll:{t:1,b:1,s:0},NU:16,NV:40,rivets:[[.5,Math.PI*1.5],[.74,Math.PI*1.5]],bones:one(sd+'Arm')},body),steelFitMat);
+      // couter: a cup over the point of the elbow, with a fan on the outside
+      S(plateLoft(A,{tb:.82,tt:1.12,thc:Math.PI,span:3.4,clr:.034,clrF:(t,th)=>.018*Math.exp(-Math.pow((t-.98)/.08,2))*Math.max(0,Math.cos(th-Math.PI)),roll:{t:1,b:1,s:1,rt:1},NU:14,NV:30,bones:blend2(sd+'Arm',sd+'ForeArm',.95,1.05)},body),steelFitMat);
+      {const xs=sd==='Left'?1:-1,ep=J[sd+'ForeArm'].clone();ep.z-=.05;ep.y+=.01;S(discPlate(.045,.012,body,sd+'Arm',ep.add(V(0,0,-.012)),V(0,.2,-1),false),steelFitMat);}
+      // lower cannon: two halves closed by a hinge and a strap, rolled at both ends
+      S(plateLoft(F,{tb:.06,tt:.9,thc:0,span:Math.PI*2,clr:.012,roll:{t:1,b:1,s:0,rb:1},NU:18,NV:40,rivets:[[.2,Math.PI/2],[.7,Math.PI/2]],bones:one(sd+'ForeArm')},body),steelFitMat);
+      S(plateLoft(F,{tb:.45,tt:.52,thc:Math.PI*1.5,span:2.2,clr:.019,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'ForeArm')},body),strapMat);
+      // gauntlet: a flared cuff and a plate over the back of the hand
+      const H=limbMap(body,J[sd+'Hand'],J[sd+'HandMiddle1']||J[sd+'Hand'].clone().add(V(sd==='Left'?.09:-.09,0,0)),(v,W)=>W(v,[sd+'Hand'])>.4,{key:sd+'hand',ref:V(0,1,0),t0:-.6,t1:1.2,sw:4,st:2});
+      S(plateLoft(H,{tb:-.55,tt:-.05,thc:0,span:Math.PI*2,clr:.016,clrF:(t)=>.03*sstep(-.25,-.55,t),roll:{t:1,b:1,s:0,rt:1},NU:12,NV:36,bones:blend2(sd+'ForeArm',sd+'Hand',-.4,-.15)},body),steelFitMat);
+      S(plateLoft(H,{tb:-.05,tt:.95,thc:0,span:2.1,clr:.012,ridge:[.25,.003],roll:{t:1,b:0,s:1},NU:12,NV:22,bones:one(sd+'Hand')},body),faulMat);}
+  }
+  if(def.id==='greaves'){
+    for(const sd of ['Left','Right']){const U=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh2',t0:-.1,t1:1.15,sw:5,st:2}),L=limbMap(body,J[sd+'Leg'],J[sd+'Foot'],(v,W)=>W(v,[sd+'Leg'])>.5,{key:sd+'shin',t0:-.15,t1:1.05,sw:5,st:2});
+      const xs=sd==='Left'?1:-1;
+      // cuisse: the front of the thigh, with a medial ridge, strapped round the back
+      S(plateLoft(U,{tb:.28,tt:.9,thc:0,span:3.6,clr:.012,ridge:[.4,.004],roll:{t:1,b:1,s:1,rt:1},NU:16,NV:34,bones:one(sd+'UpLeg')},body),steelFitMat);
+      S(plateLoft(U,{tb:.42,tt:.47,thc:Math.PI,span:2.8,clr:.01,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'UpLeg')},body),strapMat);
+      // poleyn: a cup over the knee with a heart-shaped wing on the outside
+      S(plateLoft(U,{tb:.86,tt:1.12,thc:0,span:3.2,clr:.03,clrF:(t,th)=>.02*Math.exp(-Math.pow((t-.98)/.08,2))*Math.max(0,Math.cos(th)),roll:{t:1,b:1,s:1,rt:1,rb:1},NU:14,NV:30,bones:blend2(sd+'UpLeg',sd+'Leg',.95,1.05)},body),steelFitMat);
+      {const kp=J[sd+'Leg'].clone();kp.x+=xs*.068;kp.z+=.02;S(discPlate(.045,.01,body,sd+'UpLeg',kp,V(xs,0,.35),false),steelFitMat);}
+      // greave: closed round the shin and calf, rolled top and bottom
+      S(plateLoft(L,{tb:.08,tt:.88,thc:0,span:Math.PI*2,clr:.009,ridge:[.3,.003],roll:{t:1,b:1,s:0,rt:1},NU:20,NV:40,rivets:[[.25,Math.PI/2*xs],[.65,Math.PI/2*xs]],bones:one(sd+'Leg')},body),steelFitMat);
+      // sabaton: lames over the top of the foot
+      const F=limbMap(body,J[sd+'Foot'],J[sd+'ToeBase'],(v,W)=>W(v,[sd+'Foot',sd+'ToeBase'])>.5,{key:sd+'foot',ref:V(0,1,0),t0:-.3,t1:1.5,sw:4,st:1});
+      for(let k=0;k<4;k++){const a=-.1+k*.32,b=a+.36;S(plateLoft(F,{tb:a,tt:b,thc:0,span:2.4,clr:.012+k*.002,roll:{t:0,b:1,s:1},NU:6,NV:22,bones:k<2?one(sd+'Foot'):blend2(sd+'Foot',sd+'ToeBase',.9,1.1)},body),faulMat);}}
+  }
+  FIT_CACHE.set(ck,out);return out;}
+
+function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambraces'||def.id==='greaves'))return platePieces(body,def);const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
   const arm=['LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],torso=['Hips','Spine','Spine1','Spine2'],neck=['Neck','Head'];
   const S=(key,o,mat,bones)=>{const g=fitShell(body,key,Object.assign({bones},o));if(key==='cuirass'&&!g.attributes.aCu){const P=g.attributes.position,a=new Float32Array(P.count*3),zc=J.Spine1.z;let y0=9,y1=-9;for(let i=0;i<P.count;i++){y0=Math.min(y0,P.getY(i));y1=Math.max(y1,P.getY(i));}
       for(let i=0;i<P.count;i++){const an=Math.atan2(P.getX(i),P.getZ(i)-zc);a[i*3]=Math.sin(an);a[i*3+1]=Math.cos(an);a[i*3+2]=(P.getY(i)-y0)/(y1-y0);}g.setAttribute('aCu',new THREE.BufferAttribute(a,3));}   /* (Build 128) the angle as sine and cosine: a triangle across the back seam interpolated it from +π through 0 to −π and drew the front's straps in a streak down the spine */return [g,mat];};
@@ -4042,7 +4167,7 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
   switch(def.id){
     case 'kettle':return [H('kettle',z=>ey+.03,.02,null,steelFitMat),[kettleBrim(M),steelFitMat]];
     case 'nasal':return [H('nasal',z=>z>ez-.06?ey+.03:ey-.035,.019,point(.11,ey+.11),steelFitMat),[nasalBar(M),steelFitMat]];
-    case 'bascinet':return [H('bascinet',z=>z>ez-.05?ey+.03:ey-.11,.022,point(.13,ey+.1),steelFitMat),
+    case 'bascinet':return [H('bascinet',z=>z>ez-.05?ey+.03:ey-.11,.022,point(.13,ey+.1),steelFitMat),...(OLD_PLATE?[]:visorParts(body,M)),
       [fitShell(body,'aventail',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['Neck','Head','Spine2','LeftShoulder','RightShoulder'])>.5&&w(v,['LeftArm','RightArm'])<.2&&y>J.Neck.y-.09&&(y<ey-.1||P.getZ(v)<ez-.07)&&!(P.getZ(v)>ez-.06&&y>ey-.13);},off:.03,smooth:6,rim:.003,bones:['Neck','Head','Spine2'],fallback:'Neck'}),mailMat]];
     case 'greathelm':{helmSlitMat.userData.uEye.value.set(cx,ey+.004,M.nose-.04);const RX=M.rx+.04,RZ=M.rz+.035;return [H('greathelm',z=>ey-.14,.035,(q,g)=>{const x=(q[g*3]-cx)/RX,z=(q[g*3+2]-cz)/RZ,r=Math.hypot(x,z)||1;   // a flat-topped drum round the whole head
         q[g*3]=cx+x/r*RX;q[g*3+2]=cz+z/r*RZ;if(q[g*3+1]>ey+.12)q[g*3+1]=ey+.12+(q[g*3+1]-ey-.12)*.2;},helmSlitMat),
@@ -4051,6 +4176,26 @@ function fitPieces(body,def){const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,e
       [greatHelmCross(M,RX,RZ),brassFitMat]];}
   }
   return null;}
+/* Build 170: the bascinet's visor, a 'hounskull' of c. 1400: a snout drawn out to a blunt point in front of the face, a sight cut across
+   it with a raised flange above, rows of breathing holes down the right side, hung on pivots at the temples. Lofted round the head's own
+   size (bodyMarks), bound to the head */
+function visorParts(body,M){const k='visor|'+body.name;if(FIT_CACHE.has(k))return FIT_CACHE.get(k);
+  const cx=M.hx,cz=M.hz,ey=M.ey,RX=M.rx+.03,RZ=M.rz+.032,y0=ey-.115,y1=ey+.045,ys=ey+.004,gap=.011;
+  const mk=(ya,yb,flange)=>{const NU=14,NV=34,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,y=ya+(yb-ya)*u;for(let j=0;j<=NV;j++){const v=j/NV,th=(v-.5)*2.7,c=Math.cos(th);
+      const sn=.13*Math.pow(Math.max(0,c),5)*Math.pow(Math.max(0,1-Math.abs(y-(ey-.03))/.1),1.2);   // the snout, drawn out to a blunt point
+      const fl=flange&&u<.18?.006*(1-u/.18):0,rim=(u<.06||u>.94||v<.04||v>.96)?.002:0;
+      pos.push(cx+Math.sin(th)*(RX+fl+rim),y,cz+Math.cos(th)*(RZ+fl+rim)+sn);}}
+    for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,c,b,b,c,d);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g.toNonIndexed();};
+  const parts=[mk(y0,ys-gap/2,false),mk(ys+gap/2,y1,true)];
+  for(const sd of [-1,1]){const pv=new THREE.SphereGeometry(.009,10,6);pv.translate(cx+sd*(RX+.004),ys+.006,cz+.01);parts.push(pv.toNonIndexed());}   // the pivots
+  const steel=mergeGeometries(parts.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;}));bindRigid(steel,'Head',body);
+  // breaths: dark holes in rows on the right side of the snout
+  const holes=[];for(let r=0;r<3;r++)for(let c=0;c<4;c++){const th=-.35-c*.13,y=ey-.045-r*.02;const h=new THREE.CircleGeometry(.0035,8);const nx=Math.sin(th),nz=Math.cos(th);
+    h.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(nx,0,nz)));const sn=.13*Math.pow(Math.max(0,Math.cos(th)),5)*Math.pow(Math.max(0,1-Math.abs(y-(ey-.03))/.1),1.2);
+    h.translate(cx+nx*(RX+.0015),y,cz+nz*(RZ+.0015)+sn);holes.push(h.toNonIndexed());}
+  const hg=mergeGeometries(holes.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;}));bindRigid(hg,'Head',body);
+  const out=[[steel,steelFitMat],[hg,slitMat]];FIT_CACHE.set(k,out);return out;}
 // the great helm's riveted brass cross: a band round the front above the sight and a strap down the face
 function greatHelmCross(M,RX,RZ){const k='ghx'+M.ey.toFixed(3);if(FIT_CACHE.has(k))return FIT_CACHE.get(k);
   const band=new THREE.CylinderGeometry(1,1,.02,28,1,true,-1.05,2.1);band.scale(RX+.004,1,RZ+.004);band.translate(M.hx,M.ey+.034,M.hz);
@@ -4099,7 +4244,7 @@ function armorMeshes(def){
   return [];
 }
 // loot lying on the ground: the same body-grown pieces the fighters wear (from build A), laid down as they'd fall
-function splitSides(geo){const p=geo.attributes.position,I=geo.index,L=[],R=[];for(let i=0;i<I.count;i+=3){const a=I.getX(i),b=I.getX(i+1),c=I.getX(i+2);(p.getX(a)+p.getX(b)+p.getX(c)>0?L:R).push(a,b,c);}
+function splitSides(geo){if(!geo.index){const n=geo.attributes.position.count,ix=new Uint32Array(n);for(let i=0;i<n;i++)ix[i]=i;geo.setIndex(new THREE.BufferAttribute(ix,1));}const p=geo.attributes.position,I=geo.index,L=[],R=[];for(let i=0;i<I.count;i+=3){const a=I.getX(i),b=I.getX(i+1),c=I.getX(i+2);(p.getX(a)+p.getX(b)+p.getX(c)>0?L:R).push(a,b,c);}
   return [L,R].filter(x=>x.length).map(ix=>{const g=new THREE.BufferGeometry();for(const k of ['position','normal','uv'])if(geo.attributes[k])g.setAttribute(k,geo.attributes[k]);g.setIndex(ix);return g;});}
 const PREVIEW_GEO=new Map();
 function fittedPreview(def){if(!GLTF)return null;let body=null;GLTF.scene.traverse(o=>{if(o.isSkinnedMesh&&o.name==='MH_Body_A')body=o;});if(!body)return null;
@@ -5616,14 +5761,14 @@ class Fighter{
   // ---------------- armor
   equip(def){
     const old=this.unequip(def.slot);const groups=[];
-    const fit=fitArmor(this,def);if(fit){this.armor[def.slot]={def,groups:fit,fit:true};if(def.slot==='body'){this.model.traverse(o=>{if(o.userData.underBody)o.visible=false;});setGarbClip(this.model,def.id);}if(def.slot==='head'){this.helmet=def.helm;this.model.userData.hideHair=true;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}return old;}
+    const fit=fitArmor(this,def);if(fit){this.armor[def.slot]={def,groups:fit,fit:true};if(def.slot==='body'){this.model.traverse(o=>{if(o.userData.underBody||(o.userData.tabard&&def.id==='plate'&&!OLD_PLATE))o.visible=false;});   /* (Build 170: a tabard grown from the body can't go over rigid plates, so it comes off under a plate harness) */setGarbClip(this.model,def.id);}if(def.slot==='head'){this.helmet=def.helm;this.model.userData.hideHair=true;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}return old;}
     for(const [bn,g] of armorMeshes(def)){const att=new THREE.Group();const ft=(this.model.userData.mh&&ARMOR_FIT_MH[bn])||ARMOR_FIT[bn]||1;if(Array.isArray(ft))att.scale.set(100*ft[0],100*ft[1],100*ft[2]);else att.scale.setScalar(100*ft);const of=(this.model.userData.mh?ARMOR_OFF_MH:ARMOR_OFF)[bn];if(of)att.position.set(...of);att.add(g);this.bones[bn].add(att);groups.push(att);}
     this.armor[def.slot]={def,groups};
     if(def.id==='mail')this.setMail(1);
     if(def.slot==='head'){this.helmet=def.helm;this.model.userData.hideHair=true;this.model.traverse(o=>{if(o.userData.hair)o.visible=false;});}
     return old;
   }
-  unequip(slot){const a=this.armor[slot];if(!a)return null;if(slot==='body'){this.model.traverse(o=>{if(o.userData.underBody)o.visible=true;});setGarbClip(this.model,null);}for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head'){this.helmet=-1;this.model.userData.hideHair=false;this.model.traverse(o=>{if(o.userData.hair)o.visible=true;});}return a.def;}
+  unequip(slot){const a=this.armor[slot];if(!a)return null;if(slot==='body'){this.model.traverse(o=>{if(o.userData.underBody||o.userData.tabard)o.visible=true;});setGarbClip(this.model,null);}for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;if(slot==='head'){this.helmet=-1;this.model.userData.hideHair=false;this.model.traverse(o=>{if(o.userData.hair)o.visible=true;});}return a.def;}
   setMail(v){for(const m of this.mats)if(!m.userData.noMail)m.userData.U.uBodyMail.value=v;}
   prot(zone){
     const a=this.armor,p=s=>a[s]?a[s].def.prot:0,mail=a.body&&a.body.def.id==='mail';
