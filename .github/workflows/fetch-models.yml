@@ -9,20 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: MakeHuman hair, beard, brow and lash packs
-        run: |
-          mkdir -p /tmp/out/mh && cd /tmp/out/mh
-          for p in bodyparts05/bodyparts05_cc0.zip eyebrows01/eyebrows01_cc0.zip eyelashes01/eyelashes01_cc0.zip hair01/hair01_cc0.zip hair02/hair02_ccby.zip hair03/hair03_ccby.zip bodyparts06/bodyparts06_ccby.zip; do
-            n=$(basename $p); curl -fsSL --retry 3 -o $n https://files.makehumancommunity.org/asset_packs/$p || curl -fsSL --retry 3 -o $n https://files2.makehumancommunity.org/asset_packs/$p || echo "fail $p" >> log.txt
-          done
-          ls -la >> log.txt
-          for z in *.zip; do mkdir -p ${z%.zip} && (cd ${z%.zip} && unzip -q ../$z) && rm $z; done
-          find . -name "*.png" -size +12M -delete
-      - name: Commit to the garb-raw2 branch
+      - name: Weapon and armour models
+        run: python3 tools/fetch_assets.py /tmp/out
+        env:
+          PH_RES: 2k
+          PH_IDS: antique_estoc ornate_medieval_mace ornate_war_hammer ornate_medieval_dagger wooden_axe wooden_axe_02 wooden_axe_03 hatchet kite_shield
+          URLS: ""
+      - name: Commit to the assets-raw3 branch
         run: |
           cd /tmp/out
-          git init -q -b garb-raw2
+          git init -q -b assets-raw3
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A && git commit -qm "CC0 skins and fabric scans, fetched by workflow"
-          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" garb-raw2
+          git add -A && git commit -qm "Weapon and armour models, fetched by workflow"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" assets-raw3
