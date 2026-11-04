@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=166;
+const BUILD=167;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -5844,7 +5844,11 @@ class Fighter{
       let guide=this.guideDir(tgt,V());
       /* Build 161 (?hf): clicking into a committed swing eases the blade's line from the guard's to the swing's over ~0.12 s instead of
          switching it in one frame (the hand twisted over as the line jumped) */
-      if((HAND_FIRST||MB)&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);if(this._cmB>0&&this._cmB<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;guide.copy(gA).lerp(gB,this._cmB*this._cmB*(3-2*this._cmB)).normalize();}}
+      /* Build 167: a player's click alone doesn't move the blade: in a committed swing its line goes from the guard's toward the swing's only as
+         the aim moves (full after 0.3 of the aim box), so clicking held still no longer drops the blade level and rolls both hands ~70° over */
+      const mbS=MB&&(this.isPlayer||this.remote)&&!this.thrust&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist';let mbK=1;
+      if(mbS){if(this.commit){const A=this._cmA||(this._cmA={x:this.ctrl.x,y:this.ctrl.y,m:0});A.m=Math.max(A.m,clamp(Math.hypot(this.ctrl.x-A.x,this.ctrl.y-A.y)/.3,0,1));mbK=A.m*A.m*(3-2*A.m);this._cmK=mbK;}else{this._cmA=null;mbK=this._cmK??1;}}
+      if((HAND_FIRST||MB)&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);const cmW=this._cmB*(mbS?mbK:1);if(this._cmB>0&&cmW<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;const cw=mbS?this._cmB*this._cmB*(3-2*this._cmB)*mbK:this._cmB*this._cmB*(3-2*this._cmB);guide.copy(gA).lerp(gB,cw).normalize();}}
       if(HAND_FIRST&&!(REF_G&&!this.commit&&!this.thrust)&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
       (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */
       const str=(exhausted?.62:1)*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
@@ -6341,7 +6345,7 @@ class Fighter{
           this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=Math.max(this.calmW||0,rvg?1:0),e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,-.3).addScaledVector(_r,.15*sgn).normalize();_ogu.copy(_r).multiplyScalar(sgn*.4).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,.55+.5*e);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
-        else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?1:0,1-Math.exp(-9*dt));g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
+        else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?(MB&&(this.isPlayer||this.remote)&&this._cmA?this._cmK??1:1):0,1-Math.exp(-9*dt));   /* (Build 167: a player's lower hand slides down only as the swing moves, not on the click) */g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
         if(!one){   // the off hand on the haft. It used to let go the instant the haft passed arm's reach and the arm fell back to the clip's pose (out to the side) for that frame,
           // so a guard hovering at the edge of reach flickered between the two. Now it holds on a little past reach, and when it does let go it eases to a guarding fist by the chest.
           const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&!((this._gb?.o||0)>(this.offOn===false?1.35:1.75));   /* (Build 152: and lets go rather than fold the wrist back past 100°, retaking it under 77°) */this.offOn=onH;
