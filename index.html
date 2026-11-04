@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=168;
+const BUILD=169;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4168,6 +4168,7 @@ const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck',
 const RD_MINS=[['LeftArm','LeftHand','LeftForeArm',.5],['RightArm','RightHand','RightForeArm',.5],['LeftUpLeg','LeftFoot','LeftLeg',.75],['RightUpLeg','RightFoot','RightLeg',.75]];
 let FULLBODY=/[?&]fullbody/.test(location.search)||!/[?&]nofullbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-fullbody');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on, Build 119)
 const FB_R={Hips:.13,Spine1:.15,Spine2:.16,Neck:.07,Head:.11,HeadTop_End:.09,LeftArm:.07,RightArm:.07,LeftForeArm:.055,RightForeArm:.055,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftUpLeg:.09,RightUpLeg:.09,LeftLeg:.07,RightLeg:.07,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};   // contact sizes
+let FB_ARM=.05,FB_DVMAX=4,FB_DIV=150;try{const m=location.search.match(/[?&]fbdiv=([\d.]+)/);if(m)FB_DIV=+m[1];}catch(e){}try{const m=location.search.match(/[?&]fbdv=([\d.]+)/);if(m)FB_DVMAX=+m[1];}catch(e){}try{const m=location.search.match(/[?&]fbarm=([\d.]+)/);if(m)FB_ARM=+m[1];}catch(e){}
 const FB_K={Hips:.22,Spine1:.14,Spine2:.12,Neck:.11,Head:.09,HeadTop_End:.09,LeftArm:.14,RightArm:.14,LeftForeArm:.09,RightForeArm:.09,LeftUpLeg:.2,RightUpLeg:.2,LeftLeg:.16,RightLeg:.16};   // muscle: how hard each point is pulled to its animated place per 1/120 s
 const RD_R={Hips:.13,Spine1:.14,Spine2:.14,Neck:.07,Head:.11,HeadTop_End:.09,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};
 const _rv=V(),_ru=V(),_rq=new THREE.Quaternion(),_rinv=new THREE.Matrix4();
@@ -5700,11 +5701,15 @@ class Fighter{
        if(near)for(const O of near)for(const m of O.names){const q=O.P[m],rr=r+(FB_R[m]||.06);_wl1.subVectors(p,q);const d2=_wl1.lengthSq();if(d2<rr*rr&&d2>1e-8){const d=Math.sqrt(d2);p.addScaledVector(_wl1,(rr-d)/d*.5);}}}
      CTX.m=ctx;}
     // never wander far from the pose: past 25 cm a point is drawn back hard
-    for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length();if(d>.25){A.P[n].copy(t).addScaledVector(_wl1,.25/d);}else if(!(d>=0)){A.P[n].copy(t);A.Q[n].copy(t);}}
+    /* Build 169: arms holding a weapon stay within FB_ARM of the drawn arm (other parts keep 25 cm): their hands are pinned to the grip, so a
+       loose elbow could only swing round the hand, and in a fight (blows, the other man's body pressing on it) it whipped the arm about:
+       elbow jumps in 40 s player duels 1.2% of frames with the full body, 0.5% without it */
+    const tight=new Set();if(this.sword&&this.mainArm&&FB_ARM<.25){const m=this.mainArm==='R'?'Right':'Left';tight.add(m+'Arm').add(m+'ForeArm');if(twoH(this.sword.def)||this.sword.def.kind==='spear'){const o=m==='Right'?'Left':'Right';tight.add(o+'Arm').add(o+'ForeArm');}}
+    for(const n of A.names){const t=T[n];if(!t)continue;_wl1.subVectors(A.P[n],t);const d=_wl1.length(),lim=tight.has(n)?FB_ARM:.25;if(d>lim){A.P[n].copy(t).addScaledVector(_wl1,lim/d);if(lim<.25)A.Q[n].lerp(A.P[n],.5);}else if(!(d>=0)){A.P[n].copy(t);A.Q[n].copy(t);}}
     A.apply();this.root.updateMatrixWorld(true);}
   // a blow lands on the full body: the struck point and its neighbours are driven
   fbHit(n,dir,dv){if(this.hs){hsHit(this,n,dir,dv);return;}const A=this.ar;if(!A||!A.P[n])return;const p=A.P[n];let wp=0;for(const m of FB_PELV)if(A.P[m])wp=Math.max(wp,m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08));
-    for(const m of A.names){const w=FB_PELV.includes(m)?wp:m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-dv*w/55);}   /* (Build 128) the pelvis is pushed as one piece: pushing one hip more than the other spun the hips round */this.fbRelax=Math.min(1,(this.fbRelax||0)+dv*.25);}   // a blow knocks the wind out: the muscles give for a moment and the body rides it
+    for(const m of A.names){const w=FB_PELV.includes(m)?wp:m===n?1:Math.exp(-A.P[m].distanceToSquared(p)/.08);if(w>.05)A.Q[m].addScaledVector(dir,-Math.min(dv,FB_DVMAX)*w/FB_DIV);}   /* (Build 169: a blow's push is capped at FB_DVMAX: a 10 m/s blow set points moving at 22 m/s, they hit the 25 cm leash in a frame, and the shoulder and arm whipped 20-30 cm a frame) */   /* (Build 128) the pelvis is pushed as one piece: pushing one hip more than the other spun the hips round */this.fbRelax=Math.min(1,(this.fbRelax||0)+dv*.25);}   // a blow knocks the wind out: the muscles give for a moment and the body rides it
   // an elbow: the IK's bend point is a weight carried by the body, sprung to where the arm wants it, so it swings and is knocked about
   physPole(side,t,dt,held){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
     const str=this.pbd?this.pbd.str:1,k=70*str*str+12,c=2*Math.sqrt(k)*.62,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,P.tp).multiplyScalar(1/Math.max(dt,1e-3));P.p.addScaledVector(_wl1,dt*.7);
@@ -5790,6 +5795,11 @@ class Fighter{
     // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
     if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
       _v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length();if(d>ro)out.addScaledVector(_v,-(d-ro)/d);}
+    /* Build 169: the sword hand stays at least HAND_MIN of the arm's length from its own shoulder. A swing wound up at the side of the aim box
+       could pull the hand to within 12% of the arm's length of the shoulder: an arm can't fold that far, and with the hand on the shoulder
+       the elbow has no one place to be, so it whipped round 10-30 cm a frame. It is pushed out forward, the way the arm would hold it */
+    if(this.sword&&this.sword.def.kind!=='fist'&&HAND_MIN>0&&!this.throwHold&&this.throwT<0){const sm=this.mainArm==='L'?this.shL:this.shR;if(sm){const mn=HAND_MIN*(this.armLen[0]+this.armLen[1]);
+      _v.subVectors(out,sm);const d=_v.length();if(d<mn){this.fwd(_hmF);if(d<1e-4)_v.copy(_hmF);else _v.multiplyScalar(1/d);_v.lerp(_hmF,clamp(1-d/mn,0,1)*.5).normalize();out.copy(sm).addScaledVector(_v,mn);}}}
     return out;
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
@@ -5807,7 +5817,7 @@ class Fighter{
     {const gw=this.guardW();if(gw>0){const sg=this.mainArm==='L'?-1:1;_wl3.copy(u).addScaledVector(_r,-.5*sg).addScaledVector(f,.22);
       const th=guardThreat(this);if(th){_gw7.copy(th.v).addScaledVector(th.ax,-th.v.dot(th.ax));if(_gw7.lengthSq()>1e-4){_gw7.normalize();/* square across the incoming blade and its travel */_gw8.crossVectors(th.ax,_gw7);if(_gw8.dot(_wl3)<0)_gw8.negate();_wl3.normalize().lerp(_gw8,th.w*.7);}}
       const g0=this.guideDir_(hand,_gw6);return out.copy(g0).lerp(_wl3.normalize(),gw).normalize();}}
-    if(MB&&!this.commit&&(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'){
+    if(MB&&!this.commit&&(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'){   /* (Build 169: swords only; an axe or mace in guard is held as before, head up and cocked back when raised, not pointed at the face like a sword) */
       const y=this.ctrl.y,x=this.ctrl.x,th=mbPitch(y),hk=clamp((y-.1)/.5,0,1),rr=this.right(_glR);
       out.copy(f).multiplyScalar(Math.cos(th)).addScaledVector(u,Math.sin(th)).addScaledVector(rr,x*MB_LEAN*(.45+.55*hk)*(x*(this.mainArm==='L'?-1:1)<0?.55:1));return out.normalize();}   /* (across to the far shoulder it leans less: the sword wrist would have to bend back past 60°) */
     // in guard the blade stands up; a committed swing levels it out toward where you aim, so cuts land at the height you swing
@@ -6440,7 +6450,7 @@ class Fighter{
          elbows wide, so the forearms slant in and the blade crosses them), instead of hanging the elbows straight down under the hands, which
          stood the forearms upright in line with the blade and wrapped the hand along the handle */
       if(HAND_FIRST&&natForearm(this,s.H,_hv5))_t1.copy(_nfPo);   // the same natural elbow the blade's line was worked out for
-      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt,true);const rvg=(this.revW||0)>.5&&s.def.kind==='blade',hrv=this.hrW()>.5;_rvA.copy(s.axis);if(hrv)_rvA.negate();gripBest(this,'m',B,main,_t3,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist',dt);
+      _t3.copy(s.H).addScaledVector(s.axis,-.045);const slid=Math.max(0,_t3.distanceTo(shM)-(this.armLen[0]+this.armLen[1]-.02));_t3.addScaledVector(s.axis,-slid);this.physPole(this.mainArm,_t1,dt,true);poleSafe(shM,_t3,_t1,sgn,_f,_r);const rvg=(this.revW||0)>.5&&s.def.kind==='blade',hrv=this.hrW()>.5;_rvA.copy(s.axis);if(hrv)_rvA.negate();gripBest(this,'m',B,main,_t3,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist',dt);
       B[main+'ForeArm'].getWorldPosition(_wl1);B[main+'Hand'].getWorldPosition(_wl2);(this.foreF||(this.foreF=V())).subVectors(_wl2,_wl1).normalize();
       const offLimb=this.limbs[this.mainArm==='R'?'armL':'armR'];
       const clutch=this.clutchT>simTime&&this.clutchP;
@@ -6461,7 +6471,7 @@ class Fighter{
           const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&!((this._gb?.o||0)>(this.offOn===false?1.35:1.75));   /* (Build 152: and lets go rather than fold the wrist back past 100°, retaking it under 77°) */this.offOn=onH;
           this.offW=clamp((this.offW??1)+(onH?7:-5)*dt,0,1);const w=this.offW*this.offW*(3-2*this.offW);
           if(w<1){_og.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);if(cwO>.01&&s.def.kind!=='fist'){_pl.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_og.lerp(_pl,cwO*cwO*(3-2*cwO));}_t2.lerpVectors(_og,_t2,w);}
-          {const kO=this._kO||0,hHi=this._hHi??1;_t1.copy(shO).addScaledVector(Y_AXIS,-.7+(.15*hHi-.2*(1-hHi))*kO).addScaledVector(_r,-(.55-.45*kO)*sgn).addScaledVector(_f,-.2+(.25+.45*hHi)*kO);const hUo=HAND_FIRST?clamp((s.H.y-shO.y)/.3,0,1)*ELB_UP:0;if(hUo>0){_hv5.copy(shO).addScaledVector(_r,-.6*sgn).addScaledVector(_f,.15).addScaledVector(Y_AXIS,-.05);_t1.lerp(_hv5,hUo);}}this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,w>.5);
+          {const kO=this._kO||0,hHi=this._hHi??1;_t1.copy(shO).addScaledVector(Y_AXIS,-.7+(.15*hHi-.2*(1-hHi))*kO).addScaledVector(_r,-(.55-.45*kO)*sgn).addScaledVector(_f,-.2+(.25+.45*hHi)*kO);const hUo=HAND_FIRST?clamp((s.H.y-shO.y)/.3,0,1)*ELB_UP:0;if(hUo>0){_hv5.copy(shO).addScaledVector(_r,-.6*sgn).addScaledVector(_f,.15).addScaledVector(Y_AXIS,-.05);_t1.lerp(_hv5,hUo);}}this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,w>.5);poleSafe(shO,_t2,_t1,-sgn,_f,_r);
           if(w>.5)gripBest(this,'o',B,offS,_t2,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist',dt);
           else{_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}}
       s.sync();
@@ -6693,6 +6703,18 @@ function gripHand(B,side,grip,E,A,pole,lens,curl,wrap){
    at the shoulder instead: the elbow swings round the shoulder-to-hand line. Where the wrist would be wrung, the elbow is tried a little
    either way round that line and eased toward wherever the hand sits straightest, then back home when it no longer needs to be */
 let _gripBend=0;const _gbQ0=new THREE.Quaternion(),_gbQ1=new THREE.Quaternion(),_gbQ2=new THREE.Quaternion(),_gbA=new THREE.Vector3(),_gbP=new THREE.Vector3(),_gbS=new THREE.Vector3(),_gbQ=new THREE.Quaternion(),_gbE=new THREE.Vector3(),_gbH=new THREE.Vector3(),_gbM=new THREE.Vector3(),_gbN=new THREE.Vector3();
+/* Build 169: an arm's pole (the point its elbow bends toward) is kept at least POLE_MIN off the shoulder-to-hand line. With the hand far
+   out to the side and low (a swing at the edge of the aim box) the hand lay almost on the line to the pole, and the elbow's plane swung
+   round with every centimetre the hand moved: the elbow jumped 10-40 cm a frame and the arm whipped round. The shortfall is made up along
+   a fixed down-out-back direction square to the arm, so it never flips */
+let HAND_MIN=.45;try{const m=location.search.match(/[?&]handmin=([\d.]+)/);if(m)HAND_MIN=+m[1];}catch(e){}const _hmF=new THREE.Vector3();
+let POLE_MIN=.22;try{const m=location.search.match(/[?&]polemin=([\d.]+)/);if(m)POLE_MIN=+m[1];}catch(e){}
+const _ps1=new THREE.Vector3(),_ps2=new THREE.Vector3(),_ps3=new THREE.Vector3();
+function poleSafe(sh,hand,pole,sg,f,r){if(!POLE_MIN)return pole;const d=_ps1.subVectors(hand,sh);const L=d.length();if(L<1e-4)return pole;d.multiplyScalar(1/L);
+  const o=_ps2.subVectors(pole,sh),along=o.dot(d);o.addScaledVector(d,-along);const m=o.length();if(m>=POLE_MIN)return pole;
+  const fb=_ps3.set(0,-.65,0).addScaledVector(r,.5*sg).addScaledVector(f,-.45);fb.addScaledVector(d,-fb.dot(d));if(fb.lengthSq()<1e-6)fb.copy(f).negate().addScaledVector(d,-(-f.dot(d)));fb.normalize();
+  if(m>1e-5){o.multiplyScalar(1/m);const w=m/POLE_MIN;o.multiplyScalar(w).addScaledVector(fb,1-w).normalize();}else o.copy(fb);   // blend toward the fallback as the offset vanishes
+  return pole.copy(sh).addScaledVector(d,along).addScaledVector(o,POLE_MIN);}
 function gripBest(f,key,B,side,grip,E,A,pole,lens,curl,wrap,dt){
   if(window.__noGB)return gripHand(B,side,grip,E,A,pole,lens,curl,wrap);
   const st=f._pth||(f._pth={});let th=st[key]||0;
