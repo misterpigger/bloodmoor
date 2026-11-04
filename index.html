@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=173;
+const BUILD=174;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -959,7 +959,8 @@ function clutter(n,ok,near,seed=5){let sd=seed;const r=()=>{sd=(sd*16807)%214748
 // opts: x,y,z, ry, s (uniform scale), h (scale to this height), fit [w,h,d] (stretch the bounding box to these), node (one piece of
 // a kit), ground (sit its base on y, default true), parent. If a model can't load, fallback(group) builds the old shape instead.
 const MDL={},MDL_LOADER=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-function mdl(id){return MDL[id]||(MDL[id]=MDL_LOADER.loadAsync('assets/models/'+id+'.glb').then(g=>{g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;
+const MDL_SCN={};   // (Build 174) models that have arrived, for code that can't wait (a helmet fitted as a fighter is dressed)
+function mdl(id){return MDL[id]||(MDL[id]=MDL_LOADER.loadAsync('assets/models/'+id+'.glb').then(g=>{MDL_SCN[id]=g.scene;g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;
   const m=o.material;if(m&&m.map)m.map.anisotropy=MAXANI;}});return g.scene;}));}
 function placeModel(id,o={},fallback=null){const g=new THREE.Group();g.position.set(o.x||0,o.y||0,o.z||0);g.rotation.y=o.ry||0;(o.parent||world).add(g);const key=mapKey;
   mdl(id).then(sc=>{if(key!==mapKey&&!o.parent)return;let src=sc;if(o.node){src=null;sc.traverse(n=>{if(!src&&n.name===o.node)src=n;});if(!src)return;}
@@ -3039,10 +3040,15 @@ function garmentDetail(m,kind,M){const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs
       diffuseColor.rgb*=k; }`);};}
 function quilt(m){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
   sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
-    { vec3 b=vBind;float limb=smoothstep(.2,.26,abs(b.x));float ch=mix(b.x*80.+b.z*30.,b.y*80.+b.z*20.,limb),st=mix(b.y,abs(b.x),limb)*14.;
-      float hgt=(pow(abs(sin(ch)),.6)*.9+pow(abs(sin(st)),8.)*-.4)*.0022;   // puffed channels between seams, and the cross stitching
+    { vec3 b=vBind;float limb=smoothstep(.2,.26,abs(b.x));float chT=b.x*80.+b.z*30.,chL=b.y*80.+b.z*20.;
+      // (Build 174) the torso's and the sleeve's channels are each worked out and then blended, not their phases (mixing the phases drew a
+      // moire of wavy stripes over the shoulder), and the pattern fades where a channel is finer than a couple of pixels
+      float aT=clamp(1.5-fwidth(chT)*.9,0.,1.),aL=clamp(1.5-fwidth(chL)*.9,0.,1.);
+      float pT=mix(.55,pow(abs(sin(chT)),.6),aT),pL=mix(.55,pow(abs(sin(chL)),.6),aL),pc=mix(pT,pL,limb),ch=0.;
+      float st=mix(b.y,abs(b.x),limb)*14.,aS=clamp(1.5-fwidth(st)*2.,0.,1.);
+      float hgt=(pc*.9+pow(abs(sin(st)),8.)*-.4*aS)*.0022;   // puffed channels between seams, and the cross stitching
       vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
-      normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));diffuseColor.rgb*=.82+.18*pow(abs(sin(ch)),.6); }`);};}
+      normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));diffuseColor.rgb*=.82+.18*pc; }`);};}
 function dressHS(model,look,pal,mats){
   let body=null;model.traverse(m=>{if(m.isSkinnedMesh&&m.name==='Beta_Surface')body=m;});
   const tone=LOOK.skin[look.sk]||LOOK.skin[1];const skin=std({color:new THREE.Color().setRGB(.83*tone[0],.56*tone[1],.43*tone[2]),roughness:.62});tintMaterial(skin,2,pal,mats);
@@ -3149,13 +3155,13 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
 const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('assets/tex/'+k+'_d.jpg'),n=L.load('assets/tex/'+k+'_n.jpg');m.colorSpace=THREE.SRGBColorSpace;for(const x of [m,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(22,22);x.anisotropy=MAXANI;}return {m,n};};return {wool:mk('wool'),twill:mk('twill')};})();
 const GARB={1:{id:'shirt',belt:'belt_shirt',mat:'linen'},2:{id:'aketon',mat:'quilt'},3:{id:'cote',belt:'belt_cote',mat:'wool'},4:{id:'doublet',belt:'belt_doublet',mat:'twill'}};
 // body armour over a draped garment: the part it covers isn't drawn (the cloth would poke through the steel); x = half-width, y = from
-const GARB_CLIP={plate:[.27,.92,1.37],brigandine:[.27,.97,1.39],mail:[.44,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
+const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.27,.9,1.39],mail:[.44,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
 // the legs push the skirt out of their way (Build 127): each frame the hips, knees and ankles go to the garment's shader in its own space and
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile;
   m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uLegP=U.uLegP;
     sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R0,float R1){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);float R=mix(R0,R1,smoothstep(0.,.5,t));vec3 c=a+ab*t,d=p-c;float l=length(d);return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+
-      sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n if(position.y<1.08){transformed=legPush(transformed,uLegP[0],uLegP[1],.0,.11);transformed=legPush(transformed,uLegP[1],uLegP[2],.085,.08);transformed=legPush(transformed,uLegP[3],uLegP[4],.0,.11);transformed=legPush(transformed,uLegP[4],uLegP[5],.085,.08);}');};   /* (Build 130) skirts only (bind height under the hips): the swinging sleeves passed the thighs when running and were shoved out, a flicker on the arms */
+      sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n if(position.y<1.08){transformed=legPush(transformed,uLegP[0],uLegP[1],.095,.115);transformed=legPush(transformed,uLegP[1],uLegP[2],.1,.085);transformed=legPush(transformed,uLegP[3],uLegP[4],.095,.115);transformed=legPush(transformed,uLegP[4],uLegP[5],.1,.085);}');};   /* (Build 130) skirts only (bind height under the hips): the swinging sleeves passed the thighs when running and were shoved out, a flicker on the arms */
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|legs';return m;}
 const _glM=new THREE.Matrix4(),_glN=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
 function garbLegStep(f){const gs=f.model&&f.model.userData.legMeshes;if(!gs||!gs.length||!f.bones)return;
@@ -3891,6 +3897,8 @@ const WEAPONS={
    `stretch` (a uniform scale, then the shaft between two heights drawn out so the head reaches the length), or `head` (only the model's
    head above `cut`, set where the drawn head was; the drawn haft, grip and butt stay). Until the file arrives the drawn weapon shows. */
 const WMODELS={
+  arming:{0:{file:'w_arming',flip:1,center:2,hand:-41.5,tip:52.8,tint:[3.4,3.3,3.0],rough:.42}},   // (Build 174) the Oakeshott Institute's 15th-century arming sword (CC BY 4.0), in cm, hilt at +y
+  longsword:{0:{file:'w_arming',flip:1,center:2,hand:-41.5,tip:52.8,seg:[-47.5,-39.5,2.6],tint:[3.4,3.3,3.0],rough:.42}},   // the same sword with its grip drawn out to a hand-and-a-half's
   greatsword:{0:{file:'w_estoc',hand:.085,tip:1.293}},
   mace:{0:{file:'w_mace',hand:.01,tip:.526,s:1.12,stretch:[.13,.34]}},
   axe:{0:{file:'w_axe',s:1.3,bottom:-.219,top:.412,stretch:[-.16,.235],butt:.355}},   // the whole axe, its haft drawn out to a two-hander's length (the head stays its own size)
@@ -3918,12 +3926,17 @@ function wmodelFit(def,st,cfg){const key=def.id+'|'+st;if(WM_FIT.has(key))return
         P.needsUpdate=true;const yb=(a-cfg.bottom)+(b-a)*k;for(let i=0;i<P.count;i++){const w=sstep(yb*s0-cfg.butt-.03,yb*s0-cfg.butt+.01,P.getY(i)),f=lerp(cfg.haftS||.9,s0,w);P.setX(i,P.getX(i)*f);P.setZ(i,P.getZ(i)*f);}   // the head at its scale, the haft its own thickness
         g.computeBoundingBox();const c=g.boundingBox.getCenter(V());   // the head's bulk toward +x
         const hp=[];for(let i=0;i<P.count;i++)if(P.getY(i)>def.len-.2)hp.push(i);let hx=0,hz=0;for(const i of hp){hx+=P.getX(i);hz+=P.getZ(i);}g.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI/2-Math.atan2(hx,hz)));}
-      else{const s0=cfg.s||1;g.translate(0,-cfg.hand,0);
-        let k=1;if(cfg.stretch){const [a,b]=cfg.stretch,tip=(cfg.tip-cfg.hand)*s0,need=def.len-tip;k=1+Math.max(0,need)/((b-a)*s0);
-          const a0=a-cfg.hand,b0=b-cfg.hand;for(let i=0;i<P.count;i++){const y=P.getY(i);P.setY(i,y<a0?y:y<b0?a0+(y-a0)*k:y+(b0-a0)*(k-1));}}
-        const sc=cfg.stretch?s0:def.len/(cfg.tip-cfg.hand);g.scale(sc,sc,sc);
+      else{const s0=cfg.s||1;
+        if(cfg.flip){g.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.PI));}   // (Build 174) a model lying hilt-up: point it up
+        if(cfg.center){let sx=0,sz2=0,n=0;for(let i=0;i<P.count;i++){const y=P.getY(i);if(Math.abs(y-cfg.hand)<cfg.center){sx+=P.getX(i);sz2+=P.getZ(i);n++;}}if(n)g.translate(-sx/n,0,-sz2/n);}   // the grip on the weapon's axis
+        let hand=cfg.hand,tip=cfg.tip;if(cfg.seg){const [a,b,k]=cfg.seg,mp=y=>y<a?y:y<b?a+(y-a)*k:y+(b-a)*(k-1);for(let i=0;i<P.count;i++)P.setY(i,mp(P.getY(i)));P.needsUpdate=true;hand=mp(hand);tip=mp(tip);}   // a longer grip drawn out of the same hilt
+        g.translate(0,-hand,0);
+        let k=1;if(cfg.stretch){const [a,b]=cfg.stretch,tl=(tip-hand)*s0,need=def.len-tl;k=1+Math.max(0,need)/((b-a)*s0);
+          const a0=a-hand,b0=b-hand;for(let i=0;i<P.count;i++){const y=P.getY(i);P.setY(i,y<a0?y:y<b0?a0+(y-a0)*k:y+(b0-a0)*(k-1));}}
+        const sc=cfg.stretch?s0:def.len/(tip-hand);g.scale(sc,sc,sc);
         // the blade's flat across x (its width), as the drawn ones
         g.computeBoundingBox();}
+      if(cfg.tint){mat=mat.clone();mat.color.multiply(new THREE.Color().setRGB(...cfg.tint));if(cfg.rough!=null)mat.roughness=cfg.rough;}   // (Build 174) an aged museum blade, brightened to steel in use
       g.computeVertexNormals&&g.attributes.normal||g.computeVertexNormals();out.push([g,mat]);}
     return out;}).catch(e=>{console.warn('weapon model',cfg.file,e);return null;});
   WM_FIT.set(key,pr);return pr;}
@@ -4077,14 +4090,26 @@ const brassFitMat=brassMat.clone();brassFitMat.side=THREE.DoubleSide;
 const faulMat=steelDark.clone();{const pre=faulMat.onBeforeCompile;steelDetail(faulMat,'faul');const pre2=faulMat.onBeforeCompile;faulMat.onBeforeCompile=(sh,r)=>{pre2.call(faulMat,sh,r);
   sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat lame=fract(vSP.y/.045);diffuseColor.rgb*=.55+.45*smoothstep(.0,.12,lame)*smoothstep(1.,.9,lame);if(!gl_FrontFacing)diffuseColor.rgb*=.3;');};faulMat.customProgramCacheKey=()=>'faul';faulMat.side=THREE.DoubleSide;}   // overlapping lames
 // a brigandine: small steel plates riveted inside a dyed cloth coat, the rows of brass rivet heads showing on the outside
-const brigMat=std({color:0x7a2418,roughness:.86,metalness:0});{const L=new THREE.TextureLoader(),d=L.load('assets/tex/cloth_d.jpg'),n=L.load('assets/tex/cloth_n.jpg');d.colorSpace=THREE.SRGBColorSpace;for(const x of [d,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(6,6);x.anisotropy=MAXANI;}Object.assign(brigMat,{map:d,normalMap:n});
+const brigMat=std({color:0x6a1c14,roughness:.9,metalness:0});{const L=new THREE.TextureLoader(),d=L.load('assets/tex/cloth_d.jpg'),n=L.load('assets/tex/cloth_n.jpg');d.colorSpace=THREE.SRGBColorSpace;for(const x of [d,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(6,6);x.anisotropy=MAXANI;}Object.assign(brigMat,{map:d,normalMap:n});
+  /* Build 174: a brigandine is rows of small plates riveted inside a cloth cover, each row lapping over the one below like roof tiles, so the
+     cloth takes a stepped, scaled relief; two tinned rivet heads hold each plate near its top, so the rivets run in neat lines along each
+     row; the front opens down the middle over a plain strip. All in the bind pose's frame (rows by height, plates by angle round the trunk),
+     faded out where a row is finer than a few pixels. */
   brigMat.onBeforeCompile=sh=>{sh.vertexShader='varying vec3 vBP;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBP=position;');
-    sh.fragmentShader='varying vec3 vBP;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      float rw=vBP.y/.042,ro=mod(floor(rw),2.)*.5;vec2 rc=vec2((vBP.x+(vBP.z>0.?0.:.011))/.038+ro,rw);vec2 rf=fract(rc)-.5;float rv=1.-smoothstep(.1,.16,length(rf*vec2(.038,.042))/.038*1.);
-      float plate=smoothstep(.0,.06,abs(fract(rc.y)-.5)-.44);diffuseColor.rgb*=1.-.25*plate;   // the seams between the plates show through the cloth
-      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.46,.2),rv);`)
-     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.32,rv);')
-     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.92,rv);');};brigMat.customProgramCacheKey=()=>'brig';brigMat.side=THREE.DoubleSide;}
+    sh.fragmentShader='varying vec3 vBP;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+      float bzr=vBP.z-.01,bAng=atan(vBP.x,bzr),bArc=bAng*.16;float bRw=vBP.y/.046,bRi=floor(bRw),bFv=fract(bRw);
+      float bCu=bArc/.06+mod(bRi,2.)*.5,bFu=fract(bCu);float bFade=clamp(1.-fwidth(bRw)*5.,0.,1.);
+      float bOpen=step(0.,bzr)*(1.-smoothstep(.011,.015,abs(vBP.x)));
+      float bH=mix(.3,.3+.7*(1.-bFv),smoothstep(0.,.06,bFv))-.22*(1.-smoothstep(0.,.07,min(bFu,1.-bFu)));
+      vec2 bq=vec2(bFu,bFv-.79);float bD=min(length((bq-vec2(.27,0.))*vec2(.06,.046)),length((bq-vec2(.73,0.))*vec2(.06,.046)));
+      float bRv=(1.-smoothstep(.0021,.0029,bD))*(1.-bOpen)*bFade;float bDome=sqrt(max(0.,1.-bD*bD/(.0029*.0029)));
+      float bRing=smoothstep(.0026,.0031,bD)*(1.-smoothstep(.0031,.0045,bD))*(1.-bOpen)*bFade;
+      bH=mix(bH,.55,bOpen);float rv=bRv;
+      diffuseColor.rgb*=mix(1.,.72+.36*bH,bFade*(1.-bOpen))*(1.-.35*bRing)*(1.-.25*bOpen*(1.-smoothstep(.0,.003,abs(abs(vBP.x)-.013))));
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.6,.6,.58)*(.55+.45*bDome),bRv);`)
+     .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,.28,rv);')
+     .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.95,rv);')
+     .replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\nnormal=sfBump(normal,(bH*.0028*(1.-bOpen)+bDome*bRv*.0022)*bFade,vViewPosition);');};brigMat.customProgramCacheKey=()=>'brig2';brigMat.side=THREE.DoubleSide;}
 const helmSlitMat=steelMat.clone();{steelDetail(helmSlitMat,'slit');const pre=helmSlitMat.onBeforeCompile;helmSlitMat.onBeforeCompile=(sh,r)=>{pre.call(helmSlitMat,sh,r);
   sh.vertexShader=sh.vertexShader.replace('varying vec3 vSP;','varying vec3 vSP;uniform vec3 uEye;varying float vSl;varying vec3 vBr;').replace('vSP=position;','vSP=position;vSl=step(abs(position.y-uEye.y),.011)*step(uEye.z-.06,position.z)*step(abs(position.x-uEye.x),.085);vBr=position-uEye;');
   sh.fragmentShader=sh.fragmentShader.replace('varying vec3 vSP;','varying vec3 vSP;varying float vSl;varying vec3 vBr;').replace('#include <color_fragment>','#include <color_fragment>\nif(vSl>.5)discard;\nif(vBr.z>-.07&&vBr.x<-.012&&vBr.x>-.075&&vBr.y<-.035&&vBr.y>-.1){vec2 c=fract(vec2(vBr.x,vBr.y)/.016)-.5;if(length(c)<.24)discard;}');
@@ -4284,6 +4309,20 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
       const nb=new THREE.BoxGeometry(.018,.085,.004);nb.translate(0,-.03,0);const pn=nb.attributes.position;for(let i=0;i<pn.count;i++){const y=pn.getY(i);pn.setX(i,pn.getX(i)*(1-.35*clamp(-y/.07,0,1)));pn.setZ(i,pn.getZ(i)-.012*clamp(-y/.07,0,1));}nb.computeVertexNormals();nb.translate(cx,ey+.035,cz+M.rz+.03);parts.push(nb.toNonIndexed());
       S(mergeGeometries(parts.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),steelFitMat);}
     aventail(ey-.03);}
+  else if(def.id==='bascinet'&&MDL_SCN.w_barbute){
+    /* (Build 174) a visored barbute (D3's model, CC BY 4.0) in place of the drawn bascinet and its boxy visor: one rigid shell, scaled to
+       this head's width and depth and set so its crown sits just over the scalp, drawn in its own scratched steel */
+    const sc=MDL_SCN.w_barbute;sc.updateMatrixWorld(true);const parts=[];
+    sc.traverse(o=>{if(!o.isMesh)return;let g=o.geometry.clone();if(g.index)g=g.toNonIndexed();const P=g.attributes.position,N=g.attributes.normal,n=P.count;
+      const pos=new Float32Array(n*3),nor=new Float32Array(n*3),v=V(),nm=new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+      for(let i=0;i<n;i++){v.fromBufferAttribute(P,i).applyMatrix4(o.matrixWorld);pos.set([v.x,v.y,v.z],i*3);if(N){v.fromBufferAttribute(N,i).applyMatrix3(nm).normalize();nor.set([v.x,v.y,v.z],i*3);}}
+      const ng=new THREE.BufferGeometry();ng.setAttribute('position',new THREE.BufferAttribute(pos,3));if(N)ng.setAttribute('normal',new THREE.BufferAttribute(nor,3));else ng.computeVertexNormals();
+      const U=g.attributes.uv;if(U){const uv=new Float32Array(n*2);for(let i=0;i<n;i++){uv[i*2]=U.getX(i);uv[i*2+1]=U.getY(i);}ng.setAttribute('uv',new THREE.BufferAttribute(uv,2));}parts.push(ng);});
+    const g=mergeGeometries(parts);g.computeBoundingBox();const bb=g.boundingBox,sz=bb.getSize(V()),c=bb.getCenter(V());
+    const W=2*(M.rx+BARB.clr),D=2*(M.rz+BARB.clr),sx=W/sz.x,sz_=D/sz.z,sy=(sx+sz_)/2;
+    g.translate(-c.x,-bb.max.y,-c.z);g.scale(sx,sy,sz_);g.translate(cx,top+BARB.up,cz+BARB.fwd);g.computeVertexNormals();
+    let bm=null;sc.traverse(o=>{if(o.isMesh&&!bm)bm=o.material;});if(!BARB.mat){BARB.mat=bm.clone();BARB.mat.color.setRGB(2.4,2.35,2.2);BARB.mat.side=THREE.DoubleSide;}   // its own scratched steel, brightened (the armour steel's detail banded across its few long faces)
+    S(g,BARB.mat);aventail(top+BARB.up-sz.y*sy+.04);}   // mail from the neck up under the helmet's lower edge
   else if(def.id==='bascinet'){
     // a bascinet: a tall skull drawn to a point set back over the crown, coming down round the sides and the nape, the face open for the visor
     S(helmLoft(M,{kind:'point',pw:.65,clr:.022,yC:ey+.02,yT:top+.09,rimY:th=>{const c=Math.cos(th);return c>.35?ey+.034:c>-.2?lerp(ey-.1,ey+.034,(c+.2)/.55):ey-.115;},apexBack:-.03,rivets:16}),steelFitMat);
@@ -4301,7 +4340,8 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
         const rz=(M.rz+.04)*(nz>0?1-.12*nx*nx:1);h.translate(cx+nx*(M.rx+.0415),y,cz+nz*(rz+.0015));holes.push(h.toNonIndexed());}
       S(mergeGeometries(holes.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),slitMat);}
     S(greatHelmCross(M,RX,RZ).clone(),brassFitMat);}
-  FIT_CACHE.set(ck,out);return out;}
+  if(!(def.id==='bascinet'&&!MDL_SCN.w_barbute))FIT_CACHE.set(ck,out);return out;}
+const BARB={clr:.03,up:.035,fwd:.012};mdl('w_barbute');
 
 function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambraces'||def.id==='greaves'))return platePieces(body,def);if(!OLD_PLATE&&def.slot==='head')return helmPieces(body,def);const M=bodyMarks(body),J=M.J,hy=J.Hips.y,ey=M.ey,ez=M.ez;
   const arm=['LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],torso=['Hips','Spine','Spine1','Spine2'],neck=['Neck','Head'];
@@ -4313,7 +4353,7 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambrac
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.09;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06,hem:true},loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'brigandine':return [S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return (y<hy-.02?w(v,['Hands*','LeftForeArm','RightForeArm'])<.3&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05:w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35)&&w(v,neck)<.3&&y>hy-.17&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.1,hold:1,hem:true},loose:(x,y,z)=>(hy-.02-y)/.15*.35},brigMat,torso)];   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
     case 'mail':return [S('hauberk',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*','LeftForeArm','RightForeArm'])<.4&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
@@ -9141,6 +9181,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>

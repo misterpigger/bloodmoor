@@ -45,13 +45,14 @@ def hem_rim(V,F,t=.0045):
     V2=np.concatenate([V,np.array([V[v]-N[v]*t for v in vs],np.float32)]);F2=[*F]
     for a,b in be:F2.append([b,a,m[a]]);F2.append([b,m[a],m[b]])
     return V2,np.array(F2)
-def push_out(b,V,F,off=.006):
+def push_out(b,V,F,off=.006,mask=None):
     # (Build 129) no cloth inside the body: the sim let the back of a garment sink into the shoulder blades on one build, and the skin
     # drawn there showed through as a ragged hole. Each vertex is lifted to at least `off` outside the nearest skin (5 nearest, along its normal)
     from scipy.spatial import cKDTree
     P=BODY[b]['P'];N=BODY[b]['N'];d,j=cKDTree(P).query(V,k=5);V=V.copy()
     for k in range(5):
         q=P[j[:,k]];n=N[j[:,k]];s=((V-q)*n).sum(1);m=(s<off)&(d[:,k]<.06)
+        if mask is not None:m&=mask
         V[m]+=n[m]*(off-s[m])[:,None]
     return V
 def shoulder_hug(b,V,F,cap=.02):
@@ -97,7 +98,7 @@ def bind_edges(V,F,r=.0042,sides=6):
     for tri in F:
         for a,b in ((tri[0],tri[1]),(tri[1],tri[2]),(tri[2],tri[0])):k=(min(a,b),max(a,b));ec[k]=None if k in ec else (a,b)
     nxt={a:b for v in ec.values() if v is not None for a,b in [v]}
-    N=normals(V,F);seen=set();Vs=[V];Fs=[F];n0=len(V)
+    N=normals(V,F);seen=set();Vs=[V];Fs=[F];n0=len(V);src=[]
     for s in list(nxt):
         if s in seen:continue
         loop=[];x=s
@@ -108,7 +109,7 @@ def bind_edges(V,F,r=.0042,sides=6):
         for i in range(L):
             t=P[(i+1)%L]-P[i-1];t/=np.linalg.norm(t)+1e-9;n=N[loop[i]];n=n-t*(n@t);n/=np.linalg.norm(n)+1e-9;b=np.cross(t,n)
             ring=[P[i]+r*(np.cos(a)*n+np.sin(a)*b)-n*r*.6 for a in np.linspace(0,2*np.pi,sides,endpoint=False)]
-            Vs.append(np.array(ring,np.float32))
+            Vs.append(np.array(ring,np.float32));src+=[loop[i]]*sides
         for i in range(L if closed else L-1):
             j=(i+1)%L
             if np.linalg.norm(P[j]-P[i])>.04:continue   # never bridge a gap
@@ -116,6 +117,7 @@ def bind_edges(V,F,r=.0042,sides=6):
                 a=n0+i*sides+k;b2=n0+i*sides+(k+1)%sides;c=n0+j*sides+k;d=n0+j*sides+(k+1)%sides
                 Fs.append(np.array([[a,c,b2],[b2,c,d]]))
         n0+=L*sides
+    bind_edges.src=np.array(src,np.int64)
     return np.concatenate(Vs).astype(np.float32),np.concatenate(Fs)
 def skin_cloth(b,V,F,N,smooth_it=6):
     # (Build 133) cloth weights from the skin straight under each vertex (along its inward normal), not simply the nearest skin: cloth that
@@ -139,6 +141,19 @@ def skin_cloth(b,V,F,N,smooth_it=6):
     nbrs=[np.array(sorted(adj[i])) if adj[i] else np.array([i]) for i in range(len(V))]
     for _ in range(smooth_it):
         acc=.5*acc+.5*np.stack([acc[nb_].mean(0) for nb_ in nbrs])
+    # (Build 174) along a cut edge the weights are evened out along the edge itself, then a little into the next two rows: neighbouring
+    # neckline vertices took the neck, the collarbone and the shoulder in turn, and posed the neckline zigzagged like torn cloth
+    ec=defaultdict(int)
+    for tri in F:
+        for a,c in ((tri[0],tri[1]),(tri[1],tri[2]),(tri[2],tri[0])):ec[(min(a,c),max(a,c))]+=1
+    bn=defaultdict(list)
+    for (a,c),k in ec.items():
+        if k==1:bn[a].append(c);bn[c].append(a)
+    be=np.array(sorted(bn),np.int64)
+    if len(be):
+        for _ in range(16):acc[be]=.5*acc[be]+.5*np.stack([acc[bn[v]].mean(0) for v in be])
+        r1=np.array(sorted({n for v in be for n in adj[v]}-set(be.tolist())),np.int64)
+        for _ in range(4):acc[r1]=.6*acc[r1]+.4*np.stack([acc[nbrs[v]].mean(0) for v in r1])
     jj=np.zeros((len(V),4),np.uint8);wq=np.zeros((len(V),4),np.uint8)
     for i in range(len(V)):
         o=np.argsort(-acc[i])[:4];w=acc[i,o];w=w/max(w.sum(),1e-6);jj[i]=o;wq[i]=np.round(w*255)
@@ -149,15 +164,62 @@ def uvs(V,F):
     for i in range(len(V)):
         a=ax[i];uv[i]=(V[i,[2,1]] if a==0 else V[i,[0,2]] if a==1 else V[i,[0,1]])
     return uv*.57   # (cloth maps repeat 22 times: a weave tile is about 8 cm)
+def near_edge(V,F,rings=4):
+    # (Build 174) cloth within a few rows of a cut edge: kept a little further off the skin, which otherwise shows through in teeth along a neckline
+    from collections import defaultdict
+    ec=defaultdict(int);adj=defaultdict(set)
+    for t in F:
+        for a,c in ((t[0],t[1]),(t[1],t[2]),(t[2],t[0])):ec[(min(a,c),max(a,c))]+=1;adj[a].add(c);adj[c].add(a)
+    r={a for (a,c),k in ec.items() if k==1}|{c for (a,c),k in ec.items() if k==1}
+    for _ in range(rings):r|={n for v in list(r) for n in adj[v]}
+    m=np.zeros(len(V),bool);m[list(r)]=True;return m
+def fold_verts(V,F,thr=-.2):
+    # vertices on an edge where the cloth turns back on itself (the two faces' normals more than ~100 degrees apart)
+    e=V[F[:,1]]-V[F[:,0]];f=V[F[:,2]]-V[F[:,0]];n=np.cross(e,f);n/=np.linalg.norm(n,axis=1)[:,None]+1e-12
+    from collections import defaultdict
+    ed=defaultdict(list)
+    for i,t in enumerate(F):
+        for a,b in ((t[0],t[1]),(t[1],t[2]),(t[2],t[0])):ed[(min(a,b),max(a,b))].append(i)
+    bad=set()
+    for k,fs in ed.items():
+        if len(fs)==2 and n[fs[0]]@n[fs[1]]<thr:bad.update(k)
+    return bad
+def unfold(V,F,rounds=30):
+    # (Build 174) the sim leaves the cloth folded back on itself in places (round the neck and shoulders above all): seen on the fighter as
+    # torn, spiky flaps and a V-shaped rip down the back. Each round finds the folded edges, takes two rings of cloth round them and relaxes
+    # that patch toward its neighbours' average until it lies flat; a light Taubin pass over the whole garment then evens out what's left
+    from collections import defaultdict
+    adj=defaultdict(set)
+    for t in F:
+        for a,c in ((t[0],t[1]),(t[1],t[2]),(t[2],t[0])):adj[a].add(c);adj[c].add(a)
+    nb=[np.array(sorted(adj[i])) if adj[i] else np.array([i]) for i in range(len(V))]
+    V=V.copy();n0=len(fold_verts(V,F))
+    for r in range(rounds):
+        bad=fold_verts(V,F)
+        if not bad:break
+        reg=set(bad)
+        for _ in range(3):reg|={n for v in reg for n in adj[v]}
+        reg=np.array(sorted(reg))
+        for _ in range(12):
+            V2=V.copy()
+            for v in reg:V2[v]=V[v]+.6*(V[nb[v]].mean(0)-V[v])
+            V=V2
+    for k in range(8):
+        lam=.5 if k%2==0 else -.53;M=np.stack([V[x].mean(0) for x in nb]);V=V+lam*(M-V)
+    print('  folds',n0,'->',len(fold_verts(V,F)))
+    return V.astype(np.float32)
 def write(g,builds='ABCD',kind='cloth',extra={}):
     arrs=[];H={'id':g,'kind':kind,'builds':{},'perBuild':True,**extra}
     def add(n,a):arrs.append((n,np.ascontiguousarray(a)))
     for b in builds:
         d=np.load(SC+'gar_%s_%s.npz'%(g,b));V=d['V'].astype(np.float32);F=d['F'].astype(np.int64)
-        V=push_out(b,V,F);V=shoulder_hug(b,V,F);V=push_out(b,V,F,.004);V=smooth_edges(V,F,40);V=ring_smooth(V,F)
+        V=unfold(V,F);V=push_out(b,V,F);V=shoulder_hug(b,V,F);V=push_out(b,V,F,.004);V=smooth_edges(V,F,40);V=ring_smooth(V,F);V=push_out(b,V,F,.009,near_edge(V,F));V=push_out(b,V,F,.015,near_edge(V,F,6)&(V[:,1]>1.28));V=push_out(b,V,F,.013,(V[:,1]>1.3)&(np.abs(V[:,0])>.08))   # over the shoulders, where the deltoid bulges as the arm comes up
         if kind=='cloth':
             n_body=len(V);V,F=bind_edges(V,F)
-        N=normals(V,F);j,w=skin_cloth(b,V,F,N) if kind=='cloth' else skin(b,V)
+        if kind=='cloth':   # (Build 174) the rolled hem's tube takes the weights of the edge vertex it was made round, so it moves with the edge
+            Fb=F[(F<n_body).all(1)];j,w=skin_cloth(b,V[:n_body],Fb,normals(V[:n_body],Fb));sr=bind_edges.src;j=np.concatenate([j,j[sr]]);w=np.concatenate([w,w[sr]])
+        else:j,w=skin(b,V)
+        N=normals(V,F)
         B=BODY[b];names=list(B['names']);IBM=B['IBM'];hy=np.linalg.inv(IBM[names.index('Hips')])[1,3]
         # skirt weights: below the crotch blend toward Hips + UpLegs
         iH,iL,iR=names.index('Hips'),names.index('LeftUpLeg'),names.index('RightUpLeg')
