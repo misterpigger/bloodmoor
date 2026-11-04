@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=165;
+const BUILD=166;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -4338,6 +4338,9 @@ try{const m=location.search.match(/[?&]elb=([\d.]+)/);if(m)ELB_UP=+m[1];}catch(e
 /* Build 164 (?mb): the blade's angle in guard comes straight from the mouse: its height tips the point from the foe's face (low) up to
    standing (high) and a little back over the head (top); its side leans the blade out that way, more the higher the hands are */
 let MB=!/[?&]nomb(&|=|$)/.test(location.search),MB_LEAN=1.4;try{const m=location.search.match(/[?&]mbl=([\d.]+)/);if(m)MB_LEAN=+m[1];}catch(e){}
+/* Build 166: in a committed swing a player's blade turns about its own length at most MB_RCM rad/s (was 14, about 800°/s): the edge
+   swinging round to face each new direction spun the hand and wrist over on the grip ("curling") */
+let MB_RCM=9;try{const m=location.search.match(/[?&]rcm=([\d.]+)/);if(m)MB_RCM=+m[1];}catch(e){}
 const MB_P=[[-.4,.12],[.1,.44],[.45,1.22],[.75,1.72]];
 function mbPitch(y){if(y<=MB_P[0][0])return MB_P[0][1];for(let i=1;i<MB_P.length;i++)if(y<=MB_P[i][0]){const a=MB_P[i-1],b=MB_P[i],u=(y-a[0])/(b[0]-a[0]);return a[1]+(b[1]-a[1])*u*u*(3-2*u);}return MB_P[MB_P.length-1][1];}
 let HAND_FIRST=/[?&](hf|ref)/.test(location.search),NF_TMIN=40*Math.PI/180,NF_TMAX=105*Math.PI/180,NF_PSI=110*Math.PI/180;
@@ -4610,7 +4613,7 @@ class Sword{
       else this.w.addScaledVector(this.axis,-wr*Math.min(1,10*h));
     }
     {const ex=window.__noRL?0:rollLimit(this,_wl2);if(ex){const wr=this.w.dot(this.axis);if(wr*ex>0)this.w.addScaledVector(this.axis,-wr);this.w.addScaledVector(this.axis,-Math.sign(ex)*Math.min(Math.abs(ex)*30,8));}
-     const wr2=this.w.dot(this.axis),rmx=commit?14:7;if(Math.abs(wr2)>rmx)this.w.addScaledVector(this.axis,(Math.sign(wr2)*rmx-wr2));}   // forearm roll speed limit
+     const wr2=this.w.dot(this.axis),rmx=commit?(MB&&f&&(f.isPlayer||f.remote)?MB_RCM:14):7;if(Math.abs(wr2)>rmx)this.w.addScaledVector(this.axis,(Math.sign(wr2)*rmx-wr2));}   // forearm roll speed limit
     const rwP=f&&f.hrW?f.hrW():0,rsP=rwP>.5?-1:1;
     if(f&&f.foreF&&this.def.kind!=='fist'&&this.def.kind!=='spear'&&(rwP<.05||rwP>.95)){const F=f.foreF,c=rsP*this.axis.dot(F);
       if(c<WR_MAX||c>WR_MIN){_wl1.crossVectors(this.axis,F).multiplyScalar(rsP);const sn=_wl1.length();if(sn>1e-5){_wl1.multiplyScalar(1/sn);const sg=c<WR_MAX?1:-1;
@@ -4759,7 +4762,7 @@ class Sword{
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
     if(rollLimit(this,_wl2))this.edge.lerp(_wl2,.25).normalize();   /* Build 148: back on for blades, wider (RL1/RL2): with none the wrists wrung to follow the edge in a committed swing and the hands tangled */   /* Build 147: not for blades: edgeHome already keeps their roll bounded, and this forearm-based limit (40° for two-handers) held a raised longsword's edge sideways, so cuts landed flat */   // the grip can't spin the head round the haft
     // and the forearm can only roll so fast (about 400 deg/s): the head never whirls round in the hand
-    if(pe0&&!this.free&&this.owner){_rp.set(peX,peY,peZ);const sn=_wl3.crossVectors(_rp,this.edge).dot(this.axis),cs=_rp.dot(this.edge),th=Math.atan2(sn,cs),mx=(this.owner.commit&&this.def.kind==='blade'?7+((window.__rrc||ROLL_CM)-7)*clamp(1-((this._trs||0)-5)/6,0,1):7)*h;   /* (Build 149) a committed cut along a line (not the point circling, `_trs`) may roll the blade faster (ROLL_CM rad/s): at 400 deg/s a two-hander swung over from the left shoulder couldn't turn its edge into the arc and came round flat */
+    if(pe0&&!this.free&&this.owner){_rp.set(peX,peY,peZ);const sn=_wl3.crossVectors(_rp,this.edge).dot(this.axis),cs=_rp.dot(this.edge),th=Math.atan2(sn,cs),mx=(this.owner.commit&&this.def.kind==='blade'?7+((window.__rrc||(MB&&(this.owner.isPlayer||this.owner.remote)?MB_RCM:ROLL_CM))-7)*clamp(1-((this._trs||0)-5)/6,0,1):7)*h;   /* (Build 149) a committed cut along a line (not the point circling, `_trs`) may roll the blade faster (ROLL_CM rad/s): at 400 deg/s a two-hander swung over from the left shoulder couldn't turn its edge into the arc and came round flat */
       if(Math.abs(th)>mx){_wl3.crossVectors(this.axis,_rp);this.edge.copy(_rp).multiplyScalar(Math.cos(mx)).addScaledVector(_wl3,Math.sin(mx)*Math.sign(th));}}
   }
   stepFree(h){
