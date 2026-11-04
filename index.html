@@ -394,7 +394,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=167;
+const BUILD=168;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3618,14 +3618,116 @@ function bandGeo(r,h){return lathe([[r*.82,-h/2],[r,-h*.3],[r,h*.3],[r*.82,h/2]]
 function scentStopper(R){return lathe([[0,-R*1.5],[R*.35,-R*1.45],[R*.55,-R*1.1],[R*.42,-R*.75],[R*.9,-R*.3],[R,0],[R*.9,R*.3],[R*.5,R*.55],[R*.3,R*.6],[0,R*.62]].reverse(),20);}
 function lobedPommel(R){const parts=[];for(const [x,s] of [[-R*.75,.62],[0,.85],[R*.75,.62]]){const g=new THREE.SphereGeometry(R*s,12,8);g.scale(1,.8,.7);g.translate(x,-R*(1-s)*.5,0);parts.push(g);}
   const b=new THREE.BoxGeometry(R*2.3,R*.32,R*.9);b.translate(0,R*.45,0);parts.push(b);return mergeGeometries(parts.map(x=>x.index?x.toNonIndexed():x));}
+/* ---- Build 168: period swords (c. 1350–1450), after surviving pieces and Oakeshott's types. Looks only: the blade, its hit shape and
+   handling are unchanged.
+   Blades (bladeP): a real cross-section by type. 'diamond' (Type XV/XVIII: a central ridge, no fuller, stiff for thrusting at armour),
+   'lens' (Type XII/XIV: lenticular with a fuller), 'hex' (a flat middle with bevels); a fuller that runs part of the length and fades
+   out; a short blunt ricasso under the cross; distal taper (thinner toward the point); secondary edge bevels ground bright; and a smith's
+   mark inlaid in latten (brass) in the fuller or on the ridge, as on many blades of the period.
+   Hilts: an octagonal cross with an écusson (the lozenge where the blade seats) and flared, knobbed or down-turned terminals; a grip of
+   leather over a wooden core with cord risers and a seam down the back, bound at both ends with twisted wire; a leather chappe (rain guard)
+   over the shoulders of the blade; wheel pommels with sunken faces and a raised boss (some with a latten disc set in), faceted
+   scent-stopper and pear pommels, and the tang peened over a small block on top. Every part is stacked from the grip's real length, so
+   nothing floats (the greatsword's pommel hung 2 cm below its grip). The greatsword lost its parrying lugs: those are 16th-century */
+const steelHilt=steelDark;const latten=std({color:0xb48c4c,metalness:.92,roughness:.32,vertexColors:false});steelDetail(latten,'c');latten.side=THREE.DoubleSide;
+const chappeMat=std({color:0x8a5c3a,roughness:.78});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.anisotropy=MAXANI;}Object.assign(chappeMat,{map:ld,normalMap:ln});}
+function bladeP(L,w,o={}){
+  const NS=64,NX=12,sec=o.sec||'diamond',ful=o.ful??0,fw=o.fw??.3,ric=o.ric??0,base=o.base??.04,th0=o.th0??.0036,th1=o.th1??.0012,pt=o.pt??.22,tw=o.tw??.72,eb=.09;
+  const width=u=>{if(o.leaf)return w*(.32+.68*Math.sin(Math.PI*Math.pow(u,.72)))*(1-Math.pow(u,6));const u0=1-pt;return u<u0?w*(1-(1-tw)*u/u0):w*tw*Math.cos((u-u0)/pt*Math.PI/2);};
+  const prof=(a,u,y)=>{   // half-thickness at |x|/width = a, length fraction u
+    const th=th0+(th1-th0)*u,rk=ric>0?clamp(1-(y-base*0)/ric,0,1):0;
+    let z=sec==='lens'?th*Math.sqrt(Math.max(0,1-a*a)):sec==='hex'?(a<.38?th:th*(1-(a-.38)/.62)):th*(1-a);
+    if(sec==='diamond')z=th*(1-Math.pow(a,1.08));
+    const fu=ful>0?clamp((ful-u)/.06,0,1):0;if(fu>0&&a<fw){const d=th*.42*fu;z-=d*(.5+.5*Math.cos(Math.PI*a/fw));}
+    if(a>1-eb){const z0=(sec==='lens'?th*Math.sqrt(Math.max(0,1-(1-eb)*(1-eb))):sec==='hex'?th*(1-(1-eb-.38)/.62):th*(1-Math.pow(1-eb,1.08))),e=lerp(.00035,th*.55,rk);z=e+(z0-e)*(1-(a-(1-eb))/eb);}   // the secondary bevel to the edge (blunt on the ricasso)
+    return Math.max(z,.0003);};
+  const A=[];for(let i=0;i<=NX;i++){const t=i/NX;A.push(1-Math.pow(t,1.15));}   // 1 (edge) .. 0 (middle), denser toward the edge
+  const ring=j=>{const u=j/NS,y=u*L,wd=width(u),pts=[];
+    for(let i=0;i<=NX;i++){const a=A[i];pts.push([a*wd,y,prof(a,u,y),a]);}for(let i=NX-1;i>=0;i--){const a=A[i];pts.push([-a*wd,y,prof(a,u,y),a]);}
+    const top=pts,bot=[];for(let i=top.length-2;i>=1;i--){const p=top[i];bot.push([p[0],p[1],-p[2],p[3]]);}return top.concat(bot);};
+  const pos=[],col=[];const shade=(a,u)=>{const fu=ful>0?clamp((ful-u)/.06,0,1):0;return a>1-eb?1.16:a>.82?1.04:(fu>0&&a<fw*.85)?.84:1;};
+  const put=p=>{pos.push(p[0],p[1],p[2]);const u=p[1]/L,c=shade(p[3],u)*(ric>0&&p[1]<ric?.94:1);col.push(c,c,c);};
+  let prev=ring(0);const K=prev.length;for(let j=1;j<=NS;j++){const cur=ring(j);for(let k=0;k<K;k++){const k2=(k+1)%K;put(prev[k]);put(prev[k2]);put(cur[k2]);put(prev[k]);put(cur[k2]);put(cur[k]);}prev=cur;}
+  {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0,0]);put(r0[(k+1)%K]);put(r0[k]);}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
+  const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);
+  const out=toCreasedNormals(g,.5);out.userData.surf=y=>prof(0,clamp((y-base)/L,0,1),y-base);
+  out.userData.surfXY=(x,y)=>{const u=clamp((y-base)/L,0,1);return prof(Math.min(1,Math.abs(x)/Math.max(1e-4,width(u))),u,y-base);};return out;}
+// the mark laid onto both faces of the blade, each vertex dropped onto the steel's own curve so it lies flush on a ridge or in a fuller
+function markOn(b,y,s,kind){const parts=[];for(const sd of [1,-1]){const g=smithMark(s,kind);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),yy=p.getY(i)+y,dz=p.getZ(i);p.setXYZ(i,sd*x,yy,sd*(b.userData.surfXY(x,yy)-.00012+dz*.9));}if(sd<0){const ix=g.index;}g.computeVertexNormals();parts.push(g.index?g.toNonIndexed():g);}
+  return mergeGeometries(parts);}
+// a smith's mark: a cross fleury in a ring, or a running-wolf-like stroke mark, cut thin to lie in the steel
+function smithMark(s,kind=0){const sh=new THREE.Shape();
+  if(kind===0){const a=s*.16,b=s*.5;sh.moveTo(-a,-b);sh.lineTo(a,-b);sh.lineTo(a,-a);sh.lineTo(b,-a);sh.lineTo(b,a);sh.lineTo(a,a);sh.lineTo(a,b);sh.lineTo(-a,b);sh.lineTo(-a,a);sh.lineTo(-b,a);sh.lineTo(-b,-a);sh.lineTo(-a,-a);sh.closePath();
+    const g1=new THREE.ExtrudeGeometry(sh,{depth:.00025,bevelEnabled:false});
+    const r=new THREE.Shape();r.absarc(0,0,s*.74,0,Math.PI*2,false);const h=new THREE.Path();h.absarc(0,0,s*.6,0,Math.PI*2,true);r.holes.push(h);const g3=new THREE.ExtrudeGeometry(r,{depth:.00025,bevelEnabled:false,curveSegments:24});
+    return mergeGeometries([g1,g3].map(x=>x.index?x.toNonIndexed():x));}
+  // a wolf: a few strokes, as the Passau marks were punched and filled
+  const st=(x0,y0,x1,y1,t)=>{const dx=x1-x0,dy=y1-y0,l=Math.hypot(dx,dy),nx=-dy/l*t,ny=dx/l*t;const p=new THREE.Shape();p.moveTo(x0+nx,y0+ny);p.lineTo(x1+nx,y1+ny);p.lineTo(x1-nx,y1-ny);p.lineTo(x0-nx,y0-ny);p.closePath();return new THREE.ExtrudeGeometry(p,{depth:.00025,bevelEnabled:false});};
+  const t=s*.07,S=[[-.5,0,.3,.08],[.3,.08,.5,.32],[.5,.32,.42,.5],[.5,.32,.62,.42],[-.5,0,-.62,.25],[-.35,.02,-.5,-.45],[-.2,.03,-.05,-.45],[.15,.06,.05,-.45],[.3,.08,.38,-.45]];
+  return mergeGeometries(S.map(([a,b,c,d])=>{const g=st(a*s,b*s,c*s,d*s,t);return g.index?g.toNonIndexed():g;}));}
+// a cross: one forged bar, octagonal in section, tapering out from an écusson and finishing in flared, knobbed or down-turned terminals
+function crossP(S,H,D,o={}){const term=o.term||'flare',bend=o.bend||0,NS=8,NX=56,pos=[];const bw=o.bw||.02;
+  const half=S/2,ec=o.ec||0;const prof=x=>{const ax=Math.abs(x),t=clamp((ax-bw/2)/Math.max(1e-4,half-bw/2),0,1);let k=ax<bw/2?1:1-.28*Math.pow(t,.8);
+    if(term==='flare')k*=1+.55*Math.pow(clamp((t-.78)/.22,0,1),1.6);if(term==='knob')k*=t>.86?1+.6*Math.sin(clamp((t-.86)/.14,0,1)*Math.PI):1;
+    const end=t>.975?Math.sqrt(Math.max(0,(1-t)/.025))*.75+.25:1,el=ec>0?ec*Math.max(0,1-ax/(bw*.7)):0;return [H/2*k*end+el,D/2*k*end*(ax<bw/2?1.12:1)];};   /* (the écusson: the bar swells into a lozenge over the blade's shoulder and down over the grip) */
+  const XS=[];for(let i=0;i<=NX;i++){const u=i/NX;XS.push(-half+S*(.5-.5*Math.cos(Math.PI*u)));}if(ec>0)for(let i=0;i<=20;i++)XS.push(-bw*.75+bw*1.5*i/20);XS.sort((a,b)=>a-b);
+  const ring=i=>{const x=XS[i],[hy,hz]=prof(x),f=Math.abs(x)/half,yo=bend*f*f*f;const out=[];
+    for(let k=0;k<NS;k++){const a=(k+.5)/NS*Math.PI*2;out.push([x,yo+Math.cos(a)*hy/Math.cos(Math.PI/NS),Math.sin(a)*hz/Math.cos(Math.PI/NS)]);}return out;};
+  let prev=ring(0);const put=p=>pos.push(p[0],p[1],p[2]);
+  for(let i=1;i<XS.length;i++){const cur=ring(i);for(let k=0;k<NS;k++){const k2=(k+1)%NS;put(prev[k]);put(cur[k]);put(prev[k2]);put(prev[k2]);put(cur[k]);put(cur[k2]);}prev=cur;}
+  for(const [i,c] of [[0,[-half,0,0]],[XS.length-1,[half,bend,0]]]){const r=ring(i);for(let k=0;k<NS;k++){const k2=(k+1)%NS;if(i===0){put(c);put(r[k]);put(r[k2]);}else{put(c);put(r[k2]);put(r[k]);}}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.computeVertexNormals();g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(pos.length/3*2),2));
+  const parts=[toCreasedNormals(g,.4)];
+  if(term==='knob'){for(const sx of [-1,1]){const b=lathe([[0,-H*.75],[H*.5,-H*.55],[H*.72,0],[H*.5,H*.55],[0,H*.75]].reverse(),8);b.rotateZ(Math.PI/2);b.translate(sx*(half-H*.35),bend,0);parts.push(toCreasedNormals(b.toNonIndexed(),.4));}}
+  const m=mergeGeometries(parts.map(p=>{if(!p.attributes.uv)p.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(p.attributes.position.count*2),2));if(p.attributes.color)p.deleteAttribute('color');return p;}));return m;}
+// a grip: leather over a wooden core, swelling or waisted, with cord risers showing through and a stitched seam down the back
+function gripP(len,r,o={}){const g=new THREE.CylinderGeometry(r,r,len,28,Math.max(12,Math.round(len*300)),true),p=g.attributes.position,ris=o.ris||[],sw=o.swell||0,wa=o.waist||0;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),t=y/len+.5,th=Math.atan2(z,x);let k=1+sw*Math.sin(Math.PI*t)-wa*Math.sin(Math.PI*t)*Math.sin(Math.PI*t)-.05*Math.pow(Math.abs(2*t-1),8);
+    for(const tr of ris)k+=.09*Math.exp(-Math.pow((t-tr)/.022,2));
+    const dth=Math.atan2(Math.sin(th-Math.PI),Math.cos(th-Math.PI));k+=.035*Math.exp(-Math.pow(dth/.07,2))-.02*Math.exp(-Math.pow(dth/.18,2));   // the seam where the leather's edges are stitched together
+    p.setX(i,x*k);p.setZ(i,z*k);}
+  g.computeVertexNormals();return g;}
+// twisted wire bound round the ends of the grip
+function wireP(r,h){const g=new THREE.CylinderGeometry(r,r,h,32,Math.max(6,Math.round(h*900)),true),p=g.attributes.position;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),th=Math.atan2(z,x),ph=y/.0024+th/(Math.PI*2);const k=1+.06*Math.pow(Math.abs(Math.sin(Math.PI*ph*2)),.5)+.03*Math.cos(th*14+y*2600);p.setX(i,x*k);p.setZ(i,z*k);}
+  g.computeVertexNormals();return g;}
+// a leather chappe: the rain guard laced over the cross, a rounded flap down each face of the blade's shoulder
+function chappeP(w,h,z){const sh=new THREE.Shape();sh.moveTo(-w,0);sh.lineTo(w,0);sh.lineTo(w*.95,h*.55);sh.quadraticCurveTo(w*.6,h*1.02,0,h);sh.quadraticCurveTo(-w*.6,h*1.02,-w*.95,h*.55);sh.closePath();
+  const parts=[];for(const s of [1,-1]){const g=new THREE.ExtrudeGeometry(sh,{depth:.0016,bevelEnabled:true,bevelThickness:.0005,bevelSize:.0006,bevelSegments:1,curveSegments:8});g.translate(0,0,s>0?z:-z-.0016);parts.push(g.index?g.toNonIndexed():g);}
+  return mergeGeometries(parts);}
+// pommels
+function wheelP(R,T,o={}){const rc=o.recess??.35,bs=o.boss??.3;   // a wheel with a chamfered rim, sunken faces and a raised boss in the middle
+  const g=lathe([[0,-T/2+T*rc*.4],[R*bs,-T/2+T*rc*.4],[R*bs*1.15,-T/2+T*rc],[R*.62,-T/2+T*rc],[R*.74,-T/2],[R*.92,-T/2],[R,-T*.24],[R,T*.24],[R*.92,T/2],[R*.74,T/2],[R*.62,T/2-T*rc],[R*bs*1.15,T/2-T*rc],[R*bs,T/2-T*rc*.4],[0,T/2-T*rc*.4]].reverse(),36);g.rotateX(Math.PI/2);return toCreasedNormals(g.toNonIndexed(),.5);}
+function stopperP(R){const g=lathe([[0,-R*1.45],[R*.38,-R*1.42],[R*.5,-R*1.2],[R*.36,-R*.95],[R*.62,-R*.78],[R*.98,-R*.25],[R,0],[R*.88,R*.42],[R*.56,R*.72],[R*.38,R*.8],[0,R*.82]].reverse(),8);return toCreasedNormals(g.toNonIndexed(),.35);}   // faceted, eight sides
+function pearP(R){const g=lathe([[0,-R*1.3],[R*.3,-R*1.26],[R*.42,-R*1.12],[R*.34,-R*.98],[R*.8,-R*.7],[R,-R*.12],[R*.88,R*.5],[R*.5,R*.84],[R*.32,R*.95],[0,R*.98]].reverse(),12);return toCreasedNormals(g.toNonIndexed(),.35);}
+function peenP(s){const g=lathe([[0,0],[s,0],[s*.95,s*.5],[s*.55,s*.9],[0,s]].reverse(),4);g.rotateY(Math.PI/4);return toCreasedNormals(g.toNonIndexed(),.3);}   // the tang's end hammered over a small square block
+function discP(r){const g=new THREE.CylinderGeometry(r,r,.0012,28);g.rotateX(Math.PI/2);return g;}
+// a hilt stacked from the cross down: o = {cross:[S,H,D,{...}], grip:[len,r,{...}], pom:'wheel'|'stopper'|'pear'|'lobed', pR, pT, disc, chappe:[w,h], wire}
+function hiltP(o,blade){const P=[];const gc=o.gc??.032,[S,H,D,co]=o.cross;P.push([crossP(S,H,D,co),steelHilt,0,gc,0]);
+  const gTop=gc-H/2+.001,[gl,gr,go]=o.grip,gBot=gTop-gl;P.push([gripP(gl,gr,go),gripMat,0,(gTop+gBot)/2,0]);
+  if(o.wire!==false){const wh=Math.min(.014,gl*.08);P.push([wireP(gr*1.04,wh),steelHilt,0,gTop-wh/2,0]);P.push([wireP(gr*.98,wh),steelHilt,0,gBot+wh/2,0]);}
+  if(o.chappe){const [cw,ch]=o.chappe,z=blade.userData.surf?Math.max(.0028,blade.userData.surf(gc+H/2+.004)*.9+.0011):.004;P.push([chappeP(cw,ch,z),chappeMat,0,gc+H/2-.002,0]);}
+  const R=o.pR;let pc,pb;
+  if(o.pom==='wheel'){pc=gBot-R*.82;pb=pc-R;P.push([wheelP(R,o.pT||R*.7,o.wh||{}),steelHilt,0,pc,0]);if(o.disc){const dz=(o.pT||R*.7)*(.5-(o.wh?.recess??.35))+.0002;for(const s of [1,-1])P.push([discP(R*.5),latten,0,pc,s*dz]);}}
+  else if(o.pom==='stopper'){pc=gBot-R*.78;pb=pc-R*1.45;P.push([stopperP(R),steelHilt,0,pc,0]);}
+  else if(o.pom==='pear'){pc=gBot-R*.95;pb=pc-R*1.3;P.push([pearP(R),steelHilt,0,pc,0]);}
+  else{pc=gBot-R*.6;pb=pc-R*.95;P.push([lobedPommel(R),steelHilt,0,pc,0]);}
+  P.push([peenP(o.peen||.0055),steelHilt,0,pb+.0008,0,Math.PI,0,0]);
+  return P;}
 function makeBlade(L,w,grip,st=0){const two=grip>.2;
-  const bw=w*2+.01,guard=st===1?guardGeo(two?.27:.24,.018,.024,-.016,bw):st===2?guardGeo(.13,.03,.03,0,bw):guardGeo(two?.25:.22,.02,.026,two?.006:-.004,bw);
-  const pom=st===1?[scentStopper(two?.022:.02),steelDark,0,-.004-grip,0]:st===2?[lobedPommel(two?.024:.022),steelDark,0,-.012-grip,0]:[wheelPommel(two?.034:.031,.022),steelDark,0,-.006-grip,0];
-  return wpnGroup([[bladeGeo(L,w,st===2?.044:.039),bladeMat,0,0,0],[guard,steelDark,0,.032,0],[gripGeo(grip+.005,.0158,two?.09:.05),gripMat,0,.0165-grip/2,0],
-    [bandGeo(.019,.014),steelDark,0,.018,0],[bandGeo(.0175,.008),steelDark,0,.012-grip,0],pom]);}
-function makeGreatsword(st=0){if(st)return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(st===1?.4:.3,.026,.032,st===1?-.03:0,.07),steelDark,0,.035,0],[gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],st===1?[scentStopper(.026),steelDark,0,-.4,0]:[lobedPommel(.026),steelDark,0,-.4,0]]);
-  return wpnGroup([[bladeGeo(1.22,.03,.045),bladeMat,0,0,0],[guardGeo(.38,.028,.032,.012,.07),steelDark,0,.035,0],[guardGeo(.1,.016,.02,-.004),steelDark,0,.21,0],
-  [gripGeo(.24,.018,.06),gripMat,0,-.1,0],[bandGeo(.02,.012),steelDark,0,.022,0],[gripGeo(.13,.0165,0),gripMat,0,-.29,0],[bandGeo(.021,.012),steelDark,0,-.225,0],[pearPommel(.03),steelDark,0,-.41,0]]);}
+  if(st===1){   // knightly: a Type XIV/XVIIIa blade, fuller for the first third then a ridge, down-turned cross with knobs, faceted scent-stopper
+    const b=bladeP(L,w,{sec:'diamond',ful:.34,fw:.22,ric:.03,base:.042,th0:.0038,pt:.26,tw:.62});return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.1,.012,1),latten,0,0,0],...hiltP({cross:[two?.26:.23,.017,.021,{term:'knob',bend:.014,bw:.022,ec:.017}],grip:[grip,.0155,{waist:two?.1:0,swell:two?0:.06,ris:two?[.5]:[]}],pom:'stopper',pR:two?.022:.02},b)]);}
+  if(st===2){   // northern: a broad Type XII blade with a long fuller, short heavy cross, lobed pommel
+    const b=bladeP(L,w*1.04,{sec:'lens',ful:.72,fw:.3,base:.044,th0:.0034,pt:.16,tw:.8});return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.12,.011,0),latten,0,0,0],...hiltP({cross:[.14,.026,.026,{term:'flare',bw:.03}],grip:[grip,.0165,{swell:.08,ris:[]}],pom:'lobed',pR:two?.024:.022,wire:false},b)]);}
+  // default: a Type XVIII blade (a stiff diamond, thrusting at armour), straight octagonal cross with flared ends and an écusson, chappe, wheel pommel with a latten disc
+  const b=bladeP(L,w,{sec:'diamond',ful:two?.22:0,fw:.18,ric:.025,base:.04,th0:.0038,pt:.24,tw:.66});return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.085,.012,0),latten,0,0,0],...hiltP({cross:[two?.25:.22,.019,.024,{term:'flare',bend:two?.004:-.003,bw:.024,ec:.019}],grip:[grip,.0155,{waist:two?.12:0,swell:two?0:.05,ris:two?[.32,.68]:[.5]}],pom:'wheel',pR:two?.031:.029,pT:.022,disc:true,wh:{boss:.06},chappe:[w*.85,.024]},b)]);}
+function makeGreatsword(st=0){
+  if(st===1)return wpnGroup([[bladeP(1.22,.031,{sec:'diamond',ful:.3,fw:.2,ric:.06,base:.045,th0:.0042,pt:.22,tw:.66}),bladeMat,0,0,0],...hiltP({gc:.035,cross:[.4,.024,.03,{term:'knob',bend:.026,bw:.03,ec:.024}],grip:[.36,.0175,{waist:.08,ris:[.25,.5,.75]}],pom:'stopper',pR:.026},{userData:{}})]);
+  if(st===2)return wpnGroup([[bladeP(1.22,.032,{sec:'lens',ful:.6,fw:.3,ric:.05,base:.045,th0:.0038,pt:.18,tw:.75}),bladeMat,0,0,0],...hiltP({gc:.035,cross:[.3,.03,.032,{term:'flare',bw:.034}],grip:[.36,.018,{swell:.05,ris:[.5]}],pom:'lobed',pR:.026,wire:false},{userData:{}})]);
+  // a great sword of war (Type XIIa): a long broad blade with a fuller two-thirds down, a long straight cross, a long grip and a heavy wheel pommel
+  const b=bladeP(1.22,.032,{sec:'lens',ful:.62,fw:.28,ric:.06,base:.045,th0:.0042,pt:.2,tw:.72});return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.14,.014,1),latten,0,0,0],...hiltP({gc:.035,cross:[.38,.026,.03,{term:'flare',bend:.008,bw:.032,ec:.026}],grip:[.36,.0178,{waist:.06,ris:[.22,.5,.78]}],pom:'wheel',pR:.038,pT:.028,disc:true,wh:{boss:.06},chappe:[.03,.03]},b)]);}
+
 const headMat=std({color:0x6c6964,metalness:.88,roughness:.34,envMapIntensity:1.05,vertexColors:true});steelDetail(headMat,'head');
 function edgeShade(g,f){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=f(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=c[i*3+1]=c[i*3+2]=v;}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g;}
 // (Build 127) the head lofted in slices from the eye to the edge: each slice a lens through the head's height, thick by the eye and ground
@@ -3651,9 +3753,15 @@ function makeAxe(st=0){
   else{sh.moveTo(.02,.97);sh.lineTo(.03,.968);sh.quadraticCurveTo(.05,.958,.07,.964);sh.quadraticCurveTo(.12,.985,.168,1.03);sh.quadraticCurveTo(.2,.9,.172,.725);sh.quadraticCurveTo(.12,.76,.085,.86);sh.quadraticCurveTo(.065,.905,.03,.902);sh.lineTo(.02,.9);sh.closePath();}
   const hg=axeLoft(sh);
   edgeShade(hg,(x,y)=>{const d=Math.hypot(x-.03,y-.9);return d>.13?1.45:d>.11?1.15:.85;});
-  const eye=edgeShade(lathe([[0,-.042],[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042],[.012,.044],[0,.044]],20),()=>.9);   // closed over the haft's end (open, it looked like a hollow tube from above)   // a socket with flared lugs above and below
+  const eye=edgeShade(toCreasedNormals(lathe([[0,-.042],[.0245,-.042],[.0295,-.034],[.027,-.01],[.027,.01],[.0295,.034],[.0245,.042],[.012,.044],[0,.044]],8).toNonIndexed(),.4),()=>.9);   // (Build 168: an eight-sided forged socket, not a turned one)   // closed over the haft's end (open, it looked like a hollow tube from above)   // a socket with flared lugs above and below
   const haft=lathe([[0,-.355],[.02,-.355],[.022,-.335],[.018,-.31],[.0175,0],[.019,.5],[.022,.86],[.022,.975],[0,.975]].reverse(),14);
-  return wpnGroup([[haft,woodMat,0,0,0],[hg,headMat,0,0,0],[eye,headMat,0,.935,0],[gripGeo(.24,.0195,.03),gripMat,0,-.2,0],[bandGeo(.021,.01),steelDark,0,-.075,0]]);
+  /* (Build 168) langets: iron straps forged with the socket running down both cheeks of the haft, riveted through, so a blow can't split the
+     haft below the head; the grip is leather bound with wire at both ends, and the butt is shod with a faceted iron cap */
+  const P=[[haft,woodMat,0,0,0],[hg,headMat,0,0,0],[eye,headMat,0,.935,0],[gripP(.24,.0198,{swell:.03,ris:[]}),gripMat,0,-.2,0],[wireP(.0205,.012),steelDark,0,-.086,0],[wireP(.0205,.012),steelDark,0,-.314,0],
+    [toCreasedNormals(lathe([[0,-.03],[.021,-.03],[.0235,-.022],[.0225,0],[.0215,.012],[.02,.016]].reverse(),8).toNonIndexed(),.4),steelDark,0,-.345,0]];
+  for(const sd of [-1,1]){const lg=new THREE.BoxGeometry(.009,.13,.0024);lg.translate(0,-.065,0);const sh2=lg.attributes.position;for(let i=0;i<sh2.count;i++){const y=sh2.getY(i),k=1-.45*clamp(-y/.13,0,1);sh2.setX(i,sh2.getX(i)*k);}lg.computeVertexNormals();
+    P.push([edgeShade(lg,()=>.92),headMat,0,.9,sd*.0205]);for(const y of [.875,.83,.785])P.push([edgeShade(new THREE.SphereGeometry(.0028,8,5,0,Math.PI*2,0,Math.PI/2),()=>1.1),headMat,0,y,sd*.0218,sd*Math.PI/2,0,0]);}
+  return wpnGroup(P);
 }
 function makeMace(st=0){
   // (Build 129) three period heads, all of forged steel with their edges ground bright (every part carries vertex colours: headMat
@@ -3661,7 +3769,7 @@ function makeMace(st=0){
   // pierced finial; 1 a ribbed bulb (a 12th-century knobbed mace): a pear-shaped head with six raised ribs swelling into blunt knobs; 2 a
   // morning star: a round head set with short four-sided spikes on a mesh of points spread evenly over it
   const shaft=lathe([[0,-.23],[.016,-.23],[.015,.3],[.0165,.56],[.0,.56]].reverse(),12);
-  const parts=[[shaft,steelDark,0,0,0],[gripGeo(.22,.019,.04),gripMat,0,-.1,0],[bandGeo(.021,.01),steelDark,0,.012,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
+  const parts=[[shaft,steelDark,0,0,0],[gripP(.22,.0188,{swell:.04,ris:[.3,.7]}),gripMat,0,-.1,0],[wireP(.0195,.011),steelDark,0,.0035,0],[wireP(.0195,.011),steelDark,0,-.2035,0],[bandGeo(.021,.01),steelDark,0,.012,0],[lathe([[0,-.004],[.034,-.002],[.034,.002],[0,.004]].reverse(),20),steelDark,0,.015,0],[pearPommel(.02),steelDark,0,-.235,0]];
   const shade=g=>edgeShade(g,(x,y,z)=>{const r=Math.hypot(x,z);return r>.04?1.35:r>.03?1.12:.9;});
   if(st===1){
     // (Build 134) a knobbed mace, after the cast heads of the 12th–13th centuries: a waisted iron core with moulded rims and three
@@ -3700,10 +3808,12 @@ function makeMace(st=0){
     for(const sd of [-1,1]){const lg=new THREE.BoxGeometry(.006,.12,.0035);lg.translate(0,-.06,0);parts.push([shade(lg),headMat,sd*.0165,.56,0]);}}
   return wpnGroup(parts);
 }
-function makeSpear(st=0){const sock=lathe([[.0175,-.05],[.019,-.04],[.017,.02],[.012,.07],[.008,.09]].reverse(),14);
+function makeSpear(st=0){const sock=toCreasedNormals(lathe([[.0195,-.05],[.0215,-.045],[.021,-.035],[.0188,.02],[.013,.07],[.0085,.09]].reverse(),8).toNonIndexed(),.4);   /* (Build 168: a forged eight-sided socket, nailed through, with a ridged head and a faceted iron butt) */
   const parts=[[lathe([[0,-.37],[.019,-.37],[.017,-.34],[.016,.6],[.0175,1.6],[0,1.6]].reverse(),12),woodMat,0,0,0],[sock,steelDark,0,1.58,0],[bandGeo(.0195,.008),steelDark,0,1.545,0],
-    st===2?[bladeGeo(.3,.016,1.66,false),bladeMat,0,0,0]:[bladeGeo(.24,.03,1.66,true),bladeMat,0,0,0],[bandGeo(.02,.03),steelDark,0,-.36,0]];
-  if(st===1){const w=new THREE.BoxGeometry(.075,.016,.01);parts.push([w,steelDark,0,1.6,0]);for(const sx of [-1,1])parts.push([new THREE.SphereGeometry(.009,8,6),steelDark,sx*.038,1.6,0]);}   // the wings of a boar spear
+    st===2?[bladeP(.3,.016,{sec:'diamond',base:1.66,th0:.0055,th1:.0018,pt:.5,tw:.6}),bladeMat,0,0,0]:[bladeP(.24,.03,{leaf:true,sec:'diamond',base:1.66,th0:.0052,th1:.0015}),bladeMat,0,0,0],
+    [toCreasedNormals(lathe([[.0175,.02],[.02,.012],[.0205,-.02],[.014,-.034],[0,-.036]].reverse(),8).toNonIndexed(),.4),steelDark,0,-.355,0]];
+  for(const sd of [-1,1])parts.push([new THREE.SphereGeometry(.0026,8,5,0,Math.PI*2,0,Math.PI/2),steelDark,sd*.0198,1.555,0,0,0,-sd*Math.PI/2]);
+  if(st===1){for(const sx of [-1,1]){const w=new THREE.Shape();w.moveTo(0,-.006);w.lineTo(.038,-.012);w.quadraticCurveTo(.044,-.004,.04,.006);w.lineTo(0,.009);w.closePath();const wg=new THREE.ExtrudeGeometry(w,{depth:.008,bevelEnabled:true,bevelThickness:.0015,bevelSize:.0012,bevelSegments:1});wg.translate(0,0,-.004);if(sx<0)wg.scale(-1,1,1);parts.push([wg,steelDark,sx*.012,1.6,0]);}}   // the lugs (wings) of a boar spear, forged with the socket   // the wings of a boar spear
   return wpnGroup(parts);}
 const WEAPONS={
   arming:{id:'arming',name:'Arming sword',kind:'blade',len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:1,make:st=>makeBlade(.78,.024,.15,st),styles:3},
