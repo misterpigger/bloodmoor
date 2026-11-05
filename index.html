@@ -263,8 +263,8 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map" data-map="ship" role="radio" aria-checked="false"><b>Mutiny</b><span>A longship in a heavy sea · the deck heaves, so keep low or lose your feet · over the side is the end</span></button>
       <button class="map" data-map="tavern" role="radio" aria-checked="false"><b>The Tavern</b><span>Night · a brawl: everyone starts bare-handed; knives, stools, tankards and bottles</span></button>
       <button class="map" data-map="mill" role="radio" aria-checked="false"><b>The Mill</b><span>Midday · a watermill: the race runs to the wheel, the gears bite, flour burns</span></button>
-      <button class="map gm" data-map="breach" role="radio" aria-checked="false"><b>The Breach</b><span>A castle wall with a breach in it · gauntlet and team battle</span></button>
-      <button class="map gm" data-map="road" role="radio" aria-checked="false"><b>The Road</b><span>A forest road and a cart · gauntlet and team battle</span></button>
+      <button class="map gm" data-map="breach" role="radio" aria-checked="false"><b>The Breach</b><span>Team battle: a siege · blue holds the castle, red storms it (breach, ladders, the gate) · also gauntlet</span></button>
+      <button class="map gm" data-map="road" role="radio" aria-checked="false"><b>The Road</b><span>Team battle: tug of war over a cart, the fallen come back · also gauntlet</span></button>
     </div>
     <div class="maps" id="sideRow" role="radiogroup" aria-label="Your side"><b class="tlab">Your side</b>
       <button class="map sd" data-sd="0" role="radio"><b>Either</b></button><button class="map sd" data-sd="1" role="radio"><b>Blue</b></button><button class="map sd" data-sd="2" role="radio"><b>Red</b></button>
@@ -404,7 +404,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=190;
+const BUILD=191;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -909,6 +909,16 @@ function buildChurch(cx,cz){
 }
 // a tree: a tapering trunk forking into boughs, the crown built of clumps of leaf cards (crossed planes cut out by a painted
 // spray of leaves) round a dark inner mass, so it reads as foliage with sky through it instead of a lumpy ball
+// (Build 191) a low bush drawn like the trees' crowns: two or three squat leafy clumps sitting on the ground (the scanned shrubs'
+// thin pale stems vanished in the game's light, so their leaves looked like bits floating in the air)
+function bush(x,z,s=1){const n=2+((srand()*2)|0),I=new THREE.Matrix4(),C=V();
+  for(let c=0;c<n;c++){const a=srand()*6.283,o=c?(.35+srand()*.25)*s:0,cx=x+Math.cos(a)*o,cz=z+Math.sin(a)*o,rr=(.42+srand()*.18)*s*(c?.85:1),cy=rr*.62;
+    const core=new THREE.IcosahedronGeometry(rr,1);core.scale(1,.72,1);addGeo('leaf',core,T(cx,cy,cz));C.set(cx,cy+.05*s,cz);
+    for(let i=0;i<10;i++){const u=srand()*1.6-.6,ph=srand()*6.283,r=Math.sqrt(Math.max(0,1-u*u)),d=V(r*Math.cos(ph),u*.7+.2,r*Math.sin(ph)).normalize(),w=(.7+srand()*.4)*s;
+      const g=new THREE.PlaneGeometry(w,w*.85);g.applyMatrix4(new THREE.Matrix4().compose(V().copy(C).addScaledVector(d,rr*(.85+srand()*.3)),new THREE.Quaternion().setFromUnitVectors(V(0,0,1),d).multiply(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),srand()*6.283)),V(1,1,1)));
+      if(g.attributes.position.array.some((v,k)=>k%3===1&&v<.02)){const P=g.attributes.position;for(let k=0;k<P.count;k++)P.setY(k,Math.max(.03,P.getY(k)));}
+      const P=g.attributes.position,N=g.attributes.normal;for(let k=0;k<P.count;k++){const nn=V(P.getX(k)-C.x,P.getY(k)-C.y+.3*s,P.getZ(k)-C.z).normalize();N.setXYZ(k,nn.x,nn.y,nn.z);}
+      addGeo(srand()<.5?'leafCard':'leafCard2',g,I);}}}
 function tree(x,z,s=1){
   const th=3.4*s;addGeo('bark',new THREE.CylinderGeometry(.13*s,.3*s,th,8),T(x,th/2,z));
   const boughs=3+((srand()*2)|0),tops=[];
@@ -2295,6 +2305,16 @@ function buildBreach(){
   addBox(-XW-1,-XW+1,ZB-1,WZ,WH);addBox(XW-1,XW+1,ZB-1,WZ,WH);addBox(-XW-1,XW+1,ZB-1.3,ZB+1.2,WH+1);
   placeModel('large_castle_door',{x:0,z:ZB+1.25,fit:[3.2,4,.3]},g=>{const m=new THREE.Mesh(boxUV(3.2,4,.3,1.5),MATS.wood);m.position.y=2;g.add(m);});
   {const b={pv:0,thatch:false,chimney:false,door:0,torch:false,light:false,noDoor:true};house(0,ZB-7,0,14,10,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(-14,ZB-6,0,9,7,4,{...b,pv:1,slate:true});house(14,ZB-5.5,0,9,6,4,{...b,stone:true,allStone:true,slate:true});}
+  /* (Build 191) for sieges between players: a wall-walk along the front wall behind a parapet, a stone stair up to it inside each end (along the
+     west part of the wall, and up the east side wall), and two long scaling ladders in the attackers' camp (the wall is 7.2 m) */
+  for(const [x0,x1] of [[-XW-1,bx-bhw],[bx+bhw,gx-ghw-3.2],[gx+ghw+3.2,XW+1]]){FLOORS.push({x0,x1,z0:WZ-WT/2,z1:WZ+WT/2,h:WH+.02});const pb=addBox(x0,x1,WZ+WT/2-.32,WZ+WT/2,WH+1.1);pb.y0=WH-.02;}
+  {const xa=bx-bhw-1.2,xb=-XW+1.2,z0=WZ-WT/2-1.5,z1=WZ-WT/2,n=Math.round(Math.abs(xb-xa)/.5),dir=Math.sign(xb-xa);
+    FLOORS.push({x0:Math.min(xa,xb),x1:Math.max(xa,xb),z0,z1,ramp:'x',a0:xa,a1:xb,h0:0,h1:WH+.02});
+    for(let k=0;k<n;k++){const xc=xa+dir*(k+.5)*.5,top=WH*(k+1)/n;addGeo('ashlar',boxUV(.5,top,z1-z0,1.5),T(xc,top/2,(z0+z1)/2));if(top>1.6)addBox(xc-.25,xc+.25,z0,z1,top-1.3);}}
+  {const x0=XW-2.5,x1=XW-1,za=WZ-WT/2-14.6,zb=WZ-WT/2-.02,n=Math.round((zb-za)/.5);
+    FLOORS.push({x0,x1,z0:za,z1:zb,ramp:'z',a0:za,a1:zb,h0:0,h1:WH+.02});
+    for(let k=0;k<n;k++){const zc=za+(k+.5)*.5,top=WH*(k+1)/n;addGeo('ashlar',boxUV(x1-x0,top,.5,1.5),T((x0+x1)/2,top/2,zc));if(top>1.6)addBox(x0,x1,zc-.25,zc+.25,top-1.3);}}
+  for(const [x,z] of [[-12,WZ+11.5],[15,WZ+12.5]])ladderAdd(x,z,Math.PI/2,8.4);
   // the banner the attackers are after, before the keep door, the ground round it marked with stones
   {const z=ZB+7,G=new THREE.Group();G.position.set(0,0,z);world.add(G);const P=new THREE.Group();G.add(P);
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,6.2,10),MATS.beam||MATS.wood);pole.position.y=3.1;pole.castShadow=true;P.add(pole);
@@ -2325,9 +2345,13 @@ function buildBreach(){
 }
 // lead a bot through the wall by a way that's open; the defenders' men-at-arms hold the yard rather than sally out after them
 function breachSteer(f,wish){const B=BREACH;if(!B||!f.entrant)return false;const A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z;
-  if(f.entrant.side==='D'){if(tg&&tg.pos.z>B.WZ-1&&z<B.WZ-1){const p=A.post||(A.post=[B.open[A.post0=(A.post0??((Math.random()*B.open.length)|0))%B.open.length].x+rand(-2.5,2.5),B.WZ-rand(4.5,6.5)]);const dx=p[0]-x,dz=p[1]-z,l=Math.hypot(dx,dz);if(l>.7)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;}return false;}
+  if(RUN&&RUN.siege&&f.entrant.raidS===0&&B.banner&&B.banner.st==='up'){const b=B.banner;   /* (Build 191) a defender with nobody close goes to the banner when they're at it */
+    if((!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>5)&&fighters.some(o=>o.alive&&!o.downed&&o.entrant&&o.entrant.raidS===1&&Math.hypot(o.pos.x-b.x,o.pos.z-b.z)<b.r+5)){const dx=b.x-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.2){wish.set(dx/l,0,dz/l);return true;}}}
+  if(RUN&&RUN.siege){const ms=f.entrant.raidS;let nb=null,nd=6;for(const o of fighters){if(!o.alive||o.downed||o.ragdoll||!o.entrant||o.entrant.raidS==null||o.entrant.raidS===ms)continue;const d=Math.hypot(o.pos.x-x,o.pos.z-z);if(d<nd){nd=d;nb=o;}}
+    if(nb){if(A.target!==nb){A.target=nb;}return false;}}   /* (Build 191) in a siege, a foe within 6 m is the one to fight: defenders held their post facing a man out in the camp while the one beside them cut them down */
+  if(f.entrant.side==='D'||RUN&&RUN.siege&&f.entrant.raidS===0){if(tg&&tg.pos.z>B.WZ-1&&z<B.WZ-1&&!(RUN&&RUN.siege&&Math.hypot(tg.pos.x-x,tg.pos.z-z)<14)){const p=A.post||(A.post=[B.open[A.post0=(A.post0??((Math.random()*B.open.length)|0))%B.open.length].x+rand(-2.5,2.5),B.WZ-rand(4.5,6.5)]);const dx=p[0]-x,dz=p[1]-z,l=Math.hypot(dx,dz);if(l>.7)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;}return false;}
   if(z<B.WZ-1.3){   // inside: with nobody close to fight, make for the banner
-    const b=B.banner;if(b&&b.st==='up'&&RUN&&RUN.mode==='breach'&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>6.5)){const dx=b.x+(A.lane||0)*.6-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.6){wish.set(dx/l,0,dz/l);return true;}}return false;}
+    const b=B.banner;if(b&&b.st==='up'&&RUN&&(RUN.mode==='breach'||RUN.siege)&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>6.5)){const dx=b.x+(A.lane||0)*.6-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.6){wish.set(dx/l,0,dz/l);return true;}}return false;}
   if(tg&&tg.pos.z>B.WZ-1.3)return false;   // fighting out here
   if(!A.way||(A.way.gate&&!B.open.includes(A.way))){let best=null,bd=1e9;for(const o of B.open){const d=Math.abs(x-o.x)+(o.gate?2:0)+rand(0,3);if(d<bd){bd=d;best=o;}}A.way=best;A.lane=rand(-1,1)*(best.hw-.8);}
   const o=A.way,lx=o.x+A.lane;let tx,tz;if(Math.abs(x-lx)>.5&&z>B.WZ+1.3){tx=lx;tz=B.WZ+1.8;}else{tx=lx;tz=B.WZ-3;}
@@ -2337,7 +2361,7 @@ function breachGateBreak(net=true){const B=BREACH;if(!B||!B.gate||B.gate.st!=='s
   B.open.push({x:g.x,hw:g.hw-.2,gate:true});if(B.ram){B.ram.position.set(g.x+2.6,.25,B.WZ+6);B.ram.rotation.y=.35;B.ram.children.forEach((c,i)=>{if(i>1)c.visible=false;});B.ramGone=true;}const p=V(g.x,1.5,B.WZ);sfx('crush',p,1,.6,0,false);sThud(p,1.2);spawnDust(p,30,1.4,.8);if(net&&NET.mode==='host')netEv(['BG']);}
 function breachBannerFall(net=true){const B=BREACH;if(!B||!B.banner||B.banner.st!=='up')return;B.banner.st='falling';B.banner.t=0;mapDirty=true;if(net&&NET.mode==='host')netEv(['BF']);}
 function breachVisual(dt){const B=BREACH;if(!B)return;
-  if(B.ram){const g=B.gate,on=g&&g.st==='shut'&&RUN&&RUN.mode==='breach'&&!RUN.over||(NET.mode==='client'&&g&&g.st==='shut'&&NET.mode2==='breach');B.ramT+=dt;
+  if(B.ram){const g=B.gate,on=g&&g.st==='shut'&&RUN&&(RUN.mode==='breach'||RUN.siege)&&!RUN.over||(NET.mode==='client'&&g&&g.st==='shut'&&(NET.mode2==='breach'||NET.mode2==='team'));B.ramT+=dt;
     const ph=(B.ramT%3.2)/3.2,sw=on?(ph<.8?-Math.sin(ph/.8*Math.PI/2)*.9:-.9+Math.pow((ph-.8)/.2,2)*.9):0;if(!B.ramGone)B.ram.position.z=B.WZ+3.8+sw;   // drawn back slowly, then driven in
     if(on&&ph>=.98&&!B.ramHit){B.ramHit=true;const p=V(g.x,1.3,B.WZ+.4);sfx('crush',p,.8,.5,0,false);spawnDust(p,6,.6,.4);g.G.position.z=B.WZ-.06;if(player&&Math.hypot(player.pos.x-g.x,player.pos.z-B.WZ)<9)applyKick&&applyKick(V(0,0,-1),.15);}
     if(ph<.5){B.ramHit=false;g&&g.st==='shut'&&(g.G.position.z+=(B.WZ-g.G.position.z)*Math.min(1,dt*8));}}
@@ -2454,7 +2478,7 @@ function buildRaid(){
   let sd=4219;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   for(let k=0;k<150;k++){const side=r()<.5?-1:1,x=side*(25+Math.pow(r(),1.6)*22),z=(r()-.5)*150;tree(x,z,.85+r()*.5);addCircle(x,z,.32,4);}
   for(let k=0;k<26;k++){const x=(r()-.5)*36,z=(r()-.5)*(2*RAID_W0-14);if(Math.abs(x-rx(z))<4||Math.abs(x-R.bx)<4.5||Math.abs(x+18)<6&&Math.abs(z-2)<7)continue;if(r()<.6)tree(x,z,.8+r()*.4);addCircle(x,z,.32,4);}
-  scatterModels(['shrub_02','shrub_03','shrub_04'],70,(x,z)=>Math.abs(z)<RAID_W0-4&&Math.abs(x-rx(z))>3.5,77,.7,1.2);
+  for(let k=0,t=0;k<70&&t<1400;t++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!(Math.abs(z)<RAID_W0-4&&Math.abs(x-rx(z))>3.5))continue;bush(x,z,.7+r()*.6);k++;}   // (Build 191: drawn bushes, not the scanned shrubs that looked like floating leaves)
   // the chapel: broken walls waist to head high, an arch standing
   {const cx=-18,cz=2,st=(x0,x1,z0,z1,h)=>{addGeo('ashlar',boxUV(x1-x0,h,z1-z0,2),T((x0+x1)/2,h/2,(z0+z1)/2));addBox(x0,x1,z0,z1,h);};
     st(cx-4,cx-3.5,cz-5,cz+1,2.4);st(cx-4,cx-3.5,cz+2.6,cz+5,1.3);st(cx+3.5,cx+4,cz-5,cz-1.5,1.1);st(cx+3.5,cx+4,cz+1,cz+5,2.8);st(cx-4,cx-1,cz+5,cz+5.5,1.8);st(cx+1.2,cx+4,cz+5,cz+5.5,3.2);st(cx-4,cx+4,cz-5.5,cz-5,.9);
@@ -2501,7 +2525,12 @@ function ladStanding(d){const a=ladAxis(d,_ld3);if(a.y<.8)return false;const b=d
 function wallAhead(f){const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw);for(let s=.4;s<=2.6;s+=.1){const x=f.pos.x+fx*s,z=f.pos.z+fz*s;
     for(const b of boxes){if(b.h<2||b.dyn||x<b.x0||x>b.x1||z<b.z0||z>b.z1)continue;if(b.y0&&b.y0>f.pos.y+1)continue;
       const dx0=x-b.x0,dx1=b.x1-x,dz0=z-b.z0,dz1=b.z1-z,m=Math.min(dx0,dx1,dz0,dz1);const n=m===dx0?[-1,0]:m===dx1?[1,0]:m===dz0?[0,-1]:[0,1];
-      const top=Math.max(b.h,floorY(x,z,b.h+.5));return {dist:s,h:top,nx:n[0],nz:n[1],fx:x-n[0]*0,fz:z};}}return null;}
+      const top=Math.max(b.h,floorY(x,z,b.h+.5));return {dist:s,h:top,nx:n[0],nz:n[1],fx:x-n[0]*0,fz:z};}
+    /* (Build 191) the edge of a raised floor counts too (the Mill's stone floor stands on posts, so once its ladder was taken down there was
+       nothing to set it against again) */
+    for(const F of FLOORS){if(F.ob||F.ramp||F.down||F.h<f.pos.y+1.6||F.h>f.pos.y+7.5||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;
+      const dx0=x-F.x0,dx1=F.x1-x,dz0=z-F.z0,dz1=F.z1-z,m=Math.min(dx0,dx1,dz0,dz1);if(m>.6)continue;const n=m===dx0?[-1,0]:m===dx1?[1,0]:m===dz0?[0,-1]:[0,1];
+      return {dist:s,h:F.h,nx:n[0],nz:n[1],fx:x,fz:z};}}return null;}
 function ladderUse(f,dry){if(!f||!f.alive||f.ragdoll||!LADDERS.length)return false;
   if(f.climb){if(!dry)f.climb=null;return 'Let go of the ladder';}
   const c=f.ladCarry;
@@ -2600,7 +2629,7 @@ function buildRoad(){
   let sd=4711;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   // the forest: trees thick a few metres off the road, thinning out with distance; shrubs between
   for(let k=0;k<260;k++){const z=Z0-10+r()*(Z1-Z0+24),side=r()<.5?-1:1,off=5+Math.pow(r(),1.9)*28,x=roadX(z)+side*off;if(z>Z1-6&&Math.abs(x)<16)continue;tree(x,z,.85+r()*.55);addCircle(x,z,.32,4);}
-  scatterModels(['shrub_02','shrub_03','shrub_04'],110,(x,z)=>{const d=Math.abs(x-roadX(z));return d>3.4&&d<14&&z<Z1-6;},55,.7,1.3);
+  {let sd=55;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let k=0,t=0;k<110&&t<2200;t++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP,d=Math.abs(x-roadX(z));if(!(d>3.4&&d<14&&z<Z1-6))continue;bush(x,z,.7+r()*.7);k++;}}   // (Build 191: drawn bushes)
   // fallen trunks the bandits hide behind, a wayside cross, a milestone
   for(let k=0;k<10;k++){const z=Z0+8+k*13+r()*4,side=k%2?1:-1,x=roadX(z)+side*(7+r()*6);addGeo('bark',new THREE.CylinderGeometry(.28,.34,4.5,8),T(x,.3,z,r()*3,0,Math.PI/2));addBox(x-1.3,x+1.3,z-1.3,z+1.3,.6);}
   {const z=-30,x=roadX(z)+3.4;addGeo('stone',boxUV(.5,.4,.5,1),T(x,.2,z));addGeo('beam',boxUV(.14,2.2,.14,1),T(x,1.3,z));addGeo('beam',boxUV(.9,.12,.12,1),T(x,1.9,z));addCircle(x,z,.3,2);}
@@ -2630,7 +2659,7 @@ function buildRoad(){
 function roadPlaceCart(){const R=ROAD,c=R.cart;const x=roadX(c.z),[dx,dz]=roadDir(c.z);c.G.position.set(x,0,c.z);c.G.rotation.y=Math.atan2(dx,dz);
   const b=c.box;gridRemove(b);b.x0=x-1.15;b.x1=x+1.15;b.z0=c.z-1.5;b.z1=c.z+1.5;gridInsert(b,b.x0-1,b.x1+1,b.z0-1,b.z1+1);c.bz=c.z;}
 const cartFront=()=>{const c=ROAD.cart;const [dx,dz]=roadDir(c.z);return [roadX(c.z)+dx*2.6,c.z+dz*2.6];};
-function roadSteer(f,wish){const R=ROAD;if(!R||!f.entrant||!R.cart||!RUN||RUN.mode!=='road')return false;const c=R.cart,A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z,cx=roadX(c.z);
+function roadSteer(f,wish){const R=ROAD;if(R&&R.cart&&RUN&&RUN.tug&&f.entrant)return tugSteer(f,wish);if(!R||!f.entrant||!R.cart||!RUN||RUN.mode!=='road')return false;const c=R.cart,A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z,cx=roadX(c.z);
   const go=(tx,tz,stop=.5)=>{const dx=tx-x,dz=tz-z,l=Math.hypot(dx,dz);if(l>stop)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;};
   if(f.entrant.carter){const [fx,fz]=cartFront(),[dx,dz]=roadDir(c.z),s=f.entrant.carter;return go(fx+dz*.45*s,fz-dx*.45*s,.25);}   // the carters keep to the shafts whatever happens
   if(f.entrant.side==='D'&&!fighters.some(q=>q.alive&&!q.downed&&q.entrant&&q.entrant.carter)&&f===fighters.find(q=>q.alive&&!q.downed&&q.entrant&&q.entrant.ally)&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>4)){const [fx,fz]=cartFront();return go(fx,fz,.3);}   // with both carters down, a man-at-arms takes the shafts
@@ -9645,16 +9674,64 @@ document.querySelectorAll('.sd').forEach(b=>b.addEventListener('click',()=>{SIDE
 function showTeamN(){document.querySelectorAll('.tn').forEach(o=>{const on=+o.dataset.tn===TEAMN;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});}
 document.querySelectorAll('.tn').forEach(b=>b.addEventListener('click',()=>{TEAMN=+b.dataset.tn;try{localStorage.setItem('bloodmoor-teamn',String(TEAMN));}catch(e){}showTeamN();if(NET.mode==='host')hostLobby();}));showTeamN();
 function teamStart(H){RUN={mode:'team',H,names:BOT_NAMES(),ni:0,team:TOUCH?Math.min(TEAMN,4):TEAMN,kills:[0,0],t0:simTime};roundSetup();raidEntrants(H);
+  if(BREACH&&BREACH.banner){siegeStart(H);return;}
+  if(ROAD&&ROAD.cart){tugStart(H);return;}
   const sp=duelSpots(Math.min(14,4+RUN.team*1.6));
   for(let s=0;s<2;s++){const [cx,cz]=sp[s],[ox,oz]=sp[1-s],L=RUN.en[s];let fx=ox-cx,fz=oz-cz;const fl=Math.hypot(fx,fz)||1;fx/=fl;fz/=fl;
     L.forEach((en,k)=>{let x=cx,z=cz;if(k){for(let t=0;t<30;t++){const a=Math.random()*6.283,r=1.2+Math.sqrt(Math.random())*Math.min(4,1+L.length*.35);const tx=cx+Math.cos(a)*r-fx*r*.4,tz=cz+Math.sin(a)*r-fz*r*.4;if(SHIP||isFree(tx,tz,.6)&&groundY(tx,tz,0)>-.05){x=tx;z=tz;break;}}}
       const kit=en.human?[ownWeapon(en,'longsword'),['kettle','brigandine']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=Math.atan2(fx,fz);f.ai.retarget=0;});}
   hostSendStart();teamHud();banner('Team battle',`${RUN.team} a side · nobody comes back · you are ${H[0].raidS?'red':'blue'}`);}
+// ---- (Build 191) team battle on the Breach is a siege: blue holds the castle, red storms it from the camp. Red wins by cutting blue down to
+// the last man or holding the banner (BR_HOLD with no defender on his feet by it); blue wins by holding out SIEGE_TIME. The gate gives way at
+// SIEGE_GATE. Nobody comes back. Bots: blue's hold a line behind the openings when a foe is outside, red's come through and go for the banner.
+const SIEGE_TIME=360,SIEGE_GATE=90;
+function siegeKit(en,k,s){return en.human?[ownWeapon(en,'longsword'),s?['kettle','mail']:['kettle','brigandine']]:RAID_KIT[k%RAID_KIT.length];}
+function siegeStart(H){const R=RUN,B=BREACH;R.siege=true;R.hold=0;
+  R.en[0].forEach((en,k)=>{const x=((k%5)-2)*2.2+rand(-.3,.3),z=B.banner.z+3+Math.floor(k/5)*1.8;const f=spawnEntrant(en,x,z,siegeKit(en,k,0),en.human?null:en.skill);f.yaw=0;f.ai.retarget=0;});
+  R.en[1].forEach((en,k)=>{const x=((k%6)-2.5)*2.6+rand(-.4,.4),z=B.WZ+28+Math.floor(k/6)*2;const f=spawnEntrant(en,x,z,siegeKit(en,k,1),en.human?null:en.skill);f.yaw=Math.PI;f.ai.retarget=0;});
+  hostSendStart();siegeHud();const me=H[0]&&H[0].raidS;
+  banner('The siege',me?'You storm the castle · through the breach, over the wall or the gate when it falls · take the banner or cut them down':'You hold the castle · keep them off the banner until time runs out');}
+function siegeHud(){const R=RUN,a=teamAlive(),left=Math.max(0,SIEGE_TIME-(simTime-R.t0));MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`${fmtClock(left)} left`+(R.hold>.2?` · banner ${Math.round(100-R.hold/BR_HOLD*100)}%`:R.gateT?'':` · gate ${fmtClock(Math.max(0,SIEGE_GATE-(simTime-R.t0)))}`)];}
+function siegeTick(){const R=RUN,B=BREACH;if(!B||R.ended)return;const h=1/240;
+  if(!R.gateT&&simTime-R.t0>SIEGE_GATE&&B.gate&&B.gate.st==='shut'){R.gateT=simTime;breachGateBreak();banner('The gate is down','They can come through the gate now');}
+  const b=B.banner;let a=0,d=0;if(b&&b.st==='up')for(const f of fighters){if(!f.alive||f.downed||f.ragdoll||!f.entrant||f.entrant.raidS==null)continue;if(Math.hypot(f.pos.x-b.x,f.pos.z-b.z)>b.r)continue;if(f.entrant.raidS===1)a++;else d++;}
+  if(a&&!d)R.hold=Math.min(BR_HOLD,R.hold+h*(1+.35*(a-1)));else if(d)R.hold=Math.max(0,R.hold-h*(a?.3:1.2));
+  if(a&&!d&&!R.warned&&R.hold>2){R.warned=true;banner('The banner!',`Red is on the banner`);}if(R.hold<1)R.warned=false;
+  if(((R.tk=(R.tk||0)+1)%24)===0)siegeHud();
+  const end=(w,why)=>{R.ended=true;const a2=teamAlive();R.next=simTime+3;R.after=()=>endRun(R.en[w].filter(e=>e.human),'Defeat',`${w?'Red':'Blue'} won · ${a2[0]} – ${a2[1]} standing`,why);};
+  if(R.hold>=BR_HOLD&&b&&b.st==='up'){breachBannerFall();banner('The banner fell','Red has taken the castle');end(1,'Red took the banner.');}
+  else if(simTime-R.t0>SIEGE_TIME){banner('The castle held','Time is up · blue held out');end(0,'Blue held the castle.');}}
+// ---- (Build 191) team battle on the Road is a tug of war over the cart: it starts halfway; whichever side has men by it with none of the
+// other side's pushes it toward the other side's end (blue toward the village gate, red toward the burnt farm), faster with more. Get it
+// to their end to win; at time up, whoever has it in the other side's half wins. The fallen come back TUG_BACK s later, 18 m behind the cart.
+const TUG_TIME=420,TUG_BACK=9,TUG_R=3.4;
+function tugStart(H){const R=RUN,RD=ROAD,c=RD.cart;R.tug=true;R.back=[];R.mid=(RD.Z0+RD.Z1)/2+2;c.z=R.mid;c.v=0;roadPlaceCart();if(NET.mode==='host')netEv(['RC',r3(c.z)]);roadLogClear();
+  for(let s=0;s<2;s++)R.en[s].forEach((en,k)=>tugSpawn(en,k));
+  hostSendStart();tugHud();banner('Tug of war',`Push the cart to ${H[0]&&H[0].raidS?'the burnt farm':'the village gate'} · stand by it with none of them there · the fallen come back`);}
+function tugSpawn(en,k){const RD=ROAD,c=RD.cart,s=en.raidS,z=clamp(c.z+(s?18:-18)+rand(-2,2),RD.Z0+4,RD.Z1-6),x=roadX(z)+((k%4)-1.5)*1.6+rand(-.3,.3);
+  const f=spawnEntrant(en,x,z,siegeKit(en,k,s),en.human?null:en.skill);f.yaw=s?Math.PI:0;f.ai.retarget=0;return f;}
+function tugHud(){const R=RUN,c=ROAD.cart,a=teamAlive(),left=Math.max(0,TUG_TIME-(simTime-R.t0)),dB=Math.max(0,ROAD.end-c.z),dR=Math.max(0,c.z-(ROAD.Z0+6));
+  MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`${fmtClock(left)} left · cart ${Math.round(dB)} m from the gate, ${Math.round(dR)} m from the farm`+(R.push?` · ${R.push>0?'blue':'red'} pushing`:'')];}
+function tugTick(){const R=RUN,RD=ROAD,c=RD.cart;if(!c||R.ended)return;const h=1/240;
+  for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}const f=tugSpawn(q.en,(Math.random()*4)|0);hostSendStart();if(f.isPlayer)state='playing';}
+  const cx=roadX(c.z);let n=[0,0];for(const f of fighters){if(!f.alive||f.downed||f.ragdoll||!f.entrant||f.entrant.raidS==null)continue;if(Math.hypot(f.pos.x-cx,f.pos.z-c.z)<TUG_R)n[f.entrant.raidS]++;}
+  const dir=n[0]&&!n[1]?1:n[1]&&!n[0]?-1:0,want=simTime<CD_END?0:dir*Math.min(1.35,.85+.17*(Math.max(n[0],n[1])-1));R.push=dir;
+  c.v=(c.v||0)+(want-(c.v||0))*Math.min(1,h*1.6);c.z+=c.v*h;if(Math.abs(c.z-c.bz)>.25)roadPlaceCart();
+  if((c.st=(c.st||0)+h)>.5){c.st=0;if(NET.mode==='host')netEv(['RC',r3(c.z)]);}
+  if(((R.tk=(R.tk||0)+1)%24)===0)tugHud();
+  const end=(w,why)=>{R.ended=true;c.v=0;R.next=simTime+3;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'A draw':'Defeat',w<0?'Neither side got the cart home':`${w?'Red':'Blue'} won`,why);};
+  if(c.z>=RD.end){banner('Blue wins','The cart is at the village gate');end(0,'Blue got the cart to the village.');}
+  else if(c.z<=RD.Z0+6){banner('Red wins','The cart is back at the burnt farm');end(1,'Red got the cart to the farm.');}
+  else if(simTime-R.t0>TUG_TIME){const w=c.z>R.mid+.5?0:c.z<R.mid-.5?1:-1;banner(w<0?'Neither side':`${w?'Red':'Blue'} wins`,'Time is up');end(w,w<0?'The cart never left the middle.':`${w?'Red':'Blue'} had the cart on the other side's half.`);}}
+function tugSteer(f,wish){const c=ROAD.cart,A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z,s=f.entrant.raidS;if(s==null)return false;
+  if(tg&&tg.alive&&!tg.ragdoll&&Math.hypot(tg.pos.x-x,tg.pos.z-z)<6)return false;   // fight whoever is close
+  const side=A.tside||(A.tside=Math.random()<.5?-1:1),tz=c.z+(s?2.2:-2.2),tx=roadX(tz)+side*1.1,dx=tx-x,dz=tz-z,l=Math.hypot(dx,dz);if(l>.6)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;}
 function teamAlive(){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;return a;}
 function fmtClock(t){t=Math.max(0,t);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
 function teamHud(){const a=teamAlive(),R=RUN;MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`${fmtClock(simTime-(R.t0||0))} · ${R.kills[0]+R.kills[1]} fallen`];}
 function teamKill(killer,victim){const R=RUN,en=victim.entrant;if(en&&en.raidS!=null&&killer&&killer.entrant&&killer.entrant.raidS!=null&&killer.entrant.raidS!==en.raidS)R.kills[killer.entrant.raidS]++;
-  teamHud();const a=teamAlive();if(R.ended)return;
+  if(R.tug){if(en&&en.raidS!=null&&!R.ended){R.back.push({en,at:simTime+TUG_BACK});if(victim.isPlayer)note(`Back on your feet in ${TUG_BACK} s`,'sm');}tugHud();return;}
+  if(R.siege)siegeHud();else teamHud();const a=teamAlive();if(R.ended)return;
   if(!a[0]||!a[1]){R.ended=true;const w=a[0]?0:a[1]?1:-1;banner(w<0?'Nobody is left':`${w?'Red':'Blue'} wins`,`${a[0]} – ${a[1]} standing`);
     R.next=simTime+3.5;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'Nobody won':'Defeat',`${w<0?'Both sides fell':(w?'Red':'Blue')+' won'} · ${R.kills[0]+R.kills[1]} fallen`,w<0?'':`${w?'Red':'Blue'} holds the field.`);}}
 function modeKill(killer,victim){
@@ -9692,7 +9769,7 @@ function modeTick(){const R=RUN;if(!R||R.over)return;
   if(R.mode==='breach')breachTick();
   if(R.mode==='road')roadTick();
   if(R.mode==='raid')raidTick();
-  if(R.mode==='team'&&((R.tk=(R.tk||0)+1)%60===0))teamHud();
+  if(R.mode==='team'){if(R.siege)siegeTick();else if(R.tug)tugTick();else if((R.tk=(R.tk||0)+1)%60===0)teamHud();}
   if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),[ownWeapon(q.en,'longsword'),[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
