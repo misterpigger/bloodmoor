@@ -401,10 +401,10 @@ const pick=a=>a[(Math.random()*a.length)|0];
 const FB_PELV=['Hips','LeftUpLeg','RightUpLeg'];
 let MSAA_N=0;function MSAA_ON(){return MSAA_N>0;}
 const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=new THREE.Quaternion(),_m4c=new THREE.Matrix4();
-const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
+const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=188;
+const BUILD=189;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -5770,7 +5770,7 @@ class Sword{
 // shoves it by mass and speed (CTX). Floors on top of them (tables, benches, chests) ride along while they stay upright and go when
 // they tip. On Mutiny the deck's heel tilts gravity. Only the host simulates; friends get the poses in snapshots (dp).
 let RP=null,PRW=null,dynKey=-1,dynPh=0,dynN=0,dynFull=0;
-const DYN=[],DYNK=new Map(),PSOLID=[],PROX=new Map();
+const DYN=[],DYNK=new Map(),PSOLID=[],PROX=new Map();let dynSane=0;
 const DG_S=1,DG_L=2,DG_H=4,DG_P=8,DG_PL=16,DG_PR=32,DG_M=64;   // fixed world, light, heavy, weapons and fists, standing bodies, fallen bodies, medium (benches)
 const DGR_S=grp(DG_S,DG_L|DG_H|DG_M),DGR_L=grp(DG_L,DG_S|DG_L|DG_H|DG_M|DG_P|DG_PL|DG_PR),DGR_H=grp(DG_H,DG_S|DG_L|DG_H|DG_M|DG_P),DGR_M=grp(DG_M,DG_S|DG_L|DG_H|DG_M|DG_P|DG_PR),DGR_P=grp(DG_P,DG_L|DG_H|DG_M),DGR_PL=grp(DG_PL,DG_L),DGR_PR=grp(DG_PR,DG_L|DG_M);
 const CTX={m:0,v:V(),y:0,f:null,q:null,h:0};
@@ -5784,7 +5784,7 @@ function unStatic(c){if(!c)return;gridRemove(c);for(const L of [boxes,circles]){
 // register an object already placed in the world. o: m (kg), sh (shapes) or auto ('box'|'cyl'|'table'|'cylx') from its meshes,
 // col (its static collider), floor (a FLOORS entry on top of it), noOb (heavy but never blocks walkers), fx (flames on it), snd
 function dynAdd(obj,o={}){const d=Object.assign({obj,m:5,body:null,ob:null,floor:null,fl:null,fx:null,sh:null,lb:null,gone:false,mv:false,slp:true,net:0,snd:'wood'},o);
-  d.heavy=d.m>=12;obj.updateMatrixWorld(true);const p=obj.getWorldPosition(V());d.key=dynKeyOf(p.x,p.y,p.z);DYNK.set(d.key,d);DYN.push(d);
+  d.heavy=d.m>=12;obj.updateMatrixWorld(true);const p=obj.getWorldPosition(V());d.p0=p.clone();d.key=dynKeyOf(p.x,p.y,p.z);DYNK.set(d.key,d);DYN.push(d);
   if(d.floor)d.floor.dyn=d;if(d.col)d.col.dyn=d;
   if(o.sh){d.shFixed=true;dynShape(d,o.sh);}else if(o.auto&&!o.wait)dynAuto(d);
   return d;}
@@ -6232,7 +6232,8 @@ function dynKick(f,fw){if(!PRW)return false;for(const d of DYN){const b=d.body;i
     b.applyImpulseAtPoint({x:fw.x*J,y:0,z:fw.z*J},{x:t.x-fw.x*ext*.8,y:hy,z:t.z-fw.z*ext*.8},true);sThud(V(t.x,hy,t.z),.7);return true;}
   return false;}
 // a stand-in capsule from a to b that follows its target: its speed is set to reach the target this step, the solver does the rest
-function proxyCap(k,a,b,r,m,g){_xdv.subVectors(b,a);const L=_xdv.length(),hh=Math.max(.004,L/2);_xdv2.addVectors(a,b).multiplyScalar(.5);
+const _xNaN=new THREE.Vector3();
+function proxyCap(k,a,b,r,m,g){if(!Number.isFinite(a.x+a.y+a.z+b.x+b.y+b.z)){a=b=_xNaN.set(0,-50,0);}   /* (Build 189) never hand Rapier a NaN stand-in */_xdv.subVectors(b,a);const L=_xdv.length(),hh=Math.max(.004,L/2);_xdv2.addVectors(a,b).multiplyScalar(.5);
   if(L>1e-4)_xdq.setFromUnitVectors(Y_AXIS,_xdv.multiplyScalar(1/L));else _xdq.identity();
   let x=PROX.get(k);if(x&&x.off){x.b.setEnabled(true);x.off=false;x.fresh=true;}if(!x){x={b:PRW.createRigidBody(RP.RigidBodyDesc.dynamic().setGravityScale(0).setCcdEnabled(true).setCanSleep(false).setTranslation(_xdv2.x,_xdv2.y,_xdv2.z).setRotation({x:_xdq.x,y:_xdq.y,z:_xdq.z,w:_xdq.w})),c:null,hh:0,r:0,g:0,vc:V(),used:0,fresh:true,sw:null,rag:null,ci:-1};PROX.set(k,x);}
   if(!x.c||Math.abs(x.hh-hh)>.03||Math.abs(x.r-r)>.004){if(x.c)PRW.removeCollider(x.c,false);x.c=PRW.createCollider(RP.ColliderDesc.capsule(hh,r).setMass(m).setFriction(.5).setRestitution(.15).setCollisionGroups(g),x.b);x.hh=hh;x.r=r;x.g=g;}
@@ -6265,6 +6266,10 @@ function dynStep2(){dynN++;
       else if(f.fists)for(const sd of ['R','L']){const a=f.fists[sd],k=f.id*64+(sd==='R'?41:42);if(a&&a.pos&&!(f.climb||f.ladCarry||f.cartHold)&&dynReach(L,a.pos,a.pos,.35)){   /* (hands holding a ladder or a cart's shafts don't shove it) */const x=proxyCap(k,a.pos,a.pos,.05,2.2,DGR_P);x.sw=null;x.rag=null;}else proxyOff(k);}}}
   for(const s of freeSwords){if(s.owner&&!s.free)continue;const k=1e7+s.id;if(RAID&&onCartBed(s)){proxyOff(k);continue;}   /* (Build 188) whatever rides in a cart moves with it: its stand-in shoved the cart it lay in, the cart carried it faster, and the two ran away (the game froze taking up the shafts with a box aboard) */if(!(s.flying||(s.rb?(()=>{const v=s.rb.linvel();return v.x*v.x+v.y*v.y+v.z*v.z>.09;})():s.H.distanceToSquared(s.Hp)>4e-6))){proxyOff(k);continue;}const L=dynNear(s.H.x,s.H.z);if(!L||!dynReach(L,s.H,s.T,.5)){proxyOff(k);continue;}proxySword(k,s,false);}
   PRW.step();
+  /* (Build 189) a loose thing whose numbers go bad, or that is flung absurdly fast, is put back still: Rapier can hang on a NaN body */
+  if(++dynSane%30===0||RAID)for(const d of DYN){const b=d.body;if(!b||d.gone||b.isSleeping())continue;const t=b.translation(),v=b.linvel(),w=b.angvel(),q=b.rotation();
+    if(Number.isFinite(t.x+t.y+t.z+q.x+q.y+q.z+q.w)&&Math.abs(v.x)+Math.abs(v.y)+Math.abs(v.z)<150&&Math.abs(w.x)+Math.abs(w.y)+Math.abs(w.z)<200)continue;
+    if(!Number.isFinite(t.x+t.y+t.z+q.x+q.y+q.z+q.w)){b.setTranslation({x:d.p0.x,y:d.p0.y+.05,z:d.p0.z},true);b.setRotation({x:0,y:0,z:0,w:1},true);}b.setLinvel({x:0,y:0,z:0},true);b.setAngvel({x:0,y:0,z:0},true);gameError(new Error('loose thing reset ('+(d.kind||d.snd)+')'));}
   // what the loose things did back: a blade that met something heavy loses speed, a body that hit a table is held up by it
   for(const [k,x] of PROX){if(x.used!==dynN){if(dynN-x.used>240){PRW.removeRigidBody(x.b);PROX.delete(k);}else if(!x.off){x.b.setEnabled(false);x.off=true;}continue;}
     const v=x.b.linvel(),dx=v.x-x.vc.x,dy=v.y-x.vc.y,dz=v.z-x.vc.z,d2=dx*dx+dy*dy+dz*dz;if(d2<.36)continue;
@@ -7522,7 +7527,7 @@ function forearmRoll(B,side,qHand){const F=B[side+'ForeArm'],Hd=B[side+'Hand'];i
   const t=_fq2.x*_fa.x+_fq2.y*_fa.y+_fq2.z*_fa.z;let tw=wrapA(2*Math.atan2(t,_fq2.w));   // its twist about that axis
   /* Build 157: the twist is taken nearest the one it had (it used to wrap at ±180°, and a grip turned past that snapped the forearm from
      fully one way to fully the other in a frame: the hand flipping over on the grip), and the forearm turns at most ~20° a frame */
-  const ud=Hd.userData;if(FR_FIX&&ud._ptw!=null){while(tw-ud._ptw>Math.PI)tw-=2*Math.PI;while(tw-ud._ptw<-Math.PI)tw+=2*Math.PI;if(Math.abs(tw)>2.6*Math.PI/2)tw=wrapA(tw);}
+  const ud=Hd.userData;if(ud._ptw!=null&&!(Math.abs(ud._ptw)<20))ud._ptw=null;if(FR_FIX&&ud._ptw!=null){while(tw-ud._ptw>Math.PI)tw-=2*Math.PI;while(tw-ud._ptw<-Math.PI)tw+=2*Math.PI;if(Math.abs(tw)>2.6*Math.PI/2)tw=wrapA(tw);}
   let roll=clamp(tw*.8,-1.45,1.45);if(FR_FIX&&ud._prl!=null&&ud._prT===FR_TICK-1)roll=ud._prl+clamp(roll-ud._prl,-.35,.35);
   if(window.__rstat&&ud._prl!=null&&ud._prT===FR_TICK-1){const d=Math.abs(roll-ud._prl);window.__rstat.n++;if(d>.7)window.__rstat.big++;window.__rstat.sum+=d;}
   ud._ptw=tw;ud._prl=roll;ud._prT=FR_TICK;if(Math.abs(roll)>1e-3){_fq.setFromAxisAngle(_fa,roll);F.quaternion.multiply(_fq);F.updateWorldMatrix(false,false);}
@@ -8875,6 +8880,13 @@ function logic(dt){FR_TICK++;
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
+// (Build 189) anything that goes wrong shows in a small box (first few distinct errors), so a player can screenshot it for the fix
+const _errSeen=new Map();function gameError(e){try{const m=String(e&&e.message||e).slice(0,160),st=String(e&&e.stack||'').split('\n').slice(1,3).map(l=>l.trim().replace(/^at /,'').replace(/\(?https?:\/\/[^)]*?(index\.html)?:/,'line ').replace(/\)$/,'')).join(' · ');
+  const k=m+st;const n=(_errSeen.get(k)||0)+1;_errSeen.set(k,n);if(n>1&&n%120)return;if(_errSeen.size>4&&n===1)return;console.error(e);
+  let b=document.getElementById('errbox');if(!b){b=document.createElement('div');b.id='errbox';b.style.cssText='position:fixed;left:8px;bottom:8px;max-width:min(560px,90vw);z-index:9999;background:rgba(40,0,0,.86);color:#fbb;font:12px/1.35 monospace;padding:6px 26px 6px 8px;border:1px solid #a33;border-radius:4px;white-space:pre-wrap;pointer-events:auto';
+    const x=document.createElement('span');x.textContent='×';x.style.cssText='position:absolute;right:6px;top:2px;cursor:pointer;font-size:15px';x.onclick=()=>b.remove();b.appendChild(x);document.body.appendChild(b);}
+  const d=document.createElement('div');d.textContent=`Build ${BUILD} error${n>1?' ×'+n:''}: ${m}${st?'\n  '+st:''}`;b.appendChild(d);while(b.children.length>5)b.children[1].remove();}catch(_){}}
+window.addEventListener('error',ev=>gameError(ev.error||ev.message));
 function frame(now){
   if(window.__manual&&!window.__inManual){requestAnimationFrame(frame);return;}   // test hook: a recorder steps frames itself
   // phones (Build 119): draw at most 30 frames a second in a match and 20 behind the menu, and update the shadows every other frame;
@@ -8885,7 +8897,7 @@ function frame(now){
   let dt=Math.max(0,Math.min((now-last)/1000,.1));last=now;
   if(state==='playing'){perf.t+=dt;perf.n++;if(perf.t>2.5){const avg=perf.t/perf.n;if(avg>PERF_SLOW&&gtao&&gtao.enabled){gtao.enabled=false;}else if(avg>PERF_SLOW&&perf.pr>.7){perf.pr=Math.max(.7,perf.pr-.25);renderer.setPixelRatio(perf.pr);composer.setPixelRatio(perf.pr);composer.setSize(innerWidth,innerHeight);if(perf.pr<=1)bloom.enabled=perf.pr>.75;}perf.t=0;perf.n=0;}}
   if(state==='loading')return;
-  if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host'))logic(dt);
+  if(!window.__pause&&!(paused&&state==='playing'&&NET.mode!=='host')){if(window.__game&&window.__inManual)logic(dt);else try{logic(dt);}catch(e){gameError(e);}}   // (Build 189) a step that throws no longer stops the picture; it's shown so it can be reported
   netTick(dt);
   if(NET.mode==='client'&&player&&player.alive&&!player.ragdoll&&state==='playing'&&!paused&&!input.locked&&input.mx!=null){
     if(player.sword){player.ctrl.x=clamp((input.mx-.5)*1.25,-.5,.5);player.ctrl.y=clamp(-(input.my-.5)*1.15+.05,-.45,.55);}
@@ -9511,7 +9523,7 @@ function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPu
   for(const f of fighters){if(!f.alive||!f.sword||f.sword.def.id!=='chest')continue;
     if(f.ragdoll||f.downed){f.dropSword();continue;}   // knocked down: the box goes
     // a bot that has carried a box into its own strongroom sets it down and takes a weapon back up
-    if(!f.isPlayer&&!f.remote){const ct=RAID.team[raidSideOf(f)].cart;if(ct&&raidHolder(ct)&&ct.slots.includes(null)&&cartPt(ct,0,0,0,V()).distanceTo(f.pos)<2.4){raidUse(f);if(!f.sword||f.sword.def.id!=='chest'){raidSetDown2(f);continue;}}const z=raidZoneOf(f.pos.x,f.pos.z),s=raidSideOf(f);if(z===s&&f.sword.home!==s&&Math.hypot(f.pos.x-RAID.team[s].home[0],f.pos.z-RAID.team[s].home[1])<1.6||z===s&&f.sword.home===s){raidSetDown(f);}}}
+    if(!f.isPlayer&&!f.remote){const ct=RAID.team[raidSideOf(f)].cart;if(ct&&raidHolder(ct)&&cartRoom(ct)&&cartPt(ct,0,0,0,V()).distanceTo(f.pos)<2.4){raidUse(f);if(!f.sword||f.sword.def.id!=='chest'){raidSetDown2(f);continue;}}const z=raidZoneOf(f.pos.x,f.pos.z),s=raidSideOf(f);if(z===s&&f.sword.home!==s&&Math.hypot(f.pos.x-RAID.team[s].home[0],f.pos.z-RAID.team[s].home[1])<1.6||z===s&&f.sword.home===s){raidSetDown(f);}}}
   for(const rk of RAID.racks)if(simTime>(rk.t||0)){rk.t=simTime+20;raidRackFill(rk,3);}
   for(const T_ of RAID.team)for(const c of T_.rooms){if(!c.door.open&&fighters.some(o=>o.alive&&!o.ragdoll&&!o.isPlayer&&!o.remote&&raidSideOf(o)===T_.s&&raidCellOf(T_,o)===c))raidCell(T_,c,true);}   // bots let themselves out
   // bots pick up boxes they've walked onto
@@ -9535,7 +9547,7 @@ function raidSteer(f,wish){const R=RAID;if(!R||!f.entrant||f.entrant.raidS==null
   const tgD=tg&&tg.alive&&!tg.ragdoll?Math.hypot(tg.pos.x-x,tg.pos.z-z):99;
   const T_=R.team[s],p=V();
   {const cc=raidCellOf(T_,f);if(cc){const D=cc.door,ex=(D.x0+D.x1)/2,ez=D.z+(D.out!=null?D.out*2:(s?-1.4:1.4)),dx=ex-x,dz=ez-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}}   // in the spawn room: out by the door
-  if(f.sword&&f.sword.def.id==='chest'){A.raidGoal={home:1};if(tgD<1.6)return false;{const ct=T_.cart;if(ct&&!ct.gone&&raidHolder(ct)&&ct.slots.includes(null)){const q=cartPt(ct,0,0,0,V());if(q.distanceTo(f.pos)<16){raidGo(f,wish,q.x,q.z);return true;}}}   /* our cart is out and being pulled: put it in there */raidGo(f,wish,T_.home[0]+((f.id%3)-1)*1.2,T_.home[1]);return true;}
+  if(f.sword&&f.sword.def.id==='chest'){A.raidGoal={home:1};if(tgD<1.6)return false;{const ct=T_.cart;if(ct&&!ct.gone&&raidHolder(ct)&&cartRoom(ct)){const q=cartPt(ct,0,0,0,V());if(q.distanceTo(f.pos)<16){raidGo(f,wish,q.x,q.z);return true;}}}   /* our cart is out and being pulled: put it in there */raidGo(f,wish,T_.home[0]+((f.id%3)-1)*1.2,T_.home[1]);return true;}
   if((A.raidT||0)<simTime){A.raidT=simTime+.6+Math.random()*.4;let best=null,bs=1e9;const role=f.entrant.role||'raid';
     for(const c of raidChests()){raidChestPos(c,p);const d=Math.hypot(p.x-x,p.z-z),zn=raidZoneOf(p.x,p.z),own=c.owner;
       if(c.home===s){   // ours: get it back if it's out of our strongroom
@@ -9558,6 +9570,9 @@ function cartPt(d,lx,ly,lz,out){const [p,q]=cartPose(d);return out.set(lx,ly,lz)
 function raidCarts(){return RAID?RAID.team.map(t=>t.cart).filter(Boolean):[];}
 function cartChestMesh(d,k){const sl=d.slots[k];if(d.sm&&d.sm[k]){d.obj.remove(d.sm[k]);d.sm[k]=null;}if(sl==null)return;d.sm=d.sm||[];const g=improvMesh('chest');g.rotation.set(0,0,Math.PI/2);g.position.set(-.55+k*1.1+.3,(d.cartY0||.74)+.27,0);d.obj.add(g);d.sm[k]=g;}
 function cartSet(d,k,home,net=true){d.slots[k]=home;cartChestMesh(d,k);if(net&&NET.mode==='host')netEv(['CL',RAID.team.findIndex(t=>t.cart===d),k,home==null?-1:home]);}
+// (Build 189) room for another box in a cart's bed (carts lost their fixed slots, and the bots' check of them threw every step a bot
+// carrying a box came near a cart someone held: the game froze when you took up the shafts)
+function cartRoom(d){let n=0;for(const c of raidChests())if(!c.owner&&c.H.y>.4&&cartEdgeD(d,c.H)<.15)n++;return n<4;}
 // (Build 188) is this loose weapon lying in a cart's bed
 function onCartBed(s){for(const d of raidCarts()){if(d.gone)continue;const y=(d.cartY0||.74);if(s.H.y<y-.3||s.H.y>y+1.2)continue;if(cartEdgeD(d,s.H)<.15||cartEdgeD(d,s.T)<.15)return true;}return false;}
 // (Build 188) how far a point is from the edge of a cart's bed (0 inside it): a box can be put in from the tail and the sides, not only near the middle
