@@ -404,7 +404,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=192;
+const BUILD=193;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -1074,8 +1074,15 @@ const CROCK={jug:lathe([[0,.235],[.038,.235],[.033,.205],[.058,.17],[.078,.105],
   cup:lathe([[0,.1],[.042,.1],[.04,.05],[.032,0],[0,0]],12)};
 function crockery(id,mat,wx,wy,wz,ry){return dynMesh(CROCK[id],MATS[mat],T(wx,wy,wz,ry),{m:id==='bowl'?.35:id==='cup'?.2:id==='pot'?1.2:.9,auto:'cyl',snd:'pot',brittle:1});}
 // a two-wheeled farm cart standing on its shafts, sometimes loaded; a loose thing that rolls on its wheels when shoved
+// (Build 193) a powder keg: a closed solid (heads included) turned bottom to top, and its four iron hoops
+const KEG_G=(()=>lathe([[0,-.3],[.19,-.3],[.205,-.285],[.24,-.18],[.262,-.06],[.265,0],[.262,.06],[.24,.18],[.205,.285],[.19,.3],[0,.3]],18))();
+function kegAt(x,y,z,rx,ry,rz){const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)),M=new THREE.Matrix4().compose(V(x,y,z),q,V(1,1,1));
+  addGeo('propWood',KEG_G.clone(),M);for(const [hy,hr] of [[-.21,.232],[-.1,.256],[.1,.256],[.21,.232]]){const t=new THREE.TorusGeometry(hr+.004,.011,4,22);t.rotateX(Math.PI/2);t.translate(0,hy,0);addGeo('iron',t,M);}}
 function cart(x,z,r,empty,floor){const load0=srand(),load=empty?1:load0,R=.56,ax=.2,y0=.74;
-  const G=ownGroup(x,z,r,()=>{
+  const G=ownGroup(x,z,r,()=>cartGeo(load));
+  return cartPhys(G,floor);}
+// the wagon itself, built round its own origin (shafts toward -x); load <.32 sacks, <.58 hay, <.74 casks, 'powder' kegs and a fuse
+function cartGeo(load){const R=.56,ax=.2,y0=.74;{
     for(const sd of [-1,1]){const zc=sd*.8;
       addGeo('beam',new THREE.CylinderGeometry(.1,.115,.28,12),T(ax,R,zc,0,Math.PI/2));   // hub
       for(let i=0;i<12;i++){const a=i/12*6.2832,c=Math.cos(a),s=Math.sin(a);vRod('wood',V(ax+c*.1,R+s*.1,zc),V(ax+c*(R-.08),R+s*(R-.08),zc),.024,5,.018);}   // spokes
@@ -1092,7 +1099,14 @@ function cart(x,z,r,empty,floor){const load0=srand(),load=empty?1:load0,R=.56,ax
     vRod('beam',V(-2.35,.33,-.44),V(-2.35,.33,.44),.03,6);   // a crossbar between them
     if(load<.32){for(const [lx,lz] of [[-.95,-.26],[-.9,.28],[.05,0],[.6,-.3]])addGeo('burlap',SACK_G,T(lx+.33,y0+.33,lz,lx*.4,0,Math.PI/2));}   // sacks lying in the bed
     else if(load<.58){const hg=new THREE.SphereGeometry(1,12,8,0,6.283,0,Math.PI/2);addGeo('thatch',hg,T(.05,y0+.08,0,0,0,0,1.25,.62,.62));}   // a heap of hay
-    else if(load<.74){for(const lz of [-.32,.32])addGeo('propWood',new THREE.CylinderGeometry(.27,.27,.7,12),T(.1,y0+.35,lz,0,0,Math.PI/2));}});   // two casks
+    else if(load<.74){for(const lz of [-.32,.32])addGeo('propWood',new THREE.CylinderGeometry(.27,.27,.7,12),T(.1,y0+.35,lz,0,0,Math.PI/2));}   // two casks
+    else if(load==='powder'){const ky=y0+.075+.265;
+      for(const kx of [-.82,-.15,.52])for(const kz of [-.3,.3])kegAt(kx,ky,kz,0,0,Math.PI/2);   // six lying along the bed in two rows
+      for(const kx of [-.48,.19])kegAt(kx,ky+.44,0,0,0,Math.PI/2);   // two more in the groove on top
+      for(const kx of [-.95,.0,.85]){vRod('rope',V(kx,y0+.1,-.68),V(kx,ky+.36,-.25),.012,4);vRod('rope',V(kx,ky+.36,-.25),V(kx,ky+.72,0),.012,4);vRod('rope',V(kx,ky+.72,0),V(kx,ky+.36,.25),.012,4);vRod('rope',V(kx,ky+.36,.25),V(kx,y0+.1,.68),.012,4);}   // lashings
+      vRod('rope',V(.19,ky+.7,0),V(.75,ky+.62,.05),.009,4);vRod('rope',V(.75,ky+.62,.05),V(1.22,y0+.62,.1),.009,4);vRod('rope',V(1.22,y0+.62,.1),V(1.36,y0+.3,.12),.009,4);}   // the fuse: slow match from the top keg's bung over the tailboard
+  }}
+function cartPhys(G,floor){const R=.56,ax=.2,y0=.74;
   const d=dynAdd(G,{m:150,fr:.8,floor,sh:[{t:'box',h:[1.3,.07,.72],o:[0,y0+.02,0],w:.55},{t:'box',h:[1.25,.05,.03],o:[0,y0+.28,.72],w:.05},{t:'box',h:[1.25,.05,.03],o:[0,y0+.28,-.72],w:.05},{t:'cyl',h:[.07,R],o:[ax,R,.8],rx:1,w:.15},{t:'cyl',h:[.07,R],o:[ax,R,-.8],rx:1,w:.15},{t:'box',h:[.14,.05,.46],o:[-2.95,.06,0],w:.15}]});
   d.lb=new THREE.Box3(V(-1.36,0,-.9),V(1.36,y0+.7,.9));if(d.ob)dynOb(d,G.position,G.quaternion);d.cartY0=y0;return d;}   /* (Build 181) a walker is kept off the bed and wheels, not the shafts: you can stand between them to pull */
 // a market stall: turned posts with knee braces, a plank counter with a boarded front, a back shelf, a sloping striped awning with a
@@ -1350,7 +1364,7 @@ const TOWER={st:'none'};
 function sBell(p,v){if(!AC)return;const vol=distVol(p)*v;if(vol<.005)return;const t=AC.currentTime,f0=174*(1+(Math.random()-.5)*.02);
   for(const [r,a,d] of [[.5,.5,5],[1,1,4],[1.19,.45,3],[1.5,.35,2.2],[2,.3,1.8],[2.74,.2,1.2],[3.76,.12,.8]]){const o=AC.createOscillator();o.type='sine';o.frequency.value=f0*r;const g=AC.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol*a*.22,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d+.05);}}
 const towerStoneM=MATS.towerStone=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xb8ad9a,roughness:.95}),towerQuoinM=MATS.towerQuoin=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xd8cfbc,roughness:.92}),towerSlateM=MATS.towerSlate=std({map:TX.tile,color:0x55606a,roughness:.7});   // scanned surfaces replace these as they load (PHOTO)
-function bellGeo(){const pts=[[.06,.95],[.2,.94],[.3,.88],[.34,.75],[.36,.5],[.42,.25],[.55,.08],[.6,0],[.57,-.01]].map(([x,y])=>new THREE.Vector2(x,y));return new THREE.LatheGeometry(pts,20);}
+function bellGeo(){const pts=[[.06,.95],[.2,.94],[.3,.88],[.34,.75],[.36,.5],[.42,.25],[.55,.08],[.6,0],[.57,-.01]].reverse().map(([x,y])=>new THREE.Vector2(x,y));   /* (Build 193) bottom to top, so it faces out */return new THREE.LatheGeometry(pts,20);}
 function buildTower(x,z){Object.assign(TOWER,{st:'whole',x,z,t:0,at:rand(60,100),burnFor:rand(28,36),parts:[],fx:[],smoke:[],tollT:3,emberT:2,creakT:0,warned:false,rig:null});
   const S=3.8,ch=.9,NC=9,wt=.55;   // side, course height, courses up to the cornice, wall thickness
   const part=(m,half,pos,q,mass,kind)=>{m.position.copy(pos);if(q)m.quaternion.copy(q);m.castShadow=m.receiveShadow=true;world.add(m);const p={m,half,pos:pos.clone(),q:(q||new THREE.Quaternion()).clone(),mass,kind};TOWER.parts.push(p);return p;};
@@ -2344,7 +2358,55 @@ function buildBreach(){
   flushBatch();
 }
 // lead a bot through the wall by a way that's open; the defenders' men-at-arms hold the yard rather than sally out after them
+// (Build 193) bots and ladders. A plan (f.ai.lad) walks a bot through: fetch a lying ladder, carry it to a spot before the enemy's wall, face
+// the wall and set it, climb (climbHold takes him up and over onto the walk), walk the walk to the stair and down into the yard, take his
+// own weapon up again (raidSetDown2). Wall spots and the way down come from ladderSpots: the Breach's front wall (siege attackers, two of
+// them with the camp's ladders) and each raid castle's front wall (one bot a side, with a ladder from his own castle)
+function ladderSpots(side){const out=[];
+  if(BREACH&&RUN&&RUN.siege){const W=BREACH.WZ;out.push({spot:[-14,W+2.6],face:Math.PI,down:[[-20.4,W],[-20.4,W-1.95],[-8.6,W-1.95]]},{spot:[18,W+2.6],face:Math.PI,down:[[20.25,W],[20.25,W-1.5],[20.25,W-15.4]]});}
+  else if(RAID&&side!=null){const Z=lz=>raidZ(side,lz),fy=Math.atan2(0,Z(0)-Z(2.5));out.push({spot:[-15.5,Z(2.5)],face:fy,down:[[-18.6,Z(0)],[-18.6,Z(-1.85)],[-11.9,Z(-1.85)]]},{spot:[16.5,Z(2.5)],face:fy,down:[[18.6,Z(0)],[18.6,Z(-1.85)],[12.9,Z(-1.85)]]});}
+  return out;}
+function freeLadders(f){return LADDERS.filter(d=>!d.gone&&!d.lad.carrier&&!ladStanding(d)&&!fighters.some(o=>o!==f&&o.ai&&o.ai.lad&&o.ai.lad.d===d));}
+function ladderPlan(f,side,maxN){const A=f.ai;if(A.lad||A.ladDone)return false;const busy=fighters.filter(o=>o.alive&&o.ai&&o.ai.lad&&o.entrant&&o.entrant.raidS===f.entrant.raidS).length;if(busy>=maxN)return false;
+  const L=freeLadders(f).filter(q=>!RAID||raidYard(q.obj.position.z)!==side);if(!L.length)return false;   /* not one lying in their own castle */let d=null,bd=60;for(const q of L){const p=ladPt(q,q.lad.L/2,_ld2),dd=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(dd<bd){bd=dd;d=q;}}if(!d)return false;
+  const sp=ladderSpots(side);if(!sp.length)return false;const used=fighters.filter(o=>o.ai&&o.ai.lad).map(o=>o.ai.lad.k);let k=sp.findIndex((_,i)=>!used.includes(i));if(k<0)k=(Math.random()*sp.length)|0;
+  A.lad={st:'get',d,k,...sp[k],i:0,t:simTime};A.ladDone=true;return true;}
+function botLadder(f,wish){const A=f.ai,L=A.lad;if(!L)return false;if(f.ragdoll||f.downed)return false;const x=f.pos.x,z=f.pos.z,d=L.d;
+  const go=(tx,tz,stop=.5)=>{if(RAID&&f.pos.y<1.5&&L.st!=='down'){raidGo(f,wish,tx,tz);return Math.hypot(tx-x,tz-z)>stop;}const dx=tx-x,dz=tz-z,l=Math.hypot(dx,dz);if(l>stop){wish.set(dx/l,0,dz/l);return true;}wish.set(0,0,0);return false;};
+  const quit=()=>{A.lad=null;if(f.ladCarry){ladderUse(f);}if(!f.sword&&f.entrant&&f.entrant.kit)raidSetDown2(f);return false;};
+  if(simTime-L.t>120)return quit();   // given up
+  if(L.st==='get'){if(!d||d.gone||(d.lad.carrier&&d.lad.carrier!==f)||ladStanding(d))return quit();
+    if(f.ladCarry===d){L.st='carry';return true;}const p=ladPt(d,d.lad.L/2,_ld2);if(Math.hypot(p.x-x,p.z-z)<1.3){ladderTake(f,d);return true;}go(p.x,p.z,.3);return true;}
+  if(L.st==='carry'){if(f.ladCarry!==d)return quit();
+    {const dd=Math.hypot(L.spot[0]-x,L.spot[1]-z);if(dd<(L.best??1e9)-.4){L.best=dd;L.bt=simTime;}const st=simTime-(L.bt||simTime);if(st>8)return quit();   // no headway for 8 s: give it up
+      if(st>1.5){const side=(Math.floor(st/2.5)%2?1:-1);const dx=L.spot[0]-x,dz=L.spot[1]-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l*.4-dz/l*side,0,dz/l*.4+dx/l*side).normalize();return true;}}   // stuck: sidestep round whatever is in the way
+    if(go(L.spot[0],L.spot[1],.45))return true;
+    f.yaw=L.face;const W=wallAhead(f);if(W){ladderSet(f,W);L.st='climb';L.ct=simTime;return true;}wish.set(Math.sin(L.face),0,Math.cos(L.face));return true;}
+  if(L.st==='climb'){if(f.climb)return true;if(f.pos.y>2.5){L.st='down';L.i=0;return true;}
+    if(!ladStanding(d)){if(simTime-L.ct>5)return quit();wish.set(0,0,0);return true;}
+    const ft=ladPt(d,0,_ld2),ax=ladAxis(d,_ld3.clone());const hx=ax.x,hz=ax.z,hl=Math.hypot(hx,hz)||1,px=ft.x-hx/hl*.45,pz=ft.z-hz/hl*.45;
+    if(Math.hypot(px-x,pz-z)<.6||Math.hypot(ft.x-x,ft.z-z)<1.1){ladderClimb(f,d);return true;}go(px,pz,.3);return true;}
+  if(L.st==='down'){if(f.climb)return true;const w=L.down[L.i];if(!w||f.pos.y<.6&&L.i>=2)return quit();if(!go(w[0],w[1],.45))L.i++;if(L.i>=L.down.length)return quit();return true;}
+  return false;}
+// (Build 193) a raid carter: one bot a side winds his own portcullis up, takes up the cart's shafts, hauls it out to wait 16 m before the
+// other side's wall (carriers bring boxes to a cart being pulled within 16 m of them: raidSteer), and once a box of theirs is in the bed
+// hauls it home to stand at his strongroom's door (a box in a cart within 3 m of the strongroom counts: raidScore)
+function botCart(f,wish){const A=f.ai,C=A.cartP;if(!C||!RAID||f.ragdoll||f.downed)return false;const s=f.entrant.raidS,o=1-s,T_=RAID.team[s],g=T_.gate,d=T_.cart,x=f.pos.x,z=f.pos.z;
+  const done=()=>{A.cartP=null;A.cartNext=simTime+25;if(f.wheelHold)f.wheelHold=null;if(f.cartHold)f.cartHold=null;if(!f.sword&&f.entrant.kit)raidSetDown2(f);return false;};
+  if(!d||d.gone||simTime-C.t>240)return done();
+  const near=(tx,tz,r)=>Math.hypot(tx-x,tz-z)<r;
+  if(C.st==='gate'){if(!g||g.lift>=3.5){if(f.wheelHold)f.wheelHold=null;C.st='shafts';return true;}
+    if(f.wheelHold===T_)return true;if(near(g.wx,g.wz,1.25)){raidUse(f);return true;}raidGo(f,wish,g.wx,g.wz);return true;}
+  if(C.st==='shafts'){if(raidHolder(d)===f){C.st='out';C.t1=simTime;return true;}if(raidHolder(d))return done();
+    const P=cartPt(d,-2.45,.25,0,V());if(near(P.x,P.z,1.0)){raidUse(f);if(!f.cartHold)C.tries=(C.tries||0)+1;if(C.tries>40)return done();return true;}raidGo(f,wish,P.x,P.z);return true;}
+  if(!f.cartHold||f.cartHold!==d)return C.st==='home'?done():(C.st='shafts',true);
+  const loaded=raidChests().some(c=>!c.owner&&c.home===o&&cartEdgeD(d,c.H)<.2&&c.H.y>.5);
+  if(C.st==='out'){const W=[RAID.gx,raidZ(o,16)];if(loaded){C.st='home';return true;}if(near(W[0],W[1],1.2)){C.st='wait';C.tw=simTime;wish.set(0,0,0);return true;}raidGo(f,wish,W[0],W[1]);return true;}
+  if(C.st==='wait'){if(loaded||simTime-C.tw>100){C.st='home';return true;}wish.set(0,0,0);return true;}
+  if(C.st==='home'){const D=T_.door;if(near(D[0],D[1]+(s?1:-1)*.5,1.4)){raidUse(f);return done();}raidGo(f,wish,D[0],D[1]+(s?1:-1)*.5);return true;}
+  return false;}
 function breachSteer(f,wish){const B=BREACH;if(!B||!f.entrant)return false;const A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z;
+  if(RUN&&RUN.siege&&f.entrant.raidS===1){ladderPlan(f,1,2);if(botLadder(f,wish))return true;}
   if(RUN&&RUN.siege&&f.entrant.raidS===0&&B.banner&&B.banner.st==='up'){const b=B.banner;   /* (Build 191) a defender with nobody close goes to the banner when they're at it */
     if((!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>5)&&fighters.some(o=>o.alive&&!o.downed&&o.entrant&&o.entrant.raidS===1&&Math.hypot(o.pos.x-b.x,o.pos.z-b.z)<b.r+5)){const dx=b.x-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.2){wish.set(dx/l,0,dz/l);return true;}}}
   if(RUN&&RUN.siege){const ms=f.entrant.raidS;let nb=null,nd=6;for(const o of fighters){if(!o.alive||o.downed||o.ragdoll||!o.entrant||o.entrant.raidS==null||o.entrant.raidS===ms)continue;const d=Math.hypot(o.pos.x-x,o.pos.z-z);if(d<nd){nd=d;nb=o;}}
@@ -2525,7 +2587,9 @@ function ladStanding(d){const a=ladAxis(d,_ld3);if(a.y<.8)return false;const b=d
 function wallAhead(f){const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw);for(let s=.4;s<=2.6;s+=.1){const x=f.pos.x+fx*s,z=f.pos.z+fz*s;
     for(const b of boxes){if(b.h<2||b.dyn||x<b.x0||x>b.x1||z<b.z0||z>b.z1)continue;if(b.y0&&b.y0>f.pos.y+1)continue;
       const dx0=x-b.x0,dx1=b.x1-x,dz0=z-b.z0,dz1=b.z1-z,m=Math.min(dx0,dx1,dz0,dz1);const n=m===dx0?[-1,0]:m===dx1?[1,0]:m===dz0?[0,-1]:[0,1];
-      const top=Math.max(b.h,floorY(x,z,b.h+.5));return {dist:s,h:top,nx:n[0],nz:n[1],fx:x-n[0]*0,fz:z};}
+      let top=Math.max(b.h,floorY(x,z,b.h+.5));
+      for(const pb of boxes)if(pb.y0&&pb.y0<=top+.15&&pb.h>top&&x>pb.x0-.5&&x<pb.x1+.5&&z>pb.z0-.5&&z<pb.z1+.5)top=pb.h;   /* (Build 193) a parapet on the edge: lean on its face, not through it (a ladder set with its rails inside the parapet was thrown out at 300 m/s) */
+      return {dist:s,h:top,nx:n[0],nz:n[1],fx:x-n[0]*0,fz:z};}
     /* (Build 191) the edge of a raised floor counts too (the Mill's stone floor stands on posts, so once its ladder was taken down there was
        nothing to set it against again) */
     for(const F of FLOORS){if(F.ob||F.ramp||F.down||F.h<f.pos.y+1.6||F.h>f.pos.y+7.5||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;
@@ -2660,19 +2724,15 @@ function buildRoad(){
     addGeo('beam',boxUV(8,.4,.4,1),T(roadX(z),4.7,z));
     R.gates[0]=roadGate(roadX(z),z-.45,2.4,3.6,0);
     const b={pv:0,thatch:true,chimney:true,door:0,torch:false,light:false,noDoor:true};house(roadX(z)-9,z+9,0,8,6,4,{...b});house(roadX(z)+10,z+11,0,9,6,4,{...b,pv:1,thatch:false});house(roadX(z)+1,z+17,0,8,6,6,{...b,pv:2});}
-  // the cart: a planked bed on two spoked wheels, loaded with sacks and casks under a roped cloth, its shafts out in front
-  {const G=new THREE.Group();world.add(G);const add=(geo,mat,x,y,z,rx=0,ry=0,rz=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);m.castShadow=m.receiveShadow=true;G.add(m);return m;};
-    add(boxUV(1.3,.1,2.6,1),MATS.wood,0,.8,0);for(const s of [-1,1]){add(boxUV(.06,.42,2.6,1),MATS.wood,s*.66,1.06,0);add(boxUV(.07,.07,3.2,1),MATS.beam||MATS.wood,s*.5,.72,1.9,.12);}
-    for(const s of [-1,1]){const w=add(new THREE.TorusGeometry(.5,.05,6,18),MATS.iron,s*.76,.55,-.15,0,Math.PI/2);for(let k=0;k<6;k++)add(boxUV(.04,.96,.04,1),MATS.wood,s*.76,.55,-.15,k/6*Math.PI,0,0).rotation.set(k/6*Math.PI,0,0);add(new THREE.CylinderGeometry(.09,.09,.2,10),MATS.beam||MATS.wood,s*.76,.55,-.15,0,0,Math.PI/2);}
-    add(new THREE.CylinderGeometry(.045,.045,1.7,8),MATS.iron,0,.55,-.15,0,0,Math.PI/2);
-    /* (Build 192) a powder cart: kegs of black powder lashed in the bed, a coil of slow match on top (the fuse) */
-    const keg=new THREE.LatheGeometry([[.2,-.3],[.25,-.15],[.27,0],[.25,.15],[.2,.3]].map(([x,y])=>new THREE.Vector2(x,y)),14);
-    for(const [x,y,z] of [[-.3,1.13,-.8],[.3,1.13,-.8],[-.3,1.13,-.15],[.3,1.13,-.15],[-.3,1.13,.5],[.3,1.13,.5],[0,1.6,-.45],[0,1.6,.2]]){add(keg,MATS.propWood||MATS.wood,x,y,z,Math.PI/2,0,0);for(const e of [-.17,.17])add(new THREE.TorusGeometry(.255,.018,5,16),MATS.iron,x,y,z+e);}
-    const coil=add(new THREE.TorusGeometry(.13,.025,5,14),MATS.rope||MATS.wood,0,1.9,.75,Math.PI/2,0,0);
-    const fuse=new THREE.Mesh(new THREE.SphereGeometry(.06,6,5),new THREE.MeshBasicMaterial({color:0xffb040}));fuse.position.set(0,1.95,.75);fuse.visible=false;G.add(fuse);
-    R.cart={G,z:Z0,v:0,box:addBox(-1,1,Z0-1.5,Z0+1.5,1.4),loot:0,hit:0,state:'roll',fuseM:fuse,fuse:null};roadPlaceCart();
-    const fb=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),new THREE.MeshBasicMaterial({color:0xffa040,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));fb.visible=false;world.add(fb);
-    const fl=new THREE.PointLight(0xffa050,0,40,1.6);world.add(fl);R.fx={fb,fl,t:-1};}
+  // (Build 193) the powder cart: the raid's wagon (cartGeo) turned so its shafts lead along the road, loaded with kegs of powder lashed down and
+  // a slow match over the tailboard. The fuse's burning end (fuseM) creeps along the match to the bung while it burns
+  {const G=new THREE.Group();world.add(G);const W=ownGroup(0,0,Math.PI/2,()=>cartGeo('powder'));world.remove(W);G.add(W);
+    const fm=new THREE.Mesh(new THREE.SphereGeometry(.035,8,6),new THREE.MeshBasicMaterial({color:0xffd070}));fm.visible=false;G.add(fm);
+    const glow=new THREE.PointLight(0xff9040,0,4,2);fm.add(glow);
+    // the match's path in the group's frame (cart x -> group -z after the quarter turn): tailboard end to the bung
+    const y0=.74,ky=y0+.075+.265,path=[V(1.36,y0+.3,.12),V(1.22,y0+.62,.1),V(.75,ky+.62,.05),V(.19,ky+.7,0)].map(p=>V(p.z,p.y,-p.x));
+    R.cart={G,z:Z0,v:0,box:addBox(-1,1,Z0-1.5,Z0+1.5,1.4),loot:0,hit:0,state:'roll',fuseM:fm,fuseL:glow,fusePath:path,fuse:null};roadPlaceCart();
+    R.fx=explosionFx();}
   // the felled tree waiting across the road before the third ambush
   {const z=R.amb[2]+9,x=roadX(z);const G=new THREE.Group();G.position.set(x,0,z);world.add(G);const t=new THREE.Mesh(new THREE.CylinderGeometry(.3,.38,8,9),MATS.bark||MATS.wood);t.rotation.set(0,.3,Math.PI/2);t.position.y=.36;t.castShadow=t.receiveShadow=true;G.add(t);
     for(let k=0;k<5;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.09,1.6,5),MATS.bark||MATS.wood);b.position.set(-3+k*1.4,.6,(k%2?1:-1)*.4);b.rotation.set(k%2?.8:-.8,0,.3);G.add(b);}
@@ -3057,6 +3117,7 @@ function pointsPool(n,color,size){const g=new THREE.BufferGeometry();const pos=n
   const p=new THREE.Points(g,m);p.frustumCulled=false;scene.add(p);return {p,pos,vel:new Float32Array(n*3),life:new Float32Array(n),n,i:0};}
 const sparks=pointsPool(300,0xffc070,.06);
 const embers=pointsPool(160,0xff7a30,.035);
+function spawnSparksLocal(p,n){for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;sparks.vel[i*3]=(Math.random()-.5)*1.6;sparks.vel[i*3+1]=Math.random()*1.8;sparks.vel[i*3+2]=(Math.random()-.5)*1.6;sparks.life[i]=.15+Math.random()*.25;}}   // (Build 193) a burning fuse's sparks, drawn on each machine, nothing sent
 function spawnSparks(p,n,dir){netEv(['k',r3v(p),n,dir?r3v(dir):0]);for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;sparks.vel[i*3]=(Math.random()-.5)*5+(dir?dir.x*2:0);sparks.vel[i*3+1]=Math.random()*3.5;sparks.vel[i*3+2]=(Math.random()-.5)*5+(dir?dir.z*2:0);sparks.life[i]=.25+Math.random()*.35;}}
 function updatePool(P,dt,grav,drag){for(let i=0;i<P.n;i++){if(P.life[i]<=0)continue;P.life[i]-=dt;if(P.life[i]<=0){P.pos[i*3+1]=-999;continue;}P.vel[i*3+1]+=grav*dt;for(let a=0;a<3;a++){P.vel[i*3+a]*=1-drag*dt;P.pos[i*3+a]+=P.vel[i*3+a]*dt;}if(P.pos[i*3+1]<0){P.pos[i*3+1]=0;P.vel[i*3+1]*=-.3;}}P.p.geometry.attributes.position.needsUpdate=true;}
 const spurts=[];
@@ -4119,7 +4180,13 @@ function cutFace(parent,pos,nrm,worldR){parent.updateWorldMatrix(true,false);par
   const b=new THREE.Mesh(stumpGeo,cutMeat);b.scale.set(r*.97,r*.97,r*.3);b.position.z=-r*.08;g.add(b);parent.add(g);return g;}
 const SEV_R={};
 
-function lathe(pts,seg=20){return new THREE.LatheGeometry(pts.map(([x,y])=>new THREE.Vector2(x,y)),seg);}
+/* (Build 193) three.js turns a profile listed bottom to top into faces that point outward; listed top to bottom (as many here were, after a
+   wrong note in CLAUDE.md) every face points inward and the object shows its far inside wall: sacks, crockery, pommels and hafts looked
+   see-through. lathe() now checks which way the faces point and flips a profile that is mostly inward */
+function latheOut(g){const P=g.attributes.position,I=g.index?g.index.array:null;if(!I)return 1;let o=0,n=0;const a=V(),b=V(),c=V(),e1=V(),e2=V();
+  for(let t=0;t<I.length;t+=3){a.fromBufferAttribute(P,I[t]);b.fromBufferAttribute(P,I[t+1]);c.fromBufferAttribute(P,I[t+2]);e1.subVectors(b,a).cross(e2.subVectors(c,a));const mx=(a.x+b.x+c.x)/3,mz=(a.z+b.z+c.z)/3;if(mx*mx+mz*mz<1e-8||e1.lengthSq()<1e-14)continue;if(e1.x*mx+e1.z*mz>0)o++;else n++;}
+  return o/Math.max(1,o+n);}
+function lathe(pts,seg=20){let g=new THREE.LatheGeometry(pts.map(([x,y])=>new THREE.Vector2(x,y)),seg);if(latheOut(g)<.2){g.dispose();g=new THREE.LatheGeometry(pts.slice().reverse().map(([x,y])=>new THREE.Vector2(x,y)),seg);lathe.fixed=(lathe.fixed||0)+1;}return g;}
 function makeHelmet(type,metal){
   const g=new THREE.Group();const add=(geo,mat,x=0,y=0,z=0,rx=0,sx=1,sy=1,sz=1)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.x=rx;m.scale.set(sx,sy,sz);m.castShadow=true;g.add(m);return m;};
   if(type===0){add(new THREE.SphereGeometry(.13,20,10,0,Math.PI*2,0,Math.PI/2),metal,0,.09,.012,0,1,1.05,1.08);add(lathe([[.12,.0],[.2,-.045],[.235,-.06],[.236,-.068]]),metal,0,.095,.012);add(new THREE.TorusGeometry(.131,.008,5,24),brassMat,0,.1,.012,Math.PI/2);}
@@ -6315,14 +6382,14 @@ function dynStep2(){dynN++;
   for(const f of fighters){const rag=f.ragdoll,hp=rag&&rag.P.Hips?rag.P.Hips:f.pos,L=dynNear(hp.x,hp.z);if(!L||!f.caps)continue;
     for(let i=0;i<f.caps.length;i++){const c=f.caps[i];if(!c.on)continue;const leg=c.zone==='legL'||c.zone==='legR';if(!dynReach(L,c.a,c.b,c.r+.25)){proxyOff(f.id*64+i);continue;}
       const x=proxyCap(f.id*64+i,c.a,c.b,rag?Math.min(c.r*.6,RD_R[c.ba]||.055,.08)*.95:c.r*.92,PART_M[i]*(rag?1.2:1.5),rag?DGR_PR:DGR_PL);/* bodies meet heavy things through collide() (CTX), by mass; their stand-ins only move light ones */x.sw=null;x.rag=rag?f:null;x.ci=i;}
-    if(!rag&&f.alive){if(f.sword&&!f.sword.free){if(dynReach(L,f.sword.H,f.sword.T,.45))proxySword(f.id*64+40,f.sword,true);else proxyOff(f.id*64+40);}
+    if(!rag&&f.alive){if(f.sword&&!f.sword.free){if(!f.climb&&dynReach(L,f.sword.H,f.sword.T,.45))proxySword(f.id*64+40,f.sword,true);else proxyOff(f.id*64+40);}
       else if(f.fists)for(const sd of ['R','L']){const a=f.fists[sd],k=f.id*64+(sd==='R'?41:42);if(a&&a.pos&&!(f.climb||f.ladCarry||f.cartHold)&&dynReach(L,a.pos,a.pos,.35)){   /* (hands holding a ladder or a cart's shafts don't shove it) */const x=proxyCap(k,a.pos,a.pos,.05,2.2,DGR_P);x.sw=null;x.rag=null;}else proxyOff(k);}}}
   for(const s of freeSwords){if(s.owner&&!s.free)continue;const k=1e7+s.id;if(RAID&&onCartBed(s)){proxyOff(k);continue;}   /* (Build 188) whatever rides in a cart moves with it: its stand-in shoved the cart it lay in, the cart carried it faster, and the two ran away (the game froze taking up the shafts with a box aboard) */if(!(s.flying||(s.rb?(()=>{const v=s.rb.linvel();return v.x*v.x+v.y*v.y+v.z*v.z>.09;})():s.H.distanceToSquared(s.Hp)>4e-6))){proxyOff(k);continue;}const L=dynNear(s.H.x,s.H.z);if(!L||!dynReach(L,s.H,s.T,.5)){proxyOff(k);continue;}proxySword(k,s,false);}
   PRW.step();
   /* (Build 189) a loose thing whose numbers go bad, or that is flung absurdly fast, is put back still: Rapier can hang on a NaN body */
-  if(++dynSane%30===0||RAID)for(const d of DYN){const b=d.body;if(!b||d.gone||b.isSleeping())continue;const t=b.translation(),v=b.linvel(),w=b.angvel(),q=b.rotation();
+  if(++dynSane%30===0||RAID)for(const d of DYN){const b=d.body;if(!b||d.gone||b.isSleeping()||(b.isKinematic&&b.isKinematic()))continue;const t=b.translation(),v=b.linvel(),w=b.angvel(),q=b.rotation();
     if(Number.isFinite(t.x+t.y+t.z+q.x+q.y+q.z+q.w)&&Math.abs(v.x)+Math.abs(v.y)+Math.abs(v.z)<150&&Math.abs(w.x)+Math.abs(w.y)+Math.abs(w.z)<200)continue;
-    if(!Number.isFinite(t.x+t.y+t.z+q.x+q.y+q.z+q.w)){b.setTranslation({x:d.p0.x,y:d.p0.y+.05,z:d.p0.z},true);b.setRotation({x:0,y:0,z:0,w:1},true);}b.setLinvel({x:0,y:0,z:0},true);b.setAngvel({x:0,y:0,z:0},true);gameError(new Error('loose thing reset ('+(d.kind||d.snd)+')'));}
+    if(!Number.isFinite(t.x+t.y+t.z+q.x+q.y+q.z+q.w)){b.setTranslation({x:d.p0.x,y:d.p0.y+.05,z:d.p0.z},true);b.setRotation({x:0,y:0,z:0,w:1},true);}b.setLinvel({x:0,y:0,z:0},true);b.setAngvel({x:0,y:0,z:0},true);console.warn('loose thing reset',d.kind||d.snd);}
   // what the loose things did back: a blade that met something heavy loses speed, a body that hit a table is held up by it
   for(const [k,x] of PROX){if(x.used!==dynN){if(dynN-x.used>240){PRW.removeRigidBody(x.b);PROX.delete(k);}else if(!x.off){x.b.setEnabled(false);x.off=true;}continue;}
     const v=x.b.linvel(),dx=v.x-x.vc.x,dy=v.y-x.vc.y,dz=v.z-x.vc.z,d2=dx*dx+dy*dy+dz*dz;if(d2<.36)continue;
@@ -7069,7 +7136,7 @@ class Fighter{
     if(!this.armed()&&this.mainArm){
       if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
       const lpd=A.loot?Math.hypot(lootPos(A.loot,_t2).x-this.pos.x,_t2.z-this.pos.z):99;
-      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!(tg&&!tg.ragdoll&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
+      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!A.lad&&!this.climb&&!this.ladCarry&&!this.roadHold&&!this.cartHold&&!(tg&&!tg.ragdoll&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
     }
     if(!this.sword&&this.mainArm&&tg&&!(needZone&&dT0(this,tg)>3)){
       _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();this.faceDir(_v,h,8);this.right(_r);
@@ -9600,6 +9667,9 @@ function raidKill(killer,victim){const R=RUN;const en=victim.entrant;if(!en||en.
 // bots: what each one is after. Carrying a box: home. Raiders: the nearest of their boxes not already ours. Hunters and anyone near: get our
 // boxes back from whoever has them, or carry home ours lying loose. Guards: the strongroom door. Anyone with a foe close fights (think does that).
 function raidSteer(f,wish){const R=RAID;if(!R||!f.entrant||f.entrant.raidS==null||!RUN||RUN.mode!=='raid')return false;const A=f.ai,s=f.entrant.raidS,o=1-s,x=f.pos.x,z=f.pos.z,tg=A.target;
+  if(f.entrant.role==='raid'&&simTime-(RUN.t0||0)>15&&!(f.sword&&f.sword.def.id==='chest'))ladderPlan(f,o,1);if(A.lad&&botLadder(f,wish))return true;   // (Build 193) one raider a side goes over their wall with a ladder
+  if(!A.cartP&&(f.entrant.role==='guard'||f.entrant.role==='hunt')&&simTime-(RUN.t0||0)>20&&simTime>(A.cartNext||0)&&!fighters.some(q=>q!==f&&q.alive&&q.ai&&q.ai.cartP&&q.entrant&&q.entrant.raidS===s)&&!(f.sword&&f.sword.def.id==='chest'))A.cartP={st:'gate',t:simTime};
+  if(A.cartP){const tgd=tg&&tg.alive&&!tg.ragdoll?Math.hypot(tg.pos.x-x,tg.pos.z-z):99;if(tgd>2.2&&botCart(f,wish)){return true;}}
   const tgD=tg&&tg.alive&&!tg.ragdoll?Math.hypot(tg.pos.x-x,tg.pos.z-z):99;
   const T_=R.team[s],p=V();
   {const cc=raidCellOf(T_,f);if(cc){const D=cc.door,ex=(D.x0+D.x1)/2,ez=D.z+(D.out!=null?D.out*2:(s?-1.4:1.4)),dx=ex-x,dz=ez-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}}   // in the spawn room: out by the door
@@ -9733,7 +9803,7 @@ function siegeTick(){const R=RUN,B=BREACH;if(!B||R.ended)return;const h=1/240;
 // follows you along the road; men of both sides holding it stall it. Bring it to the other side's gate and light the fuse (E, at their gate,
 // `c.fuse` TUG_FUSE s); one of them can pull it out (E). It goes off: the gate is blown in, whoever is close is killed or thrown, that side
 // wins. At TUG_TIME whoever has the cart in the other side's half wins. The fallen come back TUG_BACK s later, 18 m behind the cart.
-const TUG_TIME=480,TUG_BACK=9,TUG_FUSE=6,TUG_HOLD=2.6;
+const TUG_TIME=480,TUG_BACK=9,TUG_FUSE=3,TUG_HOLD=2.6;
 function tugGoal(s){const RD=ROAD;return s?RD.Zs+4.2:RD.Z1-3.9;}   // where side s's cart has to be to blow the other side's gate
 function tugStart(H){const R=RUN,RD=ROAD,c=RD.cart;R.tug=true;R.back=[];R.mid=(RD.Zs+RD.Z1)/2;c.z=R.mid;c.v=0;c.fuse=null;roadPlaceCart();if(NET.mode==='host')netEv(['RC',r3(c.z)]);roadLogClear();
   for(let s=0;s<2;s++)R.en[s].forEach((en,k)=>tugSpawn(en,k));
@@ -9751,10 +9821,27 @@ function roadUse(f,dry){const RD=ROAD;if(!RD||!RD.cart||!f||!f.alive||f.ragdoll|
   for(const off of [TUG_HOLD,-TUG_HOLD]){const p=tugAttach(off,_tg1);if(Math.hypot(f.pos.x-p.x,f.pos.z-p.z)<1.5){if(!dry){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.cartHold=null;f.ladCarry=null;f.roadHold={off};}return 'Take hold of the cart';}}
   return false;}
 const _tg1=V(),_tg2=V();
+// (Build 193) an explosion: a fireball of glowing puffs thrown out and swelling (white-yellow to orange to red, gone in about a second), a
+// column of dark smoke that billows up and drifts for several seconds, a flash of light. explosionFx() makes the pools; .go(P) fires one
+function explosionFx(){const c=mkCanvas(64,64),g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.35,'rgba(255,255,255,.7)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);const t=new THREE.CanvasTexture(c);
+  const c2=mkCanvas(128,128),g2=c2.getContext('2d');for(let i=0;i<26;i++){const x=64+(Math.random()-.5)*56,y=64+(Math.random()-.5)*56,r=14+Math.random()*24,q=g2.createRadialGradient(x,y,0,x,y,r);q.addColorStop(0,'rgba(255,255,255,.55)');q.addColorStop(1,'rgba(255,255,255,0)');g2.fillStyle=q;g2.fillRect(0,0,128,128);}
+  const t2=new THREE.CanvasTexture(c2);   // billowy smoke: overlapping soft puffs
+  const mk=(n,add)=>{const L=[];for(let i=0;i<n;i++){const m=new THREE.SpriteMaterial({map:add?t:t2,transparent:true,depthWrite:false,blending:add?THREE.AdditiveBlending:THREE.NormalBlending,color:add?0xffd080:0x2a2622,opacity:0});const sp=new THREE.Sprite(m);sp.visible=false;world.add(sp);L.push({sp,v:V(),age:9,life:1,s0:1,s1:3});}return L;};
+  const X={fire:mk(40,true),smoke:mk(48,false),L:new THREE.PointLight(0xffa050,0,45,1.5),t:-1};world.add(X.L);
+  X.go=P=>{X.t=0;X.L.position.copy(P).setY(P.y+1.5);X.L.intensity=700;
+    for(const f of X.fire){const a=Math.random()*6.283,e=Math.random()*1.2-.15,sp=4+Math.random()*9;f.v.set(Math.cos(a)*Math.cos(e),Math.sin(e)+.25,Math.sin(a)*Math.cos(e)).multiplyScalar(sp);f.sp.position.copy(P);f.age=0;f.life=.55+Math.random()*.55;f.s0=.8+Math.random()*.8;f.s1=3+Math.random()*3;f.sp.visible=true;}
+    for(const f of X.smoke){const a=Math.random()*6.283,e=Math.random()*.9,sp=1.5+Math.random()*4;f.v.set(Math.cos(a)*Math.cos(e)*sp,1.5+Math.random()*3.5,Math.sin(a)*Math.cos(e)*sp);f.sp.position.copy(P).add(V((Math.random()-.5),Math.random(),(Math.random()-.5)));f.age=-.05-Math.random()*.3;f.life=6+Math.random()*5;f.s0=1.2+Math.random();f.s1=5+Math.random()*5;f.sp.visible=false;}};
+  X.step=dt=>{if(X.t<0)return;X.t+=dt;X.L.intensity=Math.max(0,700*Math.exp(-X.t*7));let live=false;
+    for(const f of X.fire){if(f.age>f.life){f.sp.visible=false;continue;}live=true;f.age+=dt;const k=f.age/f.life;f.v.multiplyScalar(Math.exp(-dt*5));f.v.y+=dt*2.5;f.sp.position.addScaledVector(f.v,dt);f.sp.scale.setScalar(f.s0+(f.s1-f.s0)*Math.sqrt(k));
+      f.sp.material.color.setRGB(1,clamp(.72-k*.75,.12,.72),clamp(.3-k*.6,.02,.3));f.sp.material.opacity=(k<.08?k/.08:Math.max(0,1-k))*.62;}
+    for(const f of X.smoke){f.age+=dt;if(f.age<0)continue;if(f.age>f.life){f.sp.visible=false;continue;}live=true;f.sp.visible=true;const k=f.age/f.life;f.v.x*=Math.exp(-dt*1.6);f.v.z*=Math.exp(-dt*1.6);f.v.y=lerp(f.v.y,.9,dt*.8);f.sp.position.addScaledVector(f.v,dt);f.sp.position.x+=dt*.5;
+      f.sp.scale.setScalar(f.s0+(f.s1-f.s0)*Math.sqrt(k));const sh=clamp(.06+k*.16,0,.3);f.sp.material.color.setRGB(sh,sh*.96,sh*.92);f.sp.material.opacity=Math.min(1,f.age*4)*Math.min(1,(1-k)*1.6)*.95;}
+    if(!live&&X.t>1)X.t=-1;};
+  return X;}
 function roadBlast(side,net=true){const RD=ROAD;if(!RD||RD.blown)return;RD.blown=true;const c=RD.cart,g=RD.gates&&RD.gates[side?1:0],P=V(roadX(c.z),1.2,c.z);
   if(net&&NET.mode==='host')netEv(['RX',side]);c.fuse=null;c.fuseM.visible=false;c.G.visible=false;gridRemove(c.box);if(c.box.phys&&PW){try{PW.removeCollider(c.box.phys,false);}catch(e){}}mapDirty=true;
   sThud(P,2.4);sfx('crush',P,1,.35,0,false);sfx('crush',P,1,.6,.08,false);noiseBurstAt(P,2.4,'lowpass',260,.4,1.6);shake(clamp(1.6-P.distanceTo(camera.position)/24,0,1));spawnDust(P,90,4,1.8);spawnDust(V(P.x,.3,P.z),60,6,.6);
-  const F=RD.fx;F.t=0;F.fb.position.copy(P);F.fb.visible=true;F.fl.position.copy(P).setY(2.5);F.fl.intensity=400;
+  RD.fx.go(P);spawnDust(V(P.x,.2,P.z),70,8,.25);c.fuseL.intensity=0;
   if(g&&g.st==='shut'){g.st='blown';gridRemove(g.box);if(g.box.phys&&PW){try{PW.removeCollider(g.box.phys,false);}catch(e){}}g.G.visible=false;rubSeed=4441+side;
     for(let k=0;k<6;k++){const m=new THREE.Mesh(boxUV(.4+rrand()*.6,.12+rrand()*.2,.18,1),k%3?MATS.wood:MATS.iron);const half=V(.3,.1,.09);const r=rubbleAdd({m,half,pos:V(g.x+(rrand()-.5)*2*g.hw,1+rrand()*2.5,g.z),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rrand()*3,rrand()*3,rrand()*3)),mass:12,cause:'struck by the blast'});
       r.vel.set((rrand()-.5)*8,3+rrand()*5,(side?-1:1)*(5+rrand()*8));r.w.set(rrand()-.5,rrand()-.5,rrand()-.5).multiplyScalar(12);}
@@ -9763,9 +9850,12 @@ function roadBlast(side,net=true){const RD=ROAD;if(!RD||RD.blown)return;RD.blown
   for(const f of fighters){if(!f.alive)continue;const ch=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips:f.chest,d=ch.distanceTo(P);if(d>8)continue;const k=1-d/8;
     if(d<2.6){f.damage(400,null,'blown apart by the powder');continue;}f.damage(10+55*k*k,null,'caught in the blast');f.burn=Math.max(f.burn||0,3*k);
     if(f.alive&&!f.ragdoll){_v.subVectors(ch,P).setY(0).normalize();f.knockdown(rand(2,3.5),_v.clone().multiplyScalar(4+8*k).setY(3*k),f.chest.clone());}}}
-function roadFx(dt){const RD=ROAD;if(!RD||!RD.fx)return;const F=RD.fx,c=RD.cart;
-  if(F.t>=0){F.t+=dt;const k=F.t/.7;F.fb.scale.setScalar(1+k*5.5);F.fb.material.opacity=Math.max(0,.95*(1-k));F.fl.intensity=Math.max(0,400*(1-F.t/1.2));if(k>=1&&F.t>1.2){F.t=-1;F.fb.visible=false;F.fl.intensity=0;}}
-  if(c&&c.fuse){if(NET.mode==='client')c.fuse.t-=dt;c.fuseM.visible=Math.random()<.8;c.fuseM.scale.setScalar(.7+Math.random()*.8);if(Math.random()<dt*14){const p=c.fuseM.getWorldPosition(_tg2);spawnSparks(p,2,null);}}}
+function roadFx(dt){const RD=ROAD;if(!RD||!RD.fx)return;RD.fx.step(dt);const c=RD.cart;
+  if(c&&c.fuse){if(NET.mode==='client')c.fuse.t=Math.max(0,c.fuse.t-dt);const u=1-c.fuse.t/TUG_FUSE,P=c.fusePath,n=P.length-1,q=Math.min(n-1e-4,u*n),i=Math.floor(q),f=q-i;
+    c.fuseM.position.copy(P[i]).lerp(P[i+1],f);c.fuseM.visible=true;c.fuseM.scale.setScalar(.8+Math.random()*.9);c.fuseL.intensity=2+Math.random()*3;
+    const w=c.fuseM.getWorldPosition(_tg2);if(Math.random()<dt*30)spawnSparksLocal(w,2);if(Math.random()<dt*6)spawnDust(w,1,.15,.4);
+    if((c.hiss=(c.hiss||0)-dt)<=0){c.hiss=.12;noiseBurstAt(w,.14,'highpass',3200,.7,.35);}}
+  else if(c&&c.fuseM.visible){c.fuseM.visible=false;c.fuseL.intensity=0;}}
 function tugTick(){const R=RUN,RD=ROAD,c=RD.cart;if(!c||R.ended)return;const h=1/240;
   for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}const f=tugSpawn(q.en,(Math.random()*4)|0);hostSendStart();if(f.isPlayer)state='playing';}
   // hands on the cart: the cart follows its holders; both sides holding stalls it
@@ -10141,6 +10231,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
