@@ -252,6 +252,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map mode" data-mode="tourney" role="radio"><b>Tournament</b><span>Eight fighters, knockout bracket</span></button>
       <button class="map mode" data-mode="gauntlet" role="radio"><b>Gauntlet</b><span>Survive waves together</span></button>
       <button class="map mode" data-mode="raid" role="radio"><b>The Raid</b><span>Two castles, one road · carry two of their strongboxes home · carts and ladders · friends on either side</span></button>
+      <button class="map mode" data-mode="battle" role="radio"><b>Pitched battle</b><span>Two armies, a dozen a side, on the raid's field · nobody comes back</span></button>
       <button class="map mode" data-mode="breach" role="radio"><b>The Breach</b><span>Hold the castle against six waves storming the wall · with friends and men-at-arms</span></button>
       <button class="map mode" data-mode="road" role="radio"><b>The Road</b><span>Escort a cart through the forest to the village · four ambushes</span></button>
       <button class="map mode" data-mode="yard" role="radio"><b>Training yard</b><span>Dummies, every weapon, hit readout</span></button>
@@ -397,7 +398,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=181;
+const BUILD=182;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3210,6 +3211,15 @@ function ikSwivel(up,D,P){if(performance.now()-(IKF.at||0)>250)return;const u=up
   const c=clamp(prev.dot(_ikwA),-1,1),th=Math.acos(c),mx=IK_SWV*Math.min(IKF.dt,.05);
   if(th>mx){const ax=_ikwA.clone().addScaledVector(prev,-c);if(ax.lengthSq()<1e-6)ax.copy(_ikwB).cross(prev);ax.normalize();_ikwA.copy(prev).multiplyScalar(Math.cos(mx)).addScaledVector(ax,Math.sin(mx));}   // turn toward it at most mx this frame
   u._sw1.copy(_ikwA);_ikwQ.invert();P.copy(_ikwA).applyQuaternion(_ikwQ);P.addScaledVector(D,-P.dot(D)).normalize();}
+/* Build 182: fighters far from the camera are animated less often (LOD). Within 22 m every frame; to 40 m every second frame, beyond that every
+   third, each with the time gathered since (animate integrates over whatever dt it's given). Far ones also drop the full-body physics
+   (f.ar) and stop casting shadows. You, friends and anyone down are always animated every frame. LOD_OFF turns it off (?nolod). */
+const LOD_OFF=/[?&]nolod/.test(location.search);
+function lodAnimate(dt){const c=camera.position;
+  for(const f of fighters){let k=1;if(!LOD_OFF&&!f.isPlayer&&!f.remote&&!f.ragdoll&&!(NET.mode==='client'&&f.me)){const d2=(f.pos.x-c.x)**2+(f.pos.z-c.z)**2;k=d2<484?1:d2<1600?2:3;}
+    if(k!==f._lodK){f._lodK=k;lodShadow(f,k<3);}
+    f._lodAcc=(f._lodAcc||0)+dt;if(k===1||(IKF.n+f.id)%k===0){const t=Math.min(f._lodAcc,.15);f._lodAcc=0;f.animate(t);}}}
+function lodShadow(f,on){if(!f.root)return;f.root.traverse(o=>{if(o.isMesh){if(o.userData._cs==null)o.userData._cs=o.castShadow;o.castShadow=on&&o.userData._cs;}});}
 function ikArm(b,side,target,pole,lens){
   const up=b[side+'Arm'],lo=b[side+'ForeArm'];up.updateWorldMatrix(true,false);_iS.setFromMatrixPosition(up.matrixWorld);
   const a=lens[0],c=lens[1];_iD.subVectors(target,_iS);let d=_iD.length();if(d<1e-5)return;const dd=clamp(d,.08,a+c-.002);_iD.multiplyScalar(1/d);d=dd;
@@ -7248,7 +7258,7 @@ class Fighter{
     }
     this.updateCaps();if(PW)this.physTargets(dt,ARM_IDX);
     if(HSBODY&&HS_NEAR.has(this)&&this.alive&&!this.ragdoll&&dt>0&&dt<=.2&&hsWorld())hsTarget(this,dt);   // the active body (drawn after the world steps, in logic)
-    else{if(this.hs)hsFree(this);this.fullBody(dt);if(this.ar)this.updateCaps();}   // a blow lands where the body is drawn
+    else{if(this.hs)hsFree(this);if((this._lodK||1)>1){this.ar=null;}else{this.fullBody(dt);if(this.ar)this.updateCaps();}}   // a blow lands where the body is drawn (far away: no full body, Build 182)
   }
   startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
     if(this.ai&&!this.isPlayer)this.ai.cd=Math.max(this.ai.cd||0,d*.6);if(NET.mode==='host')netEv(['q',this.id,part,r3(d)]);if(this.isPlayer)tell(this,part==='neck'?'Your throat is cut':'You clutch the wound','red');}
@@ -7477,7 +7487,7 @@ function poleSafe(sh,hand,pole,sg,f,r){if(!POLE_MIN)return pole;const d=_ps1.sub
   if(m>1e-5){o.multiplyScalar(1/m);const w=m/POLE_MIN;o.multiplyScalar(w).addScaledVector(fb,1-w).normalize();}else o.copy(fb);   // blend toward the fallback as the offset vanishes
   return pole.copy(sh).addScaledVector(d,along).addScaledVector(o,POLE_MIN);}
 function gripBest(f,key,B,side,grip,E,A,pole,lens,curl,wrap,dt){
-  if(window.__noGB)return gripHand(B,side,grip,E,A,pole,lens,curl,wrap);
+  if(window.__noGB||(f&&f._lodK>1&&!f.isPlayer))return gripHand(B,side,grip,E,A,pole,lens,curl,wrap);   /* (Build 182: far away, the first grip will do) */
   const st=f._pth||(f._pth={});let th=st[key]||0;
   /* (Build 153: every try starts from the same arm: the bones keep their twist from the last solve, so scoring one way round after another
      gave each a different answer and the elbow swung back and forth between two of them) */
@@ -8545,7 +8555,7 @@ function startGame(){
   flushMapSwitch();
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
-  if(MODE!=='br'){paused=false;initAudio();state='playing';if(MODE==='breach'||MODE==='road'||MODE==='raid'){if(curMap!==MODE)loadMap(MODE);}else if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');loadMap(b&&b.dataset.map!=='village'?b.dataset.map:'colosseum');}else if(curMap==='village')loadMap('colosseum');modeStart();
+  if(MODE!=='br'){paused=false;initAudio();state='playing';if(MODE==='breach'||MODE==='road'||MODE==='raid'||MODE==='battle'){const mk=MODE==='battle'?'raid':MODE;if(curMap!==mk)loadMap(mk);}else if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');loadMap(b&&b.dataset.map!=='village'?b.dataset.map:'colosseum');}else if(curMap==='village')loadMap('colosseum');modeStart();
     document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);requestLock();return;}
   if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');loadMap(b?b.dataset.map:'village');}   // the siege's and the road's maps are only for their modes
   RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';startCountdown();
@@ -8663,8 +8673,9 @@ function updateHUD(dt){
   if(state==='dead')grade.uniforms.uDesat.value=Math.min(1,(performance.now()-deathT)/1500);
   const meDead=!!player&&!player.alive;if(SPEC.on&&player&&player.alive)specStop();
   if(meDead&&!SPEC.diedAt)SPEC.diedAt=performance.now();if(!meDead)SPEC.diedAt=0;
-  if(meDead&&NET.mode&&performance.now()-SPEC.diedAt>2600&&!END&&!SPEC.dismissed&&el('end').classList.contains('hide')){   // slain in multiplayer: watch the others fight it out (between rounds too)
-    const L=specTargets();if(NET.mode&&L.length>=2){if(!SPEC.on)specStart();}else if(SPEC.on&&L.length<2)specStop();
+  const bat=RUN&&RUN.mode==='battle'||NET.mode==='client'&&NET.mode2==='battle';
+  if(meDead&&(NET.mode||bat)&&performance.now()-SPEC.diedAt>2600&&!END&&!SPEC.dismissed&&el('end').classList.contains('hide')){   // slain in multiplayer: watch the others fight it out (between rounds too)
+    const L=specTargets();if((NET.mode||bat)&&L.length>=2){if(!SPEC.on)specStart();}else if(SPEC.on&&L.length<2)specStop();
     if(SPEC.on){specTick(dt);return;}}
   if(SPEC.on){specTick(dt);if(END&&el('end').classList.contains('hide'))specStop();else return;}
   if((state==='dead'||state==='won')&&performance.now()-deathT>2600&&el('end').classList.contains('hide')){
@@ -8751,7 +8762,7 @@ function logic(dt){FR_TICK++;
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   if(HSBODY)hsNear();
-  IKF.n++;IKF.dt=dt;IKF.at=performance.now();for(const f of fighters)f.animate(dt);
+  IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   if(HSW)hsStep(dt);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
@@ -9142,7 +9153,7 @@ function initFighterCard(){
 // ================================================================ modes
 // Battle royale is the open match above. Duel, Tournament and Gauntlet run in the Arena with the ring off, one round at a time.
 let MODE='br',RUN=null,END=null,MODEHUD=['',''];
-try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard','breach','road','raid'].includes(m))MODE=m;}catch(e){}
+try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard','breach','road','raid','battle'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
 function humans(){const me=ME(),h=[{ctl:'me',name:me.name,pal:me.pal,look:me.look,ch:me.ch,kit:me.kit,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,ch:x.ch||'',kit:CHAR_BY[x.ch]?CHAR_BY[x.ch].kit:null,human:true});return h;}
@@ -9199,6 +9210,7 @@ function modeStart(){
   else if(MODE==='breach')breachStart(H);
   else if(MODE==='road')roadStart(H);
   else if(MODE==='raid')raidStart(H);
+  else if(MODE==='battle')battleStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
     {const [SA]=duelSpots(0),a0=Math.random()*6.283;H.forEach((en,i)=>{const a=a0+i/H.length*6.283;spawnEntrant(en,SA[0]+Math.cos(a)*2,SA[1]+Math.sin(a)*2,[ownWeapon(en,'arming'),['kettle']]);});}hostSendStart();gauntletWave();}
 }
@@ -9360,14 +9372,14 @@ function yardHud(){const y=el('yard');if(!inYard()){y.classList.add('hide');retu
 // ---- the raid (Build 181): two sides, two castles; carry the other side's strongboxes home. A box is a weapon of its own (WEAPONS.chest,
 // two hands, heavy and blunt): you hold one at a time, swing it if you must, and it drops when you go down. Two of theirs standing in your
 // strongroom at once wins. The fallen come back in their own yard after a few seconds; racks in each yard give out fresh weapons.
-const RAID_TEAM=6,RAID_WIN=2,RAID_BACK=8,RAID_TIME=900;
+let RAID_TEAM=6;const RAID_WIN=2,RAID_BACK=8,RAID_TIME=900;
 const RAID_KIT=[['longsword',['kettle','mail']],['spear',['nasal','mail']],['axe',['kettle','brigandine']],['arming',['bascinet','mail']],['mace',['nasal','brigandine']],['greatsword',['kettle','mail']]];
 function raidChests(){return [...freeSwords,...fighters.map(f=>f.sword)].filter(s=>s&&s.def.id==='chest');}
 function raidChestPos(s,out){return out.copy(s.H).lerp(s.T,.5);}
 function raidScore(){const sc=[0,0],p=V();for(const d of raidCarts()){if(d.gone)continue;const q=cartPt(d,0,0,0,V()),z=raidZoneOf(q.x,q.z,3);   /* a cart counts drawn up to the strongroom's door */if(z>=0)for(const hm of d.slots)if(hm!=null&&hm!==z)sc[z]++;}for(const s of raidChests()){if(s.home==null)continue;raidChestPos(s,p);const z=raidZoneOf(p.x,p.z);if(z>=0&&z!==s.home){const o=s.owner;if(!o||raidSideOf(o)===z)sc[z]++;}}return sc;}
-function raidEntrants(H){const R=RUN;R.en=[[],[]];
+function raidEntrants(H){const R=RUN;R.en=[[],[]];const NT=window.__raidTeam||RUN.team||RAID_TEAM;
   H.forEach((en,i)=>{const s=i%2&&H.length>1?1:0;en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;R.en[s].push(en);});
-  for(let s=0;s<2;s++)while(R.en[s].length<RAID_TEAM){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;
+  for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;
     en.kit=RAID_KIT[R.en[s].length%RAID_KIT.length];en.role=['guard','raid','raid','hunt','raid','guard'][R.en[s].length%6];R.en[s].push(en);}}
 function raidSpawn(en,k){const T_=RAID.team[en.raidS],p=T_.spawn[k%T_.spawn.length];const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:en.kit;
   const f=spawnEntrant(en,p[0]+rand(-.4,.4),p[1]+rand(-.4,.4),kit,en.human?null:en.skill);f.yaw=en.raidS?Math.PI:0;f.ai.retarget=0;return f;}
@@ -9452,9 +9464,23 @@ function raidCartPull(h){for(const f of fighters){const d=f.cartHold;if(!d)conti
     const k=55,c=14,M=75,F=V().subVectors(tg,P).multiplyScalar(k*M).addScaledVector(V().subVectors(f.vel,vp),c*M);F.y=Math.max(-900,Math.min(F.y,1400));if(F.length()>3200)F.setLength(3200);
     b.applyImpulseAtPoint({x:F.x*h,y:F.y*h,z:F.z*h},{x:P.x,y:P.y,z:P.z},true);
     f.dragBody=simTime+.08;if(dl>.55){const pb=V().subVectors(P,tg);pb.y=0;const L=pb.length();if(L>1e-3){f.vel.addScaledVector(pb,(dl-.55)*6*h/L);}}}}
+// ---- the pitched battle (Build 182): two armies drawn up in two ranks across the raid's field, a dozen a side (six on phones), no one
+// comes back; the side with men still standing wins. The fallen watch the rest of it (spectating, single player too).
+const BATTLE_TEAM=TOUCH?6:12;
+function battleStart(H){RUN={mode:'battle',H,names:BOT_NAMES(),ni:0,team:BATTLE_TEAM,kills:[0,0]};roundSetup();raidEntrants(H);
+  for(let s=0;s<2;s++){const L=RUN.en[s],n=Math.ceil(L.length/2);L.forEach((en,k)=>{const row=k%2,col=Math.floor(k/2),x=(col-(n-1)/2)*1.8+(row?.9:0),z=(s?1:-1)*(12+row*2);
+      const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=s?Math.PI:0;f.ai.retarget=0;});}
+  hostSendStart();battleHud();banner('Pitched battle',`${RUN.en[0].length} a side · nobody comes back · you are ${H[0].raidS?'red':'blue'}`);}
+function battleAlive(){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;return a;}
+function battleHud(){const a=battleAlive();MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`men standing · ${RUN.kills[0]+RUN.kills[1]} fallen`];}
+function battleKill(killer,victim){const R=RUN,en=victim.entrant;if(en&&en.raidS!=null&&killer&&killer.entrant&&killer.entrant.raidS!=null&&killer.entrant.raidS!==en.raidS)R.kills[killer.entrant.raidS]++;
+  battleHud();const a=battleAlive();if(R.ended)return;
+  if(!a[0]||!a[1]){R.ended=true;const w=a[0]?0:a[1]?1:-1;banner(w<0?'Nobody is left':`${w?'Red':'Blue'} holds the field`,`${a[0]} – ${a[1]} standing`);
+    R.next=simTime+3.5;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'Nobody won':'Defeat',`${w<0?'Both armies fell':(w?'Red':'Blue')+' won the battle'} · ${R.kills[0]+R.kills[1]} fallen`,w<0?'':`${w?'Red':'Blue'} holds the field.`);}}
 function modeKill(killer,victim){
   const R=RUN;if(R.over)return;
   if(R.mode==='raid'){raidKill(killer,victim);return;}
+  if(R.mode==='battle'){battleKill(killer,victim);return;}
   if(R.mode==='yard'){if(victim.entrant&&victim.entrant.human){const en=victim.entrant;R.respawn=R.respawn||[];R.respawn.push({en,at:simTime+2.5,f:victim});}return;}
   const alive=fighters.filter(f=>f.alive);
   if(R.mode==='duel'){if(alive.length>1)return;const w=alive[0];if(w&&w.entrant===R.a)R.sa++;else if(w)R.sb++;
@@ -9490,7 +9516,7 @@ function modeTick(){const R=RUN;if(!R||R.over)return;
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
-  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet',yard:'Enter the yard',breach:'Man the wall',road:'Take the road',raid:'Ride out'}[MODE];}
+  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet',yard:'Enter the yard',breach:'Man the wall',road:'Take the road',raid:'Ride out',battle:'Form up'}[MODE];}
 document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{MODE=b.dataset.mode;try{localStorage.setItem('bloodmoor-mode',MODE);}catch(e){}showMode();}));
 
 // ================================================================ multiplayer
@@ -9709,7 +9735,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     else if(it.obj&&e.p){it.obj.position.fromArray(e.p,0);it.obj.rotation.y=e.p[3];}
   }
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
-  IKF.n++;IKF.dt=dt;IKF.at=performance.now();for(const f of fighters)f.animate(dt);
+  IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
