@@ -401,7 +401,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=185;
+const BUILD=186;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -989,7 +989,7 @@ function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;for(let
     placeModel('modular_fort_01',{node:'modular_fort_01_'+node,x:alongX?x+o:x,z:alongX?z:z+o,ry:alongX?Math.PI/2:0,fit:[thick,H,seg+.02]},i===0?fallback:null);}}
 // a few models scattered round: picks from a list, random turn and size, kept where ok(x,z) allows
 function scatterModels(list,n,ok,seed,smin=.8,smax=1.3,dyn=null){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
-  for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const id=list[(r()*list.length)|0],po={x,z,ry:r()*6.28,s:smin+r()*(smax-smin)};if(dyn&&dyn[id])dynModel(id,po,dyn[id]);else placeModel(id,po);k++;}}
+  for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const id=list[(r()*list.length)|0],po={x,z,y:-.07,ry:r()*6.28,s:smin+r()*(smax-smin)};if(dyn&&dyn[id])dynModel(id,po,dyn[id]);else placeModel(id,po);k++;}}
 MATS.water=std({color:0x1a2a2e,roughness:.08,metalness:.2});
 // a water trough: a plank box hollowed to hold water, ends set in, two iron bands, standing on stone blocks
 function trough(x,z,ry){ownGroup(x,z,ry,()=>{
@@ -2409,20 +2409,26 @@ function buildRaid(){
       const bm=T_.mat;for(const sx of [-2.35,2.35]){const fl=new THREE.Mesh(wallPlane(1.1,1.9,1,1),bm);fl.position.set(sx,1.75,Z(d1+.42));fl.rotation.y=s?Math.PI:0;world.add(fl);}
       T_.zone={x0:-hx+.15,x1:hx-.15,z0:Math.min(Z(d0+.2),Z(d1-.05)),z1:Math.max(Z(d0+.2),Z(d1-.05))};T_.door=[0,Z(d1+1.2)];T_.home=[0,Z(d0+2.2)];
       T_.slots=[[-2,Z(d0+1)],[0,Z(d0+1)],[2,Z(d0+1)],[-2,Z(d0+2.6)],[0,Z(d0+3.3)],[2,Z(d0+2.6)]];}
-    // the spawn room: a stone house in the back corner where the side's fallen come back. Its door opens only from inside, by the lever
-    // by the door (raidDoor), and swings shut again behind them
-    {const x0=-XW+1,x1=-11.5,a0=BK,a1=BK+5.4,H=3.4,dx0=-16.2,dx1=-14.6;box(x1,x1+.4,a0,a1+.4,H,'stone');box(x0,dx0,a1,a1+.4,H,'stone');box(dx1,x1+.4,a1,a1+.4,H,'stone');
-      addGeo('stone',boxUV(dx1-dx0,H-2.6,.4,1.5),T((dx0+dx1)/2,2.6+(H-2.6)/2,Z(a1+.2)));addGeo('ashlar',boxUV(x1-x0+.8,.3,a1-a0+.8,2),T((x0+x1)/2,H+.15,Z((a0+a1)/2+.2)));
-      const D=new THREE.Group();D.position.set(dx0,0,Z(a1+.2));world.add(D);const leaf=new THREE.Mesh(boxUV(dx1-dx0,2.55,.1,1.2),MATS.wood);leaf.position.set((dx1-dx0)/2,1.28,0);leaf.castShadow=leaf.receiveShadow=true;D.add(leaf);
-      for(const y of [.4,1.3,2.2]){const st=new THREE.Mesh(boxUV(dx1-dx0-.1,.07,.13,1),MATS.iron);st.position.set((dx1-dx0)/2,y,0);D.add(st);}
-      const dbox=addBox(dx0,dx1,...zr(a1+.02,a1+.38),2.6);dbox.dyn=true;
-      const lx=dx1+.9,lz=Z(a1-.6),L=new THREE.Group();L.position.set(lx,0,lz);world.add(L);const lb=new THREE.Mesh(boxUV(.3,.5,.2,1),MATS.stone);lb.position.y=.25;L.add(lb);const arm=new THREE.Group();arm.position.y=.5;L.add(arm);const ah=new THREE.Mesh(new THREE.CylinderGeometry(.025,.03,.8,6),MATS.iron);ah.position.y=.4;arm.add(ah);const kn=new THREE.Mesh(new THREE.SphereGeometry(.06,8,6),MATS.wood);kn.position.y=.82;arm.add(kn);arm.rotation.z=.5;
-      T_.room={x0,x1,z0:Math.min(Z(a0),Z(a1)),z1:Math.max(Z(a0),Z(a1)),door:{D,box:dbox,open:0,t:0,x0:dx0,x1:dx1,z:Z(a1+.2)},lever:{x:lx,z:lz,arm}};
-      T_.spawn=[];for(let k=0;k<8;k++)T_.spawn.push([x0+1.2+(k%4)*1.6,Z(a0+1.3+Math.floor(k/4)*1.8)]);}
+    // the holding cells: one in each back corner, vaulted stone with a bench and a torch, fronted by an iron grille you can see through.
+    // The side's men start and come back in one of them (whichever has fewer foes near, so nobody can camp one way out); the lever inside
+    // raises the grille (raidCell), and it drops again behind them. There's no lever outside
+    T_.rooms=[];T_.spawn=[];
+    for(const side of [-1,1]){const xo=side<0?-XW+1:11.5,xi=side<0?-11.5:XW-1,x0=Math.min(xo,xi),x1=Math.max(xo,xi),a0=BK,a1=BK+5.2,H=3.4,gc=(x0+x1)/2+side*-1.2,gx0=gc-.85,gx1=gc+.85;
+      const wx=side<0?x1:x0-.4;box(wx,wx+.4,a0,a1+.4,H,'stone');box(x0-(side>0?.4:0),gx0,a1,a1+.4,H,'stone');box(gx1,x1+(side<0?.4:0),a1,a1+.4,H,'stone');
+      addGeo('stone',boxUV(gx1-gx0,H-2.7,.4,1.5),T(gc,2.7+(H-2.7)/2,Z(a1+.2)));addGeo('ashlar',boxUV(x1-x0+.8,.3,a1-a0+.8,2),T((x0+x1)/2,H+.15,Z((a0+a1)/2+.2)));
+      addGeo('beam',boxUV(2.4,.1,.4,1),T((x0+x1)/2,.45,Z(a0+.45)));for(const bx of [-1,1])addGeo('beam',boxUV(.1,.45,.35,1),T((x0+x1)/2+bx,.22,Z(a0+.45)));   // a bench along the back
+      addFlame((x0+x1)/2+side*2.2,2.2,Z(a0+.3),.14,true);
+      const G=new THREE.Group();G.position.set(gc,0,Z(a1+.2));world.add(G);const gw=gx1-gx0;
+      for(let k=0;k<=6;k++){const b=new THREE.Mesh(boxUV(.045,2.75,.045,1),MATS.iron);b.position.set(-gw/2+k*gw/6,1.37,0);b.castShadow=true;G.add(b);}for(let k=0;k<4;k++){const b=new THREE.Mesh(boxUV(gw,.05,.06,1),MATS.iron);b.position.set(0,.3+k*.75,0);G.add(b);}
+      const gbox=addBox(gx0,gx1,...zr(a1+.08,a1+.32),2.7);gbox.dyn=true;
+      const lx=gc+side*-1.35,lz=Z(a1-.55),L=new THREE.Group();L.position.set(lx,0,lz);world.add(L);const lb=new THREE.Mesh(boxUV(.3,.5,.2,1),MATS.stone);lb.position.y=.25;L.add(lb);const arm=new THREE.Group();arm.position.y=.5;L.add(arm);const ah=new THREE.Mesh(new THREE.CylinderGeometry(.025,.03,.8,6),MATS.iron);ah.position.y=.4;arm.add(ah);const kn=new THREE.Mesh(new THREE.SphereGeometry(.06,8,6),MATS.wood);kn.position.y=.82;arm.add(kn);arm.rotation.z=.5;
+      const cell={i:T_.rooms.length,x0,x1,z0:Math.min(Z(a0),Z(a1)),z1:Math.max(Z(a0),Z(a1)),door:{G,box:gbox,open:0,t:0,lift:0,x0:gx0,x1:gx1,z:Z(a1+.2)},lever:{x:lx,z:lz,arm},spawn:[]};
+      for(let k=0;k<8;k++)cell.spawn.push([x0+1.1+(k%4)*1.6,Z(a0+1.4+Math.floor(k/4)*1.7)]);T_.rooms.push(cell);T_.spawn.push(...cell.spawn);}
+    T_.room=T_.rooms[0];
     // the keep behind, roofs over the walls
     {const b={pv:s,thatch:false,chimney:false,door:0,torch:false,light:false,noDoor:true};house(0,Z(BK-8),0,16,10,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(-13,Z(BK-6),0,8,7,4,{...b,pv:1,slate:true});house(13,Z(BK-6),0,8,7,4,{...b,stone:true,allStone:true,slate:true});}
     // in the yard: braziers, barrels and crates, the racks where fresh weapons are taken
-    brazier(-6,Z(-12));brazier(12,Z(-6));for(const [x,lz] of [[-16,-4],[-15.3,-4.6],[16,-20],[-9.5,-23]])barrel(x,Z(lz));crate(15,Z(-3));crate(-16.5,Z(-18));
+    brazier(-6,Z(-12));brazier(12,Z(-6));for(const [x,lz] of [[-16,-4],[-15.3,-4.6],[9.5,-23],[-9.5,-23]])barrel(x,Z(lz));crate(15,Z(-3));crate(-16.5,Z(-18));
     for(const [x,lz,ry] of [[-XW+1.3,-9,Math.PI/2],[XW-1.3,-14,-Math.PI/2]]){weaponRack(x,Z(lz),s?Math.PI-ry:ry);R.racks.push({s,x:x+(x<0?1.2:-1.2),z:Z(lz),n:0,t:0});}
     // the wall-walk along the front wall (stand on it, look over the field, push ladders off), a stone stair up to it inside each end
     for(const [x0,x1] of [[-XW-1,bx-bhw],[bx+bhw,gx-ghw-3],[gx+ghw+3,XW+1]]){const [z0,z1]=zr(-WT/2,WT/2);FLOORS.push({x0,x1,z0,z1,h:WH+.02});const pb=addBox(x0,x1,...zr(WT/2-.32,WT/2),WH+1.1);pb.y0=WH-.02;}
@@ -2493,7 +2499,7 @@ function ladderUse(f,dry){if(!f||!f.alive||f.ragdoll||!LADDERS.length)return fal
     else{ladPt(d,d.lad.L/2,p);const dm=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(dm<1.6&&Math.abs(p.y-f.pos.y)<1&&dm<bd){bd=dm;best=d;what='take';}}}
   if(!best)return false;
   if(what==='climb'){if(!dry)ladderClimb(f,best);return 'Climb the ladder';}
-  if(what==='push'){if(!dry)ladderPush(f,best);return 'Push the ladder away';}
+  if(what==='push')return false;   /* (Build 186) a kick sends it over now */
   if(!dry)ladderTake(f,best);return 'Take up the ladder';}
 function ladderTake(f,d){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.cartHold=null;f.ladCarry=d;d.lad.carrier=f;d.lad.lift=0;mapDirty=true;
   const [p,q]=ladPose(d);d.lad.cp=p.clone();d.lad.cq=q.clone();   // the carried pose starts where it lay and is lifted up over ~0.45 s
@@ -2513,6 +2519,13 @@ function ladderSet(f,W){const d=f.ladCarry;f.ladCarry=null;d.lad.carrier=null;co
   else{const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw);p=V(f.pos.x+fx*.6-fx*d.lad.L/2,groundY(f.pos.x,f.pos.z,f.pos.y+.3)+.06,f.pos.z+fz*.6-fz*d.lad.L/2);q=new THREE.Quaternion().setFromUnitVectors(Y_AXIS,V(fx,0,fz));}
   if(b&&RP){b.setBodyType(RP.RigidBodyType.Dynamic,true);b.setTranslation({x:p.x,y:p.y,z:p.z},true);b.setRotation({x:q.x,y:q.y,z:q.z,w:q.w},true);b.setLinvel({x:0,y:0,z:0},true);b.setAngvel({x:0,y:0,z:0},true);b.wakeUp();}
   d.obj.position.copy(p);d.obj.quaternion.copy(q);if(d.ob){d.ob.gx=1e9;dynOb(d,p,q);}d.mv=true;d.net=1;sThud(p,.6);}
+// a kick at a standing ladder: at its foot it kicks the foot out along the kick, at its top (from a wall-walk) it shoves the top away
+function ladderKick(f,fw){if(!LADDERS.length)return false;const p=V();for(const d of LADDERS){if(d.gone||d.lad.carrier||!d.body||!ladStanding(d))continue;const b=d.body;
+    ladPt(d,.25,p);let dx=p.x-f.pos.x,dz=p.z-f.pos.z,dd=Math.hypot(dx,dz);
+    if(dd<1.25&&dd>.05&&(dx*fw.x+dz*fw.z)/dd>.3&&Math.abs(p.y-f.pos.y)<.8){b.wakeUp();b.applyImpulseAtPoint({x:fw.x*52,y:3,z:fw.z*52},{x:p.x,y:p.y,z:p.z},true);const t=ladPt(d,d.lad.L,V());b.applyImpulseAtPoint({x:fw.x*8,y:0,z:fw.z*8},{x:t.x,y:t.y,z:t.z},true);sThud(p,.8);return true;}
+    ladPt(d,d.lad.L-.3,p);dx=p.x-f.pos.x;dz=p.z-f.pos.z;dd=Math.hypot(dx,dz);
+    if(dd<1.4&&Math.abs(p.y-(f.pos.y+.5))<1.1){const ax=ladAxis(d,V()),out=V(-ax.x,0,-ax.z).normalize();if(out.dot(fw)<-.2)continue;out.addScaledVector(fw,.5).normalize();b.wakeUp();b.applyImpulseAtPoint({x:out.x*62,y:3,z:out.z*62},{x:p.x,y:p.y,z:p.z},true);sThud(p,.8);return true;}}
+  return false;}
 function ladderPush(f,d){const b=d.body;if(!b)return;const top=ladPt(d,d.lad.L,V()),ax=ladAxis(d,V()),out=V(-ax.x,0,-ax.z).normalize(),sd=V(-out.z,0,out.x).multiplyScalar((Math.random()-.5)*.8);
   b.wakeUp();b.applyImpulseAtPoint({x:(out.x+sd.x)*48,y:4,z:(out.z+sd.z)*48},{x:top.x,y:top.y,z:top.z},true);sThud(top,.6);f.useStamina&&f.useStamina(6);}
 function ladderClimb(f,d){if(f.sword&&TWO_HANDED[f.sword.def.id])f.dropSword();f.climb={d,t:.15};f.cartHold=null;}
@@ -2523,7 +2536,7 @@ function ladderStep(h){for(const d of LADDERS){const c=d.lad.carrier;if(!c)conti
     // it has weight: it follows the shoulder a little late, so it swings wide on a turn and settles
     const k=1-Math.exp(-h/(u<1?.06:.09)),pp=L.cp.clone();L.cp.lerp(tp,u<1?u*.5+k:k);L.cq.slerp(tq,u<1?u*.5+k:k);(L.v||(L.v=V())).subVectors(L.cp,pp).multiplyScalar(1/h);
     const p=L.cp,q=L.cq;if(d.body){d.body.setNextKinematicTranslation({x:p.x,y:p.y,z:p.z});d.body.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w});}else{d.obj.position.copy(p);d.obj.quaternion.copy(q);}
-    c.dragBody=simTime+.08;ladderSweep(d,c,h);}}
+    ladderSweep(d,c,h);}}
 // a carried ladder is long and heavy: swung or run into someone, it knocks them (the faster its end goes, the harder)
 function ladderSweep(d,c,h){const L=d.lad,a=ladPt(d,0,V()),b=ladPt(d,L.L,V()),pa=L.pa||a.clone(),pb=L.pb||b.clone();L.pa=a.clone();L.pb=b.clone();if(NET.mode==='client')return;
   for(const f of fighters){if(f===c||!f.alive||f.ragdoll||f.climb)continue;if(f.pos.distanceToSquared(c.pos)>L.L*L.L)continue;const ch=f.chest||f.pos;
@@ -4420,7 +4433,7 @@ Object.assign(HANDLING,{
   bottle:      {...HANDLING.mace,  effort:.7, grip:[660,1220],gripDamp:.85,accel:[270,540],wrist:[460,860],tipDamp:[.8,.42],sag:.14,reach:.12},
   mug:         {...HANDLING.mace,  effort:.7, grip:[700,1300],gripDamp:.9, accel:[280,560],wrist:[520,980],tipDamp:[.85,.45],sag:.08,reach:.13},
   poker:       {...HANDLING.arming,effort:.85,grip:[580,1080],gripDamp:.85,accel:[245,480],wrist:[360,680],tipDamp:[.85,.45],sag:.22,edgeTurn:.08},
-  chest:       {...HANDLING.mace,  effort:2.4,grip:[430,800],gripDamp:1.1,accel:[190,360],wrist:[300,380],tipDamp:[.95,.72],sag:.45},
+  chest:       {...HANDLING.mace,  effort:3.6,grip:[380,700],gripDamp:1.15,accel:[160,300],wrist:[260,330],tipDamp:[.97,.8],sag:.75,guardY:-.62},   /* (Build 186) held low in both hands, heavy to swing */
   stool:       {...HANDLING.mace,  effort:1.35,grip:[470,860],gripDamp:1.05,accel:[205,390],wrist:[320,420],tipDamp:[.95,.72],sag:.38},
   plank:       {...HANDLING.longsword,effort:1.3,grip:[470,860],gripDamp:.95,accel:[200,380],wrist:[220,380],tipDamp:[.85,.5],sag:.35,edgeTurn:.06},   /* (Build 155: a board swung like a longsword, as fast round as an arming sword) */
   stave:       {...HANDLING.longsword,effort:1.1,grip:[500,900],gripDamp:.95,accel:[210,400],wrist:[260,440],tipDamp:[.85,.5],sag:.3,edgeTurn:.06},
@@ -4428,7 +4441,7 @@ Object.assign(HANDLING,{
 });
 const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 // mass felt at the hand, kg: the weapon's weight, more for a head-heavy one (an axe or mace head is far out on the haft)
-const WMASS={chest:5.5,knife:.45,brokenBottle:.4,cleaver:.9,mug:.7,bottle:.6,stool:2.3,poker:1.0,arming:1.15,longsword:1.6,greatsword:3.2,axe:2.7,mace:2.7,spear:2.0,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
+const WMASS={chest:9,knife:.45,brokenBottle:.4,cleaver:.9,mug:.7,bottle:.6,stool:2.3,poker:1.0,arming:1.15,longsword:1.6,greatsword:3.2,axe:2.7,mace:2.7,spear:2.0,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
 // armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
 const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]},
@@ -6704,16 +6717,16 @@ class Fighter{
     if(MILL&&!this.isPlayer&&!this.remote)millSteer(this,wish);
     if(BREACH&&!this.isPlayer&&!this.remote)breachSteer(this,wish);
     if(ROAD&&!this.isPlayer&&!this.remote)roadSteer(this,wish);
-    if(RAID&&!this.isPlayer&&!this.remote)raidSteer(this,wish);
+    if(RAID&&!this.isPlayer&&!this.remote&&raidSteer(this,wish)){const tg=this.ai.target,td=tg&&tg.alive&&!tg.ragdoll?tg.pos.distanceTo(this.pos):99;if(td>5.5&&wish.lengthSq()>.04)this.faceDir(wish,h,6);}   /* (Build 186) walking to an objective with nobody close, face the way you're going (they backed toward it, still facing a far foe) */
     const fy=SHIP||MILL||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.fallT==null&&this.vy<=0&&this.pos.y>fy&&this.pos.y-fy<.1)this.pos.y=fy;   // down a stair
     const onGround=this.pos.y<=fy+.001&&this.fallT==null;if(onGround&&this.pos.y<fy)this.pos.y=fy;
-    run=run&&!exhausted&&!this.crouch&&onGround&&!this._wade;
+    run=run&&!exhausted&&!this.crouch&&onGround&&!this._wade&&!(this.sword&&this.sword.def.id==='chest');if(this.sword&&this.sword.def.id==='chest'&&wish.lengthSq()>.01)this.useStamina(2.2*h);   /* (Build 186) a strongbox is a strain: no running with it, and walking with it wears you down */
     const legF=Math.max(this.limbF('legL'),this.limbF('legR'));if(legF>.45||(this.gut||0)>=1)run=false;   // an opened belly: no running
     if(this.heartT&&simTime>this.heartT){this.heartT=0;if(this.alive&&!this.downed&&NET.mode!=='client'){this.goDown(this.lastHitBy);return;}}   // the heart gives out: down in a second or two
     const drag=this.dragT>simTime;if(drag)run=false;const dragB=this.dragBody>simTime;
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
-    let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1)*(this.sword&&this.sword.def.id==='chest'?.8:1);
+    let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1)*(this.sword&&this.sword.def.id==='chest'?(this.stamina>6?.5:.34):1)*(this.ladCarry?.85:1);
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -6798,7 +6811,7 @@ class Fighter{
     }
   }
   kickCheck(){
-    this.fwd(_f);if(dynKick(this,_f)){this.kickHit=true;return;}
+    this.fwd(_f);if(ladderKick(this,_f)){this.kickHit=true;return;}if(dynKick(this,_f)){this.kickHit=true;return;}
     for(const o of fighters){
       if(o===this||!o.alive||o.ragdoll)continue;_v.subVectors(o.pos,this.pos).setY(0);const d=_v.length();if(d>1.45||d<.01)continue;if(_v.dot(_f)/d<.5)continue;
       // a kick is a shove with the leg: it staggers and pushes them back a step or two. It takes them off their feet only when
@@ -8502,6 +8515,7 @@ addEventListener('mousemove',e=>{
 function aimMove(dx,dy){   // the hand box: the same rule for the mouse and the right thumb
   if(state!=='playing'||!player||!player.alive||player.ragdoll)return;
   const c=player.ctrl;
+  if(player.wheelHold){c.x=clamp(c.x+dx*.0021,-.5,.5);c.y=clamp(c.y-dy*.0021,-.46,.56);return;}   // on the winch the mouse turns the wheel (raidWorks)
   if(!player.sword){
     if(input.lmb||input.rmb){for(const sd of ['R','L']){if(!(sd==='R'?input.lmb:input.rmb))continue;const a=player.fists[sd];if(!a.c)continue;const sg=sd==='R'?1:-1;
         a.c.x+=dx*.0021;a.c.y-=dy*.0021;
@@ -9437,15 +9451,15 @@ function yardHud(){const y=el('yard');if(!inYard()){y.classList.add('hide');retu
 // two hands, heavy and blunt): you hold one at a time, swing it if you must, and it drops when you go down. Two of theirs standing in your
 // strongroom at once wins. The fallen come back in their own yard after a few seconds; racks in each yard give out fresh weapons.
 let RAID_TEAM=6;const RAID_WIN=2,RAID_BACK=8,RAID_TIME=900;
-const RAID_KIT=[['longsword',['kettle','mail']],['spear',['nasal','mail']],['axe',['kettle','brigandine']],['arming',['bascinet','mail']],['mace',['nasal','brigandine']],['greatsword',['kettle','mail']]];
+const RAID_KIT=[['longsword',['kettle','brigandine']],['spear',['nasal']],['axe',['kettle','brigandine']],['arming',['bascinet','brigandine']],['mace',['nasal']],['greatsword',['kettle','brigandine']]];   /* (Build 186) armour that shows the side's colour: brigandine is dyed in it, and the rest show their coats */
 function raidChests(){return [...freeSwords,...fighters.map(f=>f.sword)].filter(s=>s&&s.def.id==='chest');}
 function raidChestPos(s,out){return out.copy(s.H).lerp(s.T,.5);}
 function raidScore(){const sc=[0,0],p=V();for(const s of raidChests()){if(s.home==null)continue;raidChestPos(s,p);const z=raidZoneOf(p.x,p.z,!s.owner&&p.y>.5?3:0);if(z>=0&&z!==s.home){const o=s.owner;if(!o||raidSideOf(o)===z)sc[z]++;}}return sc;}
 function raidEntrants(H){const R=RUN;R.en=[[],[]];const NT=window.__raidTeam||RUN.team||RAID_TEAM;
-  H.forEach((en,i)=>{const s=i%2&&H.length>1?1:0;en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.look={...(en.look||DEF_LOOK),sc:TEAM_SC[s]};R.en[s].push(en);});
-  for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;en.look={...randomLook(),sc:TEAM_SC[s]};
+  H.forEach((en,i)=>{const s=i%2&&H.length>1?1:0;en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.look={...(en.look||DEF_LOOK),sc:0};R.en[s].push(en);});
+  for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;en.look={...randomLook(),sc:0,o:[1,3,4][(Math.random()*3)|0]};
     en.kit=RAID_KIT[R.en[s].length%RAID_KIT.length];en.role=['guard','raid','raid','hunt','raid','guard'][R.en[s].length%6];R.en[s].push(en);}}
-function raidSpawn(en,k){const T_=RAID.team[en.raidS],p=T_.spawn[k%T_.spawn.length];const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:en.kit;
+function raidSpawn(en,k){const T_=RAID.team[en.raidS];let cell=T_.rooms[k%2];if(T_.rooms.length>1){const foes=c=>fighters.filter(o=>o.alive&&o.entrant&&o.entrant.raidS!=null&&o.entrant.raidS!==en.raidS&&Math.hypot(o.pos.x-(c.x0+c.x1)/2,o.pos.z-c.door.z)<12).length;const a=foes(T_.rooms[0]),b=foes(T_.rooms[1]);if(a!==b)cell=a<b?T_.rooms[0]:T_.rooms[1];}const p=cell.spawn[k%cell.spawn.length];const kit=en.human?[ownWeapon(en,'longsword'),['kettle','brigandine']]:en.kit;
   const f=spawnEntrant(en,p[0]+rand(-.4,.4),p[1]+rand(-.4,.4),kit,en.human?null:en.skill);f.yaw=en.raidS?Math.PI:0;f.ai.retarget=0;return f;}
 function raidStart(H){RUN={mode:'raid',H,names:BOT_NAMES(),ni:0,back:[],kills:[0,0],t0:simTime,warn:{}};roundSetup();raidEntrants(H);
   for(let s=0;s<2;s++)RUN.en[s].forEach((en,k)=>raidSpawn(en,k));
@@ -9457,7 +9471,7 @@ function raidRackFill(rk,n){const ids=['arming','longsword','axe','mace','spear'
   for(let i=have;i<n;i++){spawnWeaponLoot(WEAPONS[ids[(Math.random()*ids.length)|0]],rk.x+rand(-.3,.3),rk.z+rand(-.8,.8));loot[loot.length-1].sword.rack=rk;}}
 function raidHud(){const R=RUN,sc=raidScore();R.sc=sc;const mine=(R.H[0]&&R.H[0].raidS)||0,left=Math.max(0,RAID_TIME-(simTime-R.t0));
   const held=raidChests().filter(s=>s.owner&&s.owner.alive&&s.home!==raidSideOf(s.owner));const hs=held.map(s=>`${s.owner.name} has ${s.home?'red':'blue'}'s box`);
-  MODEHUD=[`Blue ${sc[0]} – ${sc[1]} Red`,`${fmtClock(left)} left`+(hs.length?' · '+hs.slice(0,2).join(' · '):` · ${RAID_WIN} boxes win`)];}
+  MODEHUD=[`Blue ${sc[0]} – ${sc[1]} Red`,(R.sudden?'Sudden death':`${fmtClock(left)} left`)+(hs.length?' · '+hs.slice(0,2).join(' · '):` · ${RAID_WIN} boxes win`)];}
 function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPull(h);raidWorks(h);
   // the fallen come back in their own yard
   for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}
@@ -9469,25 +9483,28 @@ function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPu
     // a bot that has carried a box into its own strongroom sets it down and takes a weapon back up
     if(!f.isPlayer&&!f.remote){const ct=RAID.team[raidSideOf(f)].cart;if(ct&&raidHolder(ct)&&ct.slots.includes(null)&&cartPt(ct,0,0,0,V()).distanceTo(f.pos)<2.4){raidUse(f);if(!f.sword||f.sword.def.id!=='chest'){raidSetDown2(f);continue;}}const z=raidZoneOf(f.pos.x,f.pos.z),s=raidSideOf(f);if(z===s&&f.sword.home!==s&&Math.hypot(f.pos.x-RAID.team[s].home[0],f.pos.z-RAID.team[s].home[1])<1.6||z===s&&f.sword.home===s){raidSetDown(f);}}}
   for(const rk of RAID.racks)if(simTime>(rk.t||0)){rk.t=simTime+20;raidRackFill(rk,3);}
-  for(const T_ of RAID.team){const D=T_.room&&T_.room.door;if(D&&!D.open&&fighters.some(o=>o.alive&&!o.ragdoll&&!o.isPlayer&&!o.remote&&raidSideOf(o)===T_.s&&raidInRoom(T_,o)))raidDoor(T_,true);}   // bots let themselves out
+  for(const T_ of RAID.team)for(const c of T_.rooms){if(!c.door.open&&fighters.some(o=>o.alive&&!o.ragdoll&&!o.isPlayer&&!o.remote&&raidSideOf(o)===T_.s&&raidCellOf(T_,o)===c))raidCell(T_,c,true);}   // bots let themselves out
   // bots pick up boxes they've walked onto
   for(const f of fighters){if(!f.alive||f.ragdoll||f.isPlayer||f.remote||!f.entrant||f.sword&&f.sword.def.id==='chest')continue;const g=f.ai.raidGoal;if(!g||!g.chest)continue;const it=loot.find(i=>i.kind==='weapon'&&i.sword===g.chest);if(!it)continue;lootPos(it,p);if(Math.hypot(p.x-f.pos.x,p.z-f.pos.z)<1.25&&Math.abs(p.y-f.pos.y)<1.2)pickUp(f,it);}
   raidHud();const sc=R.sc;
   for(let s=0;s<2;s++){const k=s+'';if(sc[s]>(R.warn[k]||0)){banner(`${s?'Red':'Blue'} has ${sc[s]} box${sc[s]>1?'es':''} home`,sc[s]>=RAID_WIN?'':`One more wins it`);}R.warn[k]=sc[s];}
   const tOut=simTime-R.t0>RAID_TIME;
-  if((sc[0]>=RAID_WIN||sc[1]>=RAID_WIN||tOut)&&!R.ended){R.ended=true;const w=sc[0]>sc[1]?0:sc[1]>sc[0]?1:-1;banner(w<0?'Neither side':`${w?'Red':'Blue'} wins`,`${sc[0]} – ${sc[1]}`);
-    R.next=simTime+3;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'A draw':'Defeat',`Blue ${sc[0]} – ${sc[1]} Red`,w<0?'Time ran out.':`${w?'Red':'Blue'} carried the boxes home.`);}}
+  // time's up level: sudden death. Nobody comes back; the next box home, or the last side standing, wins
+  if(tOut&&sc[0]===sc[1]&&!R.sudden&&!R.ended){R.sudden=true;R.back.length=0;banner('Sudden death','Nobody comes back · the next box home or the last side standing wins');}
+  let wipe=-1;if(R.sudden){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;if(!a[0]||!a[1])wipe=a[0]?0:a[1]?1:2;}
+  if((sc[0]>=RAID_WIN||sc[1]>=RAID_WIN||tOut&&(sc[0]!==sc[1]||wipe>=0))&&!R.ended){R.ended=true;const w=wipe>=0&&sc[0]===sc[1]?(wipe<2?wipe:-1):sc[0]>sc[1]?0:sc[1]>sc[0]?1:-1;banner(w<0?'Neither side':`${w?'Red':'Blue'} wins`,`${sc[0]} – ${sc[1]}`);
+    R.next=simTime+3;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'A draw':'Defeat',`Blue ${sc[0]} – ${sc[1]} Red`,w<0?'Time ran out.':wipe>=0&&sc[0]===sc[1]?`${w?'Red':'Blue'} was the last side standing.`:`${w?'Red':'Blue'} carried the boxes home.`);}}
 function raidSetDown2(f){const en=f.entrant;if(en&&en.kit&&!f.sword){const sw=new Sword(WEAPONS[en.kit[0]]);f.sword=sw;sw.owner=f;const ht=f.handTarget(V());sw.reset(ht,f.guideDir(ht,V()));}}
 function raidSetDown(f){const s=f.sword;f.dropSword(true);s.Hp.copy(s.H);s.vel&&s.vel.set(0,0,0);const en=f.entrant;
   if(!f.isPlayer&&!f.remote&&en&&en.kit){const sw=new Sword(WEAPONS[en.kit[0]]);if(f.sword)f.sword.dispose();f.sword=sw;sw.owner=f;const ht=f.handTarget(V());sw.reset(ht,f.guideDir(ht,V()));}}
 function raidKill(killer,victim){const R=RUN;const en=victim.entrant;if(!en||en.raidS==null)return;if(killer&&killer.entrant&&killer.entrant.raidS!=null&&killer.entrant.raidS!==en.raidS)R.kills[killer.entrant.raidS]++;
-  R.back.push({en,at:simTime+RAID_BACK});if(victim.isPlayer)note(`Back on your feet in ${RAID_BACK} s`,'sm');}
+  if(R.sudden){if(victim.isPlayer)note('Sudden death: no coming back','sm');return;}R.back.push({en,at:simTime+RAID_BACK});if(victim.isPlayer)note(`Back on your feet in ${RAID_BACK} s`,'sm');}
 // bots: what each one is after. Carrying a box: home. Raiders: the nearest of their boxes not already ours. Hunters and anyone near: get our
 // boxes back from whoever has them, or carry home ours lying loose. Guards: the strongroom door. Anyone with a foe close fights (think does that).
 function raidSteer(f,wish){const R=RAID;if(!R||!f.entrant||f.entrant.raidS==null||!RUN||RUN.mode!=='raid')return false;const A=f.ai,s=f.entrant.raidS,o=1-s,x=f.pos.x,z=f.pos.z,tg=A.target;
   const tgD=tg&&tg.alive&&!tg.ragdoll?Math.hypot(tg.pos.x-x,tg.pos.z-z):99;
   const T_=R.team[s],p=V();
-  if(raidInRoom(T_,f)){const D=T_.room.door,ex=(D.x0+D.x1)/2,ez=D.z+(s?-1.4:1.4),dx=ex-x,dz=ez-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}   // in the spawn room: out by the door
+  {const cc=raidCellOf(T_,f);if(cc){const D=cc.door,ex=(D.x0+D.x1)/2,ez=D.z+(s?-1.4:1.4),dx=ex-x,dz=ez-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}}   // in the spawn room: out by the door
   if(f.sword&&f.sword.def.id==='chest'){A.raidGoal={home:1};if(tgD<1.6)return false;{const ct=T_.cart;if(ct&&!ct.gone&&raidHolder(ct)&&ct.slots.includes(null)){const q=cartPt(ct,0,0,0,V());if(q.distanceTo(f.pos)<16){raidGo(f,wish,q.x,q.z);return true;}}}   /* our cart is out and being pulled: put it in there */raidGo(f,wish,T_.home[0]+((f.id%3)-1)*1.2,T_.home[1]);return true;}
   if((A.raidT||0)<simTime){A.raidT=simTime+.6+Math.random()*.4;let best=null,bs=1e9;const role=f.entrant.role||'raid';
     for(const c of raidChests()){raidChestPos(c,p);const d=Math.hypot(p.x-x,p.z-z),zn=raidZoneOf(p.x,p.z),own=c.owner;
@@ -9516,8 +9533,8 @@ function raidUse(f,dry){if(!RAID||!f||!f.alive||f.ragdoll)return false;
   if(f.cartHold){if(!dry){f.cartHold=null;}return 'Let go of the shafts';}
   if(f.wheelHold){if(!dry){f.wheelHold=null;}return 'Let go of the wheel';}
   const chest=f.sword&&f.sword.def.id==='chest';
-  for(const T_ of RAID.team){const g=T_.gate;if(g&&Math.hypot(g.wx-f.pos.x,g.wz-f.pos.z)<1.5&&!fighters.some(o=>o.wheelHold===T_&&o.alive)){if(!dry){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.wheelHold=T_;}return 'Turn the winch (W up, S down)';}
-    const L=T_.room&&T_.room.lever;if(L&&Math.hypot(L.x-f.pos.x,L.z-f.pos.z)<1.3){if(!dry)raidDoor(T_,true);return 'Pull the lever';}}
+  for(const T_ of RAID.team){const g=T_.gate;if(g&&Math.hypot(g.wx-f.pos.x,g.wz-f.pos.z)<1.5&&!fighters.some(o=>o.wheelHold===T_&&o.alive)){if(!dry){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.wheelHold=T_;}return 'Turn the winch (circle the mouse)';}
+    for(const c of T_.rooms){const L=c.lever;if(Math.hypot(L.x-f.pos.x,L.z-f.pos.z)<1.3&&raidCellOf(T_,f)===c){if(!dry)raidCell(T_,c,true);return 'Pull the lever';}}}
   for(const d of raidCarts()){if(d.gone)continue;const bed=cartPt(d,0,.8,0,_rc2),db=Math.hypot(bed.x-f.pos.x,bed.z-f.pos.z);
     // a box goes into the bed loose: it rides there only because it's lying on the boards
     if(chest&&db<2.1){if(!dry){const s=f.sword;f.dropSword(true);const c0=cartPt(d,0,0,0,V()),n=raidChests().filter(c=>!c.owner&&c!==s&&c0.distanceTo(c.H)<1.6).length;const P=cartPt(d,(n%2?.45:-.45)-.25,(d.cartY0||.74)+.32,(n>1?.2:-.2),V()),dir=cartPt(d,1,0,0,V()).sub(cartPt(d,0,0,0,V())).normalize();
@@ -9526,9 +9543,11 @@ function raidUse(f,dry){if(!RAID||!f||!f.alive||f.ragdoll)return false;
     if(!chest&&dh<1.25&&!raidHolder(d)){if(!dry){if(f.sword)f.dropSword(true);f.giveFists();f.cartHold=d;}return 'Take up the shafts';}}
   return false;}
 // the spawn room's door: the lever inside swings it open; it shuts by itself 3.5 s later once the doorway is clear
-function raidDoor(T_,open,net=true){const D=T_.room&&T_.room.door;if(!D)return;if(open){D.t=simTime+3.5;if(T_.room.lever)T_.room.lever.pull=1;if(D.open)return;D.open=1;gridRemove(D.box);boxPhys(D.box,false);sfx('block',V(D.x0,1.2,D.z),.3,.6,.1,false);}
-  else{if(!D.open)return;D.open=0;const b=D.box;gridInsert(b,b.x0-1,b.x1+1,b.z0-1,b.z1+1);boxPhys(b,true);sThud(V(D.x0,1.2,D.z),.5);}
-  if(net&&NET.mode==='host')netEv(['SD',T_.s,open?1:0]);}
+// a holding cell's grille: the lever raises it (over half a second) and it drops 4 s later once nobody stands under it
+function raidCell(T_,c,open,net=true){const D=c.door;if(open){D.t=simTime+4;c.lever.pull=1;if(D.open)return;D.open=1;gridRemove(D.box);boxPhys(D.box,false);sfx('block',V((D.x0+D.x1)/2,1.2,D.z),.35,.5,.1,false);}
+  else{if(!D.open)return;D.open=0;const b=D.box;gridInsert(b,b.x0-1,b.x1+1,b.z0-1,b.z1+1);boxPhys(b,true);sfx('block',V((D.x0+D.x1)/2,1.2,D.z),.5,.4,.1,false);}
+  if(net&&NET.mode==='host')netEv(['SD',T_.s,c.i,open?1:0]);}
+function raidDoor(T_,open){for(const c of T_.rooms)raidCell(T_,c,open);}
 // the portcullis to height lift (0 shut, 3.9 right up)
 function raidGateSet(T_,lift){const g=T_.gate;if(!g)return;g.lift=clamp(lift,0,3.9);g.box.y0=g.lift>.02?g.lift:0;g.box.h=4.5+g.lift;boxPhys(g.box,g.lift<1.7);}
 // a box's collider in the rigid-body engine, on or off (a door or grate that moves)
@@ -9536,15 +9555,18 @@ function boxPhys(b,on){if(!PW||!R)return;if(on&&!b.phys){b.phys=PW.createCollide
 // every sim step on the host: the winch turned by whoever holds it, doors shutting behind people
 function raidWorks(h){if(!RAID)return;
   for(const f of fighters){const T_=f.wheelHold;if(!T_)continue;const g=T_.gate;if(!f.alive||f.ragdoll||Math.hypot(g.wx-f.pos.x,g.wz-f.pos.z)>1.8||f.sword&&f.sword.def.kind!=='fist'){f.wheelHold=null;continue;}
-    const up=f.isPlayer?(input.keys.KeyW?1:0)-(input.keys.KeyS?1:0):f.remote?(f._wf>.3?1:f._wf<-.3?-1:0):(f._wheelWant??1);
-    if(up){raidGateSet(T_,g.lift+(up>0?.6:-1.1)*h);if(up>0)f.useStamina(2*h);}f.yaw=Math.atan2(g.wx-f.pos.x,g.wz-f.pos.z);
+    // turned with the mouse: the hand goes round in circles, clockwise winds the grate up, anticlockwise lets it down; one turn of the
+    // wheel is one circle of the hand and 1.5 m of grate (bots just wind)
+    let dl=0;if(f.isPlayer||f.remote){const cx=f.ctrl.x,cy=f.ctrl.y-.05,r=Math.hypot(cx,cy);if(r>.1){const a=Math.atan2(cy,cx);if(f._wa!=null){const da=wrapA(a-f._wa);dl=clamp(-da,-.35,.35)/4.2;}f._wa=a;}else f._wa=null;}
+    else dl=(f._wheelWant??1)*.6*h;
+    if(dl){raidGateSet(T_,g.lift+dl);if(dl>0)f.useStamina(dl*6);}f.yaw=Math.atan2(g.wx-f.pos.x,g.wz-f.pos.z);
     if(simTime>(g.st||0)&&Math.abs(g.lift-(g.sent??-1))>.04){g.st=simTime+.1;g.sent=g.lift;if(NET.mode==='host')netEv(['PC',T_.s,Math.round(g.lift*100)/100]);}}
-  for(const T_ of RAID.team){const D=T_.room&&T_.room.door;if(D&&D.open&&simTime>D.t){const b=D.box;if(!fighters.some(o=>o.alive&&!o.ragdoll&&o.pos.x>b.x0-.5&&o.pos.x<b.x1+.5&&o.pos.z>b.z0-.6&&o.pos.z<b.z1+.6))raidDoor(T_,false);else D.t=simTime+.5;}}}
-function raidInRoom(T_,f){const r=T_.room;return r&&f.pos.x>r.x0&&f.pos.x<r.x1&&f.pos.z>r.z0&&f.pos.z<r.z1;}
+  for(const T_ of RAID.team)for(const c of T_.rooms){const D=c.door;if(D.open&&simTime>D.t){const b=D.box;if(!fighters.some(o=>o.alive&&!o.ragdoll&&o.pos.x>b.x0-.5&&o.pos.x<b.x1+.5&&o.pos.z>b.z0-.6&&o.pos.z<b.z1+.6))raidCell(T_,c,false);else D.t=simTime+.5;}}}
+function raidCellOf(T_,f){for(const r of T_.rooms||[])if(f.pos.x>r.x0&&f.pos.x<r.x1&&f.pos.z>r.z0&&f.pos.z<r.z1)return r;return null;}
+function raidInRoom(T_,f){return !!raidCellOf(T_,f);}
 // drawn on every machine
 function raidVisual(dt){if(!RAID)return;for(const T_ of RAID.team){const g=T_.gate;if(g){if(NET.mode==='client'&&g.tl!=null)g.lift=lerp(g.lift,g.tl,1-Math.exp(-10*dt));g.G.position.y=g.lift;g.wh.rotation.z=-g.lift*4.2;}
-    const D=T_.room&&T_.room.door;if(D){const want=D.open?(T_.s?1.5:-1.5):0;D.D.rotation.y=lerp(D.D.rotation.y,want,1-Math.exp(-5*dt));}
-    const L=T_.room&&T_.room.lever;if(L){L.pull=Math.max(0,(L.pull||0)-dt*.6);L.arm.rotation.z=.5-L.pull*1;}}}
+    for(const c of T_.rooms||[]){const D=c.door;D.lift=lerp(D.lift,D.open?2.35:0,1-Math.exp(-(D.open?4:7)*dt));D.G.position.y=D.lift;const L=c.lever;L.pull=Math.max(0,(L.pull||0)-dt*.6);L.arm.rotation.z=.5-L.pull*1;}}}
 // a cart's bed carries what lies on it: each step, loose weapons and boxes resting on the boards move with the cart (they still slide,
 // bounce and fall off by themselves; rigid-body weapons and ladders are carried by friction in their own worlds)
 function cartCarry(d,p,q){const pp=d._cp,pq=d._cq;if(pp){const inv=_rcq.copy(pq).invert(),bed=(d.cartY0||.74)+.08;
@@ -9571,7 +9593,7 @@ function teamStart(H){RUN={mode:'team',H,names:BOT_NAMES(),ni:0,team:TOUCH?Math.
   const sp=duelSpots(Math.min(14,4+RUN.team*1.6));
   for(let s=0;s<2;s++){const [cx,cz]=sp[s],[ox,oz]=sp[1-s],L=RUN.en[s];let fx=ox-cx,fz=oz-cz;const fl=Math.hypot(fx,fz)||1;fx/=fl;fz/=fl;
     L.forEach((en,k)=>{let x=cx,z=cz;if(k){for(let t=0;t<30;t++){const a=Math.random()*6.283,r=1.2+Math.sqrt(Math.random())*Math.min(4,1+L.length*.35);const tx=cx+Math.cos(a)*r-fx*r*.4,tz=cz+Math.sin(a)*r-fz*r*.4;if(SHIP||isFree(tx,tz,.6)&&groundY(tx,tz,0)>-.05){x=tx;z=tz;break;}}}
-      const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=Math.atan2(fx,fz);f.ai.retarget=0;});}
+      const kit=en.human?[ownWeapon(en,'longsword'),['kettle','brigandine']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=Math.atan2(fx,fz);f.ai.retarget=0;});}
   hostSendStart();teamHud();banner('Team battle',`${RUN.team} a side · nobody comes back · you are ${H[0].raidS?'red':'blue'}`);}
 function teamAlive(){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;return a;}
 function fmtClock(t){t=Math.max(0,t);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
@@ -9691,7 +9713,7 @@ function netSnap(){
   const z=zone;
   const S={t:'s',ht:Math.round(simTime*1000)/1000,gr:PIT&&PIT.grate?[r3(PIT.grate.C.x),r3(PIT.grate.C.y),r3(PIT.grate.C.z),r3(PIT.grate.phi),PIT.grate.mode==='rest'?0:1]:0,cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
   for(const f of fighters){
-    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,lc:f.climb&&f.climb.d?[LADDERS.indexOf(f.climb.d),r3(f.climb.t)]:f.ladCarry?[LADDERS.indexOf(f.ladCarry),-1]:0,ch:f.cartHold?RAID&&RAID.team.findIndex(t=>t.cart===f.cartHold):-1,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
+    const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,lc:f.climb&&f.climb.d?[LADDERS.indexOf(f.climb.d),r3(f.climb.t)]:f.ladCarry?[LADDERS.indexOf(f.ladCarry),-1]:0,ch:f.cartHold?RAID&&RAID.team.findIndex(t=>t.cart===f.cartHold):-1,wh:f.wheelHold?f.wheelHold.s:-1,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
     if(f.sword){const s=f.sword;if((f.revW||0)>.5)o.rv=1;if(f.commit)o.cm=1;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
@@ -9814,7 +9836,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     if(m0&&f!==player){const x0=m0.get(o0.i),x1=m1.get(o0.i);if(x0&&x1&&!!x1.a===!!o0.a&&!!x1.rg===!!o0.rg){q=x0;o={...o0,p:x1.p,y:x1.y,v:x1.v,w:x1.w&&o0.w&&x1.w[0]===o0.w[0]?x1.w:o0.w,fs:x1.fs||o0.fs,rg:x1.rg||o0.rg};a=ab;ex=exB;}}
     f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);if(ex&&o.a&&!o.rg){f.pos.x+=o.v[0]*ex;f.pos.z+=o.v[1]*ex;}   // a late packet: keep walking briefly instead of stopping dead
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
-    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;{const L=o.lc&&LADDERS[o.lc[0]];f.climb=L&&o.lc[1]>=0?{d:L,t:o.lc[1]}:null;f.ladCarry=L&&o.lc[1]<0?L:null;f.cartHold=o.ch>=0&&RAID&&RAID.team[o.ch]?RAID.team[o.ch].cart:null;}f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;f.revW=o.rv?1:0;if(f!==player||!f.alive)f.commit=!!o.cm;
+    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;{const L=o.lc&&LADDERS[o.lc[0]];f.climb=L&&o.lc[1]>=0?{d:L,t:o.lc[1]}:null;f.ladCarry=L&&o.lc[1]<0?L:null;f.cartHold=o.ch>=0&&RAID&&RAID.team[o.ch]?RAID.team[o.ch].cart:null;f.wheelHold=o.wh>=0&&RAID&&RAID.team[o.wh]?RAID.team[o.wh]:null;}f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;f.revW=o.rv?1:0;if(f!==player||!f.alive)f.commit=!!o.cm;
     if(f.alive&&!o.a)f.alive=false;
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
@@ -9854,7 +9876,7 @@ function clientEvents(ev){
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'MF':mastFall(e[1],e[2],false);break;
-    case 'ML':millSluice(!!e[1],false);break;case 'BG':breachGateBreak(false);break;case 'PC':if(RAID&&RAID.team[e[1]]&&RAID.team[e[1]].gate){const g=RAID.team[e[1]].gate;g.tl=e[2];const l0=g.lift;raidGateSet(RAID.team[e[1]],e[2]);g.lift=l0;}break;case 'SD':if(RAID&&RAID.team[e[1]])raidDoor(RAID.team[e[1]],!!e[2],false);break;case 'RC':if(ROAD&&ROAD.cart)ROAD.cart.tz=e[1];break;case 'RL':roadLogClear(false);break;case 'BF':breachBannerFall(false);break;case 'MR':millStoneRoll(e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
+    case 'ML':millSluice(!!e[1],false);break;case 'BG':breachGateBreak(false);break;case 'PC':if(RAID&&RAID.team[e[1]]&&RAID.team[e[1]].gate){const g=RAID.team[e[1]].gate;g.tl=e[2];const l0=g.lift;raidGateSet(RAID.team[e[1]],e[2]);g.lift=l0;}break;case 'SD':if(RAID&&RAID.team[e[1]]&&RAID.team[e[1]].rooms[e[2]])raidCell(RAID.team[e[1]],RAID.team[e[1]].rooms[e[2]],!!e[3],false);break;case 'RC':if(ROAD&&ROAD.cart)ROAD.cart.tz=e[1];break;case 'RL':roadLogClear(false);break;case 'BF':breachBannerFall(false);break;case 'MR':millStoneRoll(e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
     case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
