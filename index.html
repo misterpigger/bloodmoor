@@ -396,7 +396,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=179;
+const BUILD=180;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -689,6 +689,11 @@ function collide(p,r,useY=false,span=0){
   const cell=grid.get(gkey(Math.floor(p.x/GRID),Math.floor(p.z/GRID)));let hit=false;
   if(cell)for(const o of cell){
     if(useY&&(p.y>o.h||(o.y0&&p.y+span<o.y0)))continue;
+    /* (Build 180) a body part over something low (rubble, a trunk, a ledge under 1.3 m) that came down onto it rests on its top instead of
+       being shoved out sideways: a dead man lying across a block was pushed off one side each step and pulled back by his own joints, and
+       thrashed about for seconds (measured at the Breach's rubble: hips at 3-4 m/s, a metre off the ground, with nothing touching him) */
+    if(useY&&CTX.q&&o.h<1.3&&(o.t===0||o.t===1)&&(CTX.q.y>=o.h-.06||o.h-p.y<.14)){const inside=o.t===0?p.x>o.x0&&p.x<o.x1&&p.z>o.z0&&p.z<o.z1:(p.x-o.x)**2+(p.z-o.z)**2<o.r*o.r;
+      if(inside){p.y=o.h+r*.6;if(CTX.q.y<p.y)CTX.q.y=p.y;hit=true;continue;}}
     if(o.t===0){if(p.x<o.x0-r||p.x>o.x1+r||p.z<o.z0-r||p.z>o.z1+r)continue;
       const cx=clamp(p.x,o.x0,o.x1),cz=clamp(p.z,o.z0,o.z1);const dx=p.x-cx,dz=p.z-cz,d2=dx*dx+dz*dz;
       if(d2>1e-10){if(d2<r*r){const d=Math.sqrt(d2);p.x=cx+dx/d*r;p.z=cz+dz/d*r;hit=true;}}
@@ -3032,12 +3037,26 @@ function setWorldQuat(bone,q){bone.parent.updateWorldMatrix(true,false);bone.par
 const _bm=new THREE.Matrix4(),_bu=V(),_bs=V(),_bf=V();
 function basisQ(up,side,out){_bu.copy(up).normalize();_bs.copy(side).addScaledVector(_bu,-side.dot(_bu)).normalize();_bf.crossVectors(_bs,_bu);_bm.makeBasis(_bs,_bu,_bf);return out.setFromRotationMatrix(_bm);}
 const _iS=V(),_iT=V(),_iD=V(),_iP=V(),_iE=V();
+/* Build 180: the elbow can't flick round the shoulder-to-hand line. Its swivel (the direction the elbow bends toward, in the chest's frame,
+   so turning the body doesn't count) turns at most IK_SWV rad/s from where it was last frame. The pole is chosen from the aim, the
+   guard and the body, and some of those flip as the hand passes close to the shoulder or the line to the pole: the elbow jumped 30-50 cm
+   in one frame with the hand still (bot fights: 10-15 times a fighter-minute, forearms at 15-35 m/s), which read as arms whipping round. */
+const IKF={n:0,dt:1/60,at:0};let IK_SWV=14;try{const m=location.search.match(/[?&]ikswv=([\d.]+)/);if(m)IK_SWV=+m[1];}catch(e){}
+const _ikwQ=new THREE.Quaternion(),_ikwA=new THREE.Vector3(),_ikwB=new THREE.Vector3();
+function ikSwivel(up,D,P){if(performance.now()-(IKF.at||0)>250)return;const u=up.userData,par=up.parent;par.getWorldQuaternion(_ikwQ);_ikwQ.invert();_ikwA.copy(P).applyQuaternion(_ikwQ);   // this frame's swivel, in the shoulder's parent frame
+  if(u._swF!==IKF.n){u._sw0=u._sw1&&IKF.n-u._swF<=2?(u._sw0||new THREE.Vector3()).copy(u._sw1):null;u._swF=IKF.n;}   // the value the last frame ended with
+  if(!u._sw1)u._sw1=new THREE.Vector3();if(!u._sw0){u._sw1.copy(_ikwA);return;}
+  _ikwB.copy(D).applyQuaternion(_ikwQ);const prev=u._sw0.clone().addScaledVector(_ikwB,-u._sw0.dot(_ikwB));if(prev.lengthSq()<1e-6){u._sw1.copy(_ikwA);return;}prev.normalize();
+  const c=clamp(prev.dot(_ikwA),-1,1),th=Math.acos(c),mx=IK_SWV*Math.min(IKF.dt,.05);
+  if(th>mx){const ax=_ikwA.clone().addScaledVector(prev,-c);if(ax.lengthSq()<1e-6)ax.copy(_ikwB).cross(prev);ax.normalize();_ikwA.copy(prev).multiplyScalar(Math.cos(mx)).addScaledVector(ax,Math.sin(mx));}   // turn toward it at most mx this frame
+  u._sw1.copy(_ikwA);_ikwQ.invert();P.copy(_ikwA).applyQuaternion(_ikwQ);P.addScaledVector(D,-P.dot(D)).normalize();}
 function ikArm(b,side,target,pole,lens){
   const up=b[side+'Arm'],lo=b[side+'ForeArm'];up.updateWorldMatrix(true,false);_iS.setFromMatrixPosition(up.matrixWorld);
   const a=lens[0],c=lens[1];_iD.subVectors(target,_iS);let d=_iD.length();if(d<1e-5)return;const dd=clamp(d,.08,a+c-.002);_iD.multiplyScalar(1/d);d=dd;
   _iT.copy(_iS).addScaledVector(_iD,d);
   const cosA=clamp((a*a+d*d-c*c)/(2*a*d),-1,1),sinA=Math.sqrt(1-cosA*cosA);
   _iP.subVectors(pole,_iS);_iP.addScaledVector(_iD,-_iP.dot(_iD));if(_iP.lengthSq()<1e-8)_iP.set(0,-1,0);_iP.normalize();
+  if(IK_SWV>0&&up.parent)ikSwivel(up,_iD,_iP);
   _iE.copy(_iS).addScaledVector(_iD,a*cosA).addScaledVector(_iP,a*sinA);
   pointBone(up,_iE);pointBone(lo,_iT);
 }
@@ -4878,7 +4897,12 @@ class Ragdoll{
     // no part of a body is thrown faster than a man could be: sideways or upward at most 9 m/s (falling is free). A fighter's pose can
     // start outside the joint limits, and the first step's correction went in as speed: hands and toes left at 30-90 m/s and whole bodies
     // skidded off at 16 m/s (measured in a battle royale, Build 117)
-    {const vm=9*h;for(const n of this.names){const p=this.P[n],q=this.Q[n],vx=p.x-q.x,vz=p.z-q.z,vu=Math.max(0,p.y-q.y),w2=vx*vx+vz*vz+vu*vu;if(w2>vm*vm){const k=vm/Math.sqrt(w2);q.x=p.x-vx*k;q.z=p.z-vz*k;if(vu>0)q.y=p.y-vu*k;}}const vd=16*h;for(const n of this.names){const p=this.P[n],q=this.Q[n];if(q.y-p.y>vd)q.y=p.y+vd;}}   /* (Build 149) and nothing falls faster than 16 m/s: a part shoved down through a constraint went in as 75 m/s of fall */
+    {const vm=9*h;for(const n of this.names){const p=this.P[n],q=this.Q[n],vx=p.x-q.x,vz=p.z-q.z,vu=Math.max(0,p.y-q.y),w2=vx*vx+vz*vz+vu*vu;if(w2>vm*vm){const k=vm/Math.sqrt(w2);q.x=p.x-vx*k;q.z=p.z-vz*k;if(vu>0)q.y=p.y-vu*k;}}const vd=16*h;for(const n of this.names){const p=this.P[n],q=this.Q[n];if(q.y-p.y>vd)q.y=p.y+vd;}}
+    /* (Build 180) a dead body that has finished falling settles: once nothing has struck, kicked or dragged it for 1.5 s, the sideways and
+       upward motion of its parts near the ground bleeds away (about 95% a second; falling stays free, so a body still goes down a shaft).
+       Its joint limits and the twist limit pulling against each other and the ground went on feeding it a little motion every step, and
+       a corpse kept twitching and flopping in place with limbs at up to 9 m/s and nothing touching it (Breach yard, Build 179) */
+    if(this.lim===2&&this.age>1.5&&!this.pin){const k=Math.exp(-3*h*Math.min(1,(this.age-1.5)/1.5));for(const n of this.names){const p=this.P[n],q=this.Q[n];if(p.y>groundY(p.x,p.z,p.y+.3)+.45)continue;q.x=p.x-(p.x-q.x)*k;q.z=p.z-(p.z-q.z)*k;if(p.y>q.y)q.y=p.y-(p.y-q.y)*k;}}   /* (Build 149) and nothing falls faster than 16 m/s: a part shoved down through a constraint went in as 75 m/s of fall */
     // (Build 136) a body on the ground can't turn itself round: nothing inside it (joint limits, the twist limit, muscle pulls, a hand on a
     // wound) can give it a net spin, but those constraints pulling against each other while the ground grips one part more than another
     // did, step after step, and a dead or dying body slowly turned in circles until something stopped it. Once a fall has played out
@@ -5071,10 +5095,10 @@ function natGuide(f,g,tgt){const F=tgt?natForearm(f,tgt,_nfF):f.foreF;if(!F||F.l
   return g;}
 function edgeHome(s,out){const f=s.owner,A=s.axis;   /* (Build 147: the forearm's knuckle side pointed sideways for an overhead longsword, so a downward cut came in flat) */
   f.fwd(out);out.y=0;out.normalize().addScaledVector(A,-out.dot(A));if(out.lengthSq()<.12){out.set(0,1,0).addScaledVector(A,-A.y);}if(out.lengthSq()<1e-6)return null;return out.normalize();}
-function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind==='fist')return 0;const A=s.axis;
+const AXE_RL=40;function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind==='fist')return 0;const A=s.axis;
   _rr.copy(f.foreF).addScaledVector(A,-f.foreF.dot(A));if(_rr.lengthSq()<.25)return 0;   // blade near the forearm line: the knuckle reference is unreliable_rr.normalize();
   let c=_rr.dot(s.edge);if(s.def.kind==='blade'&&c<0){_rr.negate();c=-c;}
-  const mx=(s.def.kind==='blade'?(twoH(s.def)?RL2:RL1):twoH(s.def)?100:70)*Math.PI/180,th=Math.acos(clamp(c,-1,1));if(th<=mx)return 0;
+  const mx=(s.def.kind==='blade'?(twoH(s.def)?RL2:RL1):s.def.kind==='axe'?AXE_RL:twoH(s.def)?100:70)*Math.PI/180,th=Math.acos(clamp(c,-1,1));if(th<=mx)return 0;
   _rp.copy(s.edge).addScaledVector(_rr,-c);if(_rp.lengthSq()<1e-8)_rp.crossVectors(A,_rr);_rp.normalize();
   const sg=Math.sign(_wl1.crossVectors(_rr,s.edge).dot(A))||1;out.copy(_rr).multiplyScalar(Math.cos(mx)).addScaledVector(_rp,Math.sin(mx));return (th-mx)*sg;}
 // wrist joint limit: a gripped weapon stays between 12 and 112 degrees of the forearm line; it can't fold back past the hand
@@ -5434,9 +5458,9 @@ class Sword{
     else if(eh&&EDGE_HOME>0&&!HAND_FIRST){if(eh.dot(this.edge)<0)eh.negate();const c=eh.dot(this.edge);if(c<EDGE_DZ)this.edge.lerp(eh,EDGE_HOME*clamp((EDGE_DZ-c)/.25,0,1));}   /* Build 157: only an edge well off the body's line drifts back (beyond ~45°): drifting all the time rolled the sword in the hand as the guard moved about (most of the blade's roll in guard) */
     if(this.def.kind==='axe'&&this.owner&&!this.free&&this.tipVel.lengthSq()<9){const o=this.owner;o.fwd(_g);_g.multiplyScalar(.9).add(o.chest).sub(this.H);_g.addScaledVector(this.axis,-_g.dot(this.axis));if(_g.lengthSq()>.01){_g.normalize();this.edge.lerp(_g,.035);}}   /* (Build 153: only when the axe is nearly still (it can be turned over then, as a man settles his grip): spinning round with it carried the hand to the other shoulder and the head flipped to face front again, against its own momentum) */   /* (Build 150) the axe's edge faces where the blow will go: from the hand toward a point in front of the chest (from the left shoulder that's right and forward), not the body's front; and only while it isn't already swinging fast: pulled to the front mid-chop, an axe swung from the left shoulder rolled its edge over */
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-6)this.edge.set(1,0,0).addScaledVector(this.axis,-this.axis.x);this.edge.normalize();
-    if(rollLimit(this,_wl2))this.edge.lerp(_wl2,.25).normalize();   /* Build 148: back on for blades, wider (RL1/RL2): with none the wrists wrung to follow the edge in a committed swing and the hands tangled */   /* Build 147: not for blades: edgeHome already keeps their roll bounded, and this forearm-based limit (40° for two-handers) held a raised longsword's edge sideways, so cuts landed flat */   // the grip can't spin the head round the haft
+    if(rollLimit(this,_wl2))this.edge.lerp(_wl2,this.def.kind==='axe'?.6:.25).normalize();   /* Build 180: an axe's head is fixed in the fist: its edge faces where the forearm points (within AXE_RL), never back at its wielder; with 100° it settled facing back over the hand in guard and chopped with the back 20-30% of committed swing frames */   /* Build 148: back on for blades, wider (RL1/RL2): with none the wrists wrung to follow the edge in a committed swing and the hands tangled */   /* Build 147: not for blades: edgeHome already keeps their roll bounded, and this forearm-based limit (40° for two-handers) held a raised longsword's edge sideways, so cuts landed flat */   // the grip can't spin the head round the haft
     // and the forearm can only roll so fast (about 400 deg/s): the head never whirls round in the hand
-    if(pe0&&!this.free&&this.owner){_rp.set(peX,peY,peZ);const sn=_wl3.crossVectors(_rp,this.edge).dot(this.axis),cs=_rp.dot(this.edge),th=Math.atan2(sn,cs),mx=(this.owner.commit&&this.def.kind==='blade'?7+((window.__rrc||(MB&&(this.owner.isPlayer||this.owner.remote)?MB_RCM:ROLL_CM))-7)*clamp(1-((this._trs||0)-5)/6,0,1):7)*h;   /* (Build 149) a committed cut along a line (not the point circling, `_trs`) may roll the blade faster (ROLL_CM rad/s): at 400 deg/s a two-hander swung over from the left shoulder couldn't turn its edge into the arc and came round flat */
+    if(pe0&&!this.free&&this.owner){_rp.set(peX,peY,peZ);const sn=_wl3.crossVectors(_rp,this.edge).dot(this.axis),cs=_rp.dot(this.edge),th=Math.atan2(sn,cs),mx=(this.owner.commit&&this.def.kind==='blade'?7+((window.__rrc||(MB&&(this.owner.isPlayer||this.owner.remote)?MB_RCM:ROLL_CM))-7)*clamp(1-((this._trs||0)-5)/6,0,1):this.def.kind==='axe'?14:7)*h;   /* (Build 149) a committed cut along a line (not the point circling, `_trs`) may roll the blade faster (ROLL_CM rad/s): at 400 deg/s a two-hander swung over from the left shoulder couldn't turn its edge into the arc and came round flat */
       if(Math.abs(th)>mx){_wl3.crossVectors(this.axis,_rp);this.edge.copy(_rp).multiplyScalar(Math.cos(mx)).addScaledVector(_wl3,Math.sin(mx)*Math.sign(th));}}
   }
   stepFree(h){
@@ -6207,7 +6231,7 @@ class Fighter{
     const B=this.bones,D=this.pbd||(this.pbd={n:['Spine1','Spine2','Neck','Head','HeadTop_End'],P:{},V:{},T:{},Tp:{},L:{},str:1,drop:0,buckle:0,init:false});
     const chain=['Spine',...D.n];
     for(const n of chain){const t=D.T[n]||(D.T[n]=V());B[n].getWorldPosition(t);}
-    if(!D.init||dt>.2||this.pos.distanceToSquared(D.lastPos||this.pos)>1){for(const n of D.n){(D.P[n]||(D.P[n]=V())).copy(D.T[n]);(D.V[n]||(D.V[n]=V())).set(0,0,0);(D.Tp[n]||(D.Tp[n]=V())).copy(D.T[n]);}
+    if(!D.init||dt>.2||this.pos.distanceToSquared(D.lastPos||this.pos)>1){for(const n of D.n){(D.P[n]||(D.P[n]=V())).copy(D.T[n]);(D.V[n]||(D.V[n]=V())).set(0,0,0);(D.Tp[n]||(D.Tp[n]=V())).copy(D.T[n]);}D.Vp={};
       for(let i=1;i<chain.length;i++)D.L[chain[i]]=D.T[chain[i]].distanceTo(D.T[chain[i-1]]);D.Tp.Spine=(D.Tp.Spine||V()).copy(D.T.Spine);D.init=true;D.lastPos=this.pos.clone();return;}
     D.lastPos.copy(this.pos);
     // most of the pelvis's travel is carried straight up the body; the rest is felt as sway (the body's own momentum)
@@ -6222,6 +6246,7 @@ class Fighter{
     for(let si=1;si<=ns;si++){const a=si/ns;
       for(const n of D.n){const P=D.P[n],Vv=D.V[n],k=K[n]*str*str*(1+3*mv),c=2*Math.sqrt(K[n]*(1+3*mv))*(Z+.45*mv);
         _wl1.lerpVectors(D.Tp[n],D.T[n],a);_wl2.subVectors(D.T[n],D.Tp[n]).multiplyScalar(1/dt).addScaledVector(bv,-CARRY);
+        const vp=D.Vp&&D.Vp[n];if(vp&&vp.lengthSq()>1e-6){const q=1-Math.exp(-h/.06);Vv.addScaledVector(vp,q);vp.multiplyScalar(1-q);}
         Vv.x+=(k*(_wl1.x-P.x)+c*(_wl2.x-Vv.x)+dax)*h;Vv.y+=(k*(_wl1.y-P.y)+c*(_wl2.y-Vv.y)-9.8*(1-str))*h;Vv.z+=(k*(_wl1.z-P.z)+c*(_wl2.z-Vv.z)+daz)*h;P.addScaledVector(Vv,h);}
       _wl3.lerpVectors(D.Tp.Spine,D.T.Spine,a);let prev=_wl3;   // segments keep their length, from the lower back up
       for(const n of D.n){const P=D.P[n];_wl1.subVectors(P,prev);const d=_wl1.length()||1e-6;_wl2.copy(prev).addScaledVector(_wl1,D.L[n]/d);
@@ -6277,20 +6302,20 @@ class Fighter{
   physPole(side,t,dt,held){const E=this.poles||(this.poles={}),P=E[side]||(E[side]={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||P.p.distanceToSquared(t)>1.5){P.p.copy(t);P.v.set(0,0,0);P.tp.copy(t);return t;}
     const str=this.pbd?this.pbd.str:1,k=70*str*str+12,c=2*Math.sqrt(k)*.62,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,P.tp).multiplyScalar(1/Math.max(dt,1e-3));P.p.addScaledVector(_wl1,dt*.7);
     const dk=SHIP&&this.pos.y>-.1?SHIP:null;
-    for(let i=0;i<ns;i++){P.v.x+=(k*(t.x-P.p.x)+c*(_wl1.x*.3-P.v.x)+(dk?9.8*dk.pitch*1.5:0))*h;P.v.y+=(k*(t.y-P.p.y)+c*(_wl1.y*.3-P.v.y)-9.8*(1-str)*.6)*h;P.v.z+=(k*(t.z-P.p.z)+c*(_wl1.z*.3-P.v.z)+(dk?9.8*dk.roll*1.5:0))*h;P.p.addScaledVector(P.v,h);}
+    for(let i=0;i<ns;i++){if(P.vp&&P.vp.lengthSq()>1e-6){const q=1-Math.exp(-h/.06);P.v.addScaledVector(P.vp,q);P.vp.multiplyScalar(1-q);}P.v.x+=(k*(t.x-P.p.x)+c*(_wl1.x*.3-P.v.x)+(dk?9.8*dk.pitch*1.5:0))*h;P.v.y+=(k*(t.y-P.p.y)+c*(_wl1.y*.3-P.v.y)-9.8*(1-str)*.6)*h;P.v.z+=(k*(t.z-P.p.z)+c*(_wl1.z*.3-P.v.z)+(dk?9.8*dk.roll*1.5:0))*h;P.p.addScaledVector(P.v,h);}
     P.tp.copy(t);_wl2.subVectors(P.p,t);const lim=held?.12:.2;if(_wl2.length()>lim)_wl2.setLength(lim);return t.add(_wl2);}
-  armHit(side,dir,dv){const P=this.poles&&this.poles[side];if(P)P.v.addScaledVector(dir,dv);if(this.ar)this.fbHit((side==='L'?'Left':'Right')+'ForeArm',_wl3.copy(dir).normalize(),dv);}
+  armHit(side,dir,dv){const P=this.poles&&this.poles[side];if(P)(P.vp||(P.vp=V())).addScaledVector(dir,Math.min(dv,5));if(this.ar)this.fbHit((side==='L'?'Left':'Right')+'ForeArm',_wl3.copy(dir).normalize(),dv);}
   // the off hand when a weapon is held in one: a mass on a spring to its guard spot, carrying the body's motion, so it swings and is flung
   freeHand(t,dt){const F=this.offH||(this.offH={p:t.clone(),v:V(),tp:t.clone()});if(dt>.2||F.p.distanceToSquared(t)>1){F.p.copy(t);F.v.set(0,0,0);F.tp.copy(t);return;}
     const k=110*(this.pbd?this.pbd.str*this.pbd.str:1),c=2*Math.sqrt(110)*.7,ns=Math.max(1,Math.ceil(dt*120)),h=dt/ns;_wl1.subVectors(t,F.tp).multiplyScalar(1/Math.max(dt,1e-3));
     const FC=.9;F.p.addScaledVector(_wl1,dt*FC);   // Build 125: carries 90% of the body's motion (was 72%), so it no longer flaps behind every turn
     const dk=SHIP&&this.pos.y>-.1?SHIP:null;
-    for(let i=0;i<ns;i++){F.v.x+=(k*(t.x-F.p.x)+c*(_wl1.x*(1-FC)-F.v.x)+(dk?9.8*dk.pitch:0))*h;F.v.y+=(k*(t.y-F.p.y)+c*(_wl1.y*(1-FC)-F.v.y))*h;F.v.z+=(k*(t.z-F.p.z)+c*(_wl1.z*(1-FC)-F.v.z)+(dk?9.8*dk.roll:0))*h;F.p.addScaledVector(F.v,h);}
+    for(let i=0;i<ns;i++){if(F.vp&&F.vp.lengthSq()>1e-6){const q=1-Math.exp(-h/.06);F.v.addScaledVector(F.vp,q);F.vp.multiplyScalar(1-q);}F.v.x+=(k*(t.x-F.p.x)+c*(_wl1.x*(1-FC)-F.v.x)+(dk?9.8*dk.pitch:0))*h;F.v.y+=(k*(t.y-F.p.y)+c*(_wl1.y*(1-FC)-F.v.y))*h;F.v.z+=(k*(t.z-F.p.z)+c*(_wl1.z*(1-FC)-F.v.z)+(dk?9.8*dk.roll:0))*h;F.p.addScaledVector(F.v,h);}
     F.tp.copy(t);_wl2.subVectors(F.p,t);if(_wl2.length()>.1)_wl2.setLength(.1);t.add(_wl2);}   /* Build 125: 10 cm. Build 120: damped near critically and kept within 20 cm (it bounced up to 35 cm and looked like a rubber arm) */
   // a blow (or anything) pushing a body part: the struck mass gets the push, its neighbours some of it; drop weakens the muscles
   bodyHit(bone,dir,dv,drop=0){if(this.ar)this.fbHit(bone==='Spine'||bone==='Hips'?'Spine1':bone,_wl3.copy(dir).normalize(),dv*.8);const D=this.pbd;if(!D||!D.init)return;const n=BODY_MAP[bone]||'Spine2',i=D.n.indexOf(n);_v.copy(dir);if(_v.lengthSq()<1e-8)return;_v.normalize();
-    for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)D.V[D.n[j]].addScaledVector(_v,dv*w);}D.rl=Math.min(1,(D.rl||0)+dv*.2);
-    if(this.offH&&(n==='Spine2'||n==='Spine1'))this.offH.v.addScaledVector(_v,dv*.8);
+    const VP=D.Vp||(D.Vp={});for(let j=0;j<D.n.length;j++){const w=j===i?1:Math.abs(j-i)===1?.5:Math.abs(j-i)===2?.2:0;if(w)(VP[D.n[j]]||(VP[D.n[j]]=V())).addScaledVector(_v,dv*w);}   /* Build 180: the push goes in over ~60 ms (D.Vp, taken up in bodyStep), not in one step: the chest and shoulders jumped 14-23 cm in the frame of a blow and the arms on them whipped */D.rl=Math.min(1,(D.rl||0)+dv*.2);
+    if(this.offH&&(n==='Spine2'||n==='Spine1'))(this.offH.vp||(this.offH.vp=V())).addScaledVector(_v,Math.min(dv*.8,3.5));
     if(this.pel&&(n==='Spine1'||n==='Spine2')){const cy=Math.cos(this.yaw),sy=Math.sin(this.yaw),k=dv*(n==='Spine1'?.35:.2);this.pel.vx+=(-_v.x*cy+_v.z*sy)*k;this.pel.vz+=(_v.x*sy+_v.z*cy)*k;}
     D.drop=Math.min(.75,D.drop+drop);}
   cacheBody(){const B=this.bones;this._cbPos=(this._cbPos||V()).copy(this.pos);B.Spine2.getWorldPosition(this.chest);B.RightArm.getWorldPosition(this.shR);B.LeftArm.getWorldPosition(this.shL);B.Head.getWorldPosition(this.headPos);}
@@ -8532,7 +8557,7 @@ function bodyPress(){
     for(const S of fighters){if(S===F||!S.alive||S.ragdoll)continue;const ox=hp.x-S.pos.x,oz=hp.z-S.pos.z;if(ox*ox+oz*oz>2.6)continue;
       const top=S.pos.y+.75;
       for(const n of R.names){const p=R.P[n];if(p.y>top)continue;const r=.22+(RD_R[n]||.055),dx=p.x-S.pos.x,dz=p.z-S.pos.z,d2=dx*dx+dz*dz;if(d2>=r*r)continue;
-        const d=Math.sqrt(d2)||1e-4,k=(r-d)*.5/d,q=R.Q[n];p.x+=dx*k;p.z+=dz*k;q.x+=dx*k*.6;q.z+=dz*k*.6;woke=true;}
+        const d=Math.sqrt(d2)||1e-4,k=(r-d)*.5/d,q=R.Q[n];p.x+=dx*k;p.z+=dz*k;q.x+=dx*k*.95;q.z+=dz*k*.95;woke=true;}   /* (Build 180: the limb is moved, not flung; .6 left 40% of every shove as speed and bodies walked over flailed) */
       if(woke){S.vel.x*=.985;S.vel.z*=.985;}}   // stepping through a body slows you a little
     if(woke){R.sleep=false;R.age=Math.min(R.age,3.5);}}
   for(let i=0;i<rags.length;i++)for(let j=i+1;j<rags.length;j++){const A=rags[i].ragdoll,B=rags[j].ragdoll;if(A.P.Hips.distanceToSquared(B.P.Hips)>3.2)continue;let hit=false;
@@ -8548,7 +8573,7 @@ function logic(dt){FR_TICK++;
   if(hitStopT>0){if(NET.mode==='host')hitStopT=0;else{const k=clamp(hitStopT/.04,0,1);hitStopT-=dt;dt*=1-.5*k;}}
   acc+=dt;let n=0;while(acc>=H&&n<24){sim(H);acc-=H;n++;}if(n>=24)acc=0;
   if(HSBODY)hsNear();
-  for(const f of fighters)f.animate(dt);
+  IKF.n++;IKF.dt=dt;IKF.at=performance.now();for(const f of fighters)f.animate(dt);
   if(HSW)hsStep(dt);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
@@ -9408,7 +9433,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     else if(it.obj&&e.p){it.obj.position.fromArray(e.p,0);it.obj.rotation.y=e.p[3];}
   }
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
-  for(const f of fighters)f.animate(dt);
+  IKF.n++;IKF.dt=dt;IKF.at=performance.now();for(const f of fighters)f.animate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
