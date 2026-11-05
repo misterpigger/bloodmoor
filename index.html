@@ -401,7 +401,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=183;
+const BUILD=184;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -694,6 +694,7 @@ function collide(p,r,useY=false,span=0){
   const cell=grid.get(gkey(Math.floor(p.x/GRID),Math.floor(p.z/GRID)));let hit=false;
   if(cell)for(const o of cell){
     if(useY&&(p.y>o.h||(o.y0&&p.y+span<o.y0)))continue;
+    if(o.t===2&&o.dyn&&o.dyn.floor&&!o.dyn.floor.down&&p.y>=o.dyn.floor.h-.08)continue;   /* (Build 184) whatever lies on a cart's bed or a table top is on it, not in it */
     /* (Build 180) a body part over something low (rubble, a trunk, a ledge under 1.3 m) that came down onto it rests on its top instead of
        being shoved out sideways: a dead man lying across a block was pushed off one side each step and pulled back by his own joints, and
        thrashed about for seconds (measured at the Breach's rubble: hips at 3-4 m/s, a metre off the ground, with nothing touching him) */
@@ -1059,7 +1060,7 @@ const CROCK={jug:lathe([[0,.235],[.038,.235],[.033,.205],[.058,.17],[.078,.105],
   cup:lathe([[0,.1],[.042,.1],[.04,.05],[.032,0],[0,0]],12)};
 function crockery(id,mat,wx,wy,wz,ry){return dynMesh(CROCK[id],MATS[mat],T(wx,wy,wz,ry),{m:id==='bowl'?.35:id==='cup'?.2:id==='pot'?1.2:.9,auto:'cyl',snd:'pot',brittle:1});}
 // a two-wheeled farm cart standing on its shafts, sometimes loaded; a loose thing that rolls on its wheels when shoved
-function cart(x,z,r,empty){const load0=srand(),load=empty?1:load0,R=.56,ax=.2,y0=.74;
+function cart(x,z,r,empty,floor){const load0=srand(),load=empty?1:load0,R=.56,ax=.2,y0=.74;
   const G=ownGroup(x,z,r,()=>{
     for(const sd of [-1,1]){const zc=sd*.8;
       addGeo('beam',new THREE.CylinderGeometry(.1,.115,.28,12),T(ax,R,zc,0,Math.PI/2));   // hub
@@ -1078,7 +1079,7 @@ function cart(x,z,r,empty){const load0=srand(),load=empty?1:load0,R=.56,ax=.2,y0
     if(load<.32){for(const [lx,lz] of [[-.95,-.26],[-.9,.28],[.05,0],[.6,-.3]])addGeo('burlap',SACK_G,T(lx+.33,y0+.33,lz,lx*.4,0,Math.PI/2));}   // sacks lying in the bed
     else if(load<.58){const hg=new THREE.SphereGeometry(1,12,8,0,6.283,0,Math.PI/2);addGeo('thatch',hg,T(.05,y0+.08,0,0,0,0,1.25,.62,.62));}   // a heap of hay
     else if(load<.74){for(const lz of [-.32,.32])addGeo('propWood',new THREE.CylinderGeometry(.27,.27,.7,12),T(.1,y0+.35,lz,0,0,Math.PI/2));}});   // two casks
-  const d=dynAdd(G,{m:150,fr:.8,sh:[{t:'box',h:[1.3,.18,.72],o:[0,y0+.1,0],w:.55},{t:'cyl',h:[.07,R],o:[ax,R,.8],rx:1,w:.15},{t:'cyl',h:[.07,R],o:[ax,R,-.8],rx:1,w:.15},{t:'box',h:[.14,.05,.46],o:[-2.95,.06,0],w:.15}]});
+  const d=dynAdd(G,{m:150,fr:.8,floor,sh:[{t:'box',h:[1.3,.07,.72],o:[0,y0+.02,0],w:.55},{t:'box',h:[1.25,.05,.03],o:[0,y0+.28,.72],w:.05},{t:'box',h:[1.25,.05,.03],o:[0,y0+.28,-.72],w:.05},{t:'cyl',h:[.07,R],o:[ax,R,.8],rx:1,w:.15},{t:'cyl',h:[.07,R],o:[ax,R,-.8],rx:1,w:.15},{t:'box',h:[.14,.05,.46],o:[-2.95,.06,0],w:.15}]});
   d.lb=new THREE.Box3(V(-1.36,0,-.9),V(1.36,y0+.7,.9));if(d.ob)dynOb(d,G.position,G.quaternion);d.cartY0=y0;return d;}   /* (Build 181) a walker is kept off the bed and wheels, not the shafts: you can stand between them to pull */
 // a market stall: turned posts with knee braces, a plank counter with a boarded front, a back shelf, a sloping striped awning with a
 // scalloped valance, and wares by trade: produce, a potter's crockery (which breaks), cloth, a baker's loaves
@@ -2351,6 +2352,13 @@ const roadDir=z=>{const dx=roadX(z+.5)-roadX(z-.5);const l=Math.hypot(dx,1);retu
 // in a stone strongroom against its back wall; carry the other side's boxes home. RAID.team[s] for s = 0 (blue, south, z < 0) and 1 (red, north).
 // Every castle is built in its own frame: lz is the distance out from its front wall toward the field (the yard is lz < 0), mirrored in z.
 let RAID=null;const RAID_W0=30,RAID_COL=[0x2a4a8a,0x8a2420];
+// each side's arms, on its banners and every man's tabard (look.sc): blue a white cross on azure, red quartered gules and or
+const TEAM_SC=[3,2];
+function teamCrestCanvas(s){const W=256,H=512,c=mkCanvas(W,H),g=c.getContext('2d');const P=PALETTES[s?0:1],f=P[0],t=P[1];g.fillStyle=f;g.fillRect(0,0,W,H);
+  if(s===0){g.fillStyle=t;g.fillRect(W*.4,0,W*.2,H*.88);g.fillRect(0,H*.3,W,W*.2);}
+  else{g.fillStyle=t;g.fillRect(0,0,W/2,H*.44);g.fillRect(W/2,H*.44,W/2,H*.44);g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=4;g.strokeRect(2,2,W-4,H*.88-2);}
+  for(let x=0;x<W;x+=16){g.fillStyle=t;g.beginPath();g.moveTo(x,H*.88);g.lineTo(x+8,H);g.lineTo(x+16,H*.88);g.fill();}   // a dagged foot
+  for(let i=0;i<2600;i++){g.fillStyle=`rgba(${Math.random()<.5?0:255},${Math.random()<.5?0:255},0,${Math.random()*.035})`;g.fillRect(Math.random()*W,Math.random()*H,2,2);}return c;}
 function raidZ(s,lz){return (s?1:-1)*(RAID_W0-lz);}
 function buildRaid(){
   const WH=6,WT=2.2,XW=20,BK=-26,gx=7,ghw=1.9,bx=-8,bhw=2.5;
@@ -2363,7 +2371,7 @@ function buildRaid(){
     const m=new THREE.Mesh(g,MATS.roadDirt||MATS.gravel);m.receiveShadow=true;world.add(m);}
   for(let s=0;s<2;s++){const Z=lz=>raidZ(s,lz),zr=(a,b)=>[Math.min(Z(a),Z(b)),Math.max(Z(a),Z(b))];
     const box=(x0,x1,a,b,h,mat,y0=0,col=true)=>{const [z0,z1]=zr(a,b);if(mat)addGeo(mat,boxUV(x1-x0,h-y0,z1-z0,3),T((x0+x1)/2,(h+y0)/2,(z0+z1)/2));if(col)return addBox(x0,x1,z0,z1,h);};
-    const T_={s,zone:null,chests:[],spawn:[]};R.team[s]=T_;
+    const T_={s,zone:null,chests:[],spawn:[],room:null,gate:null};R.team[s]=T_;
     // the yard floor: gravel inside the walls
     {const [z0,z1]=zr(BK,0);const g=new THREE.PlaneGeometry(2*XW,z1-z0);g.rotateX(-Math.PI/2);scaleUV(g,2*XW/6.5,(z1-z0)/6.5);const m=new THREE.Mesh(g,MATS.gravel);m.position.set(0,.006,(z0+z1)/2);m.receiveShadow=true;world.add(m);}
     // the front wall: west of the breach, the breach to the gate, east of the gate; crenels along the top
@@ -2376,11 +2384,21 @@ function buildRaid(){
     // the gatehouse: two towers and an arch, the gate's oak leaves standing open against the towers' inner faces
     for(const sg of [-1,1]){const tx=gx+sg*(ghw+1.5);box(tx-1.5,tx+1.5,2,-2,WH+2.6,'ashlar');for(const [ox,oz] of [[-1.05,-1.7],[0,-1.7],[1.05,-1.7],[-1.05,1.7],[0,1.7],[1.05,1.7],[-1.25,0],[1.25,0]])addGeo('ashlar',boxUV(.5,.9,.5,1.5),T(tx+ox,WH+3.05,Z(oz)));}
     addGeo('ashlar',boxUV(2*ghw+.2,WH-4.4,WT+.6,3),T(gx,4.4+(WH-4.4)/2,Z(0)));
-    for(const sg of [-1,1]){const p=new THREE.Mesh(boxUV(ghw*.95,4.2,.2,1.2),MATS.wood);p.position.set(gx+sg*(ghw-.12),2.1,Z(-WT/2-ghw*.5));p.rotation.y=Math.PI/2;p.castShadow=p.receiveShadow=true;world.add(p);
-      for(const y of [.6,1.6,2.7,3.7]){const b=new THREE.Mesh(boxUV(ghw*.95,.1,.24,1),MATS.iron);b.position.set(gx+sg*(ghw-.12),y,Z(-WT/2-ghw*.5));b.rotation.y=Math.PI/2;world.add(b);}
-      addBox(gx+sg*(ghw-.12)-.12,gx+sg*(ghw-.12)+.12,...zr(-WT/2-.05,-WT/2-ghw),4.2);}
+    // the portcullis: an oak and iron grate in a slot in the gate arch, raised by a winch inside (raidGate), down at the start. Its collider
+    // starts at the grate's foot (y0), so once it's up past head height you walk under it
+    {const G=new THREE.Group();G.position.set(gx,0,Z(.35));world.add(G);const gw=2*ghw+.1;
+      for(let k=0;k<=8;k++){const b=new THREE.Mesh(boxUV(.07,4.5,.07,1),MATS.wood);b.position.set(-gw/2+k*gw/8,2.25,0);b.castShadow=true;G.add(b);const t=new THREE.Mesh(new THREE.ConeGeometry(.05,.16,4),MATS.iron);t.position.set(-gw/2+k*gw/8,-.08,0);t.rotation.x=Math.PI;G.add(t);}
+      for(let k=0;k<7;k++){const b=new THREE.Mesh(boxUV(gw,.06,.09,1),MATS.iron);b.position.set(0,.35+k*.66,0);b.castShadow=true;G.add(b);}
+      const box=addBox(gx-ghw,gx+ghw,...zr(.2,.5),4.5);box.dyn=true;box.y0=0;
+      // the winch: a spoked wheel on a timber frame against the right tower's inner face, a rope up over a pulley to the grate
+      const wx=gx+ghw+1.6,wz=Z(-WT/2-1.1),W=new THREE.Group();W.position.set(wx,1.25,wz);world.add(W);const wh=new THREE.Group();W.add(wh);
+      const rim=new THREE.Mesh(new THREE.TorusGeometry(.62,.045,6,24),MATS.wood);wh.add(rim);for(let k=0;k<8;k++){const sp=new THREE.Mesh(boxUV(.05,1.2,.05,1),MATS.wood);sp.rotation.z=k*Math.PI/8;wh.add(sp);const hd=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.24,6),MATS.wood);const a=k*Math.PI/4;hd.position.set(Math.cos(a)*.66,Math.sin(a)*.66,.12);hd.rotation.x=Math.PI/2;wh.add(hd);}
+      const hub=new THREE.Mesh(new THREE.CylinderGeometry(.11,.11,.5,10),MATS.beam||MATS.wood);hub.rotation.x=Math.PI/2;wh.add(hub);wh.rotation.y=0;
+      for(const sx of [-.32,.32]){const post=new THREE.Mesh(boxUV(.14,1.6,.14,1),MATS.beam||MATS.wood);post.position.set(0,-.45,sx*(s?-1:1));W.add(post);}
+      W.rotation.y=Math.PI/2;const rope=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,1,5),MATS.rope||MATS.wood);world.add(rope);addCircle(wx,wz,.45,1.9);
+      T_.gate={G,box,lift:0,tl:0,W,wh,wx,wz,rope,x:gx,z:Z(.35),hw:ghw};}
     // banners in the side's colour on the towers
-    {const bm=std({color:RAID_COL[s],roughness:.85,side:THREE.DoubleSide});for(const sg of [-1,1]){const tx=gx+sg*(ghw+1.5);const fl=new THREE.Mesh(wallPlane(1.4,3,1,1),bm);fl.position.set(tx,WH-.6,Z(2.02));fl.rotation.y=s?Math.PI:0;world.add(fl);}
+    {const tex=new THREE.CanvasTexture(teamCrestCanvas(s));tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;const bm=std({map:tex,roughness:.85,side:THREE.DoubleSide});for(const sg of [-1,1]){const tx=gx+sg*(ghw+1.5);const fl=new THREE.Mesh(wallPlane(1.4,3,1,1),bm);fl.position.set(tx,WH-.6,Z(2.02));fl.rotation.y=s?Math.PI:0;world.add(fl);}
       for(const x of [-14,14]){const fl=new THREE.Mesh(wallPlane(1.2,2.6,1,1),bm);fl.position.set(x,WH-.9,Z(WT/2+.02));fl.rotation.y=s?Math.PI:0;world.add(fl);}T_.mat=bm;}
     // the side and back walls
     box(-XW-1,-XW+1,0,BK-1,WH,'ashlar');box(XW-1,XW+1,0,BK-1,WH,'ashlar');box(-XW-1,XW+1,BK,BK-2.2,WH+1,'ashlar');
@@ -2391,12 +2409,21 @@ function buildRaid(){
       const bm=T_.mat;for(const sx of [-2.35,2.35]){const fl=new THREE.Mesh(wallPlane(1.1,1.9,1,1),bm);fl.position.set(sx,1.75,Z(d1+.42));fl.rotation.y=s?Math.PI:0;world.add(fl);}
       T_.zone={x0:-hx+.15,x1:hx-.15,z0:Math.min(Z(d0+.2),Z(d1-.05)),z1:Math.max(Z(d0+.2),Z(d1-.05))};T_.door=[0,Z(d1+1.2)];T_.home=[0,Z(d0+2.2)];
       T_.slots=[[-2,Z(d0+1)],[0,Z(d0+1)],[2,Z(d0+1)],[-2,Z(d0+2.6)],[0,Z(d0+3.3)],[2,Z(d0+2.6)]];}
+    // the spawn room: a stone house in the back corner where the side's fallen come back. Its door opens only from inside, by the lever
+    // by the door (raidDoor), and swings shut again behind them
+    {const x0=-XW+1,x1=-11.5,a0=BK,a1=BK+5.4,H=3.4,dx0=-16.2,dx1=-14.6;box(x1,x1+.4,a0,a1+.4,H,'stone');box(x0,dx0,a1,a1+.4,H,'stone');box(dx1,x1+.4,a1,a1+.4,H,'stone');
+      addGeo('stone',boxUV(dx1-dx0,H-2.6,.4,1.5),T((dx0+dx1)/2,2.6+(H-2.6)/2,Z(a1+.2)));addGeo('ashlar',boxUV(x1-x0+.8,.3,a1-a0+.8,2),T((x0+x1)/2,H+.15,Z((a0+a1)/2+.2)));
+      const D=new THREE.Group();D.position.set(dx0,0,Z(a1+.2));world.add(D);const leaf=new THREE.Mesh(boxUV(dx1-dx0,2.55,.1,1.2),MATS.wood);leaf.position.set((dx1-dx0)/2,1.28,0);leaf.castShadow=leaf.receiveShadow=true;D.add(leaf);
+      for(const y of [.4,1.3,2.2]){const st=new THREE.Mesh(boxUV(dx1-dx0-.1,.07,.13,1),MATS.iron);st.position.set((dx1-dx0)/2,y,0);D.add(st);}
+      const dbox=addBox(dx0,dx1,...zr(a1+.02,a1+.38),2.6);dbox.dyn=true;
+      const lx=dx1+.9,lz=Z(a1-.6),L=new THREE.Group();L.position.set(lx,0,lz);world.add(L);const lb=new THREE.Mesh(boxUV(.3,.5,.2,1),MATS.stone);lb.position.y=.25;L.add(lb);const arm=new THREE.Group();arm.position.y=.5;L.add(arm);const ah=new THREE.Mesh(new THREE.CylinderGeometry(.025,.03,.8,6),MATS.iron);ah.position.y=.4;arm.add(ah);const kn=new THREE.Mesh(new THREE.SphereGeometry(.06,8,6),MATS.wood);kn.position.y=.82;arm.add(kn);arm.rotation.z=.5;
+      T_.room={x0,x1,z0:Math.min(Z(a0),Z(a1)),z1:Math.max(Z(a0),Z(a1)),door:{D,box:dbox,open:0,t:0,x0:dx0,x1:dx1,z:Z(a1+.2)},lever:{x:lx,z:lz,arm}};
+      T_.spawn=[];for(let k=0;k<8;k++)T_.spawn.push([x0+1.2+(k%4)*1.6,Z(a0+1.3+Math.floor(k/4)*1.8)]);}
     // the keep behind, roofs over the walls
     {const b={pv:s,thatch:false,chimney:false,door:0,torch:false,light:false,noDoor:true};house(0,Z(BK-8),0,16,10,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(-13,Z(BK-6),0,8,7,4,{...b,pv:1,slate:true});house(13,Z(BK-6),0,8,7,4,{...b,stone:true,allStone:true,slate:true});}
     // in the yard: braziers, barrels and crates, the racks where fresh weapons are taken
-    brazier(-6,Z(-12));brazier(12,Z(-6));for(const [x,lz] of [[-16,-4],[-15.3,-4.6],[16,-20],[-12,-22]])barrel(x,Z(lz));crate(15,Z(-3));crate(-16.5,Z(-18));
+    brazier(-6,Z(-12));brazier(12,Z(-6));for(const [x,lz] of [[-16,-4],[-15.3,-4.6],[16,-20],[-9.5,-23]])barrel(x,Z(lz));crate(15,Z(-3));crate(-16.5,Z(-18));
     for(const [x,lz,ry] of [[-XW+1.3,-9,Math.PI/2],[XW-1.3,-14,-Math.PI/2]]){weaponRack(x,Z(lz),s?Math.PI-ry:ry);R.racks.push({s,x:x+(x<0?1.2:-1.2),z:Z(lz),n:0,t:0});}
-    for(let k=0;k<8;k++)T_.spawn.push([-8+k*2.3,Z(-14-(k%2)*2.5)]);
     // the wall-walk along the front wall (stand on it, look over the field, push ladders off), a stone stair up to it inside each end
     for(const [x0,x1] of [[-XW-1,bx-bhw],[bx+bhw,gx-ghw-3],[gx+ghw+3,XW+1]]){const [z0,z1]=zr(-WT/2,WT/2);FLOORS.push({x0,x1,z0,z1,h:WH+.02});const pb=addBox(x0,x1,...zr(WT/2-.32,WT/2),WH+1.1);pb.y0=WH-.02;}
     for(const [xa,xb] of [[bx-bhw-1.2,-XW+1.2],[gx+ghw+4,XW-1.2]]){const [z0,z1]=zr(-WT/2-1.5,-WT/2),n=Math.round(Math.abs(xb-xa)/.5),dir=Math.sign(xb-xa);
@@ -2404,7 +2431,7 @@ function buildRaid(){
       for(let k=0;k<n;k++){const xc=xa+dir*(k+.5)*.5,top=WH*(k+1)/n;addGeo('ashlar',boxUV(.5,top,z1-z0,1.5),T(xc,top/2,(z0+z1)/2));if(top>1)addBox(xc-.25,xc+.25,z0,z1,top-.75);}}
     // two scaling ladders lie by the side wall
     for(const k of [0,1])R.lad.push(ladderAdd(-14.5,Z(-18.6-k*.9),Math.PI/2));
-    T_.cart=cart(gx,Z(-7.2),s?-Math.PI/2:Math.PI/2,true);T_.cart.slots=[null,null];T_.cart.cartS=s;
+    {const cz=Z(-7.2),F={x0:gx-.6,x1:gx+.6,z0:cz-1.25,z1:cz+1.25,h:.84};FLOORS.push(F);T_.cart=cart(gx,cz,s?-Math.PI/2:Math.PI/2,true,F);T_.cart.cartS=s;T_.cart.carry=true;}
   }
   // the field: trees along the sides, a ruined chapel and a farm wall in the middle for cover, fallen trunks
   let sd=4219;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
@@ -2425,7 +2452,7 @@ function raidSideOf(f){const s=f&&f.entrant&&f.entrant.side;return s==='A'?0:s==
 function raidYard(z){return z<-RAID_W0+.2?0:z>RAID_W0-.2?1:-1;}
 // bots: walk to (tx,tz) by way of the gate or the breach when the front wall is between
 function raidGo(f,wish,tx,tz){const R=RAID,x=f.pos.x,z=f.pos.z,yA=raidYard(z),yB=raidYard(tz);let gx=tx,gz=tz;
-  if(yA!==yB){const s=yA>=0?yA:yB,A=f.ai;if(A.rway==null||A.rwayS!==s||A.rwayT<simTime){const dG=Math.abs(x-R.gx)+Math.abs(tx-R.gx),dB=Math.abs(x-R.bx)+Math.abs(tx-R.bx);A.rway=dG+rand(-3,3)<dB?R.gx:R.bx;A.rwayS=s;A.rwayT=simTime+6;A.rlane=rand(-1,1)*(A.rway===R.gx?R.ghw-.7:R.bhw-.9);}
+  if(yA!==yB){const s=yA>=0?yA:yB,A=f.ai;if(A.rway==null||A.rwayS!==s||A.rwayT<simTime){const dG=Math.abs(x-R.gx)+Math.abs(tx-R.gx),dB=Math.abs(x-R.bx)+Math.abs(tx-R.bx);const gt=R.team[s]&&R.team[s].gate,gOpen=!gt||gt.lift>1.8;A.rway=gOpen&&dG+rand(-3,3)<dB?R.gx:R.bx;A.rwayS=s;A.rwayT=simTime+6;A.rlane=rand(-1,1)*(A.rway===R.gx?R.ghw-.7:R.bhw-.9);}
     const ox=A.rway+A.rlane,inner=raidZ(s,-WTq()-1.5),outer=raidZ(s,WTq()+1.5),here=yA===s;const near=here?inner:outer;
     if(Math.abs(x-ox)>.6&&Math.abs(z-near)>.4){gx=ox;gz=near;}else{gx=ox;gz=here?outer:inner;}}
   const dx=gx-x,dz=gz-z,l=Math.hypot(dx,dz);if(l<.3){wish.set(0,0,0);return;}wish.set(dx/l,0,dz/l);}
@@ -6199,7 +6226,7 @@ function dynSync(){for(const d of DYN){const b=d.body;if(!b||d.gone)continue;if(
   if(d.brittle||d.hp){const pv=d.pvv||(d.pvv=V()),dv=Math.hypot(v.x-pv.x,v.y-pv.y,v.z-pv.z);pv.set(v.x,v.y,v.z);   // a hard knock breaks it
     if(d.brittle&&dv>3.3){dynBreak(d,v);continue;}if(d.hp&&dv>2.5){d.dmg=(d.dmg||0)+d.m*(dv-2.5);if(d.dmg>=d.hp){dynBreak(d,v);continue;}}}const vm=d.heavy?7:14;if(sp>vm){const k=vm/sp;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);v=b.linvel();sp=vm;}   // (a safety net against anything wedged and spat out)
   if(d.pv!=null&&Math.abs(sp-d.pv)>2&&simTime>(d.sndT||0)){d.sndT=simTime+.12;dynSound(d,Math.abs(sp-d.pv),d.obj.position.clone());}d.pv=sp;
-  const p=d.obj.position,q=d.obj.quaternion;if(d.ob&&!(d.lad&&d.lad.carrier))dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;if(d.prop.y0!=null)d.prop.y0=t.y;}if(d.fx)dynFx(d,p,q);
+  const p=d.obj.position,q=d.obj.quaternion;if(d.carry)cartCarry(d,p,q);if(d.ob&&!(d.lad&&d.lad.carrier))dynOb(d,p,q);if(d.floor&&d.mv)dynFloor(d,p,q);if(d.prop){d.prop.x=t.x;d.prop.z=t.z;if(d.prop.y0!=null)d.prop.y0=t.y;}if(d.fx)dynFx(d,p,q);
   if(d.pw){d.pw.setNextKinematicTranslation(t);d.pw.setNextKinematicRotation(r);}
   if(t.y<-20||(SHIP&&t.y<-1&&!shipIn(t.x,t.z)))dynKill(d,true);}}
 // friends: the host sends what moved (and everything that has moved, every 3 s); they ease each thing to it
@@ -6638,7 +6665,7 @@ class Fighter{
       // (Build 128) a man rocked by a blow doesn't whip round: bots turned at their full 5-8 rad/s straight after being hit, so a hard hit
       // looked like it spun them; the turn is capped at 5.5 rad/s, less while staggered and for half a second after a hurt
       const hr=this.hurtT!=null?clamp((simTime-this.hurtT)/.6,0,1):1,mx=5.5*(1-.6*clamp(this.stagger*2.5,0,1))*(.4+.6*hr),dy=wrapA(this.yaw-y0);if(Math.abs(dy)>mx*h)this.yaw=y0+Math.sign(dy)*mx*h;}
-    this._wf=wish.x*Math.sin(this.yaw)+wish.z*Math.cos(this.yaw);
+    this._wf=wish.x*Math.sin(this.yaw)+wish.z*Math.cos(this.yaw);if(this.wheelHold){wish.set(0,0,0);run=false;}
     revStep(this,h);
     if(simTime<CD_END){wish.set(0,0,0);run=false;this.commit=false;this.kickReq=this.jumpReq=this.slideReq=this.throwReq=false;}
     const legs=!(this.limbs.legL.sev||this.limbs.legR.sev);
@@ -6788,6 +6815,7 @@ class Fighter{
       if(!arm.init){(this.bones[side==='R'?'RightHandMiddle1':'LeftHandMiddle1']||this.bones[side==='R'?'RightHand':'LeftHand']).getWorldPosition(arm.pos);if(!(arm.pos.y>.05))arm.pos.copy(this.chest).addScaledVector(f,.25).addScaledVector(_r,.13*sg);arm.vel.set(0,0,0);arm.initT=simTime;   /* the fist comes up from wherever the hand was */arm.init=true;arm.c={x:FG.x*sg,y:FG.y,z:FG.z};arm.cd=0;}
       if(this.ladCarry){ladPt(this.ladCarry,this.ladCarry.lad.L*.35+.32*sg,arm.pos,0);arm.vel.set(0,0,0);continue;}   // carrying a ladder: both hands on it by the shoulder
       if(this.climb&&this.climb.d){ladPt(this.climb.d,this.climb.t+1.5+(sg>0?(Math.floor(this.climb.t/.32)%2)*.16:((Math.floor(this.climb.t/.32)+1)%2)*.16),arm.pos,sg*.21);arm.vel.set(0,0,0);continue;}   // climbing: hands on the rails
+      if(this.wheelHold&&this.wheelHold.gate){const g=this.wheelHold.gate,a=-g.lift*4.2+(sg>0?0:Math.PI);_t3.set(Math.cos(a)*.66,Math.sin(a)*.66,.2);g.wh.updateMatrixWorld(true);arm.pos.copy(_t3).applyMatrix4(g.wh.matrixWorld);arm.vel.set(0,0,0);continue;}   // on the winch: hands on its handles, round they go
       if(this.cartHold&&this.cartHold.obj){cartPt(this.cartHold,-2.3,.28,.43*sg*(this.cartHold.obj.quaternion?1:1),arm.pos);arm.vel.set(0,0,0);continue;}   // pulling a cart: the hands are on the shafts
       if(this.isPlayer||this.remote){this.stepFistFree(h,side,arm,held,sg,sh,f,u,reach);continue;}
       if(arm.phase==='guard'&&held&&this.stamina>5&&this.stagger<=0){arm.phase='charge';arm.charge=0;}
@@ -8779,7 +8807,7 @@ function logic(dt){FR_TICK++;
   if(HSBODY)hsNear();
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   if(HSW)hsStep(dt);
-  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 let lastFrameAt=0;
@@ -9391,10 +9419,10 @@ let RAID_TEAM=6;const RAID_WIN=2,RAID_BACK=8,RAID_TIME=900;
 const RAID_KIT=[['longsword',['kettle','mail']],['spear',['nasal','mail']],['axe',['kettle','brigandine']],['arming',['bascinet','mail']],['mace',['nasal','brigandine']],['greatsword',['kettle','mail']]];
 function raidChests(){return [...freeSwords,...fighters.map(f=>f.sword)].filter(s=>s&&s.def.id==='chest');}
 function raidChestPos(s,out){return out.copy(s.H).lerp(s.T,.5);}
-function raidScore(){const sc=[0,0],p=V();for(const d of raidCarts()){if(d.gone)continue;const q=cartPt(d,0,0,0,V()),z=raidZoneOf(q.x,q.z,3);   /* a cart counts drawn up to the strongroom's door */if(z>=0)for(const hm of d.slots)if(hm!=null&&hm!==z)sc[z]++;}for(const s of raidChests()){if(s.home==null)continue;raidChestPos(s,p);const z=raidZoneOf(p.x,p.z);if(z>=0&&z!==s.home){const o=s.owner;if(!o||raidSideOf(o)===z)sc[z]++;}}return sc;}
+function raidScore(){const sc=[0,0],p=V();for(const s of raidChests()){if(s.home==null)continue;raidChestPos(s,p);const z=raidZoneOf(p.x,p.z,!s.owner&&p.y>.5?3:0);if(z>=0&&z!==s.home){const o=s.owner;if(!o||raidSideOf(o)===z)sc[z]++;}}return sc;}
 function raidEntrants(H){const R=RUN;R.en=[[],[]];const NT=window.__raidTeam||RUN.team||RAID_TEAM;
-  H.forEach((en,i)=>{const s=i%2&&H.length>1?1:0;en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;R.en[s].push(en);});
-  for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;
+  H.forEach((en,i)=>{const s=i%2&&H.length>1?1:0;en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.look={...(en.look||DEF_LOOK),sc:TEAM_SC[s]};R.en[s].push(en);});
+  for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;en.look={...randomLook(),sc:TEAM_SC[s]};
     en.kit=RAID_KIT[R.en[s].length%RAID_KIT.length];en.role=['guard','raid','raid','hunt','raid','guard'][R.en[s].length%6];R.en[s].push(en);}}
 function raidSpawn(en,k){const T_=RAID.team[en.raidS],p=T_.spawn[k%T_.spawn.length];const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:en.kit;
   const f=spawnEntrant(en,p[0]+rand(-.4,.4),p[1]+rand(-.4,.4),kit,en.human?null:en.skill);f.yaw=en.raidS?Math.PI:0;f.ai.retarget=0;return f;}
@@ -9409,7 +9437,7 @@ function raidRackFill(rk,n){const ids=['arming','longsword','axe','mace','spear'
 function raidHud(){const R=RUN,sc=raidScore();R.sc=sc;const mine=(R.H[0]&&R.H[0].raidS)||0,left=Math.max(0,RAID_TIME-(simTime-R.t0));
   const held=raidChests().filter(s=>s.owner&&s.owner.alive&&s.home!==raidSideOf(s.owner));const hs=held.map(s=>`${s.owner.name} has ${s.home?'red':'blue'}'s box`);
   MODEHUD=[`Blue ${sc[0]} – ${sc[1]} Red`,`${fmtClock(left)} left`+(hs.length?' · '+hs.slice(0,2).join(' · '):` · ${RAID_WIN} boxes win`)];}
-function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPull(h);
+function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPull(h);raidWorks(h);
   // the fallen come back in their own yard
   for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}
     const f=raidSpawn(q.en,(Math.random()*8)|0);hostSendStart();if(f.isPlayer)state='playing';}
@@ -9420,6 +9448,7 @@ function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPu
     // a bot that has carried a box into its own strongroom sets it down and takes a weapon back up
     if(!f.isPlayer&&!f.remote){const ct=RAID.team[raidSideOf(f)].cart;if(ct&&raidHolder(ct)&&ct.slots.includes(null)&&cartPt(ct,0,0,0,V()).distanceTo(f.pos)<2.4){raidUse(f);if(!f.sword||f.sword.def.id!=='chest'){raidSetDown2(f);continue;}}const z=raidZoneOf(f.pos.x,f.pos.z),s=raidSideOf(f);if(z===s&&f.sword.home!==s&&Math.hypot(f.pos.x-RAID.team[s].home[0],f.pos.z-RAID.team[s].home[1])<1.6||z===s&&f.sword.home===s){raidSetDown(f);}}}
   for(const rk of RAID.racks)if(simTime>(rk.t||0)){rk.t=simTime+20;raidRackFill(rk,3);}
+  for(const T_ of RAID.team){const D=T_.room&&T_.room.door;if(D&&!D.open&&fighters.some(o=>o.alive&&!o.ragdoll&&!o.isPlayer&&!o.remote&&raidSideOf(o)===T_.s&&raidInRoom(T_,o)))raidDoor(T_,true);}   // bots let themselves out
   // bots pick up boxes they've walked onto
   for(const f of fighters){if(!f.alive||f.ragdoll||f.isPlayer||f.remote||!f.entrant||f.sword&&f.sword.def.id==='chest')continue;const g=f.ai.raidGoal;if(!g||!g.chest)continue;const it=loot.find(i=>i.kind==='weapon'&&i.sword===g.chest);if(!it)continue;lootPos(it,p);if(Math.hypot(p.x-f.pos.x,p.z-f.pos.z)<1.25&&Math.abs(p.y-f.pos.y)<1.2)pickUp(f,it);}
   raidHud();const sc=R.sc;
@@ -9437,6 +9466,7 @@ function raidKill(killer,victim){const R=RUN;const en=victim.entrant;if(!en||en.
 function raidSteer(f,wish){const R=RAID;if(!R||!f.entrant||f.entrant.raidS==null||!RUN||RUN.mode!=='raid')return false;const A=f.ai,s=f.entrant.raidS,o=1-s,x=f.pos.x,z=f.pos.z,tg=A.target;
   const tgD=tg&&tg.alive&&!tg.ragdoll?Math.hypot(tg.pos.x-x,tg.pos.z-z):99;
   const T_=R.team[s],p=V();
+  if(raidInRoom(T_,f)){const D=T_.room.door,ex=(D.x0+D.x1)/2,ez=D.z+(s?-1.4:1.4),dx=ex-x,dz=ez-z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}   // in the spawn room: out by the door
   if(f.sword&&f.sword.def.id==='chest'){A.raidGoal={home:1};if(tgD<1.6)return false;{const ct=T_.cart;if(ct&&!ct.gone&&raidHolder(ct)&&ct.slots.includes(null)){const q=cartPt(ct,0,0,0,V());if(q.distanceTo(f.pos)<16){raidGo(f,wish,q.x,q.z);return true;}}}   /* our cart is out and being pulled: put it in there */raidGo(f,wish,T_.home[0]+((f.id%3)-1)*1.2,T_.home[1]);return true;}
   if((A.raidT||0)<simTime){A.raidT=simTime+.6+Math.random()*.4;let best=null,bs=1e9;const role=f.entrant.role||'raid';
     for(const c of raidChests()){raidChestPos(c,p);const d=Math.hypot(p.x-x,p.z-z),zn=raidZoneOf(p.x,p.z),own=c.owner;
@@ -9463,13 +9493,44 @@ function cartSet(d,k,home,net=true){d.slots[k]=home;cartChestMesh(d,k);if(net&&N
 // what E does for this fighter in the raid, if anything (dry: only say whether it would)
 function raidUse(f,dry){if(!RAID||!f||!f.alive||f.ragdoll)return false;
   if(f.cartHold){if(!dry){f.cartHold=null;}return 'Let go of the shafts';}
+  if(f.wheelHold){if(!dry){f.wheelHold=null;}return 'Let go of the wheel';}
   const chest=f.sword&&f.sword.def.id==='chest';
+  for(const T_ of RAID.team){const g=T_.gate;if(g&&Math.hypot(g.wx-f.pos.x,g.wz-f.pos.z)<1.5&&!fighters.some(o=>o.wheelHold===T_&&o.alive)){if(!dry){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.wheelHold=T_;}return 'Turn the winch (W up, S down)';}
+    const L=T_.room&&T_.room.lever;if(L&&Math.hypot(L.x-f.pos.x,L.z-f.pos.z)<1.3){if(!dry)raidDoor(T_,true);return 'Pull the lever';}}
   for(const d of raidCarts()){if(d.gone)continue;const bed=cartPt(d,0,.8,0,_rc2),db=Math.hypot(bed.x-f.pos.x,bed.z-f.pos.z);
-    if(chest&&db<2.1){const k=d.slots.indexOf(null);if(k<0)continue;if(!dry){const s=f.sword;f.sword=null;s.owner=null;cartSet(d,k,s.home);s.dispose();f.giveFists();sThud(bed,.5);}return 'Put the strongbox in the cart';}
+    // a box goes into the bed loose: it rides there only because it's lying on the boards
+    if(chest&&db<2.1){if(!dry){const s=f.sword;f.dropSword(true);const c0=cartPt(d,0,0,0,V()),n=raidChests().filter(c=>!c.owner&&c!==s&&c0.distanceTo(c.H)<1.6).length;const P=cartPt(d,(n%2?.45:-.45)-.25,(d.cartY0||.74)+.32,(n>1?.2:-.2),V()),dir=cartPt(d,1,0,0,V()).sub(cartPt(d,0,0,0,V())).normalize();
+        s.reset(P,dir);s.Hp.copy(s.H);if(s.Tp)s.Tp.copy(s.T);s.edge.set(0,1,0);s.age=0;f.giveFists();sThud(bed,.5);}return 'Put the strongbox in the cart';}
     const hp=cartPt(d,...CART_HOLD,_rc2),dh=Math.hypot(hp.x-f.pos.x,hp.z-f.pos.z);
-    if(!chest&&dh<1.25&&!raidHolder(d)){if(!dry){if(f.sword)f.dropSword(true);f.giveFists();f.cartHold=d;}return 'Take up the shafts';}
-    if(!chest&&db<2.1&&d.slots.some(x=>x!=null)){if(!dry){const k=d.slots[1]!=null?1:0,home=d.slots[k];cartSet(d,k,null);const s=new Sword(WEAPONS.chest);s.home=home;if(f.sword)f.dropSword(true);f.sword=s;s.owner=f;const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));}return 'Take a strongbox out of the cart';}}
+    if(!chest&&dh<1.25&&!raidHolder(d)){if(!dry){if(f.sword)f.dropSword(true);f.giveFists();f.cartHold=d;}return 'Take up the shafts';}}
   return false;}
+// the spawn room's door: the lever inside swings it open; it shuts by itself 3.5 s later once the doorway is clear
+function raidDoor(T_,open,net=true){const D=T_.room&&T_.room.door;if(!D)return;if(open){D.t=simTime+3.5;if(T_.room.lever)T_.room.lever.pull=1;if(D.open)return;D.open=1;gridRemove(D.box);boxPhys(D.box,false);sfx('block',V(D.x0,1.2,D.z),.3,.6,.1,false);}
+  else{if(!D.open)return;D.open=0;const b=D.box;gridInsert(b,b.x0-1,b.x1+1,b.z0-1,b.z1+1);boxPhys(b,true);sThud(V(D.x0,1.2,D.z),.5);}
+  if(net&&NET.mode==='host')netEv(['SD',T_.s,open?1:0]);}
+// the portcullis to height lift (0 shut, 3.9 right up)
+function raidGateSet(T_,lift){const g=T_.gate;if(!g)return;g.lift=clamp(lift,0,3.9);g.box.y0=g.lift>.02?g.lift:0;g.box.h=4.5+g.lift;boxPhys(g.box,g.lift<1.7);}
+// a box's collider in the rigid-body engine, on or off (a door or grate that moves)
+function boxPhys(b,on){if(!PW||!R)return;if(on&&!b.phys){b.phys=PW.createCollider(R.ColliderDesc.cuboid((b.x1-b.x0)/2,(b.h-(b.y0||0))/2,(b.z1-b.z0)/2).setTranslation((b.x0+b.x1)/2,(b.h+(b.y0||0))/2,(b.z0+b.z1)/2));}else if(!on&&b.phys){try{PW.removeCollider(b.phys,false);}catch(e){}b.phys=null;}}
+// every sim step on the host: the winch turned by whoever holds it, doors shutting behind people
+function raidWorks(h){if(!RAID)return;
+  for(const f of fighters){const T_=f.wheelHold;if(!T_)continue;const g=T_.gate;if(!f.alive||f.ragdoll||Math.hypot(g.wx-f.pos.x,g.wz-f.pos.z)>1.8||f.sword&&f.sword.def.kind!=='fist'){f.wheelHold=null;continue;}
+    const up=f.isPlayer?(input.keys.KeyW?1:0)-(input.keys.KeyS?1:0):f.remote?(f._wf>.3?1:f._wf<-.3?-1:0):(f._wheelWant??1);
+    if(up){raidGateSet(T_,g.lift+(up>0?.6:-1.1)*h);if(up>0)f.useStamina(2*h);}f.yaw=Math.atan2(g.wx-f.pos.x,g.wz-f.pos.z);
+    if(simTime>(g.st||0)&&Math.abs(g.lift-(g.sent??-1))>.04){g.st=simTime+.1;g.sent=g.lift;if(NET.mode==='host')netEv(['PC',T_.s,Math.round(g.lift*100)/100]);}}
+  for(const T_ of RAID.team){const D=T_.room&&T_.room.door;if(D&&D.open&&simTime>D.t){const b=D.box;if(!fighters.some(o=>o.alive&&!o.ragdoll&&o.pos.x>b.x0-.5&&o.pos.x<b.x1+.5&&o.pos.z>b.z0-.6&&o.pos.z<b.z1+.6))raidDoor(T_,false);else D.t=simTime+.5;}}}
+function raidInRoom(T_,f){const r=T_.room;return r&&f.pos.x>r.x0&&f.pos.x<r.x1&&f.pos.z>r.z0&&f.pos.z<r.z1;}
+// drawn on every machine
+function raidVisual(dt){if(!RAID)return;for(const T_ of RAID.team){const g=T_.gate;if(g){if(NET.mode==='client'&&g.tl!=null)g.lift=lerp(g.lift,g.tl,1-Math.exp(-10*dt));g.G.position.y=g.lift;g.wh.rotation.z=-g.lift*4.2;}
+    const D=T_.room&&T_.room.door;if(D){const want=D.open?(T_.s?1.5:-1.5):0;D.D.rotation.y=lerp(D.D.rotation.y,want,1-Math.exp(-5*dt));}
+    const L=T_.room&&T_.room.lever;if(L){L.pull=Math.max(0,(L.pull||0)-dt*.6);L.arm.rotation.z=.5-L.pull*1;}}}
+// a cart's bed carries what lies on it: each step, loose weapons and boxes resting on the boards move with the cart (they still slide,
+// bounce and fall off by themselves; rigid-body weapons and ladders are carried by friction in their own worlds)
+function cartCarry(d,p,q){const pp=d._cp,pq=d._cq;if(pp){const inv=_rcq.copy(pq).invert(),bed=(d.cartY0||.74)+.08;
+    for(const s of freeSwords){if(!s.free||s.flying||s.owner||s.rb||s.stuck)continue;const l=V().subVectors(s.H,pp).applyQuaternion(inv),l2=V().subVectors(s.T,pp).applyQuaternion(inv);
+      const on=(v)=>Math.abs(v.x)<1.32&&Math.abs(v.z)<.7&&v.y>bed-.12&&v.y<bed+.5;if(!on(l)&&!on(l2))continue;
+      const nH=l.applyQuaternion(q).add(p),nT=l2.applyQuaternion(q).add(p);const dH=V().subVectors(nH,s.H),dT=V().subVectors(nT,s.T);s.H.add(dH);s.T.add(dT);s.Hp.add(dH);if(s.Tp)s.Tp.add(dT);}}
+  (d._cp||(d._cp=V())).copy(p);(d._cq||(d._cq=new THREE.Quaternion())).copy(q);}
 function raidHolder(d){return fighters.find(f=>f.cartHold===d&&f.alive)||null;}
 // every sim step on the host: whoever holds the shafts pulls
 function raidCartPull(h){for(const f of fighters){const d=f.cartHold;if(!d)continue;if(!f.alive||f.ragdoll||f.downed||d.gone||f.sword&&f.sword.def.kind!=='fist'){f.cartHold=null;continue;}const b=d.body;if(!b)continue;
@@ -9759,7 +9820,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
   for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
-  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);roadVisual(dt);
+  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
 }
 function clientEvents(ev){
@@ -9772,7 +9833,7 @@ function clientEvents(ev){
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'MF':mastFall(e[1],e[2],false);break;
-    case 'ML':millSluice(!!e[1],false);break;case 'BG':breachGateBreak(false);break;case 'CL':if(RAID&&RAID.team[e[1]]&&RAID.team[e[1]].cart)cartSet(RAID.team[e[1]].cart,e[2],e[3]<0?null:e[3],false);break;case 'RC':if(ROAD&&ROAD.cart)ROAD.cart.tz=e[1];break;case 'RL':roadLogClear(false);break;case 'BF':breachBannerFall(false);break;case 'MR':millStoneRoll(e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
+    case 'ML':millSluice(!!e[1],false);break;case 'BG':breachGateBreak(false);break;case 'PC':if(RAID&&RAID.team[e[1]]&&RAID.team[e[1]].gate){const g=RAID.team[e[1]].gate;g.tl=e[2];const l0=g.lift;raidGateSet(RAID.team[e[1]],e[2]);g.lift=l0;}break;case 'SD':if(RAID&&RAID.team[e[1]])raidDoor(RAID.team[e[1]],!!e[2],false);break;case 'RC':if(ROAD&&ROAD.cart)ROAD.cart.tz=e[1];break;case 'RL':roadLogClear(false);break;case 'BF':breachBannerFall(false);break;case 'MR':millStoneRoll(e[1],false);break;case 'MX':flourBlast(e[1],e[2],e[3],false);break;
     case 'XS':{const d=DYNK.get(e[1]);if(d)dynBreak(d);break;}
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
