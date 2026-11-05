@@ -103,7 +103,7 @@ body.sim #banner{top:5%;animation:fadeq 3s ease-out forwards}body.sim #banner b{
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{display:none}
+body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{display:none}body.sim.scored #topc{display:block}#teamRow{display:none;align-items:center;gap:6px}body.m-team #teamRow{display:flex}#teamRow .tlab{font-size:12px;opacity:.8;margin-right:4px}#teamRow .map{flex:1;padding:6px 4px}.map.gm{display:none}body.m-gauntlet .map.gm,body.m-team .map.gm{display:block}body.m-raid .maps[aria-label=Map]{opacity:.35;pointer-events:none}
 #vitals{opacity:0;transition:opacity .25s}body.showvit #vitals{opacity:1}
 .note{font-size:24px!important;animation:fadeq 2.4s ease-out forwards!important;text-shadow:0 2px 6px rgba(0,0,0,.9)}
 @keyframes fadeq{0%{opacity:0}10%{opacity:.95}75%{opacity:.95}100%{opacity:0}}
@@ -251,10 +251,8 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map mode" data-mode="duel" role="radio"><b>Duel</b><span>1v1, best of three, fresh kit each round</span></button>
       <button class="map mode" data-mode="tourney" role="radio"><b>Tournament</b><span>Eight fighters, knockout bracket</span></button>
       <button class="map mode" data-mode="gauntlet" role="radio"><b>Gauntlet</b><span>Survive waves together</span></button>
-      <button class="map mode" data-mode="raid" role="radio"><b>The Raid</b><span>Two castles, one road · carry two of their strongboxes home · carts and ladders · friends on either side</span></button>
-      <button class="map mode" data-mode="battle" role="radio"><b>Pitched battle</b><span>Two armies, a dozen a side, on the raid's field · nobody comes back</span></button>
-      <button class="map mode" data-mode="breach" role="radio"><b>The Breach</b><span>Hold the castle against six waves storming the wall · with friends and men-at-arms</span></button>
-      <button class="map mode" data-mode="road" role="radio"><b>The Road</b><span>Escort a cart through the forest to the village · four ambushes</span></button>
+      <button class="map mode" data-mode="team" role="radio"><b>Team battle</b><span>Two sides on any map · pick how many a side · friends on either side</span></button>
+      <button class="map mode" data-mode="raid" role="radio"><b>The Raid</b><span>Two castles, one road · carry two of their strongboxes home · carts and ladders · its own map</span></button>
       <button class="map mode" data-mode="yard" role="radio"><b>Training yard</b><span>Dummies, every weapon, hit readout</span></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Map">
@@ -265,6 +263,11 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map" data-map="ship" role="radio" aria-checked="false"><b>Mutiny</b><span>A longship in a heavy sea · the deck heaves, so keep low or lose your feet · over the side is the end</span></button>
       <button class="map" data-map="tavern" role="radio" aria-checked="false"><b>The Tavern</b><span>Night · a brawl: everyone starts bare-handed; knives, stools, tankards and bottles</span></button>
       <button class="map" data-map="mill" role="radio" aria-checked="false"><b>The Mill</b><span>Midday · a watermill: the race runs to the wheel, the gears bite, flour burns</span></button>
+      <button class="map gm" data-map="breach" role="radio" aria-checked="false"><b>The Breach</b><span>A castle wall with a breach in it · gauntlet and team battle</span></button>
+      <button class="map gm" data-map="road" role="radio" aria-checked="false"><b>The Road</b><span>A forest road and a cart · gauntlet and team battle</span></button>
+    </div>
+    <div class="maps" id="teamRow" role="radiogroup" aria-label="Team size"><b class="tlab">A side</b>
+      <button class="map tn" data-tn="2" role="radio"><b>2 v 2</b></button><button class="map tn" data-tn="3" role="radio"><b>3 v 3</b></button><button class="map tn" data-tn="4" role="radio"><b>4 v 4</b></button><button class="map tn" data-tn="6" role="radio"><b>6 v 6</b></button><button class="map tn" data-tn="8" role="radio"><b>8 v 8</b></button>
     </div>
     <div class="maps" role="radiogroup" aria-label="Combat engine" style="margin-top:10px">
       <button class="map eng" data-eng="classic" role="radio" aria-checked="true"><b>Classic</b><span>The original sword feel</span></button>
@@ -398,7 +401,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=182;
+const BUILD=183;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -2075,7 +2078,7 @@ function buildMill(){millMats();const C=MILL_C,W=C.W,D=C.D,Hh=C.H,th=.6;
     addGeo('rope',new THREE.TorusGeometry(.13,.035,6,14),T(.72,.94,.05,0,Math.PI/2));addGeo('rope',new THREE.TorusGeometry(.1,.033,6,14),T(.72,.99,.05,0,Math.PI/2));});
    addBox(bx-.36,bx+.36,bz-1.05,bz+1.05,.92);}
   // a ladder up the east side of the stone floor
-  {const lx=C.px1+.32,lz=2.5;for(const s of [-.24,.24])vRod('beam',V(lx+.55,0,lz+s),V(lx,C.DH+.9,lz+s),.035,5);for(let k=1;k<10;k++){const u=k/10;vRod('beam',V(lx+.55*(1-u),u*(C.DH+.9),lz-.24),V(lx+.55*(1-u),u*(C.DH+.9),lz+.24),.018,4);}}
+  {const h=C.DH+.15,L=h*1.05+.1,a=Math.sqrt(L*L-h*h);ladderStand(ladderAdd(C.px1+a,2.5,0,L),C.px1+a+.04,2.5,1,0,h);}   /* (Build 183) a real ladder, like the raid's: take it, set it, climb it, knock it over */
   // handrail posts down each flight of steps in the race
   for(const s of M.steps){const d=Math.sign(s.bot-s.top);for(let k=0;k<=3;k++){const x=s.top+d*k*Math.abs(s.bot-s.top)/3,y=millGround(x+d*.05,C.rz0+.2,0);vRod('iron',V(x,y,s.z1-.04),V(x,y+.95,s.z1-.04),.018,5);}
     vRod('iron',V(s.top,.95,s.z1-.04),V(s.bot,C.rb*5/6+.95,s.z1-.04),.016,5);}
@@ -2319,7 +2322,7 @@ function buildBreach(){
 function breachSteer(f,wish){const B=BREACH;if(!B||!f.entrant)return false;const A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z;
   if(f.entrant.side==='D'){if(tg&&tg.pos.z>B.WZ-1&&z<B.WZ-1){const p=A.post||(A.post=[B.open[A.post0=(A.post0??((Math.random()*B.open.length)|0))%B.open.length].x+rand(-2.5,2.5),B.WZ-rand(4.5,6.5)]);const dx=p[0]-x,dz=p[1]-z,l=Math.hypot(dx,dz);if(l>.7)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;}return false;}
   if(z<B.WZ-1.3){   // inside: with nobody close to fight, make for the banner
-    const b=B.banner;if(b&&b.st==='up'&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>6.5)){const dx=b.x+(A.lane||0)*.6-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.6){wish.set(dx/l,0,dz/l);return true;}}return false;}
+    const b=B.banner;if(b&&b.st==='up'&&RUN&&RUN.mode==='breach'&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>6.5)){const dx=b.x+(A.lane||0)*.6-x,dz=b.z-z,l=Math.hypot(dx,dz);if(l>1.6){wish.set(dx/l,0,dz/l);return true;}}return false;}
   if(tg&&tg.pos.z>B.WZ-1.3)return false;   // fighting out here
   if(!A.way||(A.way.gate&&!B.open.includes(A.way))){let best=null,bd=1e9;for(const o of B.open){const d=Math.abs(x-o.x)+(o.gate?2:0)+rand(0,3);if(d<bd){bd=d;best=o;}}A.way=best;A.lane=rand(-1,1)*(best.hw-.8);}
   const o=A.way,lx=o.x+A.lane;let tx,tz;if(Math.abs(x-lx)>.5&&z>B.WZ+1.3){tx=lx;tz=B.WZ+1.8;}else{tx=lx;tz=B.WZ-3;}
@@ -2398,7 +2401,7 @@ function buildRaid(){
     for(const [x0,x1] of [[-XW-1,bx-bhw],[bx+bhw,gx-ghw-3],[gx+ghw+3,XW+1]]){const [z0,z1]=zr(-WT/2,WT/2);FLOORS.push({x0,x1,z0,z1,h:WH+.02});const pb=addBox(x0,x1,...zr(WT/2-.32,WT/2),WH+1.1);pb.y0=WH-.02;}
     for(const [xa,xb] of [[bx-bhw-1.2,-XW+1.2],[gx+ghw+4,XW-1.2]]){const [z0,z1]=zr(-WT/2-1.5,-WT/2),n=Math.round(Math.abs(xb-xa)/.5),dir=Math.sign(xb-xa);
       FLOORS.push({x0:Math.min(xa,xb),x1:Math.max(xa,xb),z0,z1,ramp:'x',a0:xa,a1:xb,h0:0,h1:WH+.02});
-      for(let k=0;k<n;k++){const xc=xa+dir*(k+.5)*.5,top=WH*(k+1)/n;addGeo('ashlar',boxUV(.5,top,z1-z0,1.5),T(xc,top/2,(z0+z1)/2));if(top>.75)addBox(xc-.25,xc+.25,z0,z1,top-.35);}}
+      for(let k=0;k<n;k++){const xc=xa+dir*(k+.5)*.5,top=WH*(k+1)/n;addGeo('ashlar',boxUV(.5,top,z1-z0,1.5),T(xc,top/2,(z0+z1)/2));if(top>1)addBox(xc-.25,xc+.25,z0,z1,top-.75);}}
     // two scaling ladders lie by the side wall
     for(const k of [0,1])R.lad.push(ladderAdd(-14.5,Z(-18.6-k*.9),Math.PI/2));
     T_.cart=cart(gx,Z(-7.2),s?-Math.PI/2:Math.PI/2,true);T_.cart.slots=[null,null];T_.cart.cartS=s;
@@ -2434,11 +2437,14 @@ function WTq(){return 1.1;}
 // top (E there) sends it over, and anyone on it comes down with it. E at its foot climbs (W and S, bots just go up); at the top, if the wall
 // has a walk, you step off onto it. LADDERS lists them; d.lad = {L, carrier}.
 const LADDERS=[],LAD_L=6.8,LAD_W=.46,_ld1=V(),_ld2=V(),_ld3=V(),_ldq=new THREE.Quaternion();
-function ladderMesh(){const g=new THREE.Group();const add=(geo,mat,x,y,z,rz=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.z=rz;m.castShadow=m.receiveShadow=true;g.add(m);};
-  for(const sx of [-1,1])add(boxUV(.065,LAD_L,.05,1),MATS.beam||MATS.wood,sx*LAD_W/2,LAD_L/2,0);
-  for(let y=.3;y<LAD_L-.15;y+=.32)add(new THREE.CylinderGeometry(.019,.019,LAD_W,6),MATS.wood,0,y,0,Math.PI/2);return g;}
-function ladderAdd(x,z,ry){const g=ladderMesh();g.position.set(x,.03,z);g.quaternion.setFromEuler(new THREE.Euler(Math.PI/2,ry,0,'YXZ'));world.add(g);
-  const d=dynAdd(g,{m:17,fr:.75,noOb:true,sh:[{t:'box',h:[LAD_W/2+.02,LAD_L/2,.035],o:[0,LAD_L/2,0]}],snd:'wood'});d.lad={L:LAD_L,carrier:null};LADDERS.push(d);return d;}
+function ladderMesh(L=LAD_L){const LAD_L_=L;const g=new THREE.Group();const add=(geo,mat,x,y,z,rz=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.z=rz;m.castShadow=m.receiveShadow=true;g.add(m);};
+  for(const sx of [-1,1])add(boxUV(.065,LAD_L_,.05,1),MATS.beam||MATS.wood,sx*LAD_W/2,LAD_L_/2,0);
+  for(let y=.3;y<LAD_L_-.15;y+=.32)add(new THREE.CylinderGeometry(.019,.019,LAD_W,6),MATS.wood,0,y,0,Math.PI/2);return g;}
+function ladderAdd(x,z,ry,L=LAD_L){const g=ladderMesh(L);g.position.set(x,.03,z);g.quaternion.setFromEuler(new THREE.Euler(Math.PI/2,ry,0,'YXZ'));world.add(g);
+  const d=dynAdd(g,{m:17,fr:.75,noOb:true,sh:[{t:'box',h:[LAD_W/2+.02,L/2,.035],o:[0,L/2,0]}],snd:'wood'});d.lad={L,carrier:null};LADDERS.push(d);return d;}
+// stand a ladder up at build time: foot at (fx,fz), leaning toward a face whose normal (nx,nz) points back at the foot, top at height h
+function ladderStand(d,fx,fz,nx,nz,h){const a=Math.sqrt(Math.max(.3,d.lad.L*d.lad.L-h*h)),ax=V(-nx*a,h,-nz*a).normalize(),q=new THREE.Quaternion().setFromUnitVectors(Y_AXIS,ax);const cur=V(0,0,1).applyQuaternion(q);cur.addScaledVector(ax,-cur.dot(ax)).normalize();const want=V(nx,0,nz);want.addScaledVector(ax,-want.dot(ax)).normalize();q.premultiply(new THREE.Quaternion().setFromUnitVectors(cur,want));
+  d.obj.position.set(fx,.02,fz);d.obj.quaternion.copy(q);d.obj.updateMatrixWorld(true);return d;}
 function ladPose(d){const b=d.body;if(b){const t=b.translation(),r=b.rotation();return [_ld1.set(t.x,t.y,t.z),_ldq.set(r.x,r.y,r.z,r.w)];}return [_ld1.copy(d.obj.position),_ldq.copy(d.obj.quaternion)];}
 // a point along the ladder: t metres from its foot (body origin is the foot)
 function ladPt(d,t,out,side=0){const [p,q]=ladPose(d);return out.set(side,t,0).applyQuaternion(q).add(p);}
@@ -2542,7 +2548,7 @@ function buildRoad(){
 function roadPlaceCart(){const R=ROAD,c=R.cart;const x=roadX(c.z),[dx,dz]=roadDir(c.z);c.G.position.set(x,0,c.z);c.G.rotation.y=Math.atan2(dx,dz);
   const b=c.box;gridRemove(b);b.x0=x-1.15;b.x1=x+1.15;b.z0=c.z-1.5;b.z1=c.z+1.5;gridInsert(b,b.x0-1,b.x1+1,b.z0-1,b.z1+1);c.bz=c.z;}
 const cartFront=()=>{const c=ROAD.cart;const [dx,dz]=roadDir(c.z);return [roadX(c.z)+dx*2.6,c.z+dz*2.6];};
-function roadSteer(f,wish){const R=ROAD;if(!R||!f.entrant||!R.cart)return false;const c=R.cart,A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z,cx=roadX(c.z);
+function roadSteer(f,wish){const R=ROAD;if(!R||!f.entrant||!R.cart||!RUN||RUN.mode!=='road')return false;const c=R.cart,A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z,cx=roadX(c.z);
   const go=(tx,tz,stop=.5)=>{const dx=tx-x,dz=tz-z,l=Math.hypot(dx,dz);if(l>stop)wish.set(dx/l,0,dz/l);else wish.set(0,0,0);return true;};
   if(f.entrant.carter){const [fx,fz]=cartFront(),[dx,dz]=roadDir(c.z),s=f.entrant.carter;return go(fx+dz*.45*s,fz-dx*.45*s,.25);}   // the carters keep to the shafts whatever happens
   if(f.entrant.side==='D'&&!fighters.some(q=>q.alive&&!q.downed&&q.entrant&&q.entrant.carter)&&f===fighters.find(q=>q.alive&&!q.downed&&q.entrant&&q.entrant.ally)&&(!tg||Math.hypot(tg.pos.x-x,tg.pos.z-z)>4)){const [fx,fz]=cartFront();return go(fx,fz,.3);}   // with both carters down, a man-at-arms takes the shafts
@@ -2859,7 +2865,7 @@ const MAPS={
   mill:{shR:16,entry:{x:-12.2,z:-4,dx:1,dz:0},name:'The Mill',build:()=>buildMill(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:3,lootR:13,ceil:7.4,loot:14,fighters:8,light:'mill',noRing:true,spot:()=>[rand(-11.5,11.5),rand(-6.8,3.7)]},
   breach:{shR:30,entry:{x:-4.5,z:16,dx:0,dz:-1},name:'The Breach',build:()=>buildBreach(),MAP:44,arena:0,zoneR:60,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   raid:{shR:40,entry:{x:7,z:0,dx:0,dz:1},name:'The Raid',build:()=>buildRaid(),MAP:80,arena:0,zoneR:90,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
-  road:{shR:24,entry:{x:0,z:-60,dx:0,dz:1},name:'The Road',build:()=>buildRoad(),MAP:90,arena:0,zoneR:80,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
+  road:{shR:24,entry:{x:0,z:-32,dx:0,dz:1},name:'The Road',build:()=>buildRoad(),MAP:90,arena:0,zoneR:80,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   pit:{shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
@@ -7556,6 +7562,14 @@ function lootPos(it,out){
 }
 function removeLoot(it){const i=loot.indexOf(it);if(i>=0)loot.splice(i,1);if(it.obj)scene.remove(it.obj);if(it.halo)scene.remove(it.halo);}
 function canTake(f,it){if(it.kind==='weapon')return !!f.mainArm&&!f.ragdoll&&!(f.noTakeT>simTime);if(it.corpse===f)return false;if(it.def.slot==='arms'&&f.limbs.armL.sev&&f.limbs.armR.sev)return false;if(it.def.slot==='head'&&f.limbs.head.sev)return false;return true;}
+/* Build 183: loose weapons pile up over a long match (every dead man's sword, broken barrels' staves, the raid's racks) and each one is
+   stepped and drawn; past LOOT_CAP the oldest loose ones nobody is near go (not strongboxes, not one stuck in a body or still flying). Severed
+   limbs past DEBRIS_CAP go the same way. Checked once a second on the host; friends lose them with the snapshot. */
+let lootCapT=0;const LOOT_CAP=30,DEBRIS_CAP=14;
+function lootCap(){const L=loot.filter(it=>it.kind==='weapon'&&it.sword&&it.sword.free&&!it.sword.stuck&&!it.sword.flying&&it.def.id!=='chest');
+  if(L.length>LOOT_CAP){const near=it=>fighters.some(f=>f.alive&&(f.isPlayer||f.remote)&&f.pos.distanceToSquared(it.sword.H)<36);L.sort((a,b)=>(b.sword.age||0)-(a.sword.age||0));let n=L.length-LOOT_CAP;
+    for(const it of L){if(n<=0)break;if(near(it))continue;removeLoot(it);const s=it.sword,k=freeSwords.indexOf(s);if(k>=0)freeSwords.splice(k,1);s.dispose&&s.dispose();n--;}}
+  if(debris.length>DEBRIS_CAP){const old=debris.filter(d=>!d.wep).sort((a,b)=>a.born-b.born);for(let i=0;i<old.length&&debris.length>DEBRIS_CAP;i++){const d=old[i];const k=debris.indexOf(d);if(k<0)continue;debris.splice(k,1);scene.remove(d.clone);scene.remove(d.root);}}}
 function pickUp(f,it){
   if(!loot.includes(it)||!canTake(f,it))return;
   removeLoot(it);
@@ -8555,9 +8569,9 @@ function startGame(){
   flushMapSwitch();
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
-  if(MODE!=='br'){paused=false;initAudio();state='playing';if(MODE==='breach'||MODE==='road'||MODE==='raid'||MODE==='battle'){const mk=MODE==='battle'?'raid':MODE;if(curMap!==mk)loadMap(mk);}else if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');loadMap(b&&b.dataset.map!=='village'?b.dataset.map:'colosseum');}else if(curMap==='village')loadMap('colosseum');modeStart();
+  if(MODE!=='br'){paused=false;initAudio();state='playing';{const b=document.querySelector('.map.on[data-map]');let mk=b?b.dataset.map:'colosseum';if(MODE==='raid')mk='raid';else if((mk==='breach'||mk==='road')&&MODE!=='gauntlet'&&MODE!=='team')mk='colosseum';else if(mk==='village'&&MODE!=='team')mk='colosseum';if(curMap!==mk)loadMap(mk);}document.body.classList.toggle('scored',MODE==='raid'||MODE==='team');modeStart();
     document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);requestLock();return;}
-  if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');loadMap(b?b.dataset.map:'village');}   // the siege's and the road's maps are only for their modes
+  document.body.classList.remove('scored');if(curMap==='breach'||curMap==='road'||curMap==='raid'){const b=document.querySelector('.map.on[data-map]');const mk=b?b.dataset.map:'village';loadMap(mk==='breach'||mk==='road'?'village':mk);}   // the Breach, the Road and the Raid's maps aren't for battle royale
   RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';startCountdown();
   if(NET.mode==='host'){NET.ev.length=0;hostSendStart();}
   document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);
@@ -8673,7 +8687,7 @@ function updateHUD(dt){
   if(state==='dead')grade.uniforms.uDesat.value=Math.min(1,(performance.now()-deathT)/1500);
   const meDead=!!player&&!player.alive;if(SPEC.on&&player&&player.alive)specStop();
   if(meDead&&!SPEC.diedAt)SPEC.diedAt=performance.now();if(!meDead)SPEC.diedAt=0;
-  const bat=RUN&&RUN.mode==='battle'||NET.mode==='client'&&NET.mode2==='battle';
+  const bat=RUN&&RUN.mode==='team'||NET.mode==='client'&&NET.mode2==='team';
   if(meDead&&(NET.mode||bat)&&performance.now()-SPEC.diedAt>2600&&!END&&!SPEC.dismissed&&el('end').classList.contains('hide')){   // slain in multiplayer: watch the others fight it out (between rounds too)
     const L=specTargets();if((NET.mode||bat)&&L.length>=2){if(!SPEC.on)specStart();}else if(SPEC.on&&L.length<2)specStop();
     if(SPEC.on){specTick(dt);return;}}
@@ -8732,6 +8746,7 @@ function sim(h){
   if(state==='playing'||state==='attract'||state==='dead'||state==='won')zoneStep(state==='attract'?0:h);
   if(RUN&&NET.mode!=='client')modeTick();
   if(LADDERS.length&&NET.mode!=='client')ladderStep(h);
+  if(NET.mode!=='client'&&((lootCapT=(lootCapT+1)%240)===0))lootCap();
   dynStep(h);
   villageStep(h);towerStep(h);bridgeLoad(h);rubbleStep(h);rubbleBurnStep(h);tavernStep(h);shipStep(h);millStep(h);
   if(state==='playing'&&NET.mode!=='client'&&CD_END>0)countdownTick(CD_END-simTime);
@@ -9153,7 +9168,7 @@ function initFighterCard(){
 // ================================================================ modes
 // Battle royale is the open match above. Duel, Tournament and Gauntlet run in the Arena with the ring off, one round at a time.
 let MODE='br',RUN=null,END=null,MODEHUD=['',''];
-try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard','breach','road','raid','battle'].includes(m))MODE=m;}catch(e){}
+try{const m=localStorage.getItem('bloodmoor-mode');if(['br','duel','tourney','gauntlet','yard','raid','team'].includes(m))MODE=m;}catch(e){}
 const KITS=[['arming',['kettle'],'Arming swords'],['longsword',['nasal','mail'],'Longswords'],['axe',['bascinet'],'Axes'],['mace',['greathelm','plate'],'Maces in plate'],['spear',['kettle','mail'],'Spears'],['greatsword',['bascinet','mail'],'Greatswords'],['fists',[],'Bare hands']];
 const BOT_NAMES=()=>[...NAMES].sort(()=>Math.random()-.5);
 function humans(){const me=ME(),h=[{ctl:'me',name:me.name,pal:me.pal,look:me.look,ch:me.ch,kit:me.kit,human:true}];if(NET.mode==='host')for(const x of NET.conns.filter(q=>q.hello))h.push({ctl:x,name:x.name,pal:x.pal||PALETTES[(h.length*5)%PALETTES.length],look:x.look,ch:x.ch||'',kit:CHAR_BY[x.ch]?CHAR_BY[x.ch].kit:null,human:true});return h;}
@@ -9210,7 +9225,7 @@ function modeStart(){
   else if(MODE==='breach')breachStart(H);
   else if(MODE==='road')roadStart(H);
   else if(MODE==='raid')raidStart(H);
-  else if(MODE==='battle')battleStart(H);
+  else if(MODE==='team')teamStart(H);
   else if(MODE==='gauntlet'){RUN={mode:'gauntlet',H,wave:0,kills:0,names:BOT_NAMES(),ni:0};roundSetup();
     {const [SA]=duelSpots(0),a0=Math.random()*6.283;H.forEach((en,i)=>{const a=a0+i/H.length*6.283;spawnEntrant(en,SA[0]+Math.cos(a)*2,SA[1]+Math.sin(a)*2,[ownWeapon(en,'arming'),['kettle']]);});}hostSendStart();gauntletWave();}
 }
@@ -9393,7 +9408,7 @@ function raidRackFill(rk,n){const ids=['arming','longsword','axe','mace','spear'
   for(let i=have;i<n;i++){spawnWeaponLoot(WEAPONS[ids[(Math.random()*ids.length)|0]],rk.x+rand(-.3,.3),rk.z+rand(-.8,.8));loot[loot.length-1].sword.rack=rk;}}
 function raidHud(){const R=RUN,sc=raidScore();R.sc=sc;const mine=(R.H[0]&&R.H[0].raidS)||0,left=Math.max(0,RAID_TIME-(simTime-R.t0));
   const held=raidChests().filter(s=>s.owner&&s.owner.alive&&s.home!==raidSideOf(s.owner));const hs=held.map(s=>`${s.owner.name} has ${s.home?'red':'blue'}'s box`);
-  MODEHUD=[`Blue ${sc[0]} – ${sc[1]} Red`,(hs.length?hs.slice(0,2).join(' · ')+' · ':'')+`${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,'0')} left · ${RAID_WIN} boxes win`];}
+  MODEHUD=[`Blue ${sc[0]} – ${sc[1]} Red`,`${fmtClock(left)} left`+(hs.length?' · '+hs.slice(0,2).join(' · '):` · ${RAID_WIN} boxes win`)];}
 function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPull(h);
   // the fallen come back in their own yard
   for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}
@@ -9464,23 +9479,29 @@ function raidCartPull(h){for(const f of fighters){const d=f.cartHold;if(!d)conti
     const k=55,c=14,M=75,F=V().subVectors(tg,P).multiplyScalar(k*M).addScaledVector(V().subVectors(f.vel,vp),c*M);F.y=Math.max(-900,Math.min(F.y,1400));if(F.length()>3200)F.setLength(3200);
     b.applyImpulseAtPoint({x:F.x*h,y:F.y*h,z:F.z*h},{x:P.x,y:P.y,z:P.z},true);
     f.dragBody=simTime+.08;if(dl>.55){const pb=V().subVectors(P,tg);pb.y=0;const L=pb.length();if(L>1e-3){f.vel.addScaledVector(pb,(dl-.55)*6*h/L);}}}}
-// ---- the pitched battle (Build 182): two armies drawn up in two ranks across the raid's field, a dozen a side (six on phones), no one
-// comes back; the side with men still standing wins. The fallen watch the rest of it (spectating, single player too).
-const BATTLE_TEAM=TOUCH?6:12;
-function battleStart(H){RUN={mode:'battle',H,names:BOT_NAMES(),ni:0,team:BATTLE_TEAM,kills:[0,0]};roundSetup();raidEntrants(H);
-  for(let s=0;s<2;s++){const L=RUN.en[s],n=Math.ceil(L.length/2);L.forEach((en,k)=>{const row=k%2,col=Math.floor(k/2),x=(col-(n-1)/2)*1.8+(row?.9:0),z=(s?1:-1)*(12+row*2);
-      const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=s?Math.PI:0;f.ai.retarget=0;});}
-  hostSendStart();battleHud();banner('Pitched battle',`${RUN.en[0].length} a side · nobody comes back · you are ${H[0].raidS?'red':'blue'}`);}
-function battleAlive(){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;return a;}
-function battleHud(){const a=battleAlive();MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`men standing · ${RUN.kills[0]+RUN.kills[1]} fallen`];}
-function battleKill(killer,victim){const R=RUN,en=victim.entrant;if(en&&en.raidS!=null&&killer&&killer.entrant&&killer.entrant.raidS!=null&&killer.entrant.raidS!==en.raidS)R.kills[killer.entrant.raidS]++;
-  battleHud();const a=battleAlive();if(R.ended)return;
-  if(!a[0]||!a[1]){R.ended=true;const w=a[0]?0:a[1]?1:-1;banner(w<0?'Nobody is left':`${w?'Red':'Blue'} holds the field`,`${a[0]} – ${a[1]} standing`);
-    R.next=simTime+3.5;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'Nobody won':'Defeat',`${w<0?'Both armies fell':(w?'Red':'Blue')+' won the battle'} · ${R.kills[0]+R.kills[1]} fallen`,w<0?'':`${w?'Red':'Blue'} holds the field.`);}}
+// ---- team battle (Build 183, replaces Build 182's pitched battle on the raid's field, which was too much map and too slow): two sides of
+// TEAMN (2–8, the menu's "A side" row, saved as bloodmoor-teamn) on whichever map is chosen, each side gathered round one of duelSpots'
+// two places. Nobody comes back; the side with men standing wins. The fallen watch the rest (spectating, single player too).
+let TEAMN=4;try{const n=+localStorage.getItem('bloodmoor-teamn');if([2,3,4,6,8].includes(n))TEAMN=n;}catch(e){}
+function showTeamN(){document.querySelectorAll('.tn').forEach(o=>{const on=+o.dataset.tn===TEAMN;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});}
+document.querySelectorAll('.tn').forEach(b=>b.addEventListener('click',()=>{TEAMN=+b.dataset.tn;try{localStorage.setItem('bloodmoor-teamn',String(TEAMN));}catch(e){}showTeamN();}));showTeamN();
+function teamStart(H){RUN={mode:'team',H,names:BOT_NAMES(),ni:0,team:TOUCH?Math.min(TEAMN,4):TEAMN,kills:[0,0],t0:simTime};roundSetup();raidEntrants(H);
+  const sp=duelSpots(Math.min(14,4+RUN.team*1.6));
+  for(let s=0;s<2;s++){const [cx,cz]=sp[s],[ox,oz]=sp[1-s],L=RUN.en[s];let fx=ox-cx,fz=oz-cz;const fl=Math.hypot(fx,fz)||1;fx/=fl;fz/=fl;
+    L.forEach((en,k)=>{let x=cx,z=cz;if(k){for(let t=0;t<30;t++){const a=Math.random()*6.283,r=1.2+Math.sqrt(Math.random())*Math.min(4,1+L.length*.35);const tx=cx+Math.cos(a)*r-fx*r*.4,tz=cz+Math.sin(a)*r-fz*r*.4;if(SHIP||isFree(tx,tz,.6)&&groundY(tx,tz,0)>-.05){x=tx;z=tz;break;}}}
+      const kit=en.human?[ownWeapon(en,'longsword'),['kettle','mail']]:RAID_KIT[k%RAID_KIT.length];const f=spawnEntrant(en,x,z,kit,en.human?null:en.skill);f.yaw=Math.atan2(fx,fz);f.ai.retarget=0;});}
+  hostSendStart();teamHud();banner('Team battle',`${RUN.team} a side · nobody comes back · you are ${H[0].raidS?'red':'blue'}`);}
+function teamAlive(){const a=[0,0];for(const f of fighters)if(f.alive&&!f.downed&&f.entrant&&f.entrant.raidS!=null)a[f.entrant.raidS]++;return a;}
+function fmtClock(t){t=Math.max(0,t);return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
+function teamHud(){const a=teamAlive(),R=RUN;MODEHUD=[`Blue ${a[0]} – ${a[1]} Red`,`${fmtClock(simTime-(R.t0||0))} · ${R.kills[0]+R.kills[1]} fallen`];}
+function teamKill(killer,victim){const R=RUN,en=victim.entrant;if(en&&en.raidS!=null&&killer&&killer.entrant&&killer.entrant.raidS!=null&&killer.entrant.raidS!==en.raidS)R.kills[killer.entrant.raidS]++;
+  teamHud();const a=teamAlive();if(R.ended)return;
+  if(!a[0]||!a[1]){R.ended=true;const w=a[0]?0:a[1]?1:-1;banner(w<0?'Nobody is left':`${w?'Red':'Blue'} wins`,`${a[0]} – ${a[1]} standing`);
+    R.next=simTime+3.5;R.after=()=>endRun(w<0?[]:R.en[w].filter(e=>e.human),w<0?'Nobody won':'Defeat',`${w<0?'Both sides fell':(w?'Red':'Blue')+' won'} · ${R.kills[0]+R.kills[1]} fallen`,w<0?'':`${w?'Red':'Blue'} holds the field.`);}}
 function modeKill(killer,victim){
   const R=RUN;if(R.over)return;
   if(R.mode==='raid'){raidKill(killer,victim);return;}
-  if(R.mode==='battle'){battleKill(killer,victim);return;}
+  if(R.mode==='team'){teamKill(killer,victim);return;}
   if(R.mode==='yard'){if(victim.entrant&&victim.entrant.human){const en=victim.entrant;R.respawn=R.respawn||[];R.respawn.push({en,at:simTime+2.5,f:victim});}return;}
   const alive=fighters.filter(f=>f.alive);
   if(R.mode==='duel'){if(alive.length>1)return;const w=alive[0];if(w&&w.entrant===R.a)R.sa++;else if(w)R.sb++;
@@ -9512,11 +9533,12 @@ function modeTick(){const R=RUN;if(!R||R.over)return;
   if(R.mode==='breach')breachTick();
   if(R.mode==='road')roadTick();
   if(R.mode==='raid')raidTick();
+  if(R.mode==='team'&&((R.tk=(R.tk||0)+1)%60===0))teamHud();
   if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),[ownWeapon(q.en,'longsword'),[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
-  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet',yard:'Enter the yard',breach:'Man the wall',road:'Take the road',raid:'Ride out',battle:'Form up'}[MODE];}
+  el('startBtn').textContent=NET.mode==='client'?'Waiting for host':{br:'Draw your sword',duel:'Enter the duel',tourney:'Enter the tournament',gauntlet:'Run the gauntlet',yard:'Enter the yard',breach:'Man the wall',road:'Take the road',raid:'Ride out',team:'Form up'}[MODE];for(const m of ['br','duel','tourney','gauntlet','yard','raid','team'])document.body.classList.toggle('m-'+m,MODE===m);}
 document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{MODE=b.dataset.mode;try{localStorage.setItem('bloodmoor-mode',MODE);}catch(e){}showMode();}));
 
 // ================================================================ multiplayer
@@ -9673,7 +9695,7 @@ function clientStart(d){
   for(const it of [...loot]){removeLoot(it);if(it.sword)it.sword.dispose();}freeSwords.length=0;spurts.length=0;NET.lootMap.clear();
   for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;
   zoneReset();score=0;document.getElementById('feed').innerHTML='';
-  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.buf=[];NET.rt=null;NET.evq=[];NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');
+  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.buf=[];NET.rt=null;NET.evq=[];NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');document.body.classList.toggle('scored',NET.mode2==='raid'||NET.mode2==='team');
   for(const r of d.roster){const me=r.i===d.you;const pal=Array.isArray(r.p)?r.p:PALETTES[0];
     const f=new Fighter(String(r.n).slice(0,24),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;
     for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?FG.x:-FG.x,y:FG.y,z:FG.z};}
