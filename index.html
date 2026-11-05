@@ -401,7 +401,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=184;
+const BUILD=185;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -2495,11 +2495,13 @@ function ladderUse(f,dry){if(!f||!f.alive||f.ragdoll||!LADDERS.length)return fal
   if(what==='climb'){if(!dry)ladderClimb(f,best);return 'Climb the ladder';}
   if(what==='push'){if(!dry)ladderPush(f,best);return 'Push the ladder away';}
   if(!dry)ladderTake(f,best);return 'Take up the ladder';}
-function ladderTake(f,d){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.cartHold=null;f.ladCarry=d;d.lad.carrier=f;mapDirty=true;
+function ladderTake(f,d){if(f.sword&&f.sword.def.kind!=='fist')f.dropSword(true);f.giveFists();f.cartHold=null;f.ladCarry=d;d.lad.carrier=f;d.lad.lift=0;mapDirty=true;
+  const [p,q]=ladPose(d);d.lad.cp=p.clone();d.lad.cq=q.clone();   // the carried pose starts where it lay and is lifted up over ~0.45 s
   if(d.body&&RP){d.body.setBodyType(RP.RigidBodyType.KinematicPositionBased,true);}if(d.ob){gridRemove(d.ob);d.ob.gx=1e9;}}
-// carried on the shoulder, level, along the way you face, a third of it ahead
-function ladCarryPose(f,d,outP,outQ){const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw),rx=-fz,rz=fx;outP.set(f.pos.x+rx*.2-fx*d.lad.L*.35,f.pos.y+1.42,f.pos.z+rz*.2-fz*d.lad.L*.35);
-  outQ.setFromUnitVectors(Y_AXIS,_ld3.set(fx,0,fz));return [outP,outQ];}
+// carried on the right shoulder, on its edge (rails one above the other), balanced a little ahead of its middle
+function ladCarryPose(f,d,outP,outQ){const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw),rx=-fz,rz=fx,L=d.lad.L;outP.set(f.pos.x+rx*.22-fx*L*.42,f.pos.y+1.47,f.pos.z+rz*.22-fz*L*.42);
+  outQ.setFromUnitVectors(Y_AXIS,_ld3.set(fx,0,fz));const xw=V(1,0,0).applyQuaternion(outQ);outQ.premultiply(_ldq2.setFromUnitVectors(xw,Y_AXIS));return [outP,outQ];}
+const _ldq2=new THREE.Quaternion();
 function ladderSet(f,W){const d=f.ladCarry;f.ladCarry=null;d.lad.carrier=null;const b=d.body;mapDirty=true;
   let p,q;if(W){const h=Math.min(W.h,d.lad.L*.94),a=Math.max(.9,h*.27),fx=-W.nx,fz=-W.nz,face=[f.pos.x+Math.sin(f.yaw)*W.dist,f.pos.z+Math.cos(f.yaw)*W.dist];
       // the foot a out from the face, the rail's underside resting on the edge
@@ -2516,24 +2518,43 @@ function ladderPush(f,d){const b=d.body;if(!b)return;const top=ladPt(d,d.lad.L,V
 function ladderClimb(f,d){if(f.sword&&TWO_HANDED[f.sword.def.id])f.dropSword();f.climb={d,t:.15};f.cartHold=null;}
 // every sim step: carried ladders follow their carrier; climbers ride theirs (called from Fighter.step after the move)
 function ladderStep(h){for(const d of LADDERS){const c=d.lad.carrier;if(!c)continue;if(!c.alive||c.ragdoll||c.ladCarry!==d){if(c.ladCarry===d)c.ladCarry=null;d.lad.carrier=null;
-      if(d.body&&RP){d.body.setBodyType(RP.RigidBodyType.Dynamic,true);d.body.wakeUp();}continue;}
-    const [p,q]=ladCarryPose(c,d,_ld1.clone(),_ldq.clone());if(d.body){d.body.setNextKinematicTranslation({x:p.x,y:p.y,z:p.z});d.body.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w});}else{d.obj.position.copy(p);d.obj.quaternion.copy(q);}
-    c.dragBody=simTime+.08;}}
+      if(d.body&&RP){d.body.setBodyType(RP.RigidBodyType.Dynamic,true);const v=d.lad.v||V();d.body.setLinvel({x:v.x,y:v.y,z:v.z},true);d.body.wakeUp();}continue;}
+    const L=d.lad,[tp,tq]=ladCarryPose(c,d,_ld1.clone(),new THREE.Quaternion());L.lift=Math.min(1,(L.lift||0)+h/.45);const u=L.lift*L.lift*(3-2*L.lift);
+    // it has weight: it follows the shoulder a little late, so it swings wide on a turn and settles
+    const k=1-Math.exp(-h/(u<1?.06:.09)),pp=L.cp.clone();L.cp.lerp(tp,u<1?u*.5+k:k);L.cq.slerp(tq,u<1?u*.5+k:k);(L.v||(L.v=V())).subVectors(L.cp,pp).multiplyScalar(1/h);
+    const p=L.cp,q=L.cq;if(d.body){d.body.setNextKinematicTranslation({x:p.x,y:p.y,z:p.z});d.body.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w});}else{d.obj.position.copy(p);d.obj.quaternion.copy(q);}
+    c.dragBody=simTime+.08;ladderSweep(d,c,h);}}
+// a carried ladder is long and heavy: swung or run into someone, it knocks them (the faster its end goes, the harder)
+function ladderSweep(d,c,h){const L=d.lad,a=ladPt(d,0,V()),b=ladPt(d,L.L,V()),pa=L.pa||a.clone(),pb=L.pb||b.clone();L.pa=a.clone();L.pb=b.clone();if(NET.mode==='client')return;
+  for(const f of fighters){if(f===c||!f.alive||f.ragdoll||f.climb)continue;if(f.pos.distanceToSquared(c.pos)>L.L*L.L)continue;const ch=f.chest||f.pos;
+    const ab=V().subVectors(b,a),t=clamp(V().subVectors(ch,a).dot(ab)/ab.lengthSq(),0,1),cp=a.clone().addScaledVector(ab,t);if(cp.distanceTo(ch)>.38||Math.abs(cp.y-ch.y)>.6)continue;
+    const pcp=pa.clone().lerp(pb,t),v=V().subVectors(cp,pcp).multiplyScalar(1/h);v.y=0;const sp=v.length();if(sp<1.8||simTime<(f._ladHit||0))continue;f._ladHit=simTime+.5;
+    const dir=v.clone().normalize();f.balV.addScaledVector(dir,Math.min(4,sp*.8));f.vel.addScaledVector(dir,Math.min(1.6,sp*.3));f.bodyHit&&f.bodyHit('Spine2',dir,Math.min(5,sp));f.stagger=Math.max(f.stagger,.35);
+    if(sp>3)f.damage(Math.min(14,(sp-2)*3),c,'struck with a ladder');sThud(cp,Math.min(1,sp/5));if(sp>5.5&&f.alive)f.knockdown(1.6,dir.multiplyScalar(sp*.5),cp);}}
 function climbHold(f,h){const C=f.climb,d=C.d;if(!d||d.gone||d.lad.carrier||f.ragdoll){f.climb=null;return;}
+  // over the top: a short mantle onto the walk, hands on the edge, weight up, then a knee and step forward
+  if(C.m){const M=C.m;M.t+=h/.75;const u=Math.min(1,M.t),lift=Math.min(1,u/.55),fw=Math.max(0,(u-.35)/.65),e=x=>x*x*(3-2*x);
+    f.pos.set(lerp(M.a.x,M.b.x,e(fw)),lerp(M.a.y,M.b.y,e(lift))+Math.sin(Math.PI*fw)*.08,lerp(M.a.z,M.b.z,e(fw)));f.vel.set(0,0,0);f.vy=0;f.crouchK=Math.max(f.crouchK||0,1-u);
+    if(u>=1){f.climb=null;f.pos.copy(M.b);}return;}
   const ax=ladAxis(d,_ld3.clone()),b=d.body,w=b?b.angvel():{x:0,y:0,z:0},spin=Math.hypot(w.x,w.y,w.z);
   if(ax.y<.72||spin>1.4){const y=f.pos.y;f.climb=null;if(y>1.2&&NET.mode!=='client'){const out=V(-ax.x,0,-ax.z).normalize();if(y>2.6)f.damage((y-2.2)*6,null,'fell from a ladder');if(f.alive)f.knockdown(2.4,out.multiplyScalar(2.5),f.chest.clone());}return;}   // the ladder's going: so is whoever's on it
   const up=f.isPlayer?(input.keys.KeyW?1:0)-(input.keys.KeyS?1:0):f.remote?(f._wf>.3?1:f._wf<-.3?-1:0):1;
   C.t=clamp(C.t+up*h*(f.stamina>8?.95:.5),0,d.lad.L-.9);if(up)f.useStamina(1.4*h);
   const p=ladPt(d,C.t,V()),hz=V(ax.x,0,ax.z);const L=hz.length();if(L>1e-3)hz.multiplyScalar(1/L);
-  f.pos.set(p.x-hz.x*.3,p.y,p.z-hz.z*.3);f.vel.set(0,0,0);f.vy=0;f.yaw=Math.atan2(hz.x,hz.z);
-  // at the top: step off onto the wall-walk if there is one
-  if(C.t>=d.lad.L-.95&&up>0){const top=ladPt(d,d.lad.L-.5,V()),gx=top.x+hz.x*.9,gz=top.z+hz.z*.9,fy=floorY(gx,gz,top.y+.6);if(fy>p.y-.4&&fy>1){f.pos.set(gx,fy,gz);f.climb=null;return;}}
+  f.pos.set(p.x-hz.x*.27,p.y,p.z-hz.z*.27);f.vel.set(0,0,0);f.vy=0;f.yaw=Math.atan2(hz.x,hz.z);
+  // near the top with a floor within reach above or level: go over (pressing up)
+  if(up>0&&C.t>d.lad.L-2.6){const top=ladPt(d,d.lad.L,V());for(const fd of [.75,1.05,.5]){const gx=top.x+hz.x*fd,gz=top.z+hz.z*fd,fy=floorY(gx,gz,p.y+2.1);
+      if(fy>1&&fy<p.y+1.95&&fy>p.y-.3&&(C.t>=d.lad.L-.95||fy<p.y+1.25)){C.m={t:0,a:f.pos.clone(),b:V(gx+hz.x*.35,fy,gz+hz.z*.35)};return;}}}
   if(C.t<=0&&up<0){f.climb=null;f.pos.y=groundY(f.pos.x,f.pos.z,f.pos.y+.3);}}
-// drawn: hands on the rails a little above the head, feet on rungs, alternating as he climbs
-function climbPose(f){const C=f.climb;if(!C||!C.d)return;const d=C.d,B=f.bones,ph=C.t/.32;
-  for(const [s,sg,o] of [['Left',-1,0],['Right',1,.5]]){const k=Math.floor(ph+o),rt=Math.max(.3,(k-o)*.32+.3);const ft=ladPt(d,Math.min(rt,C.t+.05),V(),sg*.12);
-    const ax=ladAxis(d,V()),hz=V(ax.x,0,ax.z).normalize();ft.addScaledVector(hz,-.06);const pole=ft.clone().addScaledVector(hz,.6).add(V(0,.5,0));
+// drawn: the body leans in to the ladder; each foot holds a rung and steps up two at a time, the hands likewise, out of step with the feet
+function climbPose(f){const C=f.climb;if(!C||!C.d)return;const d=C.d,B=f.bones;if(C.m){return;}
+  const ax=ladAxis(d,V()),hz=V(ax.x,0,ax.z).normalize(),tilt=Math.acos(clamp(ax.y,-1,1));
+  if(B.Spine&&tilt>.05){const rt=V(hz.z,0,-hz.x);B.Spine.updateWorldMatrix(true,false);const q=new THREE.Quaternion();B.Spine.getWorldQuaternion(q);q.premultiply(new THREE.Quaternion().setFromAxisAngle(rt,-tilt*.9));setWorldQuat(B.Spine,q);f.root.updateMatrixWorld(true);}
+  for(const [s,sg,o] of [['Left',-1,0],['Right',1,.32]]){const ft=ladPt(d,ladRung(C.t,o,.3),V(),sg*.12);ft.addScaledVector(hz,-.07);const pole=ft.clone().addScaledVector(hz,.6).add(V(0,.5,0));
     if(B[s+'UpLeg'])ik2(B[s+'UpLeg'],B[s+'Leg'],ft,pole,f.legLen[0],f.legLen[1]);}}
+// where a hand or foot is on the ladder at climb height t: it holds rung k until the body has climbed past, then moves up two rungs (0.64 m)
+// in the last third of the cycle, lifting off a little; o staggers the limbs
+function ladRung(t,o,base){const c=(t+o)/.64,k=Math.floor(c),u=c-k,r0=k*.64-o+base;return u<.66?r0:r0+.64*((u-.66)/.34)**1.5;}
 function buildRoad(){
   const Z0=-68,Z1=70,R=ROAD={Z0,Z1,cart:null,log:null,amb:[-46,-17,13,44],end:64};
   {const g=new THREE.PlaneGeometry(220,220);g.rotateX(-Math.PI/2);scaleUV(g,220/7,220/7);const m=new THREE.Mesh(g,MATS.villageGround||MATS.gravel);m.receiveShadow=true;world.add(m);}
@@ -6813,8 +6834,8 @@ class Fighter{
       const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
       const held=this.isPlayer?(side==='R'?input.lmb:input.rmb):this.remote?!!(this.rin&&(this.rin.k&(side==='R'?32:64))):this.fistHold[side];
       if(!arm.init){(this.bones[side==='R'?'RightHandMiddle1':'LeftHandMiddle1']||this.bones[side==='R'?'RightHand':'LeftHand']).getWorldPosition(arm.pos);if(!(arm.pos.y>.05))arm.pos.copy(this.chest).addScaledVector(f,.25).addScaledVector(_r,.13*sg);arm.vel.set(0,0,0);arm.initT=simTime;   /* the fist comes up from wherever the hand was */arm.init=true;arm.c={x:FG.x*sg,y:FG.y,z:FG.z};arm.cd=0;}
-      if(this.ladCarry){ladPt(this.ladCarry,this.ladCarry.lad.L*.35+.32*sg,arm.pos,0);arm.vel.set(0,0,0);continue;}   // carrying a ladder: both hands on it by the shoulder
-      if(this.climb&&this.climb.d){ladPt(this.climb.d,this.climb.t+1.5+(sg>0?(Math.floor(this.climb.t/.32)%2)*.16:((Math.floor(this.climb.t/.32)+1)%2)*.16),arm.pos,sg*.21);arm.vel.set(0,0,0);continue;}   // climbing: hands on the rails
+      if(this.ladCarry){const d=this.ladCarry;ladPt(d,d.lad.L*.42+(sg>0?.28:.62),arm.pos,sg>0?-.2:-.24);arm.vel.set(0,0,0);continue;}   // carrying a ladder: right hand on the lower rail by the shoulder, left reaching forward along it
+      if(this.climb&&this.climb.d){const C=this.climb;if(C.m){const top=ladPt(C.d,C.d.lad.L-.15,V(),sg*.25);arm.pos.lerp(top,.5);}else{ladPt(C.d,ladRung(C.t,sg>0?.16:.48,1.45),arm.pos,sg*.22);}arm.vel.set(0,0,0);continue;}   // climbing: hands on the rails, a rung at a time; going over, on the top
       if(this.wheelHold&&this.wheelHold.gate){const g=this.wheelHold.gate,a=-g.lift*4.2+(sg>0?0:Math.PI);_t3.set(Math.cos(a)*.66,Math.sin(a)*.66,.2);g.wh.updateMatrixWorld(true);arm.pos.copy(_t3).applyMatrix4(g.wh.matrixWorld);arm.vel.set(0,0,0);continue;}   // on the winch: hands on its handles, round they go
       if(this.cartHold&&this.cartHold.obj){cartPt(this.cartHold,-2.3,.28,.43*sg*(this.cartHold.obj.quaternion?1:1),arm.pos);arm.vel.set(0,0,0);continue;}   // pulling a cart: the hands are on the shafts
       if(this.isPlayer||this.remote){this.stepFistFree(h,side,arm,held,sg,sh,f,u,reach);continue;}
