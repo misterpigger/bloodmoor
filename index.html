@@ -188,6 +188,7 @@ body.touch canvas{touch-action:none}
 body.touch .controls{display:none}
 body.touch .tcontrols{display:grid}
 body.touch #touch{display:block;position:absolute;inset:0;pointer-events:auto;touch-action:none}
+body.touch #prompt kbd{display:none}body.touch #prompt{white-space:normal;max-width:min(92vw,520px);text-align:center;justify-content:center}.tb.hot{border-color:var(--ember,#e08a3c);box-shadow:0 0 12px rgba(224,138,60,.75);color:#fff}
 body.touch #minimap,body.touch #lockhint,body.touch #prompt kbd,body.touch #grip .pw,body.touch #armor{display:none}
 body.touch #grip{right:auto;left:50%;transform:translateX(-50%);bottom:8px;align-items:center;background:none;padding:0}
 body.touch #grip #wname{font-size:11px}body.touch #grip #gripstate{font-size:18px}
@@ -408,7 +409,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=196;
+const BUILD=197;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -2269,6 +2270,10 @@ function millSteer(f,wish){const M=MILL;if(!M)return false;
   if(inRace(f.pos.x,f.pos.z)&&f.pos.y<-.2){const down=f.pos.x>M.WX+1;const s=M.steps[down?1:0];let tx,tz;const onF=f.pos.x>=Math.min(s.top,s.bot)&&f.pos.x<=Math.max(s.top,s.bot);
     if(onF){tx=s.top;tz=(M.rz0+s.z1)/2;}else{tx=s.bot+(s.top-s.bot)*.1;tz=(M.rz0+s.z1)/2;}const dx=tx-f.pos.x,dz=tz-f.pos.z,l=Math.hypot(dx,dz)||1;wish.set(dx/l,0,dz/l);return true;}
   const st=M.steps.find(s=>Math.abs(f.pos.x-s.land)<1.2&&f.pos.z>M.rz0-.1&&f.pos.z<5.6&&f.pos.y>-.1);if(st){wish.set(0,0,-1);return true;}
+  {const C=MILL_C,tg=f.ai&&f.ai.target,sx0=C.px0-5,sz=1.475,onStair=f.pos.x>sx0-.2&&f.pos.x<C.px0+.3&&f.pos.z>.85&&f.pos.z<2.1;   /* (Build 197) the stone floor's stair: bots follow a man up it, or come down it, instead of standing under the deck */
+    if(tg&&tg.alive&&!tg.ragdoll){const up=tg.pos.y>C.DH-.6&&f.pos.y<C.DH-.6,down=tg.pos.y<.6&&f.pos.y>C.DH-.6&&Math.hypot(tg.pos.x-f.pos.x,tg.pos.z-f.pos.z)>2.5;
+      if(up){if(onStair){wish.set(1,0,0);return true;}const dx=sx0-.7-f.pos.x,dz=sz-f.pos.z,l=Math.hypot(dx,dz);if(l>.4){wish.set(dx/l,0,dz/l);return true;}wish.set(1,0,0);return true;}
+      if(down){if(onStair){wish.set(-1,0,0);return true;}const dx=C.px0+.7-f.pos.x,dz=sz-f.pos.z,l=Math.hypot(dx,dz);if(l>.4){wish.set(dx/l,0,dz/l);return true;}wish.set(-1,0,0);return true;}}}
   if(f.pos.y<.1){const d=M.rz0-f.pos.z;if(d<.9&&d>-.1&&!(f.pos.x>M.WX-2.5&&f.pos.x<M.WX+2.5)){wish.z-=(.9-d)/.9*1.6;}
     if(inSlot(f.pos.x,f.pos.z,1.1)){const dz=f.pos.z-(M.sz0+M.sz1)/2;wish.z+=(dz<0?-1:1)*1.6;}}
   else if(f.pos.y>M.DH-.3){for(const [d,nx,nz] of [[f.pos.z-M.pz0,0,1],[M.pz1-f.pos.z,0,-1],[M.px1-f.pos.x,-1,0]]){if(d<1.1)wish.x+=nx*(1.1-d)*1.8,wish.z+=nz*(1.1-d)*1.8;}}
@@ -2407,7 +2412,8 @@ function botCart(f,wish){const A=f.ai,C=A.cartP;if(!C||!RAID||f.ragdoll||f.downe
   const loaded=raidChests().some(c=>!c.owner&&c.home===o&&cartEdgeD(d,c.H)<.2&&c.H.y>.5);
   if(C.st==='out'){const W=[RAID.gx,raidZ(o,16)];if(loaded){C.st='home';return true;}if(near(W[0],W[1],1.2)){C.st='wait';C.tw=simTime;wish.set(0,0,0);return true;}raidGo(f,wish,W[0],W[1]);return true;}
   if(C.st==='wait'){if(loaded||simTime-C.tw>100){C.st='home';return true;}wish.set(0,0,0);return true;}
-  if(C.st==='home'){const D=T_.door;if(near(D[0],D[1]+(s?1:-1)*.5,1.4)){raidUse(f);return done();}raidGo(f,wish,D[0],D[1]+(s?1:-1)*.5);return true;}
+  {const tgt=C.st==='home'?T_.door:C.st==='out'?[RAID.gx,raidZ(o,16)]:null;if(tgt&&f.cartHold){const dd=Math.hypot(tgt[0]-x,tgt[1]-z);if(dd<(C.best??1e9)-.4){C.best=dd;C.bt=simTime;}else if(simTime-(C.bt||simTime)>6){if(C.st==='home'){raidUse(f);return done();}C.st='wait';C.tw=simTime;C.best=null;}}}   /* (Build 197) no headway for 6 s: park it here */
+  if(C.st==='home'){const D=T_.door;if(near(D[0],D[1]+(s?1:-1)*.5,2.8)){raidUse(f);return done();}raidGo(f,wish,D[0],D[1]+(s?1:-1)*.5);return true;}
   return false;}
 function breachSteer(f,wish){const B=BREACH;if(!B||!f.entrant)return false;const A=f.ai,tg=A.target,x=f.pos.x,z=f.pos.z;
   if(RUN&&RUN.siege&&f.entrant.raidS===1){ladderPlan(f,1,2);if(botLadder(f,wish))return true;}
@@ -2609,7 +2615,7 @@ function ladderUse(f,dry){if(!f||!f.alive||f.ragdoll||!LADDERS.length)return fal
       ladPt(d,d.lad.L,p);const dt=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(dt<1.5&&Math.abs(p.y-f.pos.y-1)<1.2&&dt<bd){bd=dt;best=d;what='push';}}
     else{ladPt(d,d.lad.L/2,p);const dm=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(dm<1.6&&Math.abs(p.y-f.pos.y)<1&&dm<bd){bd=dm;best=d;what='take';}}}
   if(!best)return false;
-  if(what==='climb'){if(!dry)ladderClimb(f,best);return 'Climb the ladder (crouch + E: take it down)';}
+  if(what==='climb'){if(!dry)ladderClimb(f,best);return TOUCH?'Climb the ladder (Crouch + Use: take it down)':'Climb the ladder (crouch + E: take it down)';}
   if(what==='down'){if(!dry)ladderTake(f,best);return 'Take the ladder down';}
   if(what==='push')return false;   /* (Build 186) a kick sends it over now */
   if(!dry)ladderTake(f,best);return 'Take up the ladder';}
@@ -3977,7 +3983,7 @@ function dressMH(model,look,pal,mats){
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
     gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm);addMHPart(body,G.id,null,'cloth',false,gm);
-    if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0x4a2e1c);bm.side=THREE.DoubleSide;garbClip(bm);bm.userData.isBelt=true;addMHPart(body,G.belt,null,'belt',false,bm);}}}
+    if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0x7a4e2c);   /* (Build 197: 0x4a2e1c over the leather maps read as a flat black band) */bm.side=THREE.DoubleSide;garbClip(bm);bm.userData.isBelt=true;addMHPart(body,G.belt,null,'belt',false,bm);}}}
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
     // hair, beard, brows and lashes are MakeHuman's own (Build 126; the shells and the painted cap are no longer used)
     const pc=new THREE.Color().setRGB(hc[0]*.5,hc[1]*.44,hc[2]*.4);
@@ -8593,7 +8599,23 @@ function feedRow(killer,victim,cause){
   while(feed.children.length>6)feed.lastChild.remove();
 }
 function addScore(n){score+=n;}
-function startCountdown(){CD_END=simTime+3;cdShown=-1;}
+function startCountdown(){CD_END=simTime+3;cdShown=-1;setTimeout(warmShaders,0);}
+// (Build 197) shaders a match will want later are built during the countdown, not mid-fight: a weapon's first blood, another hilt
+// pattern picked up, and every material already in the scene, shown or not. Each one built in the middle of a fight was a hitch,
+// 50–200 ms on a phone.
+function warmShaders(){const t0=performance.now();try{const G=new THREE.Group(),seen=new Set();
+  const sws=[...fighters.map(f=>f.sword),...freeSwords,...loot.map(l=>l&&(l.sword||l.s))].filter(s=>s&&s.mesh&&s.def);
+  const sts=new Set(fighters.map(f=>((f.look||{}).ws|0)));
+  for(const s of sws){if(seen.has(s.def.id))continue;seen.add(s.def.id);
+    const add=m=>{const c=m.clone();const fk={mesh:c,len:s.len||s.def.len||1,def:s.def};bloodWeapon(fk);G.add(c);};add(s.mesh);
+    if(s.def.styles&&s.def.make)for(const st of sts){if(st>=s.def.styles)continue;try{const n=s.def.make(st);if(n.parent)n.parent.remove(n);G.add(n.clone());add(n);}catch(e){}}}
+  const tmp=[],wf=fighters.find(f=>f.alive&&f.model&&f.model.userData.mh),ad=new Set();   /* every armour fitted once (hidden) on someone, the first match only: its skinned, swinging shaders are ready before anyone puts it on */
+  if(wf&&!warmShaders.arm){warmShaders.arm=1;for(const def of Object.values(ARMOR)){try{const ms=fitArmor(wf,def)||[];for(const m of ms){m.visible=false;tmp.push(m);}}catch(e){}try{const pv=armorPreview(def);if(pv)G.add(pv);}catch(e){}}}
+  {const pg=new THREE.PlaneGeometry(.01,.01);for(const k of ['cut','stab','bruise'])G.add(new THREE.Mesh(pg,woundMat(k)));G.add(new THREE.Mesh(fleshGeo,fleshMat));G.add(new THREE.Mesh(stumpGeo,cutMeat));}   /* the first wound and the first stump */
+  G.position.y=-400;scene.add(G);G.updateMatrixWorld(true);
+  const done=()=>{scene.remove(G);for(const m of tmp)if(m.parent)m.parent.remove(m);};
+  if(renderer.compileAsync&&renderer.extensions.has('KHR_parallel_shader_compile'))renderer.compileAsync(scene,camera).then(done,done);else{renderer.compile(scene,camera);done();}
+}catch(e){console.warn('warmShaders',e);}warmShaders.ms=performance.now()-t0;}
 let cdShown=-1;
 function countdownTick(left){ // shown on every screen; the host's clock decides
   const n=left>0?Math.ceil(left):0;if(n===cdShown)return;cdShown=n;
@@ -8705,6 +8727,10 @@ function showPause(v){paused=v;document.getElementById('pause').classList.toggle
     el('pause').querySelector('p').textContent=NET.mode?'The fight goes on without you: you stand still until you come back':'The fight is frozen until you come back';   // multiplayer can't freeze for one player
     el('restartBtn').style.display=NET.mode==='client'?'none':'';}}
 addEventListener('pointerdown',()=>{if(state!=='loading')initAudio();});
+/* (Build 197) iPhones: Safari only lets sound start from the end of a touch (or a click), so resume there too; and with iOS 17's audio session
+   API ask for 'playback', so the game is heard even with the ringer switch on silent */
+addEventListener('touchend',()=>{if(state==='loading')return;if(!AC)initAudio();else if(AC.state!=='running')AC.resume();},{passive:true});
+try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){}
 document.getElementById('resumeBtn').addEventListener('click',()=>{showPause(false);requestLock();last=performance.now();});
 document.getElementById('restartBtn').addEventListener('click',()=>{showPause(false);startGame();});
 function toMainMenu(){
@@ -8894,7 +8920,7 @@ function updateHUD(dt){
     const hp=Math.max(0,player.hp);hud.hp.style.width=hp+'%';{const w=hp<25?'Fading':hp<50?'Weak':player.bleed>.05?'Bleeding':hp<85?'Shaken':'Steady';if(hud.hpn.textContent!==w)hud.hpn.textContent=w;}   // words, not numbers (no bars, as in Half Sword)hud.st.style.width=player.stamina+'%';hud.stn.textContent=Math.round(player.stamina);
     hud.stBar.classList.toggle('low',player.stamina<12);
     const fc=player.fists&&Math.max(player.fists.R.phase==='charge'?player.fists.R.charge:0,player.fists.L.phase==='charge'?player.fists.L.charge:0);
-    const g=player.knocked>0?'Knocked down':player.downed?'Bleeding out':player.throwHold?'Let go of Q to throw':!player.sword?(fc>0?'Winding up':'Fists up'):player.stamina<12?'Exhausted':player.stagger>.2?'Staggered':player.kickT>=0?'Kick':player.thrust?'Thrust':player.commit?'Committed':player.crouch?'Crouched':'Guard';
+    const g=player.knocked>0?'Knocked down':player.downed?'Bleeding out':player.throwHold?(TOUCH?'Let go to throw':'Let go of Q to throw'):!player.sword?(fc>0?'Winding up':'Fists up'):player.stamina<12?'Exhausted':player.stagger>.2?'Staggered':player.kickT>=0?'Kick':player.thrust?'Thrust':player.commit?'Committed':player.crouch?'Crouched':'Guard';
     if(hud.grip.textContent!==g){hud.grip.textContent=g;hud.grip.className=(player.commit||player.thrust)?'commit':(g==='Exhausted'||g==='Staggered')?'bad':'';}
     const wn=player.sword?player.sword.def.name:player.mainArm?'Fists · LMB right · RMB left':'No arms';if(hud.wname.textContent!==wn)hud.wname.textContent=wn;
     hud.power.style.width=(player.sword?clamp(player.sword.power/1.15,0,1)*100:(fc||0)*100)+'%';
@@ -8904,7 +8930,7 @@ function updateHUD(dt){
     if(state==='playing'&&player&&LADDERS.length){const lt=ladderUse(player,true);if(lt)it=lt;}
     if(ROAD&&(RUN&&RUN.tug||NET.mode==='client'&&NET.mode2==='team')&&state==='playing'&&player&&typeof it!=='string'){const rt=roadUse(player,true);if(rt)it=rt;}
     if(RAID&&state==='playing'&&player&&typeof it!=='string'){const rt=raidUse(player,true)||(!it&&player.sword&&player.sword.def.id==='chest'?'Set the strongbox down':null);if(rt)it=rt;}
-    if(it!==lastPrompt){lastPrompt=it;hud.prompt.classList.toggle('hide',!it);
+    if(it!==lastPrompt){lastPrompt=it;hud.prompt.classList.toggle('hide',!it);if(TOUCH){const ub=document.getElementById('tb-use');if(ub)ub.classList.toggle('hot',!!it);}   /* (Build 197) on a phone the Use button glows while there is something to use */
       if(typeof it==='string'){hud.ptext.textContent=it;hud.prompt.style.setProperty('--tier',TIER_CSS[1]);}
       else if(it){let t;if(it.kind==='weapon')t=(player.armed()?'Swap for ':'Take ')+it.def.name;else{const cur=player.armor[it.def.slot];t=`${it.corpse?'Strip':'Wear'} ${it.def.name} · ${SLOT_NAME[it.def.slot].toLowerCase()} ${Math.round(it.def.prot*100)}%`+(cur?` (now ${Math.round(cur.def.prot*100)}%)`:'');}
         hud.ptext.textContent=t;hud.prompt.style.setProperty('--tier',TIER_CSS[it.def.tier]);}}
@@ -10237,6 +10263,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
