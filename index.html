@@ -27,6 +27,7 @@ html,body{height:100%;margin:0;background:var(--ink);color:var(--parch);overflow
 
 /* loading */
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--ink);z-index:50;font-family:var(--f-display);font-size:28px;letter-spacing:.04em;color:var(--parch-dim)}
+#loading.bar::after{content:'';position:absolute;left:50%;top:calc(50% + 34px);width:min(260px,60vw);height:2px;transform:translateX(-50%);background:linear-gradient(90deg,var(--ember) calc(var(--p,0)*100%),rgba(236,220,184,.14) 0);transition:--p .2s}
 
 /* menu */
 .panel{position:fixed;inset:0;z-index:20;display:flex;align-items:center;padding-inline:clamp(16px,6vw,96px);background:linear-gradient(90deg,rgba(7,8,12,.92) 0%,rgba(7,8,12,.7) 38%,rgba(7,8,12,0) 70%)}
@@ -233,7 +234,7 @@ body.touch #prompt{top:auto;bottom:24%}
 </style>
 
 <div id="game"></div>
-<div id="loading">Raising the village…</div>
+<div id="loading" class="bar">Raising the village…</div>
 
 <div id="menu" class="panel hide">
   <div class="panel-inner">
@@ -430,7 +431,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=199;
+const BUILD=200;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -6738,6 +6739,7 @@ const ATTACKS=[
   {n:'fromRight',s:[.5,.28],e:[-.5,.05]},{n:'fromLeft',s:[-.5,.3],e:[.5,.02]},{n:'overhead',s:[.08,.55],e:[0,-.38]},
   {n:'diagR',s:[.48,.52],e:[-.42,-.36]},{n:'diagL',s:[-.48,.52],e:[.42,-.36]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
 const X_AXIS=V(1,0,0);
+let SIT=+(new URLSearchParams(location.search).get('sit')??.24),FEETF=+(new URLSearchParams(location.search).get('feetf')??.04);const _sitQ=new THREE.Quaternion(),_sitV=V();
 let fid=0;
 const _kt4=V(),_f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
 
@@ -7131,7 +7133,7 @@ class Fighter{
       // toward the ground, and they come back up out of it, instead of every lean past .42 ending flat on the ground. Too far, or caught
       // again within a second and a half, and they go down as before
       if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=1;this.vel.multiplyScalar(.4);
-        if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6)this.bodyHit('Spine2',_v.normalize(),2.5,.15);}if(this.isPlayer)tell(this,'You catch yourself','red');}
+        if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6){_v.normalize();this.fwd(_f);if(_v.x*_f.x+_v.z*_f.z<-.3)_v.copy(_f);this.bodyHit('Spine2',_v,2.5,.15);}}   /* (caught going backwards, the chest is thrown forward over the knees, not further back) */if(this.isPlayer)tell(this,'You catch yourself','red');}
       else if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
     if(!this.isPlayer&&!this.remote&&(this.blindT>simTime||this.blindOff)){const bo=this.blindOff||(this.blindOff=V()),pa=this.blindPrev||(this.blindPrev=V());   // blinded: their aim wanders
@@ -7541,7 +7543,7 @@ class Fighter{
       const mag=Math.hypot(M.sx,M.sz);if(mag>.003){_t2.set(M.sz/mag,0,-M.sx/mag);_qr.setFromAxisAngle(_t2,mag*.6);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,mag*.4);B.Spine1.quaternion.premultiply(_qr);}
       if(Math.abs(M.tw)>.002){_qr.setFromAxisAngle(Y_AXIS,-M.tw*.45);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(Y_AXIS,-M.tw*.35);B.Spine2.quaternion.premultiply(_qr);}}
     // the body leans the way its weight has been pushed
-    {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7);
+    {const bx=this.bal.x,bz=this.bal.z,bmag=Math.hypot(bx,bz);if(bmag>.005){_v.set(bx/bmag,0,bz/bmag).applyAxisAngle(Y_AXIS,-this.yaw);_t2.set(_v.z,0,-_v.x);const la=Math.min(.55,bmag*1.7)*(1-.5*Math.max(0,-_v.z));   /* (Build 200) thrown backwards, the trunk goes back half as far: nobody stays up leaning 30° backwards with bent knees, they fold at the hips */
       _qr.setFromAxisAngle(_t2,la*.55);B.Spine.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,la*.3);B.Spine1.quaternion.premultiply(_qr);_qr.setFromAxisAngle(_t2,-la*.25);B.Head.quaternion.premultiply(_qr);}}
     // a runner holds the head steady: the run clip's nodding neck is mostly taken out on the move, using the neck and head as they sit standing
     if(B.Neck&&B.Head){const C=this._calm||(this._calm={Neck:B.Neck.quaternion.clone(),Head:B.Head.quaternion.clone()}),sp=Math.hypot(this.vel.x,this.vel.z),k=clamp((sp-.4)/3,0,1)*.75;
@@ -7581,8 +7583,17 @@ class Fighter{
         const str=this.pbd?this.pbd.str:1,k=55*str*str+15,c=2*Math.sqrt(k)*.45;Pv.vx+=(fx-k*Pv.x-c*Pv.vx)*dtc;Pv.vz+=(fz-k*Pv.z-c*Pv.vz)*dtc;Pv.x=clamp(Pv.x+Pv.vx*dtc,-.09,.09);Pv.z=clamp(Pv.z+Pv.vz*dtc,-.09,.09);
         B.Hips.position.x-=Pv.x*100;B.Hips.position.z+=Pv.z*100;}   // (the feet are put back where they were by the leg IK below)
       skelClean(B);this.fwd(_f);this.right(_r);
+      /* (Build 200) sat back into the stance. Standing in guard, the hips were over the front foot (14 cm ahead of the middle of the feet)
+         with the small of the back leaning 6° backwards to balance: a man leaning away with his belly out. Now the trunk hinges forward at
+         the hips by up to SIT rad and the hips go back by exactly what that takes to leave the chest where it was (Spine2's place and
+         turn are put back to the millimetre), so the shoulders, the sword hand, the aim and the camera don't move at all: only the pelvis
+         and the legs under it change. Standing in the fighting stance only; it's gone by a walk */
+      {const w=SIT*Math.min(1,(this.stillAmt||0)*(this.stanceAmt||0)/.26)*(1-(this.crouchAmt||0));if(w>.004&&B.Spine1){const S2=B.Spine1,e=S2.matrixWorld.elements,sx=e[12],sy=e[13],sz=e[14];S2.getWorldQuaternion(_sitQ);
+          const h=B.Hips.matrixWorld.elements,dx=sx-h[12],dy=sy-h[13],dz=sz-h[14],df=dx*_f.x+dz*_f.z,c=Math.cos(w),sn=Math.sin(w),nf=df*c+dy*sn,ny=dy*c-df*sn;   // the hips-to-chest line pitched forward by w (about the body's right)
+          _sitV.set(sx-(dx+_f.x*(nf-df)),sy-ny,sz-(dz+_f.z*(nf-df)));B.Hips.parent.worldToLocal(_sitV);B.Hips.position.copy(_sitV);
+          _qr.setFromAxisAngle(X_AXIS,w);B.Hips.quaternion.premultiply(_qr);skelClean(B);setWorldQuat(S2,_sitQ,true);}}
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
-        for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w);}}
+        const ff=FEETF*Math.min(1,w/.65);for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w+ff);}}
       if(this.gaitW>.01)this.gaitStep(dt,feet,sp);
       const PL=this.plant||(this.plant={}),pw=this.gaitW>.5?0:this.plantW;
       const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
@@ -7826,7 +7837,8 @@ class Fighter{
     for(const slot in this.armor){const a=this.armor[slot];if(a)loot.push({kind:'armor',def:a.def,corpse:this,slot,halo:lootHalo(a.def.tier)});}
     onKill(by,this,cause);
   }
-  dispose(){scene.remove(this.root);clearWounds(this);if(this.pool){scene.remove(this.pool);this.pool.material.dispose();this.pool=null;}if(this.sword)this.sword.dispose();if(this.pb&&PW){for(const p of this.pb){PHC.delete(p.col.handle);PW.removeRigidBody(p.rb);}this.pb=null;}if(this.fireFx)this.fireFx.forEach(s=>scene.remove(s));}
+  dispose(){scene.remove(this.root);clearWounds(this);for(let i=loot.length-1;i>=0;i--)if(loot[i].corpse===this)removeLoot(loot[i]);   /* (Build 200) a body taken away takes the armour on it along: a man who came back in the raid left his old armour as loot nobody could see, lying where he fell */
+    if(this.pool){scene.remove(this.pool);this.pool.material.dispose();this.pool=null;}if(this.sword)this.sword.dispose();if(this.pb&&PW){for(const p of this.pb){PHC.delete(p.col.handle);PW.removeRigidBody(p.rb);}this.pb=null;}if(this.fireFx)this.fireFx.forEach(s=>scene.remove(s));}
 }
 const _iS2=V(),_iT2=V(),_iD2=V(),_iP2=V(),_iE2=V();
 // a real grip: the handle runs through the palm, fingers curl round it, knuckles follow the edge, thumb toward the guard
@@ -9115,7 +9127,7 @@ function updateHUD(dt){
     const fc=player.fists&&Math.max(player.fists.R.phase==='charge'?player.fists.R.charge:0,player.fists.L.phase==='charge'?player.fists.L.charge:0);
     const g=player.knocked>0?'Knocked down':player.downed?'Bleeding out':player.throwHold?(TOUCH?'Let go to throw':'Let go of Q to throw'):!player.sword?(fc>0?'Winding up':'Fists up'):player.stamina<12?'Exhausted':player.stagger>.2?'Staggered':player.kickT>=0?'Kick':player.thrust?'Thrust':player.commit?'Committed':player.crouch?'Crouched':'Guard';
     if(hud.grip.textContent!==g){hud.grip.textContent=g;hud.grip.className=(player.commit||player.thrust)?'commit':(g==='Exhausted'||g==='Staggered')?'bad':'';}
-    const wn=player.sword?player.sword.def.name:player.mainArm?'Fists · LMB right · RMB left':'No arms';if(hud.wname.textContent!==wn)hud.wname.textContent=wn;
+    const wn=player.sword?player.sword.def.name:player.mainArm?(TOUCH?'Fists':'Fists · LMB right · RMB left'):'No arms';if(hud.wname.textContent!==wn)hud.wname.textContent=wn;
     hud.power.style.width=(player.sword?clamp(player.sword.power/1.15,0,1)*100:(fc||0)*100)+'%';
     for(const s in hud.armor){const a=player.armor[s];const t=a?`${SLOT_NAME[s]} ${Math.round(a.def.prot*100)}%`:`${SLOT_NAME[s]} —`;if(hud.armor[s].textContent!==t){hud.armor[s].textContent=t;hud.armor[s].classList.toggle('on',!!a);}}
     for(const k in hud.parts){const p=hud.parts[k];let col='rgba(236,220,184,.85)';if(k==='torso'){const r=hp/100;col=r>.6?col:r>.3?'#d9a441':'#c0261c';}else{const L=player.limbs[k];if(L.sev)col='rgba(192,38,28,.25)';else{const max=k.startsWith('arm')?45:k==='head'?999:50;const r=L.hp/max;col=r>.6?col:r>.3?'#d9a441':'#c0261c';}}p.style.fill=col;}
@@ -9566,7 +9578,7 @@ try{const p=JSON.parse(localStorage.getItem('bloodmoor-fighter')||'null');if(p&&
 // a friend tells the host again when they change fighter in the lobby (the host just takes the newest hello)
 function saveProfile(){try{localStorage.setItem('bloodmoor-fighter',JSON.stringify(PROFILE));}catch(e){}clearTimeout(saveProfile.t);saveProfile.t=setTimeout(sendHello,300);}
 // who you are this match: the character picked on the card, or the fighter you made (kit null = the mode's usual start)
-function ME(){const c=CHAR_BY[PROFILE.ch];return c?{name:c.name,pal:c.pal.slice(),look:{...c.look},ch:c.id,kit:c.kit}:{name:PROFILE.name.trim()||'You',pal:PROFILE.pal.slice(),look:PROFILE.look,ch:'',kit:null};}
+function ME(){const c=CHAR_BY[PROFILE.ch];return c?{name:c.name,pal:c.pal.slice(),look:{...c.look},ch:c.id,kit:c.kit}:{name:PROFILE.name.trim()||(NET.mode==='host'&&NET.conns.some(q=>q.hello)?'Host':'You'),pal:PROFILE.pal.slice(),look:PROFILE.look,ch:'',kit:null};}   /* (Build 200) a host with no name is 'Host' when friends are in: his 'You' went out to their screens, which then read 'You take the round' when he had won it */
 const prev={r:null,scene:null,cam:null,model:null,mats:[],mixer:null};
 function buildPreview(){
   const cv=el('fprev');if(!cv||prev.r)return;
@@ -9634,9 +9646,12 @@ function botEntrant(name,skill){return {ctl:null,name,pal:PALETTES[(Math.random(
 const vb=(n,a,b)=>n+' '+(n==='You'?b:a);
 function showBanner(title,sub){const b=el('banner');b.querySelector('b').textContent=title;b.querySelector('span').textContent=sub||'';b.classList.remove('hide');b.style.animation='none';void b.offsetWidth;b.style.animation='';clearTimeout(showBanner.t);showBanner.t=setTimeout(()=>b.classList.add('hide'),3200);}
 function banner(title,sub){showBanner(title,sub);netEv(['B',title,sub||'']);}
-function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;const roster=fighters.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));
+function hostSendStart(){if(NET.mode!=='host')return;NET.ev.length=0;NET.lsig=-1;const roster=fighters.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));
   for(const x of NET.conns)if(x.c.open)x.c.send({t:'start',map:curMap,mode:MODE,you:x.f&&fighters.includes(x.f)?x.f.id:-1,roster});}
-function hostSendAdd(list){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,you:list.includes(x.f)?x.f.id:undefined});}
+/* (Build 200) gone: fighters taken away as these come in. A man coming back in the raid, the powder cart or the yard used to be sent as a
+   whole new start, so every friend's game threw away and rebuilt every fighter, wiped the blood, the loot and the fallen and stalled, each
+   time anyone came back; now only he is swapped */
+function hostSendAdd(list,gone){if(NET.mode!=='host')return;const roster=list.map(f=>({i:f.id,n:f.name,p:f.pal,l:f.look}));for(const x of NET.conns)if(x.c.open)x.c.send({t:'add',roster,gone:gone||undefined,you:list.includes(x.f)?x.f.id:undefined});}
 // put entrants into the arena; kit = [weapon, armor]
 // arena modes are fought round the map's middle; on The Pit that middle is the shaft, so they shift to the open ground beside it
 const MO=()=>curMap==='pit'?-6.5:curMap==='mill'?-3:0;
@@ -9872,7 +9887,7 @@ function raidHud(){const R=RUN,sc=raidScore();R.sc=sc;const mine=(R.H[0]&&R.H[0]
 function raidTick(){const R=RUN;if(!RAID||R.over)return;const h=1/240;raidCartPull(h);raidWorks(h);
   // the fallen come back in their own yard
   for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}
-    const f=raidSpawn(q.en,(Math.random()*8)|0);hostSendStart();if(f.isPlayer)state='playing';}
+    const f=raidSpawn(q.en,(Math.random()*8)|0);hostSendAdd([f],old?[old.id]:null);if(f.isPlayer)state='playing';}
   if(((R.tk=(R.tk||0)+1)%24))return;   // the rest ten times a second
   const p=V();
   for(const f of fighters){if(!f.alive||!f.sword||f.sword.def.id!=='chest')continue;
@@ -10088,8 +10103,8 @@ function roadFx(dt){const RD=ROAD;if(!RD||!RD.fx)return;RD.fx.step(dt);const c=R
     if(Math.random()<dt*30)spawnSparksLocal(w,2);if(Math.random()<dt*6)spawnDust(w,1,.15,.4);
     if((c.hiss=(c.hiss||0)-dt)<=0){c.hiss=.12;noiseBurstAt(w,.14,'highpass',3200,.7,.35);}}
   else if(c.fuseL.intensity>0){c.fuseM.scale.setScalar(.001);c.fuseM.position.copy(c.fusePath[0]);c.fuseL.intensity=0;}}
-function tugTick(){const R=RUN,RD=ROAD,c=RD.cart;if(!c||R.ended)return;const h=1/240;
-  for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}const f=tugSpawn(q.en,(Math.random()*4)|0);hostSendStart();if(f.isPlayer)state='playing';}
+function tugTick(){const R=RUN,RD=ROAD,c=RD&&RD.cart;if(!c||R.ended)return;const h=1/240;
+  for(const q of [...R.back])if(simTime>=q.at){R.back.splice(R.back.indexOf(q),1);const old=fighters.find(f=>f.entrant===q.en);if(old){fighters.splice(fighters.indexOf(old),1);old.dispose();}const f=tugSpawn(q.en,(Math.random()*4)|0);hostSendAdd([f],old?[old.id]:null);if(f.isPlayer)state='playing';}
   if(!RD.blown&&simTime>=CD_END)raidCartPull(h);   // hands on the shafts pull it, as the raid's carts
   const hold=c.d?raidHolder(c.d):null;R.push=hold&&hold.entrant?(hold.entrant.raidS?-1:1):0;
   if(c.fuse){c.fuse.t-=h;if(c.fuse.t<=0){const s=c.fuse.side;roadBlast(s);R.ended=true;banner(`${s?'Red':'Blue'} blew the gate`,`${s?"Blue's castle":"Red's village"} is open`);R.next=simTime+4;R.after=()=>endRun(R.en[s].filter(e=>e.human),'Defeat',`${s?'Red':'Blue'} won`,`${s?'Red':'Blue'} blew in the gate.`);return;}}
@@ -10158,7 +10173,7 @@ function modeTick(){const R=RUN;if(!R||R.over)return;
   if(R.mode==='road')roadTick();
   if(R.mode==='raid')raidTick();
   if(R.mode==='team'){if(R.siege)siegeTick();else if(R.tug)tugTick();else if((R.tk=(R.tk||0)+1)%60===0)teamHud();}
-  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),[ownWeapon(q.en,'longsword'),[]]);yardHuman(f);if(NET.mode==='host')hostSendStart();if(f.isPlayer)state='playing';}return;}
+  if(R.mode==='yard'){yardTick();if(R.respawn)for(const q of [...R.respawn])if(simTime>q.at){R.respawn.splice(R.respawn.indexOf(q),1);const k=fighters.indexOf(q.f);if(k>=0)fighters.splice(k,1);q.f.dispose();const f=spawnEntrant(q.en,0,-2.2+MO(),[ownWeapon(q.en,'longsword'),[]]);yardHuman(f);hostSendAdd([f],[q.f.id]);if(f.isPlayer)state='playing';}return;}
   if(typeof R.next==='number'&&R.after&&simTime>=R.next){const f=R.after;R.after=null;f();}
   else if(R.nextT&&R.after&&simTime>=R.nextT){const f=R.after;R.after=null;R.nextT=0;f();}}
 function showMode(){document.querySelectorAll('.mode').forEach(o=>{const on=o.dataset.mode===MODE;o.classList.toggle('on',on);o.setAttribute('aria-checked',on?'true':'false');});
@@ -10245,21 +10260,32 @@ function remoteInput(f,wish,h){
   aimSeen(f);return !!(k&16);
 }
 const ARMOR_SLOTS=['head','body','arms','legs'];
+function netSame(a,b){if(a===b)return true;if(typeof a==='number')return typeof b==='number'&&Math.abs(a-b)<=.002;if(Array.isArray(a)&&Array.isArray(b)){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++){const x=a[i],y=b[i];if(x===y)continue;if(typeof x!=='number'||typeof y!=='number'||Math.abs(x-y)>.004)return false;}return true;}return false;}
 function netSnap(){
   const z=zone;
   const S={t:'s',ht:Math.round(simTime*1000)/1000,gr:PIT&&PIT.grate?[r3(PIT.grate.C.x),r3(PIT.grate.C.y),r3(PIT.grate.C.z),r3(PIT.grate.phi),PIT.grate.mode==='rest'?0:1]:0,cd:r3(CD_END-simTime),z:[r3(z.c.x),r3(z.c.z),r3(z.r),z.phase,z.state==='wait'?0:1,r3(z.t),z.next?[r3(z.next.c.x),r3(z.next.c.z),r3(z.next.r)]:0,z.dps,z.off?1:0],mh:MODEHUD,f:[],l:[],e:NET.ev.splice(0)};
+  let lsig=0;for(const it of loot){if(it.nid==null)it.nid=NET.lootSeq++;lsig=(lsig*31+it.nid+1)%2147483647;}
+  const fkey=NET.lsig===-1||!((NET.lkN=(NET.lkN||0)+1)%40)||!!window.__lootFull,lkey=fkey||lsig!==NET.lsig;NET.lsig=lsig;if(lkey)S.lk=1;if(fkey)S.fk=1;   // everything whole this time: at a start and every 2 s (the loot list also whenever something is added or taken)
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,lc:f.climb&&f.climb.d?[LADDERS.indexOf(f.climb.d),r3(f.climb.t)]:f.ladCarry?[LADDERS.indexOf(f.ladCarry),-1]:0,ch:f.cartHold?(RAID?RAID.team.findIndex(t=>t.cart===f.cartHold):ROAD&&ROAD.cart&&f.cartHold===ROAD.cart.d?99:-1):-1,rh:f.roadHold?(f.roadHold.off>0?1:2):0,wh:f.wheelHold?f.wheelHold.s:-1,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
     if(f.sword){const s=f.sword;if((f.revW||0)>.5)o.rv=1;if(f.commit)o.cm=1;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
     if(f.ragdoll){const P=f.ragdoll.P;o.rg=[];for(const n of RD_NAMES){const q=P[n];if(q)o.rg.push(r3(q.x),r3(q.y),r3(q.z));else o.rg.push(0,-99,0);}}
-    S.f.push(o);
+    /* (Build 200) only what has changed about a fighter goes out, against what was last sent (f._ns): a whole fighter every 2 s, and in between a key is left out while it's the same (numbers within 2 mm, lists within 4), null for one that
+       has gone. The dead lying still, armour, flags that are nearly always 0: about two thirds of every snapshot said nothing new */
+    if(fkey||!f._ns){f._ns={...o};S.f.push(o);}
+    else{const L=f._ns,dl={i:o.i};for(const k in o){if(k==='i')continue;if(!netSame(L[k],o[k])){dl[k]=o[k];L[k]=o[k];}}for(const k in L)if(!(k in o)){dl[k]=null;delete L[k];}S.f.push(dl);}
   }
-  for(const it of loot){if(it.nid==null)it.nid=NET.lootSeq++;
+  /* (Build 200) loot only goes out when it has moved. Every weapon and piece of armour on the ground used to be sent whole in every snapshot,
+     twenty times a second: in a village battle royale that was most of what the host sent (about 115 of 146 kB/s per friend, measured as JSON).
+     Now a snapshot carries the whole list (lk) every 2 s and whenever something is added or taken, and otherwise only what has moved;
+     the friend's side fills the rest in from the list it last had (clientData), so everything after that reads a whole list as before */
+  for(const it of loot){
     const e={n:it.nid,k:it.kind==='weapon'?1:0,d:it.def.id,c:it.corpse?it.corpse.id:-1,s:it.slot||''};
     if(it.sword){const s=it.sword;e.p=[...r3v(s.H),...r3v(s.axis),...r3v(s.edge)];}else if(it.obj)e.p=[...r3v(it.obj.position),r3(it.obj.rotation.y)];
-    S.l.push(e);}
+    if(!lkey){const q=it._np;let same=!!q||!e.p;if(same&&e.p){if(q.length!==e.p.length)same=false;else for(let i=0;i<q.length;i++)if(Math.abs(q[i]-e.p[i])>.004){same=false;break;}}if(same)continue;}
+    it._np=e.p||it._np||null;S.l.push(e);}
   S.dp=dynNet();
   return S;
 }
@@ -10311,7 +10337,11 @@ function snapAt(P,S,a,ex=0){const L=(x,y)=>x.map((v,i)=>typeof v==='number'&&typ
     return n;})};}
 function clientData(d){
   if(!d||typeof d!=='object')return;
-  if(d.t==='s'){if(d.dp)dynNetApply(d.dp);if(!NET.puppets.size)return;const now=performance.now();
+  if(d.t==='s'){if(d.dp)dynNetApply(d.dp);
+    if(d.f){const FB=NET.fbase||(NET.fbase=new Map());   // (Build 200) fighters come as what changed: fill each out from what was last had (a whole one when fk is set, or when he is new)
+      d.f=d.f.map(o=>{const b=FB.get(o.i);let n=o;if(!d.fk&&b){n={...b};for(const k in o){if(o[k]===null)delete n[k];else n[k]=o[k];}}else if(!o.p||!o.ar)return null;FB.set(o.i,n);return n;}).filter(Boolean);}
+    if(d.l){if(!d.lk&&NET.lbase){const m=new Map();for(const e of d.l)m.set(e.n,e);const L=NET.lbase.map(e=>{const n=m.get(e.n);if(n)m.delete(e.n);return n||e;});for(const e of m.values())L.push(e);d.l=L;}if(d.lk||NET.lbase)NET.lbase=d.l;else d.lq=1;}   // (Build 200) a snapshot between whole lists names only the loot that moved: the rest is as it was
+    if(!NET.puppets.size)return;const now=performance.now();
     if(NET.cur){const a=clamp((now-NET.curAt)/NET.gap,0,1),ex=clamp(now-NET.curAt-NET.gap,0,60)/1000;NET.prev=NET.prev?snapAt(NET.prev,NET.cur,a,ex):NET.cur;const iv=clamp(now-NET.curAt,16,200);NET.gap=lerp(NET.gap||iv,iv,.15);}else{NET.prev=null;NET.gap=50;}
     NET.cur=d;NET.curAt=now;NET.fresh=true;
     if(d.e&&d.e.length){if(typeof d.ht==='number'&&NET.rt!=null)(NET.evq||(NET.evq=[])).push({ht:d.ht,e:d.e});else clientEvents(d.e);}   // sounds and blood play when the blow is drawn, not when the packet lands
@@ -10336,7 +10366,7 @@ function clientStart(d){
   for(const it of [...loot]){removeLoot(it);if(it.sword)it.sword.dispose();}freeSwords.length=0;spurts.length=0;NET.lootMap.clear();
   for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;
   zoneReset();score=0;document.getElementById('feed').innerHTML='';
-  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.buf=[];NET.rt=null;NET.evq=[];NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');document.body.classList.toggle('scored',NET.mode2==='raid'||NET.mode2==='team');
+  NET.puppets.clear();NET.myId=d.you;NET.cur=NET.prev=null;NET.buf=[];NET.lbase=null;NET.fbase=null;NET.rt=null;NET.evq=[];NET.mode2=d.mode||'br';END=null;document.body.classList.toggle('sim',NET.mode2!=='br');document.body.classList.toggle('scored',NET.mode2==='raid'||NET.mode2==='team');
   for(const r of d.roster){const me=r.i===d.you;const pal=Array.isArray(r.p)?r.p:PALETTES[0];
     const f=new Fighter(String(r.n).slice(0,24),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;
     for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?FG.x:-FG.x,y:FG.y,z:FG.z};}
@@ -10346,9 +10376,11 @@ function clientStart(d){
   if(el('menu').classList.contains('hide')===false||!el('end').classList.contains('hide')){el('menu').classList.add('hide');el('end').classList.add('hide');el('hud').classList.remove('hide');showPause(false);requestLock();}
   el('hud').classList.remove('hide');
 }
-function clientAdd(d){for(const r of d.roster){if(NET.puppets.has(r.i))continue;const pal=Array.isArray(r.p)?r.p:PALETTES[0];const me=r.i===d.you;
+function clientAdd(d){if(d.gone)for(const id of d.gone){const o=NET.puppets.get(id);if(!o)continue;const k=fighters.indexOf(o);if(k>=0)fighters.splice(k,1);NET.puppets.delete(id);if(NET.fbase)NET.fbase.delete(id);if(SPEC.f===o)SPEC.f=null;
+    for(const [n,it] of NET.lootMap)if(it.corpse===o){removeLoot(it);NET.lootMap.delete(n);}o.dispose();}
+  for(const r of d.roster){if(NET.puppets.has(r.i))continue;const pal=Array.isArray(r.p)?r.p:PALETTES[0];const me=r.i===d.you;
     const f=new Fighter(String(r.n).slice(0,24),me,0,-500,pal,{weapon:'arming',armor:[],look:cleanLook(r.l)});f.sword.dispose();f.sword=null;for(const sd of ['R','L']){const a=f.fists[sd];a.init=true;a.c={x:sd==='R'?FG.x:-FG.x,y:FG.y,z:FG.z};}
-    fighters.push(f);NET.puppets.set(r.i,f);if(me){NET.myId=r.i;player=f;}}}
+    fighters.push(f);NET.puppets.set(r.i,f);if(me){NET.myId=r.i;player=f;if(SPEC.on)specStop();END=null;paused=false;state='playing';el('end').classList.add('hide');el('hud').classList.remove('hide');}}}
 const lerpA=(a,b,t)=>a+wrapA(b-a)*t;
 function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(a,1/120);rubbleStep(hh);towerStep(hh);a-=hh;}}   /* falling buildings run on friends' screens too */
   dynClient(dt);
@@ -10397,7 +10429,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     if(it.sword&&e.p){const s=it.sword;s.H.fromArray(e.p,0);s.axis.fromArray(e.p,3).normalize();s.edge.fromArray(e.p,6);s.edge.addScaledVector(s.axis,-s.edge.dot(s.axis));if(s.edge.lengthSq()<1e-6)s.edge.set(1,0,0);s.edge.normalize();s.T.copy(s.H).addScaledVector(s.axis,s.len);}
     else if(it.obj&&e.p){it.obj.position.fromArray(e.p,0);it.obj.rotation.y=e.p[3];}
   }
-  for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
+  if(!S.lq)for(const [n,it] of NET.lootMap)if(!seen.has(n)){removeLoot(it);if(it.sword){const i=freeSwords.indexOf(it.sword);if(i>=0)freeSwords.splice(i,1);it.sword.dispose();}NET.lootMap.delete(n);}
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
@@ -10440,9 +10472,17 @@ el('joinCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='En
 {let m0='village';try{const m=localStorage.getItem('bloodmoor-map');if(m&&MAPS[m])m0=m;}catch(e){}if(m0!=='village')el('loading').textContent='Building '+MAPS[m0].name+'…';loadMap(m0);
  document.querySelectorAll('.map[data-map]').forEach(o=>{o.classList.toggle('on',o.dataset.map===m0);o.setAttribute('aria-checked',o.dataset.map===m0?'true':'false');});}
 loadPhotoTex();
+function loadBar(p){const L=el('loading');if(L)L.style.setProperty('--p',String(p));}
+loadBar(.08);
 function loadFighters(onLoad,onErr){
   // the fighters ship as glTF JSON with an embedded buffer (images included); rebuild a GLB in memory so nothing fetches a data: URL
-  fetch('fighters.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
+  /* (Build 200) the download is shown as a bar under the loading line: 7.6 MB of fighters is most of the wait on a slow line, and a still
+     line of text read as a hang. The body is read as it arrives (decoded size, so the total is the file's own size, not the compressed one) */
+  fetch('fighters.json').then(async r=>{if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.body||!r.body.getReader)return r.json();
+    const rd=r.body.getReader(),parts=[];let n=0;const tot=Math.max(+r.headers.get('content-length')||0,7.6e6);
+    for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);n+=value.length;loadBar(.08+.8*Math.min(1,n/tot));}
+    loadBar(.9);return new Response(new Blob(parts)).json();}).then(j=>{
     const uri=j.buffers[0].uri;const raw=atob(uri.slice(uri.indexOf(',')+1));const bin=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bin[i]=raw.charCodeAt(i);
     delete j.buffers[0].uri;
     const js=new TextEncoder().encode(JSON.stringify(j));const jl=Math.ceil(js.length/4)*4,bl=Math.ceil(bin.length/4)*4;
@@ -10459,8 +10499,8 @@ loadFighters(async g=>{
   {const q=new URLSearchParams(location.search).get('join');let last='';try{last=localStorage.getItem('bloodmoor-lastjoin')||'';}catch(e){}
    el('joinCode').value=(q||last||'').toUpperCase().slice(0,5);if(q&&/^[A-Za-z0-9]{5}$/.test(q))netJoin(q);}
   spawnMatch(false);state='attract';attractRestart=performance.now();
-  el('loading').classList.add('hide');el('menu').classList.remove('hide');
-},err=>{el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
+  el('loading').classList.add('hide');el('loading').classList.remove('bar');el('menu').classList.remove('hide');
+},err=>{el('loading').classList.remove('bar');el('loading').textContent='Could not load the fighters. Reload to try again.';console.error(err);});
 requestAnimationFrame(frame);
 window.__sfxCount=()=>"AC "+!!AC+" loading "+sfxLoading+" "+Object.entries(SFX).map(([k,v])=>k+":"+v.length).join(" ");
 window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabTry=grabTry;window.__grabStep=grabStep;window.__onBridge=onBridge;window.__debrisWeapon=debrisWeapon;window.__propBreak=propBreak;window.__give=(f,id)=>{const s=new Sword(WEAPONS[id]);s.owner=f;f.sword=s;if(s.rb)s.setGroup(GR_HELD);const ht=f.handTarget(V());s.reset(ht,f.guideDir(ht,V()));};window.__net={netSnap:()=>netSnap(),clientFrame:dt=>clientFrame(dt)};
