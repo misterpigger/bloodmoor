@@ -431,7 +431,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=201;
+const BUILD=202;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3718,10 +3718,17 @@ function hsCloth(body){
     const loose=y<1.25&&ax<.24?.006+.018*clamp((1.18-y)/.3,0,1):.002;return .006+loose+wr(v);});   // baggy at the waist and hem, closer at the shoulders
   const braies=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.6&&pos.getY(v)<1.12,v=>.006+wr(v)*.6);
   const hose=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.07&&pos.getY(v)<1.12,v=>.0035+wr(v)*.3);
+  /* (Build 202) the hose's foot. Shod, the hose runs on down into the shoe (it stopped 7 cm up and a band of bare ankle showed above every
+     shoe); barefoot, it ends in a level hem at the ankle (the rim's vertices are brought to one height: it was a saw of triangle edges) */
+  const hoseF=build(v=>wsum(v,legs)>.5&&pos.getY(v)>.012&&pos.getY(v)<1.12,v=>.0035+wr(v)*.3);
+  {const p=hose.attributes.position,ix=hose.index.array,low=new Set();for(let i=0;i<ix.length;i++)if(pos.getY(ix[i])<.2)low.add(ix[i]);
+    const used=new Uint8Array(pos.count);for(let i=0;i<ix.length;i++)used[ix[i]]=1;const rim=new Set();
+    for(let i=0;i<idx.count;i+=3){const t=[idx.getX(i),idx.getX(i+1),idx.getX(i+2)];if(t.some(v=>!used[v]))for(const v of t)if(used[v]&&low.has(v))rim.add(v);}
+    for(const v of rim){p.setY(v,.076);}p.needsUpdate=true;hose.computeVertexNormals();}
   // a belt round the waist, over the shirt: a band of the body at the hips' height, pushed out past the cloth
   const hy=new THREE.Matrix4().copy(body.skeleton.boneInverses[bi.Hips]).invert().elements[13];
   const belt=build(v=>{const y=pos.getY(v);return y>hy+.005&&y<hy+.05&&Math.abs(pos.getX(v))<.24&&wsum(v,torso)>.6;},v=>.034+.0015*Math.sin(pos.getX(v)*90));
-  return HSC={shirt,braies,hose,belt};}
+  return HSC={shirt,braies,hose,hoseF,belt};}
 // cloth folds: drape lines drawn from the bind pose (vertical runs on the body, rings at the elbows and knees, puckering at the
 // belt), turned into lighting with screen-space derivatives so no extra texture is needed
 function clothFolds(m,amt){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
@@ -3872,7 +3879,7 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
 const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('assets/tex/'+k+'_d.jpg'),n=L.load('assets/tex/'+k+'_n.jpg');m.colorSpace=THREE.SRGBColorSpace;for(const x of [m,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(22,22);x.anisotropy=MAXANI;}return {m,n};};return {wool:mk('wool'),twill:mk('twill')};})();
 const GARB={1:{id:'shirt',belt:'belt_shirt',mat:'linen'},2:{id:'aketon',mat:'quilt'},3:{id:'cote',belt:'belt_cote',mat:'wool'},4:{id:'doublet',belt:'belt_doublet',mat:'twill'}};
 // body armour over a draped garment: the part it covers isn't drawn (the cloth would poke through the steel); x = half-width, y = from
-const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.27,1.03,1.39],mail:[.465,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
+const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.215,1.03,1.39],mail:[.465,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
 // the legs push the skirt out of their way (Build 127): each frame the hips, knees and ankles go to the garment's shader in its own space and
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m,pad=0){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile,PD=pad.toFixed(4);   /* pad: a belt lies that much further out than the cloth it's on */
@@ -4120,7 +4127,10 @@ function dressMH(model,look,pal,mats){
     const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);garmentDetail(mt,'gambeson',M);mt.customProgramCacheKey=()=>'bm-quilt';looseMat(mt,SWU,'h');
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   for(let i=nKids0;i<body.parent.children.length;i++)body.parent.children[i].userData.shellGarb=true;   // (the body-grown garment: the stand-in until the draped one arrives)
-  {const hz=o>=1||!!window.__garb;cloth(hz?C.hose:C.braies,true,hz?.0012:.003);}   // joined hose under every garment (Build 126: the shirt had braies)
+  {const hz=o>=1||!!window.__garb;   // joined hose under every garment (Build 126: the shirt had braies)
+    if(!hz)cloth(C.braies,true,.003);
+    else{const W=WOOLT.wool,mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.55,.55),roughness:.94});tintMaterial(mt,0,pal,mats);clothFolds(mt,.0016);mt.customProgramCacheKey=()=>'bm-hose';   /* (Build 202) hose are wool, not the shirt's linen */
+      const sm=new THREE.SkinnedMesh((look.ft|0)?C.hoseF:C.hose,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}}
   // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
   const hd=look.hd|0;
   if(hd===1)shell('coif',{keep:(v,P,w)=>w(v,['Head'])>.6&&P.getY(v)>M.ey-.07&&!(P.getZ(v)>M.ez-.055&&P.getY(v)<M.ey+.045),off:.009,smooth:10,rim:.003,bones:['Head','Neck'],fallback:'Head'},dyedCloth(false,.002));

@@ -32,7 +32,9 @@ and skinned from the T-pose to arms-down it folded over itself across the front 
 the neck kinked into horns. It draws that cloth in to an even 7-12 mm, smooths it, evens the collar's edge and rebuilds the rolled
 hems on it. Folded edges with the arms in a guard, before -> after: shirt 88 -> 42, doublet 111 -> 43, aketon (build A) 623 -> 36.
 `gwrap.py` replaced the aketon on builds A and C with build D's: A's own simulation had left it hanging in tatters under the arms with a
-slit down the back, C's had a torn cuff. It also zips shut slits where the neck's cut ran on down a shoulder (the shirt on build A, the doublet on C: `slits.py` lists them)
+slit down the back, C's had a torn cuff. It also zips shut the slits up the front and back of the cote's and aketon's skirts (Build 202: with the legs apart in a fighting
+stance each slit gaped, its wrinkled edges folding into what looked like ragged holes; the skirts are full enough without them), and
+slits where the neck's cut ran on down a shoulder (the shirt on build A, the doublet on C: `slits.py` lists them)
 and evens the skin weights over the mended cloth (the collar's edge drew as a saw when a shoulder was raised).
 `SRC`/`DST` point either script at other folders than `assets/mhparts`. The parts in the repository are already mended: the
 simulation's own output is the version of `assets/mhparts/*.bin` at Build 200 (`git show 1c04d86:assets/mhparts/shirt.bin`), and

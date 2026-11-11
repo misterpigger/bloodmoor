@@ -52,7 +52,7 @@ def mend(V,T,b,si,sw,log=print):
         while x not in seen and x in nx:seen.add(x);lp.append(x);x=nx[x]
         n=len(lp)
         if n<16:continue
-        P=V[lp].copy();up=(P[:,1]>J('Spine2')[1]+.06)&(np.abs(P[:,0])<.22)
+        P=V[lp].copy();up=((P[:,1]>J('Spine2')[1]+.06)&(np.abs(P[:,0])<.22))|((P[:,1]<J('Hips')[1]-.05)&(np.abs(P[:,0])<.12))   # the collar and shoulders; and the slits up the front and back of a skirt (see the README)
         if not up.any():continue
         # two stretches of the same edge lying within 9 mm of each other, six or more vertices apart along it: the sides of a slit.
         # Its tip is half way between them along the edge
@@ -64,9 +64,26 @@ def mend(V,T,b,si,sw,log=print):
             m=((i+j)//2)%n;key=min(tips,key=lambda t:min(abs(t-m),n-abs(t-m))) if tips else None
             if key is not None and min(abs(key-m),n-abs(key-m))<=4:tips[key]=max(tips[key],d)
             else:tips[m]=d
+        # a skirt's slit: a run of the hem's edge that climbs well above the hem near the middle of the front or back. Its tip is its
+        # highest point; it is zipped all the way down
+        skirt=P[:,1].min()<J('Hips')[1]-.2
+        if skirt:
+            hemY=np.percentile(P[:,1],8);inrun=(P[:,1]>hemY+.035)&(np.abs(P[:,0])<.14);i=0
+            while i<n:
+                if not inrun[i]:i+=1;continue
+                j=i
+                while j+1<n and inrun[j+1]:j+=1
+                if j-i>=7:
+                    m=i+int(np.argmax(P[i:j+1,1]));k=1;did=0
+                    while m-k>=i-2 and m+k<=j+2 and m-k>=0 and m+k<n:
+                        a_,b_=lp[m-k],lp[m+k]
+                        if np.linalg.norm(V[a_]-V[b_])>.09 or zipped[a_] or zipped[b_]:break
+                        mid=.5*(V[a_]+V[b_]);V[a_]=mid;V[b_]=mid;w=.5*(W[a_]+W[b_]);W[a_]=w;W[b_]=w;zipped[a_]=zipped[b_]=True;k+=1;did+=1
+                    if did>2:zipped[lp[m]]=True;nz+=1
+                i=j+1
         for m,dm in tips.items():
             k=1;did=0
-            while k<=30 and 2*k<n-2:
+            while k<=44 and 2*k<n-2:
                 i,j=lp[(m-k)%n],lp[(m+k)%n];d=np.linalg.norm(V[i]-V[j])
                 if d>(.03 if k<4 else .046) or zipped[i] or zipped[j]:break
                 mid=.5*(V[i]+V[j]);V[i]=mid;V[j]=mid;w=.5*(W[i]+W[j]);W[i]=w;W[j]=w;zipped[i]=zipped[j]=True;k+=1;did+=1
