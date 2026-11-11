@@ -430,7 +430,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=198;
+const BUILD=199;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -716,7 +716,7 @@ const shipIn=(x,z,m=0)=>!!SHIP&&Math.abs(z)<shipHalfW(x)-m;
 function floorY(x,z,y){let best=0;for(const F of FLOORS){if(F.down||x<F.x0||x>F.x1||z<F.z0||z>F.z1)continue;if(F.ob){const o=F.ob,dx=x-o.cx,dz=z-o.cz;if(Math.abs(dx*o.c-dz*o.s)>o.hx||Math.abs(dx*o.s+dz*o.c)>o.hz)continue;}const h=F.ramp?lerp(F.h0,F.h1,clamp(((F.ramp==='x'?x:z)-F.a0)/(F.a1-F.a0),0,1)):F.h;if(y>=h-(F.dyn?FLOOR_TOL:.45)&&h>best)best=h;}return best;}
 const GRID=8,grid=new Map();
 const gkey=(i,j)=>i*1000+j;
-function gridInsert(o,x0,x1,z0,z1){for(let i=Math.floor(x0/GRID);i<=Math.floor(x1/GRID);i++)for(let j=Math.floor(z0/GRID);j<=Math.floor(z1/GRID);j++){const k=gkey(i,j);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(o);}}
+function gridInsert(o,x0,x1,z0,z1){navDirty(x0,x1,z0,z1);for(let i=Math.floor(x0/GRID);i<=Math.floor(x1/GRID);i++)for(let j=Math.floor(z0/GRID);j<=Math.floor(z1/GRID);j++){const k=gkey(i,j);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(o);}}
 function addBox(x0,x1,z0,z1,h=8){const b={t:0,x0,x1,z0,z1,h};boxes.push(b);gridInsert(b,x0-1,x1+1,z0-1,z1+1);return b;}
 function addCircle(x,z,r,h=3){const c={t:1,x,z,r,h};circles.push(c);gridInsert(c,x-r-1,x+r+1,z-r-1,z+r+1);return c;}
 function collide(p,r,useY=false,span=0){
@@ -752,6 +752,105 @@ function collide(p,r,useY=false,span=0){
 function obstacleHeight(x,z,r){const cell=grid.get(gkey(Math.floor(x/GRID),Math.floor(z/GRID)));let hmax=0;if(cell)for(const o of cell){if(o.t===0){if(x>o.x0-r&&x<o.x1+r&&z>o.z0-r&&z<o.z1+r)hmax=Math.max(hmax,o.h);}else if(o.t===1){if(Math.hypot(x-o.x,z-o.z)<o.r+r)hmax=Math.max(hmax,o.h);}else{const dx=x-o.cx,dz=z-o.cz;if(Math.abs(dx*o.c-dz*o.s)<o.hx+r&&Math.abs(dx*o.s+dz*o.c)<o.hz+r)hmax=Math.max(hmax,o.h);}}return hmax;}
 function freeAt(x,y,z,r){const p=V(x,y,z);return !collide(p,r,true,1.6)&&Math.abs(p.x-x)<1e-6;}   // nothing in the way standing at height y (boxes below y don't count)
 function isFree(x,z,r){const p=V(x,0,z);return !collide(p,r)&&Math.abs(p.x-x)<1e-6;}
+// ================================================================ finding the way (Build 199)
+// Bots walked straight at whatever they wanted (a foe, a weapon on the ground, the middle of the ring) and only sidestepped once they
+// had stood against a wall for 1.2 s: in the village a bot with somewhere to go spent a fifth of its time pressed against a house.
+// NAV is a map of where a man can stand (cells of 0.4 m, everything solid grown by a body's half-width, plus the Pit's shaft, the
+// Mill's race and gear slot, and the sea round the ship). navSteer leaves a bot alone while the way straight ahead is open; when it
+// isn't, it finds a path round (A* over the cells) and walks it, cutting corners wherever the next stretch is in plain sight.
+// The map is rebuilt when something solid appears or goes (a house burns down, a gate breaks, a table is shoved across the room).
+const NAV={cs:.4,r:.3,x0:0,z0:0,n:0,M:0,dr:null,blk:null,key:-1,dirty:true,at:-9,g:null,f:null,par:null,st:null,cl:null,cd:null,stamp:0,heap:[],on:!/[?&]nonav/.test(location.search),plans:0,ms:0};
+function navBuild(){const cs=NAV.cs,r=NAV.r,M=MAP;let full=NAV.key!==mapKey||!NAV.blk||NAV.M!==M;
+  if(full){const n=Math.ceil(2*M/cs)+2,N=n*n;NAV.n=n;NAV.x0=-M-cs;NAV.z0=-M-cs;NAV.M=M;NAV.key=mapKey;NAV.blk=NAV.blk&&NAV.blk.length===N?NAV.blk:new Uint8Array(N);
+    if(!NAV.g||NAV.g.length!==N){NAV.g=new Float32Array(N);NAV.f=new Float32Array(N);NAV.par=new Int32Array(N);NAV.st=new Uint32Array(N);NAV.cl=new Uint8Array(N);NAV.cd=new Uint32Array(N);NAV.stamp=0;}}
+  const n=NAV.n,x0=NAV.x0,z0=NAV.z0,blk=NAV.blk,D=NAV.dr;NAV.dirty=false;NAV.at=simTime;
+  // the part to redo: everything, or the patch where something solid came or went (a cart pulled along the road is one small patch every few seconds)
+  let I0=0,I1=n-1,J0=0,J1=n-1;if(!full){if(!D){return;}I0=Math.max(0,Math.floor((D[0]-x0)/cs)-2);I1=Math.min(n-1,Math.ceil((D[1]-x0)/cs)+2);J0=Math.max(0,Math.floor((D[2]-z0)/cs)-2);J1=Math.min(n-1,Math.ceil((D[3]-z0)/cs)+2);if((I1-I0)*(J1-J0)>n*n*.6){I0=0;I1=n-1;J0=0;J1=n-1;}}
+  NAV.dr=null;for(let j=J0;j<=J1;j++)blk.fill(0,j*n+I0,j*n+I1+1);
+  const seen=new Set();
+  const rect=(xa,xb,za,zb,test)=>{const i0=Math.max(I0,Math.ceil((xa-x0)/cs-.5)),i1=Math.min(I1,Math.floor((xb-x0)/cs-.5)),j0=Math.max(J0,Math.ceil((za-z0)/cs-.5)),j1=Math.min(J1,Math.floor((zb-z0)/cs-.5));
+    for(let j=j0;j<=j1;j++){const z=z0+(j+.5)*cs;for(let i=i0;i<=i1;i++){if(!test||test(x0+(i+.5)*cs,z))blk[j*n+i]=1;}}};
+  const wx0=x0+I0*cs-1.5,wx1=x0+(I1+1)*cs+1.5,wz0=z0+J0*cs-1.5,wz1=z0+(J1+1)*cs+1.5;
+  for(let gi=Math.floor(wx0/GRID);gi<=Math.floor(wx1/GRID);gi++)for(let gj=Math.floor(wz0/GRID);gj<=Math.floor(wz1/GRID);gj++){const cell=grid.get(gkey(gi,gj));if(!cell)continue;
+    for(const o of cell){if(seen.has(o))continue;seen.add(o);if((o.y0||0)>1.7||o.h<.12)continue;   // what a standing man can't walk through (a rail overhead, a sill underfoot don't count)
+      if(o.t===0)rect(o.x0-r,o.x1+r,o.z0-r,o.z1+r);
+      else if(o.t===1){const R=o.r+r,R2=R*R;rect(o.x-R,o.x+R,o.z-R,o.z+R,(x,z)=>(x-o.x)**2+(z-o.z)**2<R2);}
+      else if(o.t===2){const R=o.rr+r;rect(o.cx-R,o.cx+R,o.cz-R,o.cz+R,(x,z)=>{const dx=x-o.cx,dz=z-o.cz;return Math.abs(dx*o.c-dz*o.s)<o.hx+r&&Math.abs(dx*o.s+dz*o.c)<o.hz+r;});}}}
+  // the edge of the map, and what you'd fall into
+  rect(-M-9,-M+r,-M-9,M+9);rect(M-r,M+9,-M-9,M+9);rect(-M-9,M+9,-M-9,-M+r);rect(-M-9,M+9,M-r,M+9);
+  if(ARENA_R>0){const R2=(ARENA_R-r-.05)**2;rect(-M-9,M+9,-M-9,M+9,(x,z)=>x*x+z*z>R2);}
+  if(PIT){const R=PIT.r+.5;rect(PIT.x-R,PIT.x+R,PIT.z-R,PIT.z+R,(x,z)=>inPit(x,z,-.38));}   // (the bridge stays open: it's the way across, and where the Pit's fights should happen)
+  if(MILL)rect(-M,M,-M,M,(x,z)=>millGround(x,z,0)<-.2||millGround(x+.35,z,0)<-.2||millGround(x-.35,z,0)<-.2||millGround(x,z+.35,0)<-.2||millGround(x,z-.35,0)<-.2);
+  if(SHIP)rect(-M,M,-M,M,(x,z)=>!shipIn(x,z,.45));
+  // cells beside something solid cost more, so a path keeps a little off the walls where it can
+  const cl=NAV.cl;for(let j=Math.max(1,J0-1);j<=Math.min(n-2,J1+1);j++)for(let i=Math.max(1,I0-1);i<=Math.min(n-2,I1+1);i++){const k=j*n+i;cl[k]=blk[k]?0:(blk[k-1]||blk[k+1]||blk[k-n]||blk[k+n]||blk[k-n-1]||blk[k-n+1]||blk[k+n-1]||blk[k+n+1])?2:1;}
+}
+function navDirty(xa,xb,za,zb){NAV.dirty=true;const D=NAV.dr;if(!D)NAV.dr=[xa,xb,za,zb];else{if(xa<D[0])D[0]=xa;if(xb>D[1])D[1]=xb;if(za<D[2])D[2]=za;if(zb>D[3])D[3]=zb;}}
+function navDirtyObj(o){if(o.t===0)navDirty(o.x0-1,o.x1+1,o.z0-1,o.z1+1);else if(o.t===1)navDirty(o.x-o.r-1,o.x+o.r+1,o.z-o.r-1,o.z+o.r+1);else if(o.t===2){const R=(o.rr||1.5)+1;navDirty(o.cx-R,o.cx+R,o.cz-R,o.cz+R);const gx=o.gx,gz=o.gz;if(gx!=null&&gx<1e8)navDirty(gx-R,gx+R,gz-R,gz+R);}else NAV.key=-1;}
+// where the living can walk to from where they stand (flooded out from every fighter on the ground): a place to wander to, run to
+// or pick something up from has to be one of these (outside the hall's walls, behind a stall's counter and under the scaffold are open
+// ground too, but nobody can get there)
+function navFlood(){const n=NAV.n,N=n*n,blk=NAV.blk;NAV.reachAt=simTime;const rc=NAV.rc&&NAV.rc.length===N?NAV.rc.fill(0):(NAV.rc=new Uint8Array(N)),st=[];
+  for(const f of fighters){if(!f.alive||f.pos.y>.6||f.pos.y<-.3)continue;const k=navNear(f.pos.x,f.pos.z,1.2);if(k>=0&&!rc[k]){rc[k]=1;st.push(k);}}
+  NAV.reach=st.length?rc:null;while(st.length){const k=st.pop(),i=k%n;if(i>0&&!blk[k-1]&&!rc[k-1]){rc[k-1]=1;st.push(k-1);}if(i<n-1&&!blk[k+1]&&!rc[k+1]){rc[k+1]=1;st.push(k+1);}if(k>=n&&!blk[k-n]&&!rc[k-n]){rc[k-n]=1;st.push(k-n);}if(k<N-n&&!blk[k+n]&&!rc[k+n]){rc[k+n]=1;st.push(k+n);}}}
+function navReach(x,z){if(!NAV.reach)return !navBlocked(x,z);const n=NAV.n,i=navI(x),j=navJ(z);return i>=0&&j>=0&&i<n&&j<n&&NAV.reach[j*n+i]===1;}
+function navReachNear(x,z,r){if(navReach(x,z))return true;const k=navNear(x,z,r);return k>=0&&(!NAV.reach||NAV.reach[k]===1);}
+function navReady(){if(!NAV.on)return false;if(NAV.key!==mapKey||!NAV.blk){navBuild();navFlood();}else if(NAV.dirty&&simTime-NAV.at>2.5){navBuild();navFlood();}else if(simTime-(NAV.reachAt||0)>4)navFlood();return true;}
+const navI=x=>Math.floor((x-NAV.x0)/NAV.cs),navJ=z=>Math.floor((z-NAV.z0)/NAV.cs);
+function navBlocked(x,z){const n=NAV.n,i=navI(x),j=navJ(z);return i<0||j<0||i>=n||j>=n||NAV.blk[j*n+i]===1;}
+// is the straight line from a to b open to walk? (sampled every half cell; stops at len metres if given)
+function navClear(ax,az,bx,bz,len){let dx=bx-ax,dz=bz-az;const d=Math.hypot(dx,dz);if(d<1e-4)return true;const L=len!=null?Math.min(d,len):d,st=NAV.cs*.5,ns=Math.ceil(L/st);dx/=d;dz/=d;
+  for(let k=1;k<=ns;k++){const t=Math.min(L,k*st);if(navBlocked(ax+dx*t,az+dz*t))return false;}return true;}
+// the open cell nearest a point (out to maxR metres), as a cell index, or -1
+function navNear(x,z,maxR){const n=NAV.n,blk=NAV.blk,ci=navI(x),cj=navJ(z),R=Math.ceil(maxR/NAV.cs);let best=-1,bd=1e9;
+  for(let rr=0;rr<=R&&best<0;rr++)for(let dj=-rr;dj<=rr;dj++)for(let di=-rr;di<=rr;di++){if(Math.max(Math.abs(di),Math.abs(dj))!==rr)continue;const i=ci+di,j=cj+dj;if(i<0||j<0||i>=n||j>=n||blk[j*n+i])continue;
+    const d=(NAV.x0+(i+.5)*NAV.cs-x)**2+(NAV.z0+(j+.5)*NAV.cs-z)**2;if(d<bd){bd=d;best=j*n+i;}}
+  return best;}
+// A* from (sx,sz) to (gx,gz); the way is written into out as x,z pairs (the far end first is avoided: start to goal) and their count returned.
+// A goal that can't be reached gives the way to the nearest place that can (cap: 12,000 cells opened).
+const _nvD=[1,0,-1,0,0,1,0,-1,1,1,1,-1,-1,1,-1,-1];
+function navPath(sx,sz,gx,gz,out){const t0=performance.now(),n=NAV.n,blk=NAV.blk,cl=NAV.cl,cs=NAV.cs,G=NAV.g,F=NAV.f,P=NAV.par,ST=NAV.st,CD=NAV.cd,H=NAV.heap;
+  const s=navNear(sx,sz,1.6),e=navNear(gx,gz,2.4);if(s<0||e<0)return 0;if(s===e){out[0]=gx;out[1]=gz;return 1;}
+  const stamp=++NAV.stamp,ei=e%n,ej=(e/n)|0;const hf=k=>{const dx=Math.abs(k%n-ei),dz=Math.abs(((k/n)|0)-ej);return (dx+dz+(Math.SQRT2-2)*Math.min(dx,dz))*1.001;};
+  H.length=0;const push=k=>{let i=H.length;H.push(k);while(i>0){const p=(i-1)>>1;if(F[H[p]]<=F[k])break;H[i]=H[p];i=p;}H[i]=k;};
+  const pop=()=>{const top=H[0],k=H.pop();const m=H.length;if(m){let i=0;for(;;){let c=2*i+1;if(c>=m)break;if(c+1<m&&F[H[c+1]]<F[H[c]])c++;if(F[H[c]]>=F[k])break;H[i]=H[c];i=c;}H[i]=k;}return top;};
+  G[s]=0;F[s]=hf(s);P[s]=-1;ST[s]=stamp;push(s);let best=s,bh=F[s],opened=0,found=false;
+  while(H.length){const k=pop();if(CD[k]===stamp)continue;CD[k]=stamp;if(k===e){found=true;break;}if(++opened>12000)break;
+    const gk=G[k];const h=F[k]-gk;if(h<bh){bh=h;best=k;}const i=k%n,j=(k/n)|0;
+    for(let d=0;d<8;d++){const di=_nvD[d*2],dj=_nvD[d*2+1],ni=i+di,nj=j+dj;if(ni<0||nj<0||ni>=n||nj>=n)continue;const q=nj*n+ni;if(blk[q]||CD[q]===stamp)continue;
+      if(d>=4&&(blk[j*n+ni]||blk[nj*n+i]))continue;   // no cutting a corner
+      const ng=gk+(d<4?1:Math.SQRT2)*(cl[q]===2?1.7:1);if(ST[q]===stamp&&G[q]<=ng)continue;G[q]=ng;F[q]=ng+hf(q);P[q]=k;ST[q]=stamp;push(q);}}
+  let k=found?e:best,c=0;for(let q=k;q>=0&&c<4000;q=P[q])c++;if(c<2){NAV.ms+=performance.now()-t0;NAV.plans++;return 0;}
+  const m=Math.min(c,out.length>>1);let w=c;for(let q=k;q>=0&&w>0;q=P[q]){w--;if(w<m){out[w*2]=NAV.x0+(q%n+.5)*cs;out[w*2+1]=NAV.z0+(((q/n)|0)+.5)*cs;}}
+  if(found&&!navBlocked(gx,gz)&&m>0){out[(m-1)*2]=gx;out[(m-1)*2+1]=gz;}
+  NAV.ms+=performance.now()-t0;NAV.plans++;return m;}
+// a bot's step: f.ai.gx/gz is where think() wants to be this step (set with navGoal); wish is the way it means to walk
+// a man running from someone picks a place to run to: one of twelve spots 7 m off, as far from his man as may be, that he can walk to
+// (better if it's in plain sight), inside the ring; he keeps it for 2.5 s or until he's there. wish comes in pointing straight away.
+function navFlee(f,tg,wish,zc){const A=f.ai;if(f.pos.y>.5||f.pos.y<-.3||!navReady())return false;const x=f.pos.x,z=f.pos.z;
+  let F=A.fl;if(!F||simTime>F.t||(F.x-x)**2+(F.z-z)**2<2.2){let bs=-1e9,bx=0,bz=0;const a0=Math.atan2(wish.x,wish.z);
+    for(let k=0;k<12;k++){const an=a0+(k-5.5)*.5,cx=x+Math.sin(an)*7,cz=z+Math.cos(an)*7;if(!navReach(cx,cz))continue;
+      const sc=Math.hypot(cx-tg.pos.x,cz-tg.pos.z)+(navClear(x,z,cx,cz)?2.5:0)-(Math.hypot(cx-zc.c.x,cz-zc.c.z)>zc.r*.8?30:0)+Math.random()*.5;if(sc>bs){bs=sc;bx=cx;bz=cz;}}
+    F=A.fl=bs>-1e8?{x:bx,z:bz,t:simTime+2.5}:{x:x+wish.x*5,z:z+wish.z*5,t:simTime+1};}
+  const fx=F.x-x,fz=F.z-z,fl=Math.hypot(fx,fz)||1;wish.set(fx/fl,0,fz/fl);navGoal(A,F.x,F.z,0);return true;}
+function navGoal(A,x,z,y){A.gx=x;A.gz=z;A.gy=y||0;A.gt=simTime;}
+function navSteer(f,wish,h){const A=f.ai;if(!A||A.gt!==simTime||f.climb||f.ladCarry||f.cartHold||f.pos.y>.5||f.pos.y<-.3||A.gy>.9||A.gy<-.4||!navReady())return;
+  const wl=Math.hypot(wish.x,wish.z);if(wl<.25)return;const x=f.pos.x,z=f.pos.z,gx=A.gx,gz=A.gz;let dx=gx-x,dz=gz-z;const d=Math.hypot(dx,dz);if(d<1.5){A.np=null;return;}
+  if((wish.x*dx+wish.z*dz)/(wl*d)<.75)return;   // not making for it just now (circling, giving ground, a map's own steering): leave it be
+  if(simTime>=(A.nvT||0)){A.nvT=simTime+.05;A.nvOn=false;   // worked out twenty times a second, walked every step
+    let P=A.np;if(P&&(simTime-P.t>6||(P.gx-gx)**2+(P.gz-gz)**2>9||P.key!==NAV.at))P=A.np=null;
+    const open=len=>navClear(x,z,gx,gz,Math.max(.2,Math.min(d-.6,len)));   // (the last half metre is the goal's own: a man by a wall, a sword against a house)
+    if(!P){if(open(7))return;   // the way ahead is open: walk it
+      if(simTime<(A.npNext||0))return;A.npNext=simTime+.5+(f.id%7)*.02;const buf=A.npBuf||(A.npBuf=new Float32Array(1200));const m=navPath(x,z,gx,gz,buf);if(m<2)return;P=A.np={n:m,i:0,gx,gz,t:simTime,key:NAV.at,pts:buf};}
+    else if(open(1e9)){A.np=null;return;}   // the goal is in plain sight again
+    // the furthest point of the path that can be walked straight to from here
+    const pts=P.pts;let i=P.i;const hi=Math.min(P.n-1,i+14);let seen=-1;for(let k=hi;k>=i;k--){if(navClear(x,z,pts[k*2],pts[k*2+1])){seen=k;break;}}
+    if(seen<0){if(Math.hypot(pts[i*2]-x,pts[i*2+1]-z)>2.5){A.np=null;A.npNext=0;return;}seen=i;}   // pushed off it: plan again
+    P.i=seen;let tx=pts[seen*2]-x,tz=pts[seen*2+1]-z,tl=Math.hypot(tx,tz);if(tl<.3&&seen<P.n-1){P.i=seen+1;tx=pts[P.i*2]-x;tz=pts[P.i*2+1]-z;tl=Math.hypot(tx,tz);}
+    if(tl<1e-3)return;A.nvx=tx/tl;A.nvz=tz/tl;A.nvOn=true;}
+  if(!A.nvOn)return;wish.set(A.nvx*wl,0,A.nvz*wl);
+  if(d>5.5)f.faceDir(wish,h,14);   // nobody close: look where you're going (think() has just turned him toward his man at 7 rad/s)
+}
 function overlapsAny(x0,x1,z0,z1){for(const b of boxes)if(x0<b.x1&&x1>b.x0&&z0<b.z1&&z1>b.z0)return true;for(const c of circles)if(c.x+c.r>x0&&c.x-c.r<x1&&c.z+c.r>z0&&c.z-c.r<z1)return true;return false;}
 
 // lights / torches
@@ -1822,7 +1921,7 @@ function grassCard(){const c=mkCanvas(128,128),g=c.getContext('2d');g.clearRect(
     const gr=g.createLinearGradient(0,128,0,128-h);const d=Math.random();gr.addColorStop(0,`rgb(${24+d*10|0},${34+d*12|0},${14+d*6|0})`);gr.addColorStop(.6,`rgb(${70+d*30|0},${92+d*30|0},${38+d*14|0})`);gr.addColorStop(1,`rgb(${120+d*40|0},${130+d*30|0},${70+d*20|0})`);
     g.fillStyle=gr;g.beginPath();g.moveTo(x0-w,128);g.quadraticCurveTo(x0+lean*.3,128-h*.5,x0+lean,128-h);g.quadraticCurveTo(x0+lean*.3+w*.4,128-h*.5,x0+w,128);g.closePath();g.fill();}
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
-function buildGrass(R,ok){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+function buildGrass(R,ok,day){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   for(let i=0;i<N;i++){const bx=r()*T,bz=r()*T,w=.45+r()*.4,h=.24+r()*.32,a=r()*Math.PI;
     for(let q=0;q<2;q++){const ang=a+q*Math.PI/2,cx=Math.cos(ang)*w/2,cz=Math.sin(ang)*w/2,v0=pos.length/3;
       pos.push(bx-cx,0,bz-cz, bx+cx,0,bz+cz, bx+cx,h,bz+cz, bx-cx,h,bz-cz);uv.push(0,0,1,0,1,1,0,1);for(let k=0;k<4;k++)base.push(bx,bz);idx.push(v0,v0+1,v0+2,v0,v0+2,v0+3);}}
@@ -1836,6 +1935,7 @@ function buildGrass(R,ok){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[],id
   const mt=new THREE.CanvasTexture(c);mt.flipY=false;
   const U={uCam:{value:new THREE.Vector2()},uT:{value:0},uTile:{value:T},uMask:{value:mt},uMR:{value:R}};
   const m=new THREE.MeshLambertMaterial({map:grassCard(),alphaTest:.45,side:THREE.DoubleSide,color:0xd0dcb0});
+  if(day){m.color.setHex(0xc4cc9a);m.emissive.setHex(0x39431f);m.emissiveMap=m.map;}   // (Build 199) in daylight: this material takes no light from the sky map, so blades in a tree's shade went black beside ground that didn't; a little of their own colour stands in for it
   m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader='uniform vec2 uCam;uniform float uT,uTile,uMR;uniform sampler2D uMask;attribute vec2 aBase;\n'+sh.vertexShader
     .replace('#include <beginnormal_vertex>','vec3 objectNormal=vec3(0.,1.,0.);')
     .replace('#include <begin_vertex>',`vec2 rel=mod(aBase-uCam+uTile*.5,uTile)-uTile*.5;vec2 wp=uCam+rel;
@@ -2579,6 +2679,7 @@ function buildRaid(){
   for(const [x,z,a] of [[1.5,-14,.3],[-1.5,13,-.4],[15,6,1.2],[-17,-16,.8],[18,-20,.1]]){addGeo('bark',new THREE.CylinderGeometry(.28,.34,4.2,8),T(x,.3,z,a,0,Math.PI/2));const c=Math.cos(a),sn=Math.sin(a);for(let t=-1.8;t<=1.8;t+=.6)addCircle(x+c*t,z-sn*t,.36,.6);}
   // the edges of the field: nobody wanders off into the woods
   addBox(-60,-44,-90,90,4);addBox(44,60,-90,90,4);addBox(-60,60,-90,-68,4);addBox(-60,60,68,90,4);
+  buildGrass(MAP+6,(x,z)=>Math.abs(x)<44&&Math.abs(z)<68&&!(Math.abs(x)<XW+1&&Math.abs(z)>RAID_W0-1.2)&&!(Math.abs(z)<RAID_W0+2&&Math.abs(x-rx(z))<2.8),true);   // (Build 199) grass over the field between the castles (not in the yards, not on the road)
   flushBatch();}
 function raidZoneOf(x,z,ext=0){if(!RAID)return -1;for(const t of RAID.team){const Z=t.zone;if(x>Z.x0-ext*.3&&x<Z.x1+ext*.3&&z>Z.z0-ext&&z<Z.z1+ext)return t.s;}return -1;}
 function raidSideOf(f){const s=f&&f.entrant&&f.entrant.side;return s==='A'?0:s==='B'?1:-1;}
@@ -2768,6 +2869,7 @@ function buildRoad(){
   {const z=R.amb[2]+9,x=roadX(z);const G=new THREE.Group();G.position.set(x,0,z);world.add(G);const t=new THREE.Mesh(new THREE.CylinderGeometry(.3,.38,8,9),MATS.bark||MATS.wood);t.rotation.set(0,.3,Math.PI/2);t.position.y=.36;t.castShadow=t.receiveShadow=true;G.add(t);
     for(let k=0;k<5;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.09,1.6,5),MATS.bark||MATS.wood);b.position.set(-3+k*1.4,.6,(k%2?1:-1)*.4);b.rotation.set(k%2?.8:-.8,0,.3);G.add(b);}
     R.log={G,z,box:addBox(x-3.6,x+3.6,z-.45,z+.45,.75),st:'down'};}
+  buildGrass(MAP+6,(x,z)=>z>R.Zs+1&&z<Z1-5&&Math.abs(x-roadX(z))>2.9,true);   // (Build 199) the forest floor is grass, as round the village: bare flat ground under the trees read as unfinished
   addMountains(0x7d8b74,0x9aa79a);
   flushBatch();
 }
@@ -4696,6 +4798,7 @@ function fitShell(body,key,o){const ck=body.name+'|'+key;if(FIT_CACHE.has(ck))re
     const weld=(A,B)=>{for(const a of A){let best=-1,bd=.045*.045;for(const b of B){const dy=q[a*3+1]-q[b*3+1];if(Math.abs(dy)>.02)continue;const d=(q[a*3]-q[b*3])**2+dy*dy+(q[a*3+2]-q[b*3+2])**2;if(d<bd){bd=d;best=b;}}
         if(best<0||bd<1e-10||near2(a,best))continue;for(let k=0;k<3;k++){const m=(q[a*3+k]+q[best*3+k])/2;q[a*3+k]=m;q[best*3+k]=m;}}};
     weld(Ls,Rs);weld(Rs,Ls);}
+  if(o.hemAt!=null)for(let g=0;g<G;g++)if(q[g*3+1]<o.hemAt)q[g*3+1]=o.hemAt;   /* (Build 199) a straight lower edge at a set height */
   if(o.cuff)for(let g=0;g<G;g++){const x=q[g*3];if(Math.abs(x)>o.cuff)q[g*3]=Math.sign(x)*o.cuff;}   /* (Build 198) a straight sleeve end: the arms run out along x in the bind pose; whatever lies past the line is brought onto it, as the hem does */
   if(o.rimSmooth)for(let it=0;it<o.rimSmooth;it++){for(let g=0;g<G;g++){if(!rim[g])continue;let x=0,y=0,z=0,c=0;for(const h of nb[g])if(rim[h]){x+=q[h*3];y+=q[h*3+1];z+=q[h*3+2];c++;}if(c>=2){tmp[g*3]=q[g*3]+(x/c-q[g*3])*.5;tmp[g*3+1]=q[g*3+1]+(y/c-q[g*3+1])*.5;tmp[g*3+2]=q[g*3+2]+(z/c-q[g*3+2])*.5;}else{tmp[g*3]=q[g*3];tmp[g*3+1]=q[g*3+1];tmp[g*3+2]=q[g*3+2];}}
     for(let g=0;g<G;g++)if(rim[g]){q[g*3]=tmp[g*3];q[g*3+1]=tmp[g*3+1];q[g*3+2]=tmp[g*3+2];}}   /* (Build 198) open edges cut along a weight threshold come out in saw teeth, one triangle deep: each edge vertex is eased toward its neighbours along the edge */
@@ -5037,7 +5140,7 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambrac
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.09;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':{const sh=S('brig',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.1&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06,hem:true},loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso);return [sh,[edgeBinding(sh[0],.0055,5,p=>Math.abs(p.x)>.1&&p.y>hy+.22),strapMat]];}   /* (not round the armholes: the arm swings through there) */   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'brigandine':{const sh=S('brig2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.07&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06},hemAt:hy-.012,rimSmooth:5,loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso);   /* (Build 199: cut level at the hip; it used to keep the strip of skin down the cleft of the seat, which hung below the hem as a pointed tail) */let hemY=9;{const P=sh[0].attributes.position;for(let i=0;i<P.count;i++)hemY=Math.min(hemY,P.getY(i));}return [sh,[edgeBinding(sh[0],.0055,5,p=>(Math.abs(p.x)>.1&&p.y>hy+.22)||(Math.abs(p.x)<.06&&p.y>hemY+.007)),strapMat]];}   /* (Build 199: nor up the seam where the two legs' halves meet at the back and front, which drew a dark notch at the middle of the hem) */   /* (not round the armholes: the arm swings through there) */   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
     case 'mail':return [S('hauberk2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*'])<.1&&Math.abs(P.getX(v))<J.LeftForeArm.x+.06&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,cuff:Math.abs(J.LeftForeArm.x)+.015,rimSmooth:6,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
@@ -5606,8 +5709,8 @@ function improvStep(){for(const d of debris){const s=d.wep;if(!s)continue;if(!fr
 // breakable things: barrels, crates and the bridge planks take blows and give way, leaving pieces you can pick up and fight with
 const PROPS=[];
 function propAdd(kind,mesh,x,z,r,h,hp,col){mesh.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});world.add(mesh);const p={kind,mesh,x,z,r,h,hp,hp0:hp,col,cd:new Map(),jig:0};PROPS.push(p);return p;}
-function gridRemove(o){for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
-function propBreak(p,dir,by){if(p.kind==='millstone'){if(NET.mode!=='client')millStoneRoll(dir?dir.x:1);return;}if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
+function gridRemove(o){navDirtyObj(o);for(const [k,a] of grid){const i=a.indexOf(o);if(i>=0)a.splice(i,1);}}
+function propBreak(p,dir,by){if(p&&p.kind==='plank'&&PIT)navDirty(PIT.x-PIT.r-1,PIT.x+PIT.r+1,PIT.z-PIT.r-1,PIT.z+PIT.r+1);if(p.kind==='millstone'){if(NET.mode!=='client')millStoneRoll(dir?dir.x:1);return;}if(p.kind==='mast'){if(!p.broken&&NET.mode!=='client')mastFall(dir?dir.x:0,dir?dir.z:0);return;}if(p.broken)return;p.broken=true;mapDirty=true;if(p.prw&&PRW){try{PRW.removeCollider(p.prw,false);}catch(e){}p.prw=null;}if(p.dyn){const t=p.dyn.obj.position;p.x=t.x;p.z=t.z;dynKill(p.dyn);}world.remove(p.mesh);if(p.col)gridRemove(p.col);
   for(const c of [p.phys,p.col&&p.col.phys])if(c&&PW){try{PW.removeCollider(c,false);}catch(e){}const i=physStatics.indexOf(c);if(i>=0)physStatics.splice(i,1);}if(NET.mode==='host')netEv(['P',r3(p.x),r3(p.z)]);
   if(p.kind==='sack'){flourBurst(p.x,p.y0||0,p.z);return;}   // a flour sack bursts: no pieces, a cloud
   sThud(V(p.x,.6,p.z),1.1);sfx('dropWeapon',V(p.x,.5,p.z),.9,.75,.04,false);
@@ -5635,7 +5738,7 @@ function bridgeLoad(h){if(!PIT||PIT.down||!PIT.planks||NET.mode==='client')retur
 // the whole bridge gives way and comes apart, like the bridge in Half Sword's pit: the beams snap where it's weakest and swing down,
 // the boards still on them tear loose and tumble into the shaft one by one, a few landing whole enough to pick up. Every machine
 // runs the same pieces from the same seed (event B).
-function bridgeCollapse(dir){if(!PIT||PIT.down)return;PIT.down=true;mapDirty=true;if(NET.mode==='host')netEv(['B']);
+function bridgeCollapse(dir){if(PIT)navDirty(PIT.x-PIT.r-1,PIT.x+PIT.r+1,PIT.z-PIT.r-1,PIT.z+PIT.r+1);if(!PIT||PIT.down)return;PIT.down=true;mapDirty=true;if(NET.mode==='host')netEv(['B']);
   sThud(V(PIT.x,0,PIT.z),1.4);sfx('crush',V(PIT.x,0,PIT.z),1,.7,0,false);spawnDust(V(PIT.x,0,PIT.z),12,PIT.r,.4);
   rubSeed=9137;let bx=0,bn=0;for(const q of PIT.planks)if(q.broken){bx+=q.x;bn++;}const cx=bn?bx/bn:PIT.x;   // it snaps where the gap is
   const L=PIT.r*2+1.1;
@@ -6960,6 +7063,7 @@ class Fighter{
     if(BREACH&&!this.isPlayer&&!this.remote)breachSteer(this,wish);
     if(ROAD&&!this.isPlayer&&!this.remote)roadSteer(this,wish);
     if(RAID&&!this.isPlayer&&!this.remote&&raidSteer(this,wish)){const tg=this.ai.target,td=tg&&tg.alive&&!tg.ragdoll?tg.pos.distanceTo(this.pos):99;if(td>5.5&&wish.lengthSq()>.04)this.faceDir(wish,h,6);}   /* (Build 186) walking to an objective with nobody close, face the way you're going (they backed toward it, still facing a far foe) */
+    if(!this.isPlayer&&!this.remote&&!this.dummy)navSteer(this,wish,h);   // (Build 199) round whatever is in the way
     const fy=SHIP||MILL||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.fallT==null&&this.vy<=0&&this.pos.y>fy&&this.pos.y-fy<.1)this.pos.y=fy;   // down a stair
     const onGround=this.pos.y<=fy+.001&&this.fallT==null;if(onGround&&this.pos.y<fy)this.pos.y=fy;
     run=run&&!exhausted&&!this.crouch&&onGround&&!this._wade;   /* (Build 188) a strongbox is like carrying 40 lb: a little slower (0.9×), running allowed (Build 186 made it a crawl) */
@@ -7221,19 +7325,20 @@ class Fighter{
       for(const o of fighters){if(o===this||!o.alive||(this.entrant&&this.entrant.foe&&o.entrant&&o.entrant.foe)||(sd&&o.entrant&&o.entrant.side===sd))continue;const d=o.pos.distanceTo(this.pos)*(o.downed?1.4:1);if(d<bd){bd=d;best=o;}}A.target=best;}
     const tg=A.target;let run=false;
     const zc=zone.next||zone,toZ=Math.hypot(this.pos.x-zc.c.x,this.pos.z-zc.c.z);
-    const needZone=this.outside||toZ>zc.r*.85;
+    if(this.outside||toZ>zc.r*.85)A.nz=true;else if(toZ<zc.r*.74)A.nz=false;const needZone=this.outside||!!A.nz;   /* (Build 199) once sent in from the edge he keeps going well inside: on the 85% line itself a bot was pulled out by a sword on the ground and in by this rule, a step each way, until the fire reached him */
     this.commit=false;this.thrust=false;this.crouch=false;
     // as in Half Sword: a man with no hands left to fight with, or bleeding out, runs from whoever is after him
     const beaten=!this.mainArm||(this.hp<22&&this.bleed>.05)||(this.hp<12);
     if(beaten&&tg&&!this.dummy&&!(RUN&&RUN.mode==='yard')){_v.subVectors(this.pos,tg.pos).setY(0);const d=_v.length()||1;wish.copy(_v).multiplyScalar(1/d);
+      if(d<9)navFlee(this,tg,wish,zc);   /* (Build 199) he runs for somewhere he can get to: straight away from his man often meant into a wall, and there he stayed */
       if(d<9){run=this.stamina>8;this.faceDir(wish,h,5);this.ctrlT.x=.05;this.ctrlT.y=-.1;this.ctrlT.z=.3;if(Math.random()<h*.25&&simTime>(this.gruntT||0)){this.gruntT=simTime+2.5;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}return run;}}
     if(!this.armed()&&this.mainArm){
-      if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon')continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
+      if(A.lootT<=0||!A.loot||!loot.includes(A.loot)){A.lootT=.8;A.loot=null;let bd=30;for(const it of loot){if(it.kind!=='weapon'||lootBanned(A,it))continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-this.pos.x,p.z-this.pos.z);if(d<bd){bd=d;A.loot=it;}}}
       const lpd=A.loot?Math.hypot(lootPos(A.loot,_t2).x-this.pos.x,_t2.z-this.pos.z):99;
-      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!A.lad&&!this.climb&&!this.ladCarry&&!this.roadHold&&!this.cartHold&&!(tg&&!tg.ragdoll&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
+      /* bare-handed: go for a weapon unless someone is already on you (a tankard within reach is worth a dash even with a man close) */if(A.loot&&!A.lad&&!this.climb&&!this.ladCarry&&!this.roadHold&&!this.cartHold&&!(tg&&!tg.ragdoll&&dT0(this,tg)<Math.min(3.5,Math.max(1.8,lpd-.5)))){const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);navGoal(A,lp.x,lp.z,lp.y-.1);const d=wish.length();if(d<1.1){pickUp(this,A.loot);A.loot=null;}else if(lootWatch(A,A.loot,d)){A.loot=null;A.lootT=0;wish.set(0,0,0);}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,6);}this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return true;}
     }
     if(!this.sword&&this.mainArm&&tg&&!(needZone&&dT0(this,tg)>3)){
-      _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();this.faceDir(_v,h,8);this.right(_r);
+      _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();this.faceDir(_v,h,8);this.right(_r);navGoal(A,tg.pos.x,tg.pos.z,tg.pos.y);
       this.pitch=lerp(this.pitch,clamp(Math.atan2(tg.headPos.y-.12-this.headPos.y,Math.max(d,.4)),-.7,.4),.08);
       if(d>1.0){wish.copy(_v);run=d>4;}else{wish.copy(_r).multiplyScalar(A.strafe*.35);if(d<.78)wish.addScaledVector(_v,-.7);}
       for(const sd of ['R','L'])if(this.fistHold[sd]){A['hold'+sd]-=h;if(A['hold'+sd]<=0)this.fistHold[sd]=false;}
@@ -7245,22 +7350,22 @@ class Fighter{
       return run;
     }
     if(!this.sword){
-      if(tg){_v.subVectors(this.pos,tg.pos).setY(0).normalize();wish.copy(_v);}if(needZone)wish.set(zc.c.x-this.pos.x,0,zc.c.z-this.pos.z).normalize();
+      if(tg){_v.subVectors(this.pos,tg.pos).setY(0).normalize();wish.copy(_v);if(!needZone)navFlee(this,tg,wish,zc);}if(needZone){wish.set(zc.c.x-this.pos.x,0,zc.c.z-this.pos.z).normalize();navGoal(A,zc.c.x,zc.c.z,0);}
       run=true;this.faceDir(wish,h,6);this.ctrlT.x=.1;this.ctrlT.y=-.3;this.ctrlT.z=.3;return run;}
     const reach=this.sword.def.len,kind=this.sword.def.kind;
     const dT=tg?tg.pos.distanceTo(this.pos):99;
     const engage=tg&&dT<22&&!(needZone&&dT>8)&&!(dT>9&&A.loot);
     // loot when nothing is close
     if(!needZone&&dT>9){
-      if(A.lootT<=0){A.lootT=1.2;A.loot=bestLootFor(this,22);}
+      if(A.lootT<=0){A.lootT=1.2;{const nv=navReady();A.loot=bestLootFor(this,22,p=>Math.hypot(p.x-zc.c.x,p.z-zc.c.z)<zc.r*.8&&(!nv||p.y>.9||navReachNear(p.x,p.z,.9)));}}   /* (not one lying where the ring will send him back from) */
       if(A.loot&&loot.includes(A.loot)){
-        const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();
-        if(d<1.1){pickUp(this,A.loot);A.loot=null;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,5);this.ctrlT.x=.15;this.ctrlT.y=-.1;this.ctrlT.z=.36;this.pitch=lerp(this.pitch,-.2,.02);return d>5;}
+        const lp=lootPos(A.loot,_t2);wish.set(lp.x-this.pos.x,0,lp.z-this.pos.z);const d=wish.length();navGoal(A,lp.x,lp.z,lp.y-.1);
+        if(d<1.1){pickUp(this,A.loot);A.loot=null;}else if(lootWatch(A,A.loot,d)){A.loot=null;A.lootT=0;}else{wish.multiplyScalar(1/d);this.faceDir(wish,h,5);this.ctrlT.x=.15;this.ctrlT.y=-.1;this.ctrlT.z=.36;this.pitch=lerp(this.pitch,-.2,.02);return d>5;}
       }
     }
     if(engage){
       _v.subVectors(tg.pos,this.pos).setY(0);const d=_v.length();_v.normalize();
-      this.faceDir(_v,h,7);
+      this.faceDir(_v,h,7);navGoal(A,tg.pos.x,tg.pos.z,tg.ragdoll?0:tg.pos.y);
       const low=tg.downed||tg.knocked>0,theirs=tg.sword?tg.sword.def.len:.5,outreached=reach<theirs-.15;
       // outreached fighters get inside the longer weapon instead of standing where only it can land
       const desired=low?.9+reach*.3:kind==='fist'?.76:outreached?Math.max(.72,.3+reach*.75):.4+reach*.85;
@@ -7317,8 +7422,8 @@ class Fighter{
       if(sst&&!sst.thrown){if(sst.age<.55){this.ctrlT.x=this.ctrl.x;this.ctrlT.y=this.ctrl.y;this.ctrlT.z=this.ctrl.z;this.ctrlV.x=this.ctrlV.y=this.ctrlV.z=0;}else{this.ctrlT.z=.24;this.ctrlT.y=this.ctrl.y+.2;wish.addScaledVector(tg.pos.clone().sub(this.pos).setY(0).normalize(),-1);}A.phase='recover';A.pt=0;}
       if(this.stagger>.1){A.phase='guard';}
     } else {
-      let tx,tz;if(needZone){tx=zc.c.x;tz=zc.c.z;run=true;}else{if(this.pos.distanceTo(A.wander)<3)A.wander.set(rand(-1,1)*zone.r*.6+zone.c.x,0,rand(-1,1)*zone.r*.6+zone.c.z);tx=A.wander.x;tz=A.wander.z;}
-      wish.set(tx-this.pos.x,0,tz-this.pos.z);if(wish.lengthSq()>.01)wish.normalize();
+      let tx,tz;if(needZone){tx=zc.c.x;tz=zc.c.z;run=true;}else{if(this.pos.distanceTo(A.wander)<3||simTime>(A.wanT||0)){A.wanT=simTime+25;const nv=navReady();for(let k=0;k<8;k++){A.wander.set(rand(-1,1)*zone.r*.6+zone.c.x,0,rand(-1,1)*zone.r*.6+zone.c.z);if(!nv||navReach(A.wander.x,A.wander.z))break;if(k===7)A.wander.copy(this.pos);}}tx=A.wander.x;tz=A.wander.z;}   /* (Build 199) somewhere he can walk to: in the Mill and the Tavern most random spots were outside the walls, and the last men standing walked into them */
+      wish.set(tx-this.pos.x,0,tz-this.pos.z);if(wish.lengthSq()>.01)wish.normalize();navGoal(A,tx,tz,0);
       this.ctrlT.x=.15;this.ctrlT.y=-.1;this.ctrlT.z=.36;this.pitch=lerp(this.pitch,0,.02);this.rev=false;
     }
     A.stuck+=h;if(A.stuck>1.2){if(this.pos.distanceTo(A.lastPos)<.6&&wish.lengthSq()>.1){A.detour=1.2;A.detourDir.set(-wish.z,0,wish.x).multiplyScalar(Math.random()<.5?1:-1);if(Math.random()<.3&&!(A.target&&A.target.alive&&A.target.pos.distanceTo(this.pos)<4))this.jumpReq=true;}   /* a bot keeping its measure in a fight isn't stuck: it used to hop mid-duel */A.stuck=0;A.lastPos.copy(this.pos);}
@@ -7899,7 +8004,10 @@ function lootValue(f,it){if(it.def&&it.def.id==='chest')return 0;
   if(it.kind==='weapon'){if(!f.sword)return Math.max(.8,it.def.tier+.5);const cur=f.sword.def.tier;return it.def.tier-cur;}   // bare-handed, anything is worth picking up
   const a=f.armor[it.def.slot];return (it.def.prot-(a?a.def.prot:0))*10;
 }
-function bestLootFor(f,radius){let best=null,bs=0;for(const it of loot){if(!canTake(f,it))continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(d>radius)continue;const v=lootValue(f,it);if(v<=.4)continue;const s=v*6-d*.3;if(s>bs){bs=s;best=it;}}return best;}
+function lootBanned(A,it){return !!(A&&A.ban&&A.ban.get(it)>simTime);}
+// a bot going for something on the ground gives it up for a while if he hasn't got half a metre nearer in four seconds (it's behind a stall's counter, under a cart, on a roof)
+function lootWatch(A,it,d){const W=A.lw;if(!W||W.it!==it){A.lw={it,best:d,t:simTime};return false;}if(d<W.best-.5){W.best=d;W.t=simTime;return false;}if(simTime-W.t>4){(A.ban||(A.ban=new Map())).set(it,simTime+25);if(A.ban.size>12)for(const [k,v] of A.ban)if(v<simTime)A.ban.delete(k);A.lw=null;return true;}return false;}
+function bestLootFor(f,radius,ok){let best=null,bs=0;for(const it of loot){if(!canTake(f,it)||lootBanned(f.ai,it))continue;const p=lootPos(it,_t3);const d=Math.hypot(p.x-f.pos.x,p.z-f.pos.z);if(d>radius||(ok&&!ok(p)))continue;const v=lootValue(f,it);if(v<=.4)continue;const s=v*6-d*.3;if(s>bs){bs=s;best=it;}}return best;}
 function playerLootCandidate(){
   if(!player||!player.alive||player.ragdoll)return null;camera.getWorldDirection(_t1);let best=null,bs=1e9;
   for(const it of loot){if(!canTake(player,it))continue;const p=lootPos(it,_t2);const dx=p.x-player.pos.x,dz=p.z-player.pos.z,d=Math.hypot(dx,dz);if(d>2.2)continue;
@@ -9749,7 +9857,7 @@ function raidEntrants(H){const R=RUN;R.en=[[],[]];const NT=window.__raidTeam||RU
   for(let s=0;s<2;s++)while(R.en[s].length<NT){const en=botEntrant(R.names[R.ni++%R.names.length],rand(.45,.72));en.side=s?'B':'A';en.pal=PALETTES[s?0:1];en.raidS=s;en.ally=true;en.look={...randomLook(),sc:0,o:[1,3,4][(Math.random()*3)|0]};
     en.kit=RAID_KIT[R.en[s].length%RAID_KIT.length];en.role=['guard','raid','raid','hunt','raid','guard'][R.en[s].length%6];R.en[s].push(en);}}
 function raidSpawn(en,k){const T_=RAID.team[en.raidS];let cell=T_.rooms[k%2];if(T_.rooms.length>1){const foes=c=>fighters.filter(o=>o.alive&&o.entrant&&o.entrant.raidS!=null&&o.entrant.raidS!==en.raidS&&Math.hypot(o.pos.x-(c.x0+c.x1)/2,o.pos.z-c.door.z)<12).length;const a=foes(T_.rooms[0]),b=foes(T_.rooms[1]);if(a!==b)cell=a<b?T_.rooms[0]:T_.rooms[1];}const p=cell.spawn[k%cell.spawn.length];const kit=en.human?[ownWeapon(en,'longsword'),['kettle','brigandine']]:en.kit;
-  const f=spawnEntrant(en,p[0]+rand(-.4,.4),p[1]+rand(-.4,.4),kit,en.human?null:en.skill);f.yaw=en.raidS?Math.PI:0;f.ai.retarget=0;return f;}
+  const f=spawnEntrant(en,p[0]+rand(-.4,.4),p[1]+rand(-.4,.4),kit,en.human?null:en.skill);f.yaw=cell.door?Math.atan2((cell.door.x0+cell.door.x1)/2-f.pos.x,cell.door.z-f.pos.z):en.raidS?Math.PI:0;f.ai.retarget=0;return f;}   /* (Build 199) he comes back facing the way out of the yard, its gate: facing the enemy meant a metre from his own back wall */
 function raidStart(H){RUN={mode:'raid',H,names:BOT_NAMES(),ni:0,back:[],kills:[0,0],t0:simTime,warn:{},team:Math.max(3,TOUCH?Math.min(TEAMN,4):TEAMN)};roundSetup();raidEntrants(H);
   for(let s=0;s<2;s++)RUN.en[s].forEach((en,k)=>raidSpawn(en,k));
   for(let s=0;s<2;s++)for(let k=0;k<3;k++){const sl=RAID.team[s].slots[k];raidPutChest(s,sl[0],sl[1]);}
@@ -10359,6 +10467,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
