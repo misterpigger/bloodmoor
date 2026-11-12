@@ -431,7 +431,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=203;
+const BUILD=204;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -5372,6 +5372,14 @@ const RD_LINKS=[['Hips','Spine1'],['Spine1','Spine2'],['Spine2','Neck'],['Neck',
   ['Hips','LeftUpLeg'],['Hips','RightUpLeg'],['LeftUpLeg','RightUpLeg'],['Spine1','LeftUpLeg'],['Spine1','RightUpLeg'],['Spine2','Hips'],['Spine2','LeftUpLeg'],['Spine2','RightUpLeg'],
   ['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['LeftFoot','LeftToeBase'],['LeftLeg','LeftToeBase'],
   ['RightUpLeg','RightLeg'],['RightLeg','RightFoot'],['RightFoot','RightToeBase'],['RightLeg','RightToeBase']];
+// (Build 204) a body that has let go. LIMP_X: the links that made the trunk one stiff board from hips to shoulders; without them the chest and
+// the pelvis are two blocks joined at the small of the back (Spine1), held by the spine's cone and twist limits, so a fallen body folds at
+// the waist. RD_IM: how easily each point is moved by the joints it shares (1/mass, relative): the trunk is heavy, hands and feet light,
+// so a flung arm or a struck head no longer hauls the whole body after it
+const LIMP_X=new Set(['Spine2|Hips','Spine2|LeftUpLeg','Spine2|RightUpLeg','Hips|LeftArm','Hips|RightArm']);
+const RD_IM={Hips:.07,Spine1:.09,Spine2:.07,Neck:.3,Head:.22,HeadTop_End:.5,LeftArm:.24,RightArm:.24,LeftForeArm:.5,RightForeArm:.5,LeftHand:.9,RightHand:.9,LeftHandMiddle1:1.2,RightHandMiddle1:1.2,
+  LeftUpLeg:.13,RightUpLeg:.13,LeftLeg:.28,RightLeg:.28,LeftFoot:.6,RightFoot:.6,LeftToeBase:1,RightToeBase:1};
+let LIMP=!/[?&]nolimp/.test(location.search),LIMP_MIN=+(new URLSearchParams(location.search).get('limpmin')??.6);
 const RD_MINS=[['LeftArm','LeftHand','LeftForeArm',.5],['RightArm','RightHand','RightForeArm',.5],['LeftUpLeg','LeftFoot','LeftLeg',.75],['RightUpLeg','RightFoot','RightLeg',.75]];
 let FULLBODY=/[?&]fullbody/.test(location.search)||!/[?&]nofullbody/.test(location.search)&&(()=>{try{const v=localStorage.getItem('bloodmoor-fullbody');return TOUCH?v==='1':v!=='0';}catch(e){return !TOUCH;}})();   // on unless switched off (phones: off unless switched on, Build 119)
 const FB_R={Hips:.13,Spine1:.15,Spine2:.16,Neck:.07,Head:.11,HeadTop_End:.09,LeftArm:.07,RightArm:.07,LeftForeArm:.055,RightForeArm:.055,LeftHand:.045,RightHand:.045,LeftHandMiddle1:.035,RightHandMiddle1:.035,LeftUpLeg:.09,RightUpLeg:.09,LeftLeg:.07,RightLeg:.07,LeftFoot:.06,RightFoot:.06,LeftToeBase:.04,RightToeBase:.04};   // contact sizes
@@ -5389,6 +5397,16 @@ function jointCone(R,piv,tip,ns,ax,lim,hard){const P=R.P,A=P[piv],T=P[tip];if(!A
   if(hard){if(th<=lim)return;rot=th-lim;}else{const st=lim*.78;if(th<=st)return;const u=(th-st)/(lim-st);rot=th>lim*1.25?th-lim*1.25:0;rot+=(th-st)*Math.min(1,.06+.12*u*u);}   // (alive: a spring from 78% of the limit, stiffer the further in; past 125% it stops dead)
   _jB.crossVectors(_jA,ax);const sl=_jB.length();if(sl<1e-6)return;_jB.multiplyScalar(1/sl);_jq.setFromAxisAngle(_jB,rot);
   for(const n of ns){const p=P[n],q=R.Q[n];if(!p)continue;_jC.subVectors(p,A);const ox=_jC.x,oy=_jC.y,oz=_jC.z;_jC.applyQuaternion(_jq);const dx=A.x+_jC.x-p.x,dy=A.y+_jC.y-p.y,dz=A.z+_jC.z-p.z;p.x+=dx;p.y+=dy;p.z+=dz;if(q){q.x+=dx*.5;q.y+=dy*.5;q.z+=dz*.5;}}}   // (half the push stays as speed lost)
+// (Build 204) the waist of a limp body: the same cone, but the two blocks it joins turn against each other about the joint (the chest back by
+// half the excess, the pelvis and legs forward by half), positions only, so what is stopped is their turning against each other and the
+// body as a whole gains nothing. Turning the chest alone to follow the pelvis, as jointCone does, made the pelvis an immovable base: when
+// the legs folded and swung it, the chest and arms were swung with it and the whole body was thrown a metre into the air
+const WAIST_LO=['Hips','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg','LeftFoot','RightFoot','LeftToeBase','RightToeBase'];
+function waistCone(R,ax,lim,hard){const P=R.P,A=P.Spine1,T=P.Neck;if(!A||!T)return;_jA.subVectors(T,A);const l=_jA.length();if(l<1e-5)return;_jA.multiplyScalar(1/l);
+  const th=Math.acos(clamp(_jA.dot(ax),-1,1));let rot;
+  if(hard){if(th<=lim)return;rot=th-lim;}else{const st=lim*.78;if(th<=st)return;const u=(th-st)/(lim-st);rot=th>lim*1.25?th-lim*1.25:0;rot+=(th-st)*Math.min(1,.06+.12*u*u);}
+  rot=Math.min(rot,.03);_jB.crossVectors(_jA,ax);const sl=_jB.length();if(sl<1e-6)return;_jB.multiplyScalar(1/sl);   // a little at a time: a waist found far past its limit is eased back over a few steps, not snapped
+  for(const [ns,k] of [[SPINE_UP,.5],[WAIST_LO,-.5]]){_jq.setFromAxisAngle(_jB,rot*k);for(const n of ns){const p=P[n];if(!p||p===A)continue;_jC.subVectors(p,A).applyQuaternion(_jq);p.set(A.x+_jC.x,A.y+_jC.y,A.z+_jC.z);}}}
 // a hinge that can't bend the wrong way: the middle point (knee, elbow) may not sit on side `dir` of the line between the ends
 function jointHinge(R,a,m,b,dir,sgn,k){const P=R.P,A=P[a],M=P[m],B=P[b];if(!A||!M||!B)return;_jA.subVectors(B,A);const L2=_jA.lengthSq();if(L2<1e-6)return;
   const t=clamp(_jC.subVectors(M,A).dot(_jA)/L2,0,1);_jX.copy(A).addScaledVector(_jA,t);const off=_jC.subVectors(M,_jX).dot(dir)*sgn;if(off>=0)return;
@@ -5441,6 +5459,7 @@ function spineTwistLim(R,lim,k,soft){const P=R.P;if(!P.Hips||!P.Neck||!P.Spine1|
   for(const [grp,a] of [[TW_UP,e],[TW_LO,-e]]){_tsQ.setFromAxisAngle(_tsA,a);for(const n of grp){const p=P[n];if(!p)continue;const q=R.Q[n];
     _tsV.subVectors(p,P.Spine1).applyQuaternion(_tsQ).add(P.Spine1);if(q){q.x+=_tsV.x-p.x;q.y+=_tsV.y-p.y;q.z+=_tsV.z-p.z;}p.copy(_tsV);}}
   return ang;}
+let FOLD_K=+(new URLSearchParams(location.search).get('foldk')??26);
 class Ragdoll{
   constructor(bones,names,vel,impulse,impulsePoint){
     this.b=bones;this.names=names.filter(n=>bones[n]);this.P={};this.Q={};
@@ -5466,11 +5485,12 @@ class Ragdoll{
     this.age=0;this.sleep=false;this.tone=0;this.lim=0;
     this.full={};for(const [a,m,b] of [['LeftArm','LeftForeArm','LeftHand'],['RightArm','RightForeArm','RightHand'],['LeftUpLeg','LeftLeg','LeftFoot'],['RightUpLeg','RightLeg','RightFoot']])if(this.P[a]&&this.P[m]&&this.P[b])this.full[b]=this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]);
   }
+  limp(){if(!/limpx=0/.test(location.search))this.links=this.links.filter(([a,b])=>!LIMP_X.has(a+'|'+b));if(!/limpm=0/.test(location.search))for(const L of this.links){const wa=RD_IM[L[0]]||.5,wb=RD_IM[L[1]]||.5;L[4]=wa/(wa+wb);}for(const M of this.mins)M[2]*=LIMP_MIN;this.isLimp=true;}   /* and the knees and elbows fold: a leg could bend no further than 97 deg at the knee (the hip kept 75% of the leg's length from the foot), so a falling body sat down as if onto a chair and a body on its back held its hips up on its shins like a bridge */
   limits(it){const P=this.P,hard=this.lim>=2;if(!P.Hips||!P.Spine1||!P.Neck)return;
     if(hard)spineTwistLim(this,.95,.6);else spineTwistLim(this,.55,.5,.5);   // the living: free to 31°, springier to 60°, a stop past it
     // Build 142: the spine bends only so far: the chest (Spine1 to Neck) within a cone round the pelvis's up, tipped forward, so a body folds forward up to ~60° but arches back at most ~38° and sideways ~49° (there was no limit at all and a fallen body could lie in a 140° backbend)
     if(P.Spine2&&P.LeftUpLeg&&P.RightUpLeg){_jU2.subVectors(P.Spine1,P.Hips).normalize();_jL2.subVectors(P.LeftUpLeg,P.RightUpLeg);_jL2.addScaledVector(_jU2,-_jL2.dot(_jU2)).normalize();_jF2.crossVectors(_jL2,_jU2);
-      _jX.copy(_jU2).addScaledVector(_jF2,.35).normalize();jointCone(this,'Spine1','Neck',SPINE_UP,_jX,.85,hard);}
+      _jX.copy(_jU2).addScaledVector(_jF2,.35).normalize();if(this.isLimp)waistCone(this,_jX,.85,hard);else jointCone(this,'Spine1','Neck',SPINE_UP,_jX,.85,hard);}
     // the chest's frame and the pelvis's frame (forward = left × up)
     if(P.LeftArm&&P.RightArm){_jU.subVectors(P.Neck,P.Spine1).normalize();_jL.subVectors(P.LeftArm,P.RightArm);_jL.addScaledVector(_jU,-_jL.dot(_jU)).normalize();_jF.crossVectors(_jL,_jU);
       jointCone(this,'Neck','HeadTop_End',['Head','HeadTop_End'],_jU2.copy(_jU).addScaledVector(_jF,.12).normalize(),.95,hard);   // the head on the neck
@@ -5489,7 +5509,7 @@ class Ragdoll{
         if(up>.15){const c=(up-.15)*.006*m;el.addScaledVector(_jU,-c*.3);}}}
   }
   kick(v){for(const n of this.names)this.Q[n].addScaledVector(v,-H*2);this.sleep=false;this.age=0;}
-  strike(p,v,k){for(const n of this.names){const w=.15+.85*Math.exp(-this.P[n].distanceToSquared(p)/.06);this.Q[n].addScaledVector(v,-H*1.4*w*k);}this.sleep=false;this.age=Math.min(this.age,1);}
+  strike(p,v,k){for(const n of this.names){const w=.15+.85*Math.exp(-this.P[n].distanceToSquared(p)/.06),m=this.isLimp?clamp((RD_IM[n]||.3)/.26,.25,1.5):1;this.Q[n].addScaledVector(v,-H*1.4*w*k*m);}this.sleep=false;this.age=Math.min(this.age,1);}   /* (Build 204) by weight: the same blow moves a hand far and the trunk little; with the trunk as light as a hand, a blow in the back sent the whole body sliding metres */
   // a part cut off a body already down: its pieces leave this ragdoll (they fly as debris of their own)
   drop(set){this.names=this.names.filter(n=>!set.has(n));this.links=this.links.filter(([a,b])=>!set.has(a)&&!set.has(b));this.mins=this.mins.filter(([a,b])=>!set.has(a)&&!set.has(b));this.pairs=this.pairs.filter(([a,c])=>!set.has(a)&&!set.has(c));for(const n of set){delete this.P[n];delete this.Q[n];}}
   step(h){
@@ -5498,6 +5518,12 @@ class Ragdoll{
     if(this.rise)this.riseStep(h);
     // a beheaded body doesn't drop like a puppet with cut strings: for a moment it stays up, then the knees go and it folds
     if(this.hold&&this.age<this.hold.t){const u=this.age/this.hold.t,k=.06*(1-u)*(1-u);for(const n in this.hold.y){const p=this.P[n];if(p){const ty=this.hold.y[n]*(1-.5*u*u);p.y+=(ty-p.y)*k;}}}
+    // (Build 204) legs that hold nobody up fold: for the first moments after the muscles let go, the knees go forward and the hips drop and
+    // sit back, each knee by its own amount, so the body comes down in a heap where it stood and then tips the way the blow sent it. Left
+    // to themselves the leg's points stood in a line like a column, and a slain man toppled about his feet like a felled plank
+    if(this.fold&&this.age<this.fold.t){const F=this.fold,P=this.P,a=h*h*F.k*(1-this.age/F.t);
+      for(const [n,m] of [['LeftLeg',F.l],['RightLeg',F.r]]){const p=P[n];if(p){p.x+=F.fx*FOLD_K*a*m;p.z+=F.fz*FOLD_K*a*m;p.y-=FOLD_K*.2*a;}}
+      if(P.Hips){P.Hips.y-=FOLD_K*.35*a;P.Hips.x-=F.fx*FOLD_K*.25*a;P.Hips.z-=F.fz*FOLD_K*.25*a;}}
     if(this.reflex&&this.age<this.reflex&&this.P.Spine2&&this.P.Spine2.y>-.15){const P=this.P,c=P.Spine2;   // hands thrown out ahead of the fall, reaching for the ground
       if(c&&P.LeftHand&&P.RightHand){_rv.subVectors(c,this.Q.Spine2);_rv.y=0;const sp=_rv.length()/h;
         if(sp>.25){_rv.multiplyScalar(1/(sp*h));const gy=groundY(c.x,c.z,c.y),k=Math.min(1,sp*.5)*.035;
@@ -5511,7 +5537,7 @@ class Ragdoll{
       for(const [n,w] of W){const t=this.P[n],tq=this.Q[n],f=w/ws*.9;t.x-=dx*f;t.y-=dy*f;t.z-=dz*f;tq.x-=dx*f*.9;tq.y-=dy*f*.9;tq.z-=dz*f*.9;}}}   // a hand pressed to the wound
     if(PIT&&this.P.Hips)this.under=this.P.Hips.y<-.15;   // gone below the deck: the bridge no longer holds any part of this body up
     for(let it=0;it<7;it++){
-      for(const [a,b,l,ank] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;let k=(d-l)/d*.5;if(ank&&this.rise){if(d>l*.88&&d<l*1.015)continue;k=(d-(d<l?l*.88:l*1.015))/d*.5;}A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}   // getting up the ankle bends (Build 127): held rigid, a foot on a forward-leaning shin couldn't lie flat and turned sideways or back to fit
+      for(const [a,b,l,ank,wa] of this.links){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;let k=(d-l)/d;if(ank&&this.rise){if(d>l*.88&&d<l*1.015)continue;k=(d-(d<l?l*.88:l*1.015))/d;}const sa=wa??.5;A.addScaledVector(_rv,k*sa);B.addScaledVector(_rv,-k*(1-sa));}   // getting up the ankle bends (Build 127): held rigid, a foot on a forward-leaning shin couldn't lie flat and turned sideways or back to fit
       if(it===0&&this.tone>0){const c=this.tone;   // muscle tone: joints resist spinning, so a conscious body folds and drops instead of flopping like a doll
         for(const [a,b] of this.links){const A=this.P[a],B=this.P[b],qa=this.Q[a],qb=this.Q[b];
           const rx=(B.x-qb.x)-(A.x-qa.x),ry=(B.y-qb.y)-(A.y-qa.y),rz=(B.z-qb.z)-(A.z-qa.z);
@@ -7897,7 +7923,7 @@ class Fighter{
   makeRagdoll(imp,impP,crumple){
     this.root.updateMatrixWorld(true);
     const names=RD_NAMES.filter(n=>!this.detached.has(n));
-    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;this.ragdoll.lim=this.alive?1:2;   // even the dying keep some stiffness for a moment
+    this.ragdoll=new Ragdoll(this.bones,names,this.vel,imp,impP);this.ragdoll.tone=.08;this.ragdoll.lim=this.alive?1:2;if(LIMP){this.ragdoll.limp();const R=this.ragdoll,hp=R.P.Hips;if(crumple>=.5&&hp&&hp.y-groundY(hp.x,hp.z,hp.y)>.62&&this.pitT==null){const f=this.fwd(V());R.fold={t:.45,k:Math.min(1,crumple),fx:f.x,fz:f.z,l:.55+Math.random()*.7,r:.55+Math.random()*.7};}}   // even the dying keep some stiffness for a moment
     {const A=this.ar,R=this.ragdoll;if(A&&A.hs){for(const n of R.names){const p=A.P[n],q=A.Q[n];if(!p||!q)continue;_wl1.subVectors(p,q).multiplyScalar(1/A.hs).sub(this.vel);const l=_wl1.length();if(l>4)_wl1.multiplyScalar(4/l);R.Q[n].addScaledVector(_wl1,-H*2);}}this.ar=null;}   // each part keeps the full body's own motion
     // the dying fold up: knees buckle forward, hips drop, the head lolls, instead of toppling like a plank
     if(crumple){const R=this.ragdoll,f=this.fwd(V()),add=(n,x,y,z)=>{if(R.Q[n])R.Q[n].add(V(f.x*z,y,f.z*z).multiplyScalar(-H*2*crumple));};
