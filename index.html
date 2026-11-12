@@ -449,7 +449,8 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=211;
+const BUILD=212;
+const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -3875,6 +3876,7 @@ function updSub(b){if(b.matrixAutoUpdate)b.updateMatrix();b.matrixWorld.multiply
 function skelClean(B){const h=B.Hips;h.parent.updateWorldMatrix(true,false);updSub(h);}
 let MX_BAD=0;function mxCheck(o,why){if(!o)return;const e0=o.matrixWorld.elements.slice();o.updateWorldMatrix(true,false);const e=o.matrixWorld.elements;let d=0;for(let i=0;i<16;i++)d=Math.max(d,Math.abs(e[i]-e0[i]));if(d>1e-5){MX_BAD++;if(MX_BAD<12)console.error('mxCheck '+why+' '+o.name+' off by '+d.toFixed(5));}}
 function indexBones(root){const b={};root.traverse(o=>{if(o.isBone){b[o.name.replace(/^mixamorig:?/,'')]=o;if(FINGER_RE.test(o.name))o._fng=true;if(!o.userData.bq)o.userData.bq=o.quaternion.toArray();}});for(const k in BONE_CHILD){const c=b[BONE_CHILD[k]];if(b[k]&&c){b[k].userData.axis=c.position.clone().normalize();if(!b[k].userData.rq)b[k].userData.rq=b[k].quaternion.toArray();}}return b;}   // rq: the bind pose's local turn, so a ragdoll's bones can be aimed from it each frame (Build 125)
+const _qr2=new THREE.Quaternion();
 const _p=V(),_s=V(),_qw=new THREE.Quaternion(),_qp=new THREE.Quaternion(),_qr=new THREE.Quaternion(),_ax=V(),_dd=V(),_pp=V(),_ps=V();
 function pointBone(bone,target,clean){   // clean: the caller knows every bone above this one is up to date
   const ax=bone.userData.axis;if(!ax)return;
@@ -4197,20 +4199,20 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
       const hs=gb.userData.cov||(gb.userData.cov=new Set());if(!hs.has(id)){for(const i of cov)at.array[i]=(at.array[i]|bit);at.needsUpdate=true;hs.add(id);}
       const HU=body.material&&body.material.userData.HU;if(HU){HU.covAll=(HU.covAll|0)|bit;let cl=false;for(let o=root;o;o=o.parent)if(o.userData.garbClip&&o.userData.garbClip.x<5){cl=true;break;}HU.uCov.value=cl?0:HU.covAll;}}
     m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard';   // (draped cloth is one double-sided layer: shadowing itself it drew dark acne slashes down the skirts)
-   m.receiveShadow=!P.H.strands;m.frustumCulled=false;   /* (strand hair shadowing itself drew black streaks) */m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;
+   m.receiveShadow=!P.H.strands;m.frustumCulled=false;   /* (strand hair shadowing itself drew black streaks) */m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;if(kind==='beard')m.userData.beard=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
     if(m.material.userData.legU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.legMeshes||(mo.userData.legMeshes=[])).push(m);}
     if(m.material.userData.clipA&&!m.material.userData.isBelt){for(let o=root;o;o=o.parent)if(o.userData.armClip){m.material.userData.clipA.value.copy(o.userData.armClip);break;}}   // (Build 176) a garment that arrives after the harness was put on
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9,9);}}   // (a belt goes under body armour altogether)
     let hid=false,hm=null;for(let o=root;o;o=o.parent)if(o.userData.hideHair){hid=true;hm=o;break;}if(tag&&hid)m.visible=false;root.add(m);
-    if(!mat&&kind!=='lash'&&!MSAA_ON()){const m2=new THREE.SkinnedMesh(m.geometry,swm(mhPartMat(P,col,kind,true)));m2.bind(body.skeleton,body.bindMatrix);m2.frustumCulled=false;m2.renderOrder=2;m2.name=m.name+'_soft';if(tag){m2.userData.hair=true;if(hid)m2.visible=false;}root.add(m2);}
-    if(tag&&hm&&hm.userData.helmOn!=null)helmHair(hm);}   /* (a helmet put on before the hair arrived) */).catch(e=>console.warn('part',id,e&&e.message));}
+    if(!mat&&kind!=='lash'&&!MSAA_ON()){const m2=new THREE.SkinnedMesh(m.geometry,swm(mhPartMat(P,col,kind,true)));m2.bind(body.skeleton,body.bindMatrix);m2.frustumCulled=false;m2.renderOrder=2;m2.name=m.name+'_soft';if(tag){m2.userData.hair=true;if(hid)m2.visible=false;}if(kind==='beard')m2.userData.beard=true;root.add(m2);}
+    if((tag||kind==='beard')&&hm&&hm.userData.helmOn!=null)helmHair(hm);}   /* (a helmet put on before the hair arrived) */).catch(e=>console.warn('part',id,e&&e.message));}
 // look.o -> draped garment: 1 linen shirt, 2 quilted aketon, 3 knee-length wool cote, 4 fitted doublet; each with its belt
 // woven wool for the cote and doublet (CC0 Poly Haven 'Caban' and 'Wool herringbone' scans, greyed so the dye tints them)
 const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('assets/tex/'+k+'_d.jpg'),n=L.load('assets/tex/'+k+'_n.jpg');m.colorSpace=THREE.SRGBColorSpace;for(const x of [m,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(22,22);x.anisotropy=MAXANI;}return {m,n};};return {wool:mk('wool'),twill:mk('twill')};})();
 const GARB={1:{id:'shirt',belt:'belt_shirt',mat:'linen'},2:{id:'aketon',mat:'quilt'},3:{id:'cote',belt:'belt_cote',mat:'wool'},4:{id:'doublet',belt:'belt_doublet',mat:'twill'}};
 // body armour over a draped garment: the part it covers isn't drawn (the cloth would poke through the steel); x = half-width, y = from
-const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.215,1.065,1.39],mail:[.465,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
+const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.215,1.065,1.39],mail:[.95,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
 // the legs push the skirt out of their way (Build 127): each frame the hips, knees and ankles go to the garment's shader in its own space and
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m,pad=0){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile,PD=pad.toFixed(4);   /* pad: a belt lies that much further out than the cloth it's on */
@@ -5553,9 +5555,9 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
         pos.push(cx+Math.sin(th)*(r0x+w),rim(th)+.004+dy+bead,cz+Math.cos(th)*(r0z+w));}}
       for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
       const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();S(bg.toNonIndexed(),steelFitMat);}
-    {const NU=10,NV=40,pos=[],idx=[],y0=ey-.205,y1=ey-.066;   // the bevor: close under the nose, swelling over the chin, flaring onto the breast, a bead along its top edge
+    {const NU=10,NV=40,pos=[],idx=[],y0=ey-.205,y1=ey-.046;   // the bevor: close under the nose, swelling over the chin, flaring onto the breast, a bead along its top edge
       for(let i=0;i<=NU;i++){const u=i/NU,y=lerp(y0,y1,u),ch=Math.exp(-Math.pow((u-.62)/.3,2)),fl=Math.pow(1-u,2.2),rx=M.rx-.014+.03*fl+.004*ch,rz=M.rz-.006+.03*fl+.012*ch+(i===NU?.004:0);
-        for(let j=0;j<=NV;j++){const th=-1.3+2.6*j/NV,e=1-.25*Math.pow(Math.abs(th)/1.3,3)*u;pos.push(cx+Math.sin(th)*rx,y*e+(1-e)*(y+.02),cz+Math.cos(th)*rz);}}
+        for(let j=0;j<=NV;j++){const th=-1.62+3.24*j/NV,e=1-.25*Math.pow(Math.abs(th)/1.62,3)*u;pos.push(cx+Math.sin(th)*rx,y*e+(1-e)*(y+.02),cz+Math.cos(th)*rz);}}
       for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
       const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();
       {const N=bg.attributes.normal,m=(NU>>1)*(NV+1)+(NV>>1);if(N.getZ(m)<0){const I=bg.index.array;for(let k=0;k<I.length;k+=3){const t=I[k+1];I[k+1]=I[k+2];I[k+2]=t;}bg.computeVertexNormals();}}
@@ -5590,7 +5592,7 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.cls==='plate'||def.cls==='vambr
     case 'brigandine':{const ax=Math.abs(J.LeftArm.x)-.03;   /* (Build 203) the armhole is a straight cut just inside the shoulder joint: choosing the cloth by skin weights alone cut the back away to a strap between the shoulder blades, and the front to narrow braces */
       const sh=S('brig3',{keep:(v,P,w)=>{const x=Math.abs(P.getX(v)),y=P.getY(v);if(!(y>hy-.035&&y<J.Neck.y-.01)||w(v,neck)>=.3||w(v,['LeftForeArm','RightForeArm'])>.02)return false;
         return x<ax&&w(v,['LeftArm','RightArm'])<.8||w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),hemAt:hy-.012,rimSmooth:5},brigMat,torso);   /* (Build 199: cut level at the hip; it used to keep the strip of skin down the cleft of the seat, which hung below the hem as a pointed tail) */let hemY=9;{const P=sh[0].attributes.position;for(let i=0;i<P.count;i++)hemY=Math.min(hemY,P.getY(i));}return [sh,[edgeBinding(sh[0],.0055,5,p=>Math.abs(p.x)>.1&&p.y>hy+.22),strapMat]];}   /* (Build 199: nor up the seam where the two legs' halves meet at the back and front, which drew a dark notch at the middle of the hem) */   /* (not round the armholes: the arm swings through there) */   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
-    case 'mail':return [S('hauberk2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*'])<.1&&Math.abs(P.getX(v))<J.LeftForeArm.x+.06&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,cuff:Math.abs(J.LeftForeArm.x)+.015,rimSmooth:6,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
+    case 'mail':return [S('hauberk2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*'])<.1&&Math.abs(P.getX(v))<Math.abs(J.LeftHand.x)-.012&&y>hy-.34&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,cuff:Math.abs(J.LeftHand.x)-.03,rimSmooth:6,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
       S('gauntlet',{keep:(v,P,w)=>w(v,['LeftHand','RightHand'])>.6,off:.013,smooth:5,rim:.003,fallback:'LeftHand'},faulMat,['LeftHand','RightHand'])];   // hourglass gauntlet plates over the back of the hand
@@ -5807,7 +5809,8 @@ const _fpHB=['Head','HeadTop_End','LeftEye','RightEye'];
 // hair under a helmet (Build 201): a kettle hat or a nasal helm leaves the hair below its rim showing (the head looked shaved between
 // the rim and the collar); a bascinet or a great helm shuts it all in. Hair that can't be cut at a height (no per-fighter material) hides
 function helmHair(model){const h=model.userData.helmOn;let cut=99;if(h!=null&&h>=0){let hy=0;model.traverse(o=>{if(o.isSkinnedMesh&&/MH_Body/.test(o.name)&&o.userData.helmY)hy=o.userData.helmY;});cut=hy?hy-.03:99;}
-  model.traverse(o=>{if(!o.userData.hair)return;const U=o.material&&o.material.userData.hairCut;if(h==null||h<0){o.visible=true;if(U)U.value=99;}else if(U&&(h===0||h===1)&&cut<90){o.visible=true;U.value=cut;}else o.visible=false;});}
+  model.traverse(o=>{if(o.userData.beard){o.visible=!(h===2||h===3||h===4);return;}   /* (Build 212) a visor, a great helm or a sallet's bevor closes over the face: the beard stood out through the steel */
+    if(!o.userData.hair)return;const U=o.material&&o.material.userData.hairCut;if(h==null||h<0){o.visible=true;if(U)U.value=99;}else if(U&&(h===0||h===1)&&cut<90){o.visible=true;U.value=cut;}else o.visible=false;});}
 function helmSkull(model,on){model.traverse(o=>{if(o.isSkinnedMesh&&/MH_Body/.test(o.name)){const HU=o.material&&o.material.userData.HU;if(HU&&HU.uHelmY)HU.uHelmY.value=on&&o.userData.helmY?o.userData.helmY:99;}});}
 function fpHead(f,on){const m=f.model;if(!m)return;let body=m.userData._fpBody;if(!body||!body.parent){body=null;m.traverse(o=>{if(!body&&o.isSkinnedMesh&&/MH_Body/.test(o.name))body=o;});m.userData._fpBody=body;}
   if(f.bones&&f.bones.Head&&f.bones.Head.scale.x<.5&&!f.limbs.head.sev)f.bones.Head.scale.setScalar(1);
@@ -8176,6 +8179,18 @@ class Fighter{
     if(PW){this.updateCaps();this.physTargets(dt,PART_VIS);if(!this.hs)this.physVisual();this.root.updateMatrixWorld(true);}   /* Build 145: not on top of the jointed body, which already draws the hit (both bent the same limb: rubbery arms) */
     this.cacheBody();
     if(this._swTw){_qr.setFromAxisAngle(Y_AXIS,this._swTw);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);B.Spine1.updateMatrixWorld(true);}
+    /* Build 212: the weight goes where the body is going. Starting off, the trunk tips forward over the feet; pulling up, it sits back; cutting a corner,
+       it leans into the turn (the physical spine only lagged behind, so a man starting a run leaned back like a sack being pulled). Drawn only (after
+       cacheBody, like the turn into the cut), so aim, reach and the camera don't move; not in first person; gone on the ground. */
+    if(WSHIFT&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&dt>0&&dt<.2){const pv=this._wsPV||(this._wsPV=V().copy(this.vel)),av=this._wsA||(this._wsA=V());
+      _wl1.subVectors(this.vel,pv).multiplyScalar(1/dt);_wl1.y=0;if(_wl1.lengthSq()>400)_wl1.setLength(20);pv.copy(this.vel);av.lerp(_wl1,1-Math.exp(-5*dt));
+      if(this.knocked||this.stagger>0)av.multiplyScalar(Math.exp(-8*dt));
+      this.fwd(_f);this.right(_r);const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12?1:0,sp=Math.hypot(this.vel.x,this.vel.z);
+      const pt=gr*clamp(av.dot(_f)*WS_P,-.13,.16),rl=gr*clamp(av.dot(_r)*WS_R*clamp(sp/1.5,0,1),-.1,.1);
+      this._wsP=lerp(this._wsP||0,pt,1-Math.exp(-9*dt));this._wsR=lerp(this._wsR||0,rl,1-Math.exp(-9*dt));
+      if(Math.abs(this._wsP)+Math.abs(this._wsR)>.004){const par=B.Spine1.parent;par.getWorldQuaternion(_qr2).invert();
+        _wl2.crossVectors(Y_AXIS,_f).normalize().multiplyScalar(this._wsP).addScaledVector(_wl3.crossVectors(Y_AXIS,_r).normalize(),this._wsR);const ang=_wl2.length();
+        if(ang>1e-4){_wl2.multiplyScalar(1/ang).applyQuaternion(_qr2);_qr.setFromAxisAngle(_wl2,ang);B.Spine1.quaternion.premultiply(_qr);updSub(B.Spine1);}}}
     {const sp2=Math.hypot(this.vel.x,this.vel.z);let sw=0;if(sp2>.25&&B.LeftFoot&&B.RightFoot&&this.alive&&!this.ragdoll){this.fwd(_f);B.LeftFoot.getWorldPosition(_wl1);B.RightFoot.getWorldPosition(_wl2);sw=clamp(_wl2.sub(_wl1).dot(_f)/.55,-1,1)*clamp(sp2/1.6,0,1);}
       this.armSw=lerp(this.armSw||0,sw,1-Math.exp(-14*dt));}   // + = right foot ahead: the arms swing against the legs when walking easy
     if(this.sword&&this.mainArm){
