@@ -59,7 +59,8 @@ kbd{font-family:var(--f-ui);font-weight:700;font-size:12px;min-width:22px;paddin
 .go{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center}.go .btn{align-self:center;white-space:nowrap}.go .mp{flex:1 1 240px;min-width:0}.go .mprow{align-items:stretch}.go #hostBtn{min-width:0;flex:1 1 150px;padding:6px 12px}.go #hostBtn b{font-size:18px}
 .fold{border-top:1px solid rgba(236,220,184,.16);padding-top:8px}.fold>summary{cursor:pointer;list-style:none;font-size:13px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;color:var(--parch);display:flex;align-items:center;gap:8px;padding:2px 0}
 .fold>summary::-webkit-details-marker{display:none}.fold>summary::before{content:'+';display:inline-block;width:14px;color:var(--ember);font-size:16px;line-height:1}.fold[open]>summary::before{content:'–'}.fold>summary:hover{color:#fff}.fold>summary:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
-.fold>*:not(summary){margin-top:10px}.fold .maps .map{min-width:0;flex:1 1 180px}
+.fold>*:not(summary){margin-top:10px}
+.keylist{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 14px}.keylist .kb{display:flex;justify-content:space-between;align-items:center;font-size:13px;gap:8px}.keylist .kb button{min-width:74px;padding:3px 8px;font:inherit;font-size:12px;background:rgba(236,220,184,.08);color:var(--parch);border:1px solid rgba(236,220,184,.25);border-radius:3px;cursor:pointer}.keylist .kb button.wait{border-color:#c9a25a;color:#c9a25a}.ctlopt .eyebrow{margin-top:8px}body.touch .notouch{display:none}.fold .maps .map{min-width:0;flex:1 1 180px}
 @media (max-height:640px){.go{position:sticky;bottom:-16px;z-index:2;padding:8px 0 12px;background:linear-gradient(180deg,rgba(7,8,12,0),rgba(7,8,12,.94) 26%)}.mdesc{min-height:1.4em}.chips .map{padding:5px 9px 6px}.chips .map b{font-size:17px}}
 #spec{position:absolute;top:18px;left:50%;transform:translateX(-50%);padding:8px 20px;background:rgba(7,8,12,.7);border:1px solid rgba(201,162,39,.5);color:var(--parch);font:600 15px var(--f-ui);text-align:center;letter-spacing:.04em;pointer-events:none;z-index:5}
 #spec b{display:block;font-size:19px;color:#e8d9a8}#spec span{font-size:12px;opacity:.75}
@@ -289,6 +290,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>Wheel</kbd></dt><dd>Swords and spears: scroll to thrust; the point stays on line while you keep scrolling. Axes and maces: scroll changes your reach.</dd>
       <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch · <kbd>Space</kbd> jump and vault</dd>
       <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q to wind up over the shoulder, let go to throw from that hand</dd>
+      <dt><kbd>Alt</kbd> <kbd>X</kbd></dt><dd>Hold Alt to thrust (the same as scrolling forward, held) · X to change hands with a one-handed weapon</dd>
       <dt><kbd>V</kbd> <kbd>M</kbd> <kbd>Tab</kbd></dt><dd>Close, wide or first-person view · music on/off · hold to look over your wounds</dd>
       <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead. In the Crypt: open caskets, take a lantern (crouch and <kbd>E</kbd> sets it down), drink from a flask, go down the stair or back out</dd>
@@ -313,6 +315,12 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map" id="hsBtn" role="switch" aria-checked="false"><b>Jointed body</b><span>Half Sword-style: the fighters nearest you are jointed rigid parts with weight, posed by muscles at each joint, so blows shove and rock the whole body</span></button>
     </div>
     <p class="small" id="physTag"></p>
+    <div class="ctlopt notouch"><div class="eyebrow">Mouse</div>
+      <label class="frow">Sensitivity <input type="range" id="msens" min="0.3" max="2.5" step="0.05" aria-label="Mouse sensitivity"> <span id="msensv"></span></label>
+      <label class="frow"><input type="checkbox" id="minv"> Invert up and down</label>
+      <div class="eyebrow">Keys <button class="lnk" id="keyReset">Reset to defaults</button></div>
+      <div id="keyList" class="keylist" aria-label="Key bindings"></div>
+      <p class="small">Click a key, then press the one you want. Esc cancels.</p></div>
     </details>
     <p class="small" id="buildTag" style="opacity:.6"></p>
   </div>
@@ -435,7 +443,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=208;
+const BUILD=209;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -9373,10 +9381,35 @@ function ambTick(){if(!AC||!torchGain)return;const cp=camera.position;let dm=1e9
     g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.09);o.connect(g);if(pn){pn.pan.value=Math.random()*1.6-.8;g.connect(pn);pn.connect(master);}else g.connect(master);o.start(t);o.stop(t+.12);}}
 function toast(t){const d=el('toast');if(!d)return;d.textContent=t;d.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>d.classList.remove('on'),1400);}
 
+// ================================================================ key bindings (Build 209)
+// Every key the game reads is a "logical" code (KeyE, KeyF, …). A binding maps a physical key to one: a capture-phase listener turns a
+// real key press into a synthetic event with the logical code, so every handler below reads it unchanged. A default key whose action
+// has been moved elsewhere does nothing. Touch buttons dispatch logical codes themselves (untrusted events are left alone).
+const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab, let go'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
+let KEYBIND={};try{KEYBIND=JSON.parse(localStorage.getItem('bloodmoor-keys')||'{}')||{};}catch(e){KEYBIND={};}
+let KEY_MAP=null;function keyMap(){if(KEY_MAP)return KEY_MAP;const m={},cur=new Set(KEY_ACTS.map(([a])=>KEYBIND[a]||a));for(const [a] of KEY_ACTS){const p=KEYBIND[a]||a;if(p!==a)m[p]=a;}for(const [a] of KEY_ACTS)if(!cur.has(a))m[a]='';return KEY_MAP=m;}
+const keyName=c=>c==='Space'?'Space':c.startsWith('Key')?c.slice(3):c.startsWith('Digit')?c.slice(5):c.replace('Left',' L').replace('Right',' R').replace('Arrow','');
+let keyWait=null;
+for(const ty of ['keydown','keyup'])window.addEventListener(ty,e=>{if(!e.isTrusted)return;
+  if(keyWait&&ty==='keydown'){e.preventDefault();e.stopImmediatePropagation();if(e.code!=='Escape'){for(const [a] of KEY_ACTS)if(a!==keyWait&&(KEYBIND[a]||a)===e.code){KEYBIND[a]=KEYBIND[keyWait]||keyWait;}KEYBIND[keyWait]=e.code;for(const a in KEYBIND)if(KEYBIND[a]===a)delete KEYBIND[a];try{localStorage.setItem('bloodmoor-keys',JSON.stringify(KEYBIND));}catch(_){}KEY_MAP=null;}keyWait=null;keyUI();return;}
+  if(e.target&&e.target.tagName==='INPUT'&&e.target.type!=='range'&&e.target.type!=='checkbox')return;
+  const m=keyMap();if(!(e.code in m))return;const to=m[e.code];e.stopImmediatePropagation();if(state==='playing')e.preventDefault();if(!to)return;
+  window.dispatchEvent(new KeyboardEvent(ty,{code:to,key:e.key,repeat:e.repeat,bubbles:true,cancelable:true,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey}));},true);
+function keyUI(){const L=document.getElementById('keyList');if(!L)return;L.innerHTML='';for(const [a,name] of KEY_ACTS){const d=document.createElement('div');d.className='kb';const b=document.createElement('button');b.textContent=keyWait===a?'press a key':keyName(KEYBIND[a]||a);if(keyWait===a)b.classList.add('wait');b.onclick=ev=>{ev.preventDefault();keyWait=keyWait===a?null:a;keyUI();};d.append(name,b);L.append(d);}}
+let MOUSE_SENS=1,MOUSE_INV=false;try{MOUSE_SENS=clamp(+localStorage.getItem('bloodmoor-msens')||1,.3,2.5);MOUSE_INV=localStorage.getItem('bloodmoor-minv')==='1';}catch(e){}
+function ctlOptInit(){const s=document.getElementById('msens'),v=document.getElementById('msensv'),iv=document.getElementById('minv'),r=document.getElementById('keyReset');if(!s)return;s.value=MOUSE_SENS;v.textContent=MOUSE_SENS.toFixed(2)+'×';
+  s.oninput=()=>{MOUSE_SENS=+s.value;v.textContent=MOUSE_SENS.toFixed(2)+'×';try{localStorage.setItem('bloodmoor-msens',MOUSE_SENS);}catch(e){}};
+  iv.checked=MOUSE_INV;iv.onchange=()=>{MOUSE_INV=iv.checked;try{localStorage.setItem('bloodmoor-minv',MOUSE_INV?'1':'0');}catch(e){}};
+  r.onclick=ev=>{ev.preventDefault();KEYBIND={};KEY_MAP=null;keyWait=null;try{localStorage.removeItem('bloodmoor-keys');}catch(e){}keyUI();};keyUI();}
+// Alt held: the sword's thrusting stance, as scrolling forward and holding it (a spear drives out); X: the weapon to the other hand
+function thrustKey(on){const f=player;if(!f||!f.sword)return;if(f.rev&&f.sword.def.kind==='blade'){input.stab=on;return;}if(f.sword.def.kind==='spear'){input.stab=on;return;}if(on){f.ctrl.z=.66;lastWheel=performance.now();f._altT=true;}else{f._altT=false;f.ctrl.z=.46;}}
+function swapHands(f){if(!f||!f.alive||f.ragdoll||!f.sword||f.sword.def.kind==='fist'||TWO_HANDED[f.sword.def.id]||f.sword.stuck||f.throwHold||f.climb||f.cartHold)return false;
+  const to=f.mainArm==='L'?'R':'L',lb=f.limbs[to==='L'?'armL':'armR'];if(lb.sev||lb.dead)return false;f.mainArm=to;const ht=f.handTarget(V());f.sword.reset(ht,f.guideDir(ht,V()));if(f.isPlayer)toast(to==='L'?'Left hand':'Right hand');return true;}
 function playerInput(f,wish,h){
   const k=input.keys;f.fwd(_f);f.right(_r);
   if(k.KeyW)wish.add(_f);if(k.KeyS)wish.sub(_f);if(k.KeyD)wish.add(_r);if(k.KeyA)wish.sub(_r);
   if(wish.lengthSq()>0)wish.normalize();if(k.KeyS&&!k.KeyW)wish.multiplyScalar(.7);
+  if(f._altT&&f.sword&&f.sword.def.kind!=='spear'){f.ctrl.z=Math.max(f.ctrl.z,.66);lastWheel=performance.now();}   // Alt held
   // a spear is thrust with the button (Build 121): hold it and both hands drive the shaft out along where you aim; let go and it comes back
   // to a lower guard. (It used to need the wheel, as a sword's thrust does, and the button did nothing useful with a spear.) The wheel still works
   if(f.sword&&f.sword.def.kind==='spear'&&!f.sword.stuck){if(input.stab){f.ctrl.z+=(.7-f.ctrl.z)*(1-Math.exp(-30*h));f._spW=simTime;}else if(simTime-(f._spW||0)>.12&&performance.now()-lastWheel>160)f.ctrl.z+=(.36-f.ctrl.z)*(1-Math.exp(-11*h));}
@@ -9400,7 +9433,7 @@ const cvs=renderer.domElement;
 addEventListener('keydown',e=>{
   if(e.code==='Tab'&&state==='playing'){e.preventDefault();document.body.classList.add('showvit');}   // hold Tab to check your wounds
   input.keys[e.code]=true;
-  if(['Space','KeyW','KeyA','KeyS','KeyD','KeyC','KeyF','KeyE','KeyQ','KeyV'].includes(e.code))e.preventDefault();
+  if(['Space','KeyW','KeyA','KeyS','KeyD','KeyC','KeyF','KeyE','KeyQ','KeyV','KeyX','AltLeft'].includes(e.code))e.preventDefault();
   if(e.code==='KeyR'&&(state==='dead'||state==='won')&&NET.mode!=='client')startGame();
   if(e.code==='KeyM'&&!e.repeat&&e.target.tagName!=='INPUT'){setMusic(!MUS.on);toast(MUS.on?'Music on':'Music off');}
   if(state==='playing'&&!paused&&player&&player.alive&&!player.ragdoll&&!e.repeat){
@@ -9411,6 +9444,8 @@ addEventListener('keydown',e=>{
     else if(e.code==='KeyG'&&player.sword&&player.sword.stuck&&!player.sword.stuck.thrown){if(NET.mode==='client')NET.lg=1;else letGo(player);}   // G with a blade in someone: let go and leave it there
     else if((e.code==='KeyG'||e.code==='KeyR')&&player.sword&&player.sword.def.kind==='blade'){player.rev=!player.rev;toast(player.rev?'Reverse grip: click to stab down':'Normal grip');}
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
+    if(e.code==='AltLeft'){e.preventDefault();thrustKey(true);}
+    if(e.code==='KeyX'){if(NET.mode==='client')NET.sw=1;else swapHands(player);}
     if(e.code==='KeyV'){if(camMode==='fp'){camMode='tp';camView='close';}else if(camView==='close')camView='wide';else camMode='fp';CAM_TP=CAMS[camView];try{localStorage.setItem('bloodmoor-cam',camView);}catch(e){}toast(camMode==='fp'?'First person':camView==='close'?'Close view':'Wide view');}
     if(inYard()){const yi=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal'].indexOf(e.code);if(yi>=0){if(NET.mode==='client')NET.yw=yi;else yardArm(player,yi);}
       if(e.code==='KeyH'){if(NET.mode==='client')NET.yg=1;else yardCycle();}}
@@ -9423,14 +9458,14 @@ addEventListener('keydown',e=>{
     else if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}else if(NET.mode!=='client'&&player&&player.alive&&!player.ragdoll&&player.mainArm){let best=null,bd=1.6;for(const d of debris){if(d.wep||!d.rag)continue;const q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-player.pos.x,q.z-player.pos.z);if(dd<bd){bd=dd;best=d;}}if(best)debrisWeapon(player,best,player.mainArm);}}
   }
 });
-addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
+addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='AltLeft'){e.preventDefault();thrustKey(false);}if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
 addEventListener('mousedown',e=>{if(state!=='playing'||paused)return;if(e.button===0)input.lmb=true;if(e.button===2)input.rmb=true;});
 addEventListener('mouseup',e=>{if(e.button===0)input.lmb=false;if(e.button===2)input.rmb=false;});
-addEventListener('blur',()=>{for(const k in input.keys)input.keys[k]=false;input.lmb=input.rmb=input.stab=false;document.body.classList.remove('showvit');if(player&&player.throwHold){player.throwHold=false;}});   // Alt-Tab: nothing stays held down
+addEventListener('blur',()=>{for(const k in input.keys)input.keys[k]=false;input.lmb=input.rmb=input.stab=false;if(player)player._altT=false;document.body.classList.remove('showvit');if(player&&player.throwHold){player.throwHold=false;}});   // Alt-Tab: nothing stays held down
 addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('mousemove',e=>{
   input.mx=e.clientX/innerWidth;input.my=e.clientY/innerHeight;
-  if(!input.locked)return;aimMove(e.movementX||0,e.movementY||0);
+  if(!input.locked)return;aimMove((e.movementX||0)*MOUSE_SENS,(e.movementY||0)*MOUSE_SENS*(MOUSE_INV?-1:1));
 });
 function aimMove(dx,dy){   // the hand box: the same rule for the mouse and the right thumb
   if(state!=='playing'||!player||!player.alive||player.ragdoll)return;
@@ -9486,6 +9521,7 @@ document.getElementById('startBtn').addEventListener('click',startGame);
 // input to the host stay exactly as on a keyboard.
 let TOUCH_SENS=3.2;const TOUCH_SWING=650;   // hand-box gain for a thumb (the player sets it: Touch sensitivity, stored as bloodmoor-tsens), and the swipe speed (px/s) that counts as a committed swing
 try{const v=parseFloat(localStorage.getItem('bloodmoor-tsens'));if(v>=1&&v<=8)TOUCH_SENS=v;}catch(e){}
+ctlOptInit();
 if(TOUCH){const gid=id=>document.getElementById(id);
   const tl=gid('touch'),joy=gid('tjoy'),knob=joy.querySelector('i'),sw=gid('tswipe'),J={id:null,x:0,y:0},A={id:null,x:0,y:0,t:0,v:0};
   const setKeys=(dx,dy)=>{const r=Math.hypot(dx,dy),R=58,k=input.keys;k.KeyW=k.KeyS=k.KeyA=k.KeyD=k.ShiftLeft=false;
@@ -10434,7 +10470,7 @@ function yardTick(){const R=RUN;
     if(broken){if(!f.resetAt)f.resetAt=simTime+2.5;else if(simTime>f.resetAt)yardDummy(i);}
     else if(!f.ragdoll){f.hp=100;f.bleed=0;if(R.dm===0)f.stamina=100;}});
   for(const f of fighters)if(f.entrant&&f.entrant.human&&f.alive){f.bleed=0;if(f.hp<40)f.hp=100;}
-  MODEHUD=['Training yard','1–9 0 − = weapons · G dummies: '+YARD_DM[R.dm]];
+  MODEHUD=['Training yard','1–9 0 − = weapons · H dummies: '+YARD_DM[R.dm]];
 }
 // a line for every blow the player lands
 function yardHit(f,wname,mode,zone,dmg,speed,glance,prot){
@@ -10448,7 +10484,7 @@ function yardClash(f,mine,theirs){if(!f||!f.isPlayer||!RUN||RUN.mode!=='yard')re
 function yardHud(){const y=el('yard');if(!inYard()){y.classList.add('hide');return;}y.classList.remove('hide');
   const w=player&&player.sword?player.sword.def.name:'Bare hands',client=NET.mode==='client';
   const sp=YARD.cur,pk=YARD.peak;
-  y.innerHTML=`<div class="yt">${esc(w)}</div><div class="yk">1 arming · 2 long · 3 great · 4 axe · 5 mace · 6 spear · 7 fists<br>G dummies: ${RUN?YARD_DM[RUN.dm]:(MODEHUD[1]||'').split(': ')[1]||'Still'}</div>`+
+  y.innerHTML=`<div class="yt">${esc(w)}</div><div class="yk">1 arming · 2 long · 3 great · 4 axe · 5 mace · 6 spear · 7 fists · 8 falchion · 9 hammer · 0 poleaxe · − glaive · = rondel<br>H dummies: ${RUN?YARD_DM[RUN.dm]:(MODEHUD[1]||'').split(': ')[1]||'Still'}</div>`+
    (client?'<div class="yr">Hit readout shows on the host’s screen</div>':
    `<div class="yr"><span>Tip speed</span><b>${sp.toFixed(1)} m/s</b></div><div class="ybar"><i style="width:${Math.min(100,sp/16*100)}%"></i></div>`+
    `<div class="yr"><span>Last swing peak</span><b>${pk?pk.toFixed(1)+' m/s':'—'}</b></div>`+
@@ -10841,7 +10877,7 @@ function hostData(c,d){
   const x=NET.conns.find(q=>q.c===c);if(!x||!d||typeof d!=='object')return;
   if(d.t==='hello'){x.build=d.build|0;if(x.build!==BUILD){try{c.send({t:'old',host:BUILD});}catch(e){}}x.hello=true;x.look=cleanLook(d.look);x.ch=CHAR_BY[d.ch]?d.ch:'';x.name=String(d.name||'').replace(/[<>&"]/g,'').slice(0,24).trim()||'Friend';x.side=[0,1,2].includes(d.side|0)?d.side|0:0;x.pal=Array.isArray(d.pal)&&d.pal.length===4&&d.pal.slice(0,3).every(v=>/^#[0-9a-f]{6}$/i.test(v))?[d.pal[0],d.pal[1],d.pal[2],d.pal[3]?1:0]:null;hostLobby();return;}
   if(d.t==='in'&&x.f){const f=x.f;f.rin=d;if(!f.alive||f.ragdoll)return;
-    if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;if(d.lg)letGo(f);
+    if(d.sl)f.slideReq=true;if(d.ju){f.crouch=false;f.jumpReq=true;}if(d.ki)f.kickReq=true;if(d.lg)letGo(f);if(d.sw)swapHands(f);
     if(d.th===1&&f.sword)f.throwHold=true;if(d.th===2&&f.throwHold){f.throwHold=false;f.throwReq=true;}
     if(RUN&&RUN.mode==='yard'){if(Number.isInteger(d.yw))yardArm(f,d.yw);if(d.yg)yardCycle();}
     if(d.pk==='lever')millLever(f);else if(d.pk==='use')raidUse(f);else if(d.pk==='road'){if(RUN&&RUN.tug)roadUse(f);}else if(d.pk==='lad')ladderUse(f);else if(d.pk==='drop'){if(f.sword&&f.sword.def.id==='chest')f.dropSword();}else if(d.pk!=null){const it=loot.find(i=>i.nid===d.pk);if(it&&canTake(f,it)){lootPos(it,_t3);if(Math.hypot(_t3.x-f.pos.x,_t3.z-f.pos.z)<2.6)pickUp(f,it);}}}
@@ -10902,7 +10938,7 @@ function clientSendInput(){
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
-    if(NET.pick!=null){d.pk=NET.pick;NET.pick=null;}if(NET.lg){d.lg=1;NET.lg=0;}
+    if(NET.pick!=null){d.pk=NET.pick;NET.pick=null;}if(NET.lg){d.lg=1;NET.lg=0;}if(NET.sw){d.sw=1;NET.sw=0;}
     if(NET.yw!=null){d.yw=NET.yw;NET.yw=null;}if(NET.yg){d.yg=1;NET.yg=0;}
     try{NET.host.send(d);}catch(e){}
   }
