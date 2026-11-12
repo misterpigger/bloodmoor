@@ -454,7 +454,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=214;
+const BUILD=215;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -683,7 +683,7 @@ MATS.floorPlank=std({map:TX.wood,color:0x8a6a50,roughness:.85,side:THREE.DoubleS
 MATS.villageGround=std({map:TX.ground,roughness:1});MATS.meadow=std({map:TX.ground,roughness:1,color:0x86a060});MATS.palisade=std({color:0x3a2c20,map:TX.wood,roughness:1});
 MATS.cobble=std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,roughness:.82,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
 // (Build 207) the crypt: dark dressed stone, flags underfoot, straw, wax, bone
-MATS.cryptWall=std({map:TX.stone,color:0x9a8e7e,roughness:.96});MATS.cryptFloor=std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,color:0x8a8072,roughness:.9});MATS.cryptVault=std({map:TX.stone,color:0x8c8274,roughness:.97});MATS.cryptStraw=std({color:0xe6c878,roughness:1,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+MATS.puddle=std({color:0x2a2219,roughness:.05,metalness:.05,transparent:true,opacity:.75,depthWrite:false});MATS.cryptWall=std({map:TX.stone,color:0x9a8e7e,roughness:.96});MATS.cryptFloor=std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,color:0x8a8072,roughness:.9});MATS.cryptVault=std({map:TX.stone,color:0x8c8274,roughness:.97});MATS.cryptStraw=std({color:0xe6c878,roughness:1,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
 MATS.cryptDark=new THREE.MeshBasicMaterial({color:0x020202});MATS.cryptSky=new THREE.MeshBasicMaterial({color:0xdfe9ff,fog:false});{const c=mkCanvas(8,64),g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,64);gr.addColorStop(0,'#ffffff');gr.addColorStop(.55,'#8a8a8a');gr.addColorStop(1,'#3a3a3a');g.fillStyle=gr;g.fillRect(0,0,8,64);const t=tex(c,false);MATS.cryptShaft=new THREE.MeshBasicMaterial({color:0xfff4e0,map:t,transparent:true,opacity:.007,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false});}
 MATS.cryptNote=std({color:0xd9c9a0,emissive:0x3a3020,emissiveIntensity:.35,roughness:.9,side:THREE.DoubleSide});MATS.wax=std({color:0xe8dcc0,emissive:0x7a4a18,emissiveIntensity:.5,roughness:.6});MATS.bone=std({color:0xb3a685,roughness:.85});MATS.boneDark=std({color:0x120d09,roughness:1});
 for(let v=0;v<3;v++)MATS['plaster'+v]=std({map:TX['plaster'+v],bumpMap:TX['plaster'+v+'b'],bumpScale:1.6,roughness:.95});
@@ -3178,7 +3178,7 @@ function shroudMat(){if(MATS.shroud)return MATS.shroud;const c=document.createEl
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;MATS.shroud=new THREE.MeshStandardMaterial({map:t,roughness:1,color:0xd9cfbc});return MATS.shroud;}
 function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,CW,CS,DW,DS}=CR;
   if(!MATS.cryptRot){MATS.cryptRot=MATS.woodPale.clone();MATS.cryptRot.color.setHex(0x5e5648);}
-  const C=CRYPT={depth:D,plan:PL,lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null};
+  const C=CRYPT={depth:D,plan:PL,coffins:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null};
   const holed=(x0,x1,z0,z1,hx,hz,hr,y,key,up)=>{const sg=up?-1:1,sh=new THREE.Shape();sh.moveTo(x0,sg*z0);sh.lineTo(x1,sg*z0);sh.lineTo(x1,sg*z1);sh.lineTo(x0,sg*z1);sh.lineTo(x0,sg*z0);const hp=new THREE.Path();hp.absarc(hx,sg*hz,hr,0,Math.PI*2,true);sh.holes.push(hp);
     const g=new THREE.ShapeGeometry(sh,28);g.rotateX(up?-Math.PI/2:Math.PI/2);const uv=g.attributes.uv,q=g.attributes.position;for(let i=0;i<uv.count;i++)uv.setXY(i,q.getX(i)/2,q.getZ(i)/2);g.computeVertexNormals();if((g.attributes.normal.getY(0)>0)!==!!up){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}g.computeVertexNormals();}addGeo(key,g,T(0,y,0));};
   const well=(x,z,r,y0,y1,key='cryptWall')=>{const g=inwardGeo(new THREE.CylinderGeometry(r,r,y1-y0,28,1,true));scaleUV(g,6,(y1-y0)/2);addGeo(key,g,T(x,(y0+y1)/2,z));};
@@ -3217,7 +3217,14 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
     if(c.type!=='node'&&!dark){const n=c.type==='hall'?3:c.type==='start'?2:1+(R()<.5?1:0);for(let i=0;i<n;i++){const [dx,dz]=SIDES[(R()*4)|0],lk=linkOf(c,dx,dz),al=dx?c.hz:c.hx,u=lk?(R()<.5?-1:1)*(1.7+R()*(al-2.1)):(R()-.5)*(al*1.3),[x,z]=inner(c,dx,dz,clamp(u,-al+.5,al-.5),0);cryptSconce(x,1.72,z,-dx,-dz,R()<.4?3:1);}}
     if(c.type==='start'){C.start={x:cx,z:cz+.4,yaw:0};
       // the straw you wake on, under a hole in the vault that lets the day in
-      {const g=new THREE.CircleGeometry(2.1,28);g.rotateX(-Math.PI/2);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*2.4,uv.getY(i)*2.4);const m=new THREE.Mesh(g,MATS.cryptStraw);m.position.set(cx,.025,cz);m.receiveShadow=true;world.add(m);}
+      {const g=lathe([[0,.16],[.5,.15],[1.1,.11],[1.6,.06],[1.95,.025],[2.15,0]],32),P=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<P.count;i++){const x=P.getX(i),z=P.getZ(i),r=Math.hypot(x,z);P.setY(i,P.getY(i)*(.75+.35*Math.sin(x*3.1+z*2.3))+.01);uv.setXY(i,x*1.2,z*1.2);}g.computeVertexNormals();const m=new THREE.Mesh(g,MATS.cryptStraw);m.position.set(cx,0,cz);m.receiveShadow=true;world.add(m);   // (Build 215) a heap of old straw, not a disc
+        for(let i=0;i<70;i++){const a=R()*6.283,r=1.7+R()*1.1,l=.15+R()*.2;addGeo('cryptStraw',new THREE.BoxGeometry(.008,.004,l),T(cx+Math.cos(a)*r,.004,cz+Math.sin(a)*r,R()*6.283));}}   // stalks kicked out across the floor
+      {// a cell's leavings in the corners: a man chained to the wall long ago, a bucket, a puddle under a drip, a tally scratched by the door
+        const cs=[[1,1],[1,-1],[-1,1],[-1,-1]].sort(()=>R()-.5),cn=(q,ins)=>[cx+q[0]*(hx-ins),cz+q[1]*(hz-ins)];
+        {const q=cs[0],[x,z]=cn(q,.3),ry=Math.atan2(-q[0],-q[1]);bones(x,0,z,ry,'sit');for(const sd of [-1,1]){const [rx,rz]=[x+Math.cos(ry)*sd*.32-Math.sin(ry)*0,z-Math.sin(ry)*sd*.32];addGeo('iron',new THREE.TorusGeometry(.045,.01,5,10),T(rx-q[0]*.05,1.05,rz-q[1]*.05,ry));for(let k=0;k<7;k++)addGeo('iron',new THREE.TorusGeometry(.022,.006,4,8),T(rx+(x-rx)*k/7*.6+q[0]*.0,1.0-k*.09,rz+(z-rz)*k/7*.6,ry+(k%2)*Math.PI/2,k%2?Math.PI/2:0));}}
+        {const [x,z]=cn(cs[1],.45);addGeo('wood',lathe([[0,0],[.13,0],[.15,.28],[.16,.3],[.15,.3],[.13,.02],[0,.02]],12),T(x,0,z));addGeo('iron',new THREE.TorusGeometry(.152,.008,4,16),T(x,.08,z,0,Math.PI/2));addGeo('iron',new THREE.TorusGeometry(.157,.008,4,16),T(x,.24,z,0,Math.PI/2));addCircle(x,z,.18,.3);}
+        {const [x,z]=cn(cs[2],1.0),m=new THREE.Mesh(new THREE.CircleGeometry(.45+R()*.25,20),MATS.puddle);m.rotation.x=-Math.PI/2;m.scale.set(1,.6+R()*.4,1);m.position.set(x,.008,z);world.add(m);}
+        {const [x,z]=cn(cs[3],.04),q=cs[3],nx=-q[0],ry=Math.atan2(nx,0);for(let g=0;g<3;g++)for(let k=0;k<5;k++){const sl=k===4;addGeo('boneDark',new THREE.BoxGeometry(sl?.11:.006,sl?.006:.09,.004),T(x+nx*.005,1.25+g*.0,z-q[1]*(.2+g*.13+k*.022)+(sl?-q[1]*.04:0),ry,0,sl?.6:0));}}}
       C.soft={x:cx,z:cz,r:2.2};
       if(D>1){well(cx,cz,CR.HR,H,H+CR.LS+3);{const m=new THREE.Mesh(new THREE.CircleGeometry(CR.HR,24),MATS.cryptDark);m.rotation.x=Math.PI/2;m.position.set(cx,H+CR.LS+3,cz);world.add(m);}C.shaftIn={x:cx,z:cz,H,top:H+CR.LS};   /* (Build 213) below the first floor you come in the way the dead did: down the hole from the hall above */
         for(let i=0;i<4;i++){const a=R()*6.283,rr=.4+R()*1.3;bones(cx+Math.cos(a)*rr,.0,cz+Math.sin(a)*rr,R()*6.283);}}
@@ -3225,7 +3232,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
         for(const [r0,r1] of [[.5,1.75],[.36,1.3],[.2,.8]]){const sh=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,H,24,1,true),MATS.cryptShaft);sh.position.set(cx,H/2,cz);sh.renderOrder=4;world.add(sh);}
         torchLights.push({position:V(cx,2.2,cz),color:new THREE.Color(0xfff2dc),intensity:11,distance:8,visible:true});}
       if(D===1)note(cx+1.2,.03,cz-1.1,.5);
-      const [fx,fz]=free[0],[rx,rz]=inner(c,fx,fz,-1.2,.34);weaponRack(rx,rz,Math.atan2(-fx,-fz));
+      const [fx,fz]=free[0],[rx,rz]=inner(c,fx,fz,-1.2,.5);{const ry=Math.atan2(-fx,-fz);for(const sx of [-1,1])for(const sz of [-.85,.85]){const lx=rx+Math.cos(ry)*sx*.0+Math.sin(ry)*0;addGeo('wood',boxUV(.07,.38,.07,1),T(rx+(fx?0:sz),.19,rz+(fx?sz:0)+(fx?0:0),0,0,0));}addGeo('wood',boxUV(fx?.7:1.9,.06,fx?1.9:.7,1),T(rx,.36,rz,0,0,.05));for(let i=0;i<5;i++)addGeo('wood',boxUV(fx?.66:.09,.025,fx?.09:.66,1),T(rx+(fx?0:-.7+i*.35),.4,rz+(fx?-.7+i*.35:0),(R()-.5)*.1));addGeo('burlap',lathe([[0,.07],[.25,.06],[.35,.03],[.38,0]],10),T(rx,.42,rz,0,0,0,fx?1:2.3,1,fx?2.3:1));addBox(rx-(fx?.38:1),rx+(fx?.38:1),rz-(fx?1:.38),rz+(fx?1:.38),.45);}   // (Build 215) a plank cot with a rotten pallet, not a rack of spears you can't take
       {const [bx,bz]=inner(c,fx,fz,1.5,.5);addGeo('wood',boxUV(.5,.05,.5,1),T(bx,.5,bz));for(const a of [0,2.1,4.2])addGeo('wood',new THREE.CylinderGeometry(.025,.03,.5,6),T(bx+Math.cos(a)*.17,.25,bz+Math.sin(a)*.17));addCircle(bx,bz,.28,.5);C.lampAt=[bx,bz,.525];}
       for(let i=0;i<5;i++){const a=2.2+i*.55;C.kit.push([cx+Math.cos(a)*2.5-fx*.2,cz+Math.sin(a)*2.5-fz*.2]);}
       const [ux,uz]=free[1]||free[0],[dx0,dz0]=inner(c,ux,uz,free[1]?0:-2.6,0),ry=Math.atan2(-ux,-uz);   // the way out: an oak door with light under it
@@ -3256,7 +3263,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       else if(K==='coffins'){const n=2+(R()<.4?1:0);for(let i=0;i<n;i++){const x=cx+(i-(n-1)/2)*1.5,z=cz+(R()-.5)*.8,open=R()<.7;
           for(const dz of [-.6,.6])for(const sx of [-1,1]){addGeo('wood',boxUV(.06,.5,.06,1),T(x+sx*.24,.25,z+dz));}for(const dz of [-.6,.6])addGeo('wood',boxUV(.62,.06,.08,1),T(x,.5,z+dz));
           addGeo('wood',boxUV(.56,.03,1.95,1),T(x,.545,z));for(const sx of [-1,1])addGeo('wood',boxUV(.03,.3,1.95,1),T(x+sx*.28,.69,z));for(const sz of [-1,1])addGeo('wood',boxUV(.56,.3,.03,1),T(x,.69,z+sz*.97));
-          if(open){bones(x,.57,z+.1,0);if(wl){const [dx,dz]=wl,[lx,lz]=inner(c,dx,dz,(i-(n-1)/2)*1.3,.16);addGeo('wood',boxUV(dx?.04:.58,1.95,dx?.58:.04,1),T(lx,.97,lz,0,dx?0:-dx*.0-.12*dz,dx?.12*dx:0));}}else addGeo('wood',boxUV(.62,.035,2,1),T(x,.86,z));
+          bones(x,.57,z+.1,0);if(open){if(wl){const [dx,dz]=wl,[lx,lz]=inner(c,dx,dz,(i-(n-1)/2)*1.3,.16);addGeo('wood',boxUV(dx?.04:.58,1.95,dx?.58:.04,1),T(lx,.97,lz,0,dx?0:-dx*.0-.12*dz,dx?.12*dx:0));}}else{const lid=new THREE.Mesh(boxUV(.62,.035,2,1),MATS.cryptRot);lid.position.set(x,.86,z);lid.castShadow=lid.receiveShadow=true;world.add(lid);C.coffins.push({x,z,ry:Math.PI/2,lid,off:0,sg:0,held:null,opened:false,fall:-1});}   // (Build 215) a closed coffin's lid is a heavy board you push off by hand
           addBox(x-.32,x+.32,z-1,z+1,.85);}}
       else if(K==='chapel'&&wl){const [dx,dz]=wl,[ax,az]=inner(c,dx,dz,0,.5),ry=Math.atan2(-dx,-dz);addGeo('cryptVault',boxUV(1.6,.9,.62,2),T(ax,.45,az,ry));addGeo('cryptVault',boxUV(1.8,.1,.8,2),T(ax,.95,az,ry));addBox(ax-(dx?.45:.9),ax+(dx?.45:.9),az-(dx?.9:.45),az+(dx?.9:.45),1);
         {const [kx,kz]=inner(c,dx,dz,0,.06);addGeo('wood',boxUV(dx?.06:.1,1.1,dx?.1:.06,1),T(kx,2.0,kz));addGeo('wood',boxUV(dx?.06:.62,.1,dx?.62:.06,1),T(kx,2.22,kz));}
@@ -3283,7 +3290,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
   // ---- corridors
   for(const [ei,[a0,b0]] of PL.edges.entries()){const extra=ei>=PL.cells.length-1,a=a0.k<b0.k?a0:b0,b=a===a0?b0:a0,ax=b.i!==a.i,s0=ax?a.cx+a.hx+WT:a.cz+a.hz+WT,s1=ax?b.cx-b.hx-WT:b.cz-b.hz-WT,m=ax?a.cz:a.cx,L=s1-s0,mid=(s0+s1)/2;
     const k={ax,m,x0:ax?s0:m-CW,x1:ax?s1:m+CW,z0:ax?m-CW:s0,z1:ax?m+CW:s1,a,b,L};C.cors.push(k);
-    const kr=R(),kd=L>2.6&&(extra?kr<.75:kr<.3)?(R()<(extra?.5:.4)?'gap':'low'):null,lh=Math.min(1.4,L/2-.3);
+    const kr=R(),kd=L>2.6&&(extra?kr<.8:kr<.22)?(extra&&R()<.6?'gap':'low'):null,lh=Math.min(1.4,L/2-.3);
     if(kd==='low'){const q={ax,m,a0:mid-lh,a1:mid+lh,y:1.3};C.lows.push(q);const P3=(u,y,w)=>ax?[u,y,m+w]:[m+w,y,u];   // (Build 214) the roof has come down: a stretch you can only get through bent double
       {const [x,y,z]=P3(mid,(q.y+2.75)/2,0);addGeo('cryptWall',boxUV(ax?2*lh:2*CW,2.75-q.y,ax?2*CW:2*lh,2),T(x,y,z));}
       for(const u of [q.a0,q.a1]){const [x,y,z]=P3(u,q.y-.06,0);addGeo('wood',boxUV(ax?.16:2*CW,.14,ax?2*CW:.16,1),T(x,y,z));for(const sg of [-1,1]){const [px,py,pz]=P3(u,q.y/2,sg*(CW-.1));addGeo('wood',boxUV(.13,q.y,.13,1),T(px,py,pz,(R()-.5)*.1));}
@@ -3330,7 +3337,15 @@ function cryptStep(h){const C=CRYPT;if(!C)return;
     cryptDoorBlades(d,a,ux,uz,px,pz,W,h);
     d.th+=d.om*h;d.om*=Math.exp(-2.2*h);if(d.th>1.62){d.th=1.62;d.om=Math.min(0,d.om)*-.2;}else if(d.th<-1.62){d.th=-1.62;d.om=Math.max(0,d.om)*-.2;}
     if(Math.abs(d.om)>.9&&simTime>d.cr){d.cr=simTime+1.4;noiseBurstAt(_la.set(d.hx,1.1,d.hz),.32,'bandpass',260+Math.random()*120,9,.5);}}
-  lidStep(h);cryptHazards(h);}
+  lidStep(h);coffinStep(h);cryptHazards(h);}
+function coffinStep(h){const C=CRYPT;
+  for(const f of fighters){const L=f.coffinLift;if(!L)continue;const c=L.c;if(!f.alive||f.ragdoll||Math.abs(c.x+c.off*c.sg-f.pos.x)>1.6||Math.abs(c.z-f.pos.z)>1.6){c.held=null;f.coffinLift=null;if(f.reach)f.reach.w=0;continue;}
+    const aim=f.isPlayer||f.remote?clamp((f.ctrl.y+.25)/.75,0,1):1,want=aim*.85,v=clamp(want-c.off,-.25*h,.42*h);   // an oak board two metres long: it grinds across at an arm's push, slower back
+    if(Math.abs(v)>.05*h&&simTime>(c.gr||0)){c.gr=simTime+.35;noiseBurstAt(c.lid.position,.32,'bandpass',260+Math.random()*120,5,.18);}
+    c.off+=v;f.crouchK=Math.max(f.crouchK||0,.35);if(f.reach){f.reach.w=1;f.reach.pos.set(c.x+c.sg*(c.off-.22),.9,c.z+clamp(f.pos.z-c.z,-.5,.5));}
+    if(c.off>=.62){c.held=null;f.coffinLift=null;if(f.reach)f.reach.w=0;c.fall=0;c.opened=true;cryptOpen({x:c.x,z:c.z,ry:-c.sg*Math.PI/2,opened:false},f.isPlayer?null:f);}}
+  for(const c of C.coffins){const l=c.lid;if(c.fall>=0&&c.fall<1){c.fall=Math.min(1,c.fall+h*2.4);const e=c.fall*c.fall;l.position.set(c.x+c.sg*(c.off+.25*e),.86-.66*e,c.z);l.rotation.z=-c.sg*1.25*e;if(c.fall>=1){sThud(l.position,.9);spawnDust(l.position.clone().setY(.15),10,.9,.4);}}
+    else if(c.fall<0){l.position.x=c.x+c.sg*c.off;l.rotation.z=-c.sg*Math.max(0,c.off-.45)*.6;l.position.y=.86-Math.max(0,c.off-.45)*.15;}}}
 /* (Build 213) what the place does to people (host): boards that give, stakes, the hole. Going down is falling down the hole: the next floor is
    built while you are in the shaft and you come out of the same shaft in its roof, so nothing fades and nothing cuts */
 /* (Build 214) a door is solid to steel: three points along every held or loose weapon are kept out of the leaf, coming back out on the side
@@ -3424,7 +3439,7 @@ function lidRelease(f){const L=f.lidLift;if(!L)return;L.k.held=null;f.lidLift=nu
 function lidStep(h){const C=CRYPT;if(!C)return;
   for(const f of fighters){const L=f.lidLift;if(!L)continue;const k=L.k;lidEdge(k,k.ang,_la);const d=Math.hypot(_la.x-f.pos.x,_la.z-f.pos.z);
     if(!f.alive||f.ragdoll||d>1.35){lidRelease(f);continue;}L.t+=h;
-    const aim=f.isPlayer||f.remote?clamp((f.ctrl.y+.15)/.9,0,1):Math.min(1,L.t/1.4),want=aim*LID_OPEN*1.02,rate=f.isPlayer?1.6:1.3;   // an arm raises an oak lid at most ~90 degrees a second
+    const aim=f.isPlayer||f.remote?clamp((f.ctrl.y+.25)/.75,0,1):Math.min(1,L.t/1.4),want=aim*LID_OPEN*1.02,rate=f.isPlayer?1.6:1.3;   // an arm raises an oak lid at most ~90 degrees a second
     k.ang+=clamp(want-k.ang,-rate*2*h,rate*h);k.av=0;f.crouchK=Math.max(f.crouchK||0,.75);if(f.reach){f.reach.w=1;lidEdge(k,k.ang,f.reach.pos);}
     _v.set(k.x-f.pos.x,0,k.z-f.pos.z);if(_v.lengthSq()>1e-4){_v.normalize();if(!f.isPlayer)f.faceDir(_v,h,4);}
     if(!k.opened&&k.ang>.9)cryptOpen(k,f.isPlayer?null:f);
@@ -3565,6 +3580,8 @@ function cryptDrink(){const R=RUN,P=player;if(!R||!R.crypt||R.flasks<=0||!P||!P.
 // E: open a casket, take a lantern, go down, leave, drink. probe=true only says what E would do
 function cryptUse(f,probe){const C=CRYPT,R=RUN;if(!C||!R||!R.crypt||R.over||!f||!f.alive||f.ragdoll)return null;const x=f.pos.x,z=f.pos.z;
   if(f.lidLift){if(probe)return 'Let go of the lid';lidRelease(f);return true;}
+  if(f.coffinLift){if(probe)return 'Let go of the lid';f.coffinLift.c.held=null;f.coffinLift=null;if(f.reach)f.reach.w=0;return true;}
+  for(const c of C.coffins)if(!c.opened&&Math.abs(c.x-x)<1.05&&Math.abs(c.z-z)<1.3&&!c.held){if(probe)return 'Push the lid off · aim up to push';c.held=f;if(!c.sg)c.sg=Math.sign(c.x-x)||1;f.coffinLift={c};f.reach={side:f.sword&&f.sword.def.kind!=='fist'&&f.mainArm!=='L'?'L':'R',pos:V(),w:1};sfx('pickup',c.lid.position,.3,.6,0,false);return true;}
   for(const k of C.caskets)if(!(k.ang>1.3)&&(k.x-x)**2+(k.z-z)**2<2.4&&!k.held){if(probe)return k.opened?'Lift the lid':'Lift the lid · aim up to raise it';lidGrab(f,k);return true;}
   if(!f.lamp)for(const l of LAMPS)if(!l.f&&(l.g.position.x-x)**2+(l.g.position.z-z)**2<2.6&&Math.abs(l.g.position.y-f.pos.y)<1.6){if(probe)return 'Take the lantern';lampTake(f,l);sPickup();return true;}
   for(const n of C.notes)if((n.x-x)**2+(n.z-z)**2<2.2&&Math.abs(n.y-f.pos.y)<1.6){if(probe)return n.read?'Read it again':'Read the parchment';cryptRead(n);return true;}
