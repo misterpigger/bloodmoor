@@ -3215,6 +3215,7 @@ function cryptTrapOpen(t){if(t.open)return;t.open=true;const [x,z]=t.ax?[t.a0+t.
   world.remove(t.g);if(NET.mode==='host')netEv(['CT',C_trapI(t)]);}
 function C_trapI(t){return CRYPT?CRYPT.traps.indexOf(t):-1;}
 function cryptHazards(h){const C=CRYPT,R=RUN;if(!C||NET.mode==='client')return;
+  for(const f of fighters)if(!Number.isFinite(f.pos.x+f.pos.z+f.vel.x+f.vel.z)){const M=f.ai&&f.ai.mind;console.warn('crypt: fighter put back',f.id,M&&M.mood,f.knocked,f.stagger);if(M){f.pos.set(M.home[0],0,M.home[1]);M.goal=null;f.ai.gx=f.ai.gz=undefined;}else if(C.start)f.pos.set(C.start.x,0,C.start.z);f.vel.set(0,0,0);f.bal.set(0,0,0);f.balV.set(0,0,0);if(!Number.isFinite(f.yaw))f.yaw=0;}   // (seen once in a long unattended run: a dweller's place gone non-finite; the cause wasn't caught)
   for(const t of C.traps){
     if(!t.open){if(t.tr){if(simTime>t.tr)cryptTrapOpen(t);}else for(const f of fighters){if(!f.alive||f.ragdoll||f.pos.y>.05)continue;const u=(t.ax?f.pos.x:f.pos.z)-t.a0;if(u>.2&&u<t.len+.5&&Math.abs((t.ax?f.pos.z:f.pos.x)-t.m)<CR.CW){t.tr=simTime+(f.crouch?.6:.3);_la.set(f.pos.x,.05,f.pos.z);noiseBurstAt(_la,.4,'bandpass',420,10,.4);break;}}continue;}
     for(const f of fighters){if(!f.alive||t.hit.has(f))continue;const q=f.ragdoll&&f.ragdoll.P.Hips||f.pos,u=(t.ax?q.x:q.z)-t.a0;if(u<0||u>t.len||Math.abs((t.ax?q.z:q.x)-t.m)>CR.CW||q.y>-t.dep+(f.ragdoll?.5:.3))continue;
@@ -3265,7 +3266,7 @@ function cryptMind(f,h,wish){const A=f.ai,M=A.mind,P=player;if(!M)return;navRead
       const fw=(dx*Math.sin(f.yaw)+dz*Math.cos(f.yaw))/(d||1),lit=P.lamp&&P.lamp.lit?1.3:1,sp=Math.hypot(P.vel.x,P.vel.z);
       const see=d<10.5*lit&&(fw>-.25||d<3.5)&&navClear(f.pos.x,f.pos.z,P.pos.x,P.pos.z),hear=d<(P.crouch?1.5:sp>3?7.5:sp>.5?3.4:1.5),hurt=simTime-(f._hurtAt??-99)<4;
       if(hurt){if(M.mood!=='hostile')bark(f,'hurt');M.mood='hostile';M.aware=simTime+14;}else if(see||hear){if(!M.aware){M.met=simTime;bark(f,M.mood==='hostile'?'see':M.mood);}M.aware=simTime+(M.mood==='hostile'?10:5);M.lx=P.pos.x;M.lz=P.pos.z;}
-      else if(M.aware&&simTime>M.aware){M.aware=0;if(M.mood==='hostile'){M.goal=[M.lx,M.lz];M.t=9;bark(f,'lost');}}}}
+      else if(M.aware&&simTime>M.aware){M.aware=0;if(M.mood==='hostile'&&Number.isFinite(M.lx+M.lz)){M.goal=[M.lx,M.lz];M.t=9;bark(f,'lost');}   /* (Build 213: a man hurt by a trap had never seen you, so there was no last place: the goal was NaN and so, a step later, was he) */}}}
   const d=M.d??99;
   if(M.aware&&P&&P.alive){if(M.mood==='hostile'){A.target=P;return;}
     _v.set(P.pos.x-f.pos.x,0,P.pos.z-f.pos.z);const l=_v.length()||1;_v.multiplyScalar(1/l);f.faceDir(_v,h,4.5);f.ctrlT.x=.1;f.ctrlT.y=-.15;f.ctrlT.z=.36;A.target=null;
@@ -7950,8 +7951,8 @@ class Fighter{
   beltPose(){const s=this.belt;if(!s)return;const hb=this.bones.Hips;if(!hb)return;hb.matrixWorld.decompose(_wl1,_qr2,_wl2);const sd=this.mainArm==='L'?-1:1;
     _wl2.set(sd,0,0).applyQuaternion(_qr2);_wl3.set(0,1,0).applyQuaternion(_qr2);_t3.set(0,0,1).applyQuaternion(_qr2);   // the hips' left (for a right-hander), up and forward
     const head=s.def.kind!=='blade';   // a mace, hammer or axe hangs by its head, haft down; a blade hangs point down and back
-    if(head){s.axis.copy(_wl3).addScaledVector(_t3,-.12).addScaledVector(_wl2,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.2).addScaledVector(_t3,.03).addScaledVector(_wl3,.02).addScaledVector(s.axis,-s.len*.72);}
-    else{s.axis.copy(_wl3).multiplyScalar(-.9).addScaledVector(_t3,-.42).addScaledVector(_wl2,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.2).addScaledVector(_t3,.07).addScaledVector(_wl3,.1).addScaledVector(s.axis,-.1);}
+    if(head){s.axis.copy(_wl3).addScaledVector(_t3,-.12).addScaledVector(_wl2,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.235).addScaledVector(_t3,.03).addScaledVector(_wl3,-.14).addScaledVector(s.axis,-s.len*.72);}
+    else{s.axis.copy(_wl3).multiplyScalar(-.9).addScaledVector(_t3,-.42).addScaledVector(_wl2,.16).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.235).addScaledVector(_t3,.08).addScaledVector(_wl3,-.1).addScaledVector(s.axis,-.1);}
     s.edge.copy(_t3).addScaledVector(s.axis,-_t3.dot(s.axis)).normalize();s.T.copy(s.H).addScaledVector(s.axis,s.len);s.Hp.copy(s.H);s.Tp.copy(s.T);if(s.Hv)s.Hv.set(0,0,0);s.sync();}
   throwWeapon(){
     // the weapon leaves the hand with whatever momentum the swing gave it
