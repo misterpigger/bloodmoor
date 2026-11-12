@@ -296,7 +296,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead. In the Crypt: open caskets, take a lantern (crouch and <kbd>E</kbd> sets it down), drink from a flask, go down the stair or back out</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
       <dt><kbd>R</kbd></dt><dd>With a sword or knife: turn the grip over, point down, and click to stab down, into a man on the ground or over a shoulder. Keep the button down and the blade stays in; let go and it comes out. <kbd>G</kbd> lets go of a blade that's in someone and leaves it there; walk up and press <kbd>E</kbd> to take hold of a blade left in a body, then step back to pull it out.</dd>
-      <dt><kbd>G</kbd></dt><dd>Tap to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
+      <dt><kbd>G</kbd></dt><dd>With a one-handed weapon, hold it and your free hand reaches out and takes hold of what's in front of you: his sword arm (he can't swing it freely), his blade or haft (step back hauling and it comes out of his hand; a bare hand on a blade he draws back gets cut), his collar or head (step back and he's towed off balance and down), a body on the floor. Let go of <kbd>G</kbd> to let go; let go while hauling and he's thrown. Bare-handed, tap it to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <dl class="tcontrols">
       <dt>Left thumb</dt><dd>Move. Push to the edge to sprint. Rock it left and right to struggle when you're down.</dd>
@@ -449,7 +449,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=210;
+const BUILD=211;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -7639,6 +7639,7 @@ class Fighter{
       this.ctrlT.x+=bo.x-pa.x;this.ctrlT.y+=bo.y-pa.y;this.ctrlT.z+=bo.z-pa.z;pa.copy(bo);if(!(this.blindT>simTime))this.blindOff=null,this.blindPrev=null;}
     if(!this.isPlayer&&!this.remote){const w=this.ai.phase==='strike'?(this.ai.atk&&this.ai.atk.thrust?24:17):this.ai.block>0?14:7,cv=this.ctrlV;for(const k of ['x','y','z']){const a=w*w*(this.ctrlT[k]-this.ctrl[k])-2*w*cv[k];cv[k]+=a*h;this.ctrl[k]+=cv[k]*h;}}
     if(!this.sword&&this.mainArm)this.stepFists(h);
+    if(this.sword&&this.mainArm)this.stepOffGrab(h);else if(this.offG&&this.offG.grab){grabRelease(this,this.offG);this.offG.grab=null;this.offG.w=0;}
     if(this.sword&&this.mainArm){
       const tgt=this.handTarget(_t1.clone());if(this.recH){this.recHT=(this.recHT||0)+h;const u=clamp(this.recHT/1.0,0,1);tgt.lerpVectors(this.recH,tgt,u*u*(3-2*u));if(u>=1)this.recH=null;}   // just up: the weapon is brought up to guard, not snapped there
       let guide=this.guideDir(tgt,V());
@@ -7745,6 +7746,48 @@ class Fighter{
     if(sp>5.5&&!arm.wh){arm.wh=true;sSwing(arm.pos,sp+2,'fist');this.useStamina(2+sp*.4);}if(sp<3)arm.wh=false;
     if(sp>3&&arm.cd<=0){arm.power=clamp((sp-2)/5,.2,1);arm.hit=false;arm.phase='punch';fistCheck(this,arm);if(arm.hit){arm.cd=.28;arm.phase='guard';}else arm.phase='guard';}
   }
+  /* Build 211: the free hand grabs while you hold a one-handed weapon, as in Half Sword: hold G and it reaches for what's in front of it and takes
+     hold of what it touches. His sword arm (he can only drag it against your grip, not swing it), his blade or haft (haul on it and it comes out
+     of his hand; a bare hand round a blade he draws back is cut), his collar or head (hauled, he's pulled off balance and down, as with fists),
+     a body on the ground (dragged). Let go of G to let go; let go mid-haul and he's thrown. */
+  stepOffGrab(h){
+    const s=this.sword,side=this.mainArm==='R'?'L':'R',lm=this.limbs[side==='R'?'armR':'armL'],sh=side==='R'?this.shR:this.shL;
+    const G=this.offG||(this.offG={off:true,pos:V(),vel:V(),tgtW:V(),tgtV:V(),grab:null,cd:0,w:0,init:false});
+    const free=s.def.kind!=='fist'&&!twoH(s.def)&&!lm.sev&&!lm.dead&&!(this.lamp&&this.lamp.inHand)&&!this.climb&&!this.ladCarry&&!this.cartHold&&!this.roadHold&&!this.wheelHold&&!(this.clutchT>simTime)&&!this.throwHold&&!(this.throwT>=0)&&!((this.revW||0)>.5)&&!(this.catchT>simTime)&&!(s.stuck&&!s.stuck.thrown)&&!this.knocked;
+    const A=this.ai;
+    if(!this.isPlayer&&!this.remote&&free&&A&&!(A.offT>simTime)){const tg=A.target;if(tg&&tg.alive&&!tg.ragdoll&&simTime>(A.offCd||0)&&this.stamina>30){const d=tg.pos.distanceTo(this.pos);if(d<1.2&&Math.random()<h*.7*(A.skill||.5)){A.offT=simTime+rand(.7,1.6);A.offCd=simTime+rand(3,8);A.offTg=tg;}}}
+    let want=false;
+    if(free){if(this.isPlayer)want=!TOUCH&&!!input.keys.KeyG;else if(this.remote)want=!!(this.rin&&(this.rin.k&512));else want=!!(A&&A.offT>simTime);}
+    if(!want){if(G.grab){grabRelease(this,G);G.grab=null;G.cd=.25;}G.w=Math.max(0,G.w-h*6);if(this.offH)G.pos.copy(this.offH.p);G.vel.copy(this.vel);G.init=false;return;}
+    if(!G.init){G.pos.copy(this.offH?this.offH.p:sh);G.vel.copy(this.vel);G.init=true;}
+    G.w=Math.min(1,G.w+h*9);G.cd-=h;
+    const f=_ogF,g=_ogG;this.fwd(f);this.right(_ogR);const reach=this.armLen[0]+this.armLen[1];
+    if(G.grab)g.copy(sh).addScaledVector(f,.34).addScaledVector(Y_AXIS,-.12).addScaledVector(_ogR,(side==='R'?-1:1)*.06);   // held: hauled in toward your chest
+    else{
+      // reach out ahead of the free shoulder, lower when you look down; a bot reaches for his man's sword hand
+      const tg=A&&A.offTg&&!this.isPlayer&&!this.remote?A.offTg:null;
+      if(tg&&tg.alive&&!tg.ragdoll)g.copy(tg.sword&&tg.sword.def.kind!=='fist'?tg.sword.H:tg.chest);
+      else g.copy(sh).addScaledVector(f,reach*.82*Math.cos(this.pitch*.8)).addScaledVector(Y_AXIS,Math.sin(this.pitch*.8)*reach*.8-.08);
+      // the hand goes to whatever is nearest that point: a limb or body, a weapon, a body lying on the ground
+      let bd=.42*.42,got=false;
+      for(const B of fighters){if(B===this)continue;
+        if(B.ragdoll){const R=B.ragdoll;if(!R.P.Hips||R.P.Hips.distanceToSquared(this.pos)>4)continue;for(const n in R.P){const P=R.P[n],d=P.distanceToSquared(g);if(d<bd){bd=d;_ogQ.copy(P);got=true;}}continue;}
+        if(!B.alive||B.pos.distanceToSquared(this.pos)>6.25)continue;
+        const S=B.sword;if(S&&S.def.kind!=='fist'){_ogP.copy(S.H).addScaledVector(S.axis,S.len);closestOnSeg(g,S.H,_ogP,_ogP);const d=_ogP.distanceToSquared(g)*.8;if(d<bd){bd=d;_ogQ.copy(_ogP);got=true;}}
+        for(const c of B.caps){if(!c.on)continue;closestOnSeg(g,c.a,c.b,_ogP);_v.subVectors(g,_ogP);const l=_v.length();if(l>1e-4)_ogP.addScaledVector(_v,Math.min(l,c.r*.7)/l);
+          const z=c.zone,wa=B.sword&&B.mainArm&&z===(B.mainArm==='R'?'armR':'armL'),d=_ogP.distanceToSquared(g)*(wa?.55:z==='neck'||z==='torso'?.85:z==='head'?1:1.3);if(d<bd){bd=d;_ogQ.copy(_ogP);got=true;}}}
+      if(got&&_ogQ.distanceTo(sh)<reach*1.12)g.copy(_ogQ);
+    }
+    G.tgtV.lerp(_v.subVectors(g,G.tgtW).multiplyScalar(1/h),.08);G.tgtW.copy(g);
+    const str=(this.stamina<12?.6:1)*(this.stagger>0?.5:1),k=760,cc=2*Math.sqrt(k)*.85,maxA=300*str;
+    _ogA.subVectors(g,G.pos).multiplyScalar(k).addScaledVector(G.vel,-cc).addScaledVector(this.vel,cc);if(_ogA.lengthSq()>maxA*maxA)_ogA.setLength(maxA);
+    G.vel.addScaledVector(_ogA,h);G.pos.addScaledVector(G.vel,h);
+    _v.subVectors(G.pos,sh);if(_v.length()>reach*1.08){_v.setLength(reach*1.08);G.pos.copy(sh).add(_v);_v.normalize();const vn=G.vel.dot(_v);if(vn>0)G.vel.addScaledVector(_v,-vn);}
+    if(g.y<this.chest.y-.55)this.stoop=true;   // reaching low for a body on the ground bends you down to it
+    _v.subVectors(G.vel,this.vel);const rv=_v.length();if(!G.grab&&rv>=4)return;
+    G.vel.copy(this.vel).add(_v.setLength(Math.min(rv,3.9)));
+    grabStep(this,G,true,h,false);
+  }
   throwWeapon(){
     // the weapon leaves the hand with whatever momentum the swing gave it
     const s=this.sword;if(!s)return;
@@ -7784,7 +7827,7 @@ class Fighter{
       // body, so press after press they don't add up into the body sliding and slowly turning round on the ground
       let I=0,nn=0;for(const n of R.names){const P=R.P[n];I+=(P.x-C.x)**2+(P.z-C.z)**2;nn++;}const w=I>1e-4?L/I:0;
       for(const n of R.names){const P=R.P[n],Q=R.Q[n];Q.x+=sx/nn-w*(P.z-C.z);Q.z+=sz/nn+w*(P.x-C.x);}}   /* (Build 130) a writhe, not a fling: each press threw the forearms and shins at up to 5 m/s, and bots pressed ~1.2 times a second, so the downed flopped about like landed fish */
-    for(const arm of grabbedBy(this)){const G=arm.grab;G.esc=(G.esc||0)+rand(.6,1.2)*(this.stamina>40?1:.6);const A=fighters.find(f=>f.fists.R===arm||f.fists.L===arm);if(G.esc>4+(A?A.stamina/100*4:2)){arm.grab=null;arm.cd=.6;if(A)tell(A,'They tore free','red');tell(this,'Broke free','gold');sThud(this.chest,.3);}}}
+    for(const arm of grabbedBy(this)){const G=arm.grab;G.esc=(G.esc||0)+rand(.6,1.2)*(this.stamina>40?1:.6);const A=fighters.find(f=>f.fists.R===arm||f.fists.L===arm||f.offG===arm);if(G.esc>4+(A?A.stamina/100*4:2)){arm.grab=null;arm.cd=.6;if(A)tell(A,'They tore free','red');tell(this,'Broke free','gold');sThud(this.chest,.3);}}}
   // getting up is work: roll onto hands and knees, push up onto one knee, then stand. Hurt, it is slow and shaky and can fail.
   startRise(){const Rg=this.ragdoll;if(!Rg||Rg.rise)return;const P=Rg.P;this.knocked=0;
     const legF=Math.max(this.limbF('legL'),this.limbF('legR')),armOut=(this.limbs.armL.sev||this.limbs.armL.dead?1:0)+(this.limbs.armR.sev||this.limbs.armR.dead?1:0);
@@ -8163,9 +8206,10 @@ class Fighter{
             _og.copy(this.chest).addScaledVector(_f,.36).addScaledVector(_r,-.3*sgn).addScaledVector(Y_AXIS,-.04);_ogc.copy(this.headPos).addScaledVector(_f,.3).addScaledVector(_r,-.34*sgn).addScaledVector(Y_AXIS,.14);_og.lerp(_ogc,lu*lu*(3-2*lu));_t2.lerp(_og,lw);}}
           if((this.catchT||0)>simTime){const u=1-(this.catchT-simTime)/.9,w=Math.sin(Math.PI*Math.min(1,u*1.3))*.95;   // caught off balance: the free hand goes to the ground
             _ogc.set(this.pos.x+_f.x*.4-_r.x*sgn*.25,groundY(this.pos.x,this.pos.z,this.pos.y+.3)+.07,this.pos.z+_f.z*.4-_r.z*sgn*.25);_t2.lerp(_ogc,Math.max(0,w));}
-          this.freeHand(_t2,dt);_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
+          this.freeHand(_t2,dt);const OG=this.offG,ow=OG&&OG.w>.01?OG.w*OG.w*(3-2*OG.w):0;if(ow>0)_t2.lerp(OG.pos,ow);   /* (Build 211) the free hand reaching for, or holding, what it grabbed */_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
           {const cw=Math.max(this.calmW||0,rvg?1:0),e=cw*cw*(3-2*cw);_hv.copy(_f).addScaledVector(Y_AXIS,-.3).addScaledVector(_r,.15*sgn).normalize();_ogu.copy(_r).multiplyScalar(sgn*.4).add(Y_AXIS).normalize();if(e>.01){_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn),e).normalize();}
             if((this._lmW||0)>.01){const lu=(this._lmU||0)*this._lmW;_hv.lerp(_pl.copy(_f).addScaledVector(Y_AXIS,-.15),this._lmW).normalize();if(lu>.01){_hv.lerp(_pl.copy(Y_AXIS).multiplyScalar(.9).addScaledVector(_f,.45),lu).normalize();_ogu.lerp(_pl.copy(_f).negate().addScaledVector(_r,sgn*.3),lu).normalize();}}   /* (Build 208) the lantern fist: level in front; lifted, the hand carries on up the forearm and the ring hangs from the bottom of the fist (it was a claw bent back at the wrist) */
+            if(ow>0){_hv.lerp(_pl.subVectors(_t2,shO).normalize(),ow).normalize();_ogu.lerp(_pl.copy(_r).multiplyScalar(sgn).addScaledVector(Y_AXIS,.5).normalize(),ow).normalize();}
             gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,.55+.5*e);}}
         else if(s.def.kind==='fist')_t2.copy(this.chest).addScaledVector(Y_AXIS,.2).addScaledVector(_f,.32).addScaledVector(_r,-.13*sgn);else if(s.def.kind==='spear'){_t2.subVectors(shO,s.H);const tt=clamp(_t2.dot(s.axis),.26,1.05);_t2.copy(s.H).addScaledVector(s.axis,tt);}   // a spear's front hand takes the shaft wherever it reaches it, ahead of the back hand
         else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?(MB&&(this.isPlayer||this.remote)&&this._cmA?this._cmK??1:1):0,1-Math.exp(-9*dt));   /* (Build 167: a player's lower hand slides down only as the swing moves, not on the click) */g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
@@ -9043,6 +9087,8 @@ function clashPhys(s,s2,P,va,vb){
 const physLive=[],EV={clash:0,clashGame:0,hit:0,wall:0,thrown:0,bodyTouch:0,lastClash:''};
 let swordId=0;
 function swordShove(s,dir,dv){if(s.rb){s.rb.applyImpulseAtPoint(_pv.copy(dir).multiplyScalar(dv*s.M),s.T,true);}else s.Hv.addScaledVector(dir,dv);}
+const _ogF=V(),_ogG=V(),_ogR=V(),_ogQ=V(),_ogP=V(),_ogA=V();
+function closestOnSeg(p,a,b,out){const abx=b.x-a.x,aby=b.y-a.y,abz=b.z-a.z,L2=abx*abx+aby*aby+abz*abz||1e-9,u=clamp(((p.x-a.x)*abx+(p.y-a.y)*aby+(p.z-a.z)*abz)/L2,0,1);return out.set(a.x+abx*u,a.y+aby*u,a.z+abz*u);}
 function mkArm(){return {phase:'guard',t:0,charge:0,pos:V(),vel:V(),tgt:V(),power:0,hit:false,init:false};}
 // ---- bare-handed grabbing: an open hand brought slowly onto a body closes on it. Moving the hand then pulls or shoves a
 // standing fighter off balance, or drags a body (ragdoll) by that limb. Letting go of the button opens the hand.
@@ -9055,15 +9101,29 @@ function grabStep(A,arm,held,h,fist){
   // (you keep hold of the same part: the nearest piece of the falling body to where your fingers are, however it lands)
   if(G.k==='f'&&(G.B.ragdoll||!fighters.includes(G.B))){const R=G.B.ragdoll;arm.grab=R?grabNearest(R,arm.pos):null;if(!arm.grab)return false;}
   if(arm.grab.k==='f'){const B=G.B;B.lastHitBy=A;B.lastHitT=simTime;G.bone.updateWorldMatrix(true,false);_gp.copy(G.loc).applyMatrix4(G.bone.matrixWorld);
-    const sh=arm===A.fists.R?A.shR:A.shL;if(_gp.distanceTo(sh)>(A.armLen[0]+A.armLen[1])*1.75){arm.grab=null;return false;}   // they tore clear of your reach
+    const sh=arm.off?(A.mainArm==='R'?A.shL:A.shR):arm===A.fists.R?A.shR:A.shL;if(_gp.distanceTo(sh)>(A.armLen[0]+A.armLen[1])*(arm.off?1.6:1.75)){arm.grab=null;return false;}   // they tore clear of your reach
+    if(arm.off){const ex=_gp.distanceTo(sh)-(A.armLen[0]+A.armLen[1])*.98;if(ex>0){_hv.subVectors(sh,_gp).setY(0).normalize();B.vel.addScaledVector(_hv,ex*40*h);B.balV.addScaledVector(_hv,ex*14*h);A.vel.addScaledVector(_hv,-ex*22*h);G.haul=(G.haul||0)+h*ex*4;}}   /* (Build 211) stepping back with a hand on him: your arm is straight and he's towed after you, or loses his feet */
     _v.subVectors(arm.tgtW,_gp);const d=_v.length();
     _v.y=0;const pull=Math.min(d,1);if(d>1e-4){_v.multiplyScalar(pull/d);
-      B.vel.addScaledVector(_v,30*h);B.balV.addScaledVector(_v,40*h);A.vel.addScaledVector(_v,-10*h);   // the harder you haul, the harder they're dragged off their feet; you feel their weight
+      const om=arm.off?.5:1;B.vel.addScaledVector(_v,30*h*om);B.balV.addScaledVector(_v,40*h*om);A.vel.addScaledVector(_v,-10*h);   // the harder you haul, the harder they're dragged off their feet; you feel their weight
       if(G.bone===B.bones.Head||G.bone===B.bones.Neck)B.balV.addScaledVector(_v,6*h);}
+    if(B.sword&&B.mainArm&&B.sword.def.kind!=='fist'){const m=B.mainArm==='R'?'Right':'Left';if(G.bone===B.bones[m+'Hand']||G.bone===B.bones[m+'ForeArm']||G.bone===B.bones[m+'Arm']){   /* (Build 211) a hand on his sword arm: he can't swing it freely, only drag it against your grip */
+      const S=B.sword,q=1-Math.exp(-(G.bone===B.bones[m+'Arm']?7:13)*h);S.Hv.lerp(B.vel,q);_v.subVectors(S.T,S.Tp);_hv.copy(B.vel).multiplyScalar(H);_v.lerp(_hv,q*.7);S.Tp.subVectors(S.T,_v);B.useStamina(h*3);B.armHeldT=simTime+.1;}}
     // keep hauling and they lose their feet: down they go, and you're still holding them
     G.haul=Math.max(0,(G.haul||0)+(pull>.3?h*(.6+pull):-h*.6));
-    if(NET.mode!=='client'&&!B.ragdoll&&G.haul>(B.stamina>50?.9:.5)){_v.multiplyScalar(2.2);B.knockdown(rand(1.2,2),_v.clone(),_gp.clone());tell(A,'Dragged down','gold');tell(B,'Dragged down','red');}
+    if(NET.mode!=='client'&&!B.ragdoll&&G.haul>(B.stamina>50?.9:.5)*(arm.off?1.7:1)){_v.multiplyScalar(2.2);B.knockdown(rand(1.2,2),_v.clone(),_gp.clone());tell(A,'Dragged down','gold');tell(B,'Dragged down','red');}
     arm.pos.copy(_gp);arm.vel.copy(B.vel);return true;}
+  if(arm.grab.k==='w'){const W=arm.grab,S=W.S,B=W.B;if(B.sword!==S||!B.alive||B.ragdoll){arm.grab=null;return false;}   // (Build 211) a hand on his weapon: the two of you fight over it
+    const sh=A.mainArm==='R'?A.shL:A.shR;_gp.copy(S.H).addScaledVector(S.axis,W.u);const reach=A.armLen[0]+A.armLen[1],ex=_gp.distanceTo(sh)-reach*.98;if(ex>reach*.75){arm.grab=null;arm.cd=.5;return false;}
+    B.lastHitBy=A;B.lastHitT=simTime;const q=1-Math.exp(-11*h);_hv.copy(S.Hv);S.Hv.lerp(B.vel,q);_v.subVectors(S.T,S.Tp);_hv2.copy(B.vel).multiplyScalar(H);_v.lerp(_hv2,q);S.Tp.subVectors(S.T,_v);
+    _v.subVectors(arm.tgtW,_gp);const d=_v.length();S.Hv.addScaledVector(_v,Math.min(d,.8)*9*h/Math.max(d,1e-4));B.balV.addScaledVector(_v.setY(0),Math.min(d,1)*6*h);A.vel.addScaledVector(_v,-3*h);
+    // a bare hand round a blade he draws back through it: cut (a gauntlet holds it)
+    if(W.blade&&!A.armor.arms){const ax=Math.abs(_hv.sub(A.vel).dot(S.axis));if(ax>2.2&&NET.mode!=='client'){A.damage(Math.min(14,(ax-1.6)*4),B,'cut');A.addBleed(.6,6);sThud(_gp,.2);tell(A,'Cut hand','red');spawnBlood(_gp,V(0,.4,0),6,1,.5);arm.grab=null;arm.cd=.8;return false;}}
+    if(ex>0){_hv2.subVectors(sh,_gp).setY(0).normalize();B.vel.addScaledVector(_hv2,ex*30*h);B.balV.addScaledVector(_hv2,ex*16*h);A.vel.addScaledVector(_hv2,-ex*22*h);}
+    W.haul=Math.max(0,(W.haul||0)+(d>.22?h*(.5+d*1.6):-h*.5)+Math.max(0,ex)*h*14);B.useStamina(h*4);A.useStamina(h*3);
+    if(NET.mode!=='client'&&W.haul>.45+B.stamina/100*.9+(TWO_HANDED[S.def.id]?.5:0)){const it0=loot.length;B.dropSword();S.Hv.copy(_v.subVectors(arm.tgtW,_gp).setY(.5)).setLength(2.2);S.Tp.copy(S.T).addScaledVector(S.Hv,-H);
+      tell(A,'Disarmed him','gold');tell(B,'Disarmed','red');sClang(_gp,.45);arm.grab=null;arm.cd=.5;return false;}
+    arm.pos.copy(_gp);arm.vel.copy(S.Hv);return true;}
   if(arm.grab.k==='g'){const G=PIT&&PIT.grate;if(!G||G.mode!=='rest'){arm.grab=null;return false;}_gp.copy(G.C).add(arm.grab.off);_gp.y=G.C.y+.05;
     _v.subVectors(arm.tgtW,_gp);_v.y=0;const d=_v.length();if(d>1.1){arm.grab=null;return false;}   // a dead weight: it moves only as hard as you haul, and drags you as much
     if(d>.08){G.vx+=_v.x*2.2*h;G.vz+=_v.z*2.2*h;A.vel.addScaledVector(_v,-3*h);A.dragT=simTime+.15;if(Math.random()<h*3)G.clang=Math.max(G.clang,.2);}
@@ -9087,12 +9147,14 @@ function sevPlace(cap,P){_ov.subVectors(cap.b,cap.a);const L2=_ov.lengthSq()||1e
 function sevPower(A,W,cap,P,speed,mw,align,arcF,stamF){return speed*Math.sqrt(mw)*(.35+.65*align)*Math.min(arcF,1.1)*stamF*(A.commit?1.12:.9)*sevPlace(cap,P)*W.sever*(.96+Math.random()*.08);}
 const SEV_RES={neck:9,armL:9.5,armR:9.5,legL:12.5,legR:12.5};
 function sevResist(B,cap,prot,pen){const L=B.limbs[cap.zone],hurt=L&&LIMB_HP[cap.zone]?clamp(L.hp/LIMB_HP[cap.zone],0,1):1;return (SEV_RES[cap.zone]||99)*(1+prot*(1-pen)*2.2)*(.62+.38*hurt);}   // armour and an already-hacked limb change what it takes
-function grabbedBy(B){const out=[];for(const A of fighters){if(A===B)continue;for(const k of ['R','L']){const a=A.fists[k],G=a&&a.grab;if(G&&((G.k==='f'&&G.B===B)||(G.k==='r'&&B.ragdoll&&G.R===B.ragdoll)))out.push(a);}}return out;}
+function grabbedBy(B){const out=[];for(const A of fighters){if(A===B)continue;for(const k of ['R','L','O']){const a=k==='O'?A.offG:A.fists[k],G=a&&a.grab;if(G&&((G.k==='f'&&G.B===B)||(G.k==='r'&&B.ragdoll&&G.R===B.ragdoll)))out.push(a);}}return out;}
 function grabNearest(R,p){let best=null,bd=1e9;for(const n in R.P){const d=R.P[n].distanceToSquared(p);if(d<bd){bd=d;best=n;}}return best&&bd<1?{k:'r',R,n:best}:null;}
 function grabRag(R,p){let best=null,bd=1e9;for(const n in R.P){const q=R.P[n],dx=q.x-p.x,dz=q.z-p.z,dy=p.y-q.y,hz=dx*dx+dz*dz;
     // in reach, or lying below the hand (you stoop to take hold of a body on the ground)
     const ok=q.distanceToSquared(p)<.2*.2||(hz<.3*.3&&dy>-.1&&dy<.75);if(ok&&hz+Math.max(0,dy)*.3<bd){bd=hz+Math.max(0,dy)*.3;best=n;}}return best?{k:'r',R,n:best}:null;}
 function grabTry(A,arm,itemsOnly){
+  if(arm.off){for(const B of fighters){const S=B.sword;if(B===A||!S||!B.alive||B.ragdoll||S.def.kind==='fist'||B.pos.distanceToSquared(A.pos)>6)continue;_t3.copy(S.H).addScaledVector(S.axis,S.len);   /* (Build 211) the off hand closes on his blade or haft */
+      if(distPointSeg2(arm.pos,S.H,_t3)<.075*.075){const u=clamp(_t3.subVectors(arm.pos,S.H).dot(S.axis),0,S.len);arm.grab={k:'w',B,S,u,blade:S.def.kind==='blade'&&u>.14};return;}}}
   if(!itemsOnly)for(const B of fighters){if(B===A||(B.ragdoll&&B.ragdoll.P.Hips||B.pos).distanceToSquared(A.pos)>4)continue;   // a body lies where it fell, not where it stood
     if(B.ragdoll){const g=grabRag(B.ragdoll,arm.pos);if(g){arm.grab=g;return;}continue;}
     if(!B.alive)continue;
@@ -9101,6 +9163,7 @@ function grabTry(A,arm,itemsOnly){
       arm.grab={k:'f',B,bone,loc:arm.pos.clone().applyMatrix4(_m4.copy(bone.matrixWorld).invert())};return;}}
   const side=arm===A.fists.R?'R':'L';
   // a loose weapon or piece of wood under the hand: close on it and it's yours
+  if(arm.off)return;
   if(NET.mode!=='client')for(const it of loot){if(it.kind!=='weapon'||!it.sword||!canTake(A,it))continue;const w=it.sword;_t3.copy(w.H).addScaledVector(w.axis,w.len);
     if(distPointSeg2(arm.pos,w.H,_t3)<.16*.16){A.mainArm=A.mainArm||side;pickUp(A,it);arm.grab=null;return;}}
   if(itemsOnly)return;
@@ -9391,7 +9454,7 @@ function toast(t){const d=el('toast');if(!d)return;d.textContent=t;d.classList.a
 // Every key the game reads is a "logical" code (KeyE, KeyF, …). A binding maps a physical key to one: a capture-phase listener turns a
 // real key press into a synthetic event with the logical code, so every handler below reads it unchanged. A default key whose action
 // has been moved elsewhere does nothing. Touch buttons dispatch logical codes themselves (untrusted events are left alone).
-const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab, let go'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
+const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab (hold with a weapon)'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
 let KEYBIND={};try{KEYBIND=JSON.parse(localStorage.getItem('bloodmoor-keys')||'{}')||{};}catch(e){KEYBIND={};}
 let KEY_MAP=null;function keyMap(){if(KEY_MAP)return KEY_MAP;const m={},cur=new Set(KEY_ACTS.map(([a])=>KEYBIND[a]||a));for(const [a] of KEY_ACTS){const p=KEYBIND[a]||a;if(p!==a)m[p]=a;}for(const [a] of KEY_ACTS)if(!cur.has(a))m[a]='';return KEY_MAP=m;}
 const keyName=c=>c==='Space'?'Space':c.startsWith('Key')?c.slice(3):c.startsWith('Digit')?c.slice(5):c.replace('Left',' L').replace('Right',' R').replace('Arrow','');
@@ -9447,7 +9510,8 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyC')player.slideReq=true;
     if(e.code==='Space'){player.crouch=false;player.jumpReq=true;}
     if(e.code==='KeyF')player.kickReq=true;
-    if(e.code==='KeyG'&&!e.repeat&&!player.sword){player.grabMode=!player.grabMode;toast(player.grabMode?'Open hands: grab':'Fists: punch');}   // tap G: open hands to grab, tap again for fists
+    if(e.code==='KeyG'&&player.sword&&!TOUCH&&player.sword.def.kind!=='fist'&&!twoH(player.sword.def)&&!(player.sword.stuck&&!player.sword.stuck.thrown)){}   // (Build 211) G with a one-handed weapon: the free hand grabs while it's held (stepOffGrab)
+    else if(e.code==='KeyG'&&!e.repeat&&!player.sword){player.grabMode=!player.grabMode;toast(player.grabMode?'Open hands: grab':'Fists: punch');}   // tap G: open hands to grab, tap again for fists
     else if(e.code==='KeyG'&&player.sword&&player.sword.stuck&&!player.sword.stuck.thrown){if(NET.mode==='client')NET.lg=1;else letGo(player);}   // G with a blade in someone: let go and leave it there
     else if((e.code==='KeyG'||e.code==='KeyR')&&player.sword&&player.sword.def.kind==='blade'){player.rev=!player.rev;toast(player.rev?'Reverse grip: click to stab down':'Normal grip');}
     if(e.code==='KeyQ'&&player.sword)player.throwHold=true;
@@ -10915,7 +10979,7 @@ function netSnap(){
   for(const f of fighters){
     const o={i:f.id,p:r3v(f.pos),y:r3(f.yaw),pi:r3(f.pitch),v:[r3(f.vel.x),r3(f.vel.z)],cr:f.crouch||f.stoop?1:0,lc:f.climb&&f.climb.d?[LADDERS.indexOf(f.climb.d),r3(f.climb.t)]:f.ladCarry?[LADDERS.indexOf(f.ladCarry),-1]:0,ch:f.cartHold?(RAID?RAID.team.findIndex(t=>t.cart===f.cartHold):ROAD&&ROAD.cart&&f.cartHold===ROAD.cart.d?99:-1):-1,rh:f.roadHold?(f.roadHold.off>0?1:2):0,wh:f.wheelHold?f.wheelHold.s:-1,k:r3(f.kickT),sl:r3(f.slideT),st:r3(f.stagger),bl:[r3(f.bal.x),r3(f.bal.z)],hp:r3(f.hp),sa:r3(f.stamina),a:f.alive?1:0,dn:f.downed?1:0,b:r3(f.burn),ou:f.outside?1:0,ma:f.mainArm||0,sv:f.sevNames,
       ar:ARMOR_SLOTS.map(sl=>f.armor[sl]?f.armor[sl].def.id:'')};
-    if(f.sword){const s=f.sword;if((f.revW||0)>.5)o.rv=1;if(f.commit)o.cm=1;o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
+    if(f.sword){const s=f.sword;if((f.revW||0)>.5)o.rv=1;if(f.commit)o.cm=1;if(f.offG&&f.offG.w>.02)o.og=[...r3v(f.offG.pos),Math.round(f.offG.w*20)/20];o.w=[s.def.id,...r3v(s.H),...r3v(s.axis),...r3v(s.edge),Math.round((s.blood||0)*20)/20,Math.round((s.wear||0)*20)/20];}
     else o.fs=[...r3v(f.fists.R.pos),...r3v(f.fists.L.pos)];
     if(f.ragdoll){const P=f.ragdoll.P;o.rg=[];for(const n of RD_NAMES){const q=P[n];if(q)o.rg.push(r3(q.x),r3(q.y),r3(q.z));else o.rg.push(0,-99,0);}}
     /* (Build 200) only what has changed about a fighter goes out, against what was last sent (f._ns): a whole fighter every 2 s, and in between a key is left out while it's the same (numbers within 2 mm, lists within 4), null for one that
@@ -10946,7 +11010,7 @@ function netTick(dt){
 setInterval(()=>{if(NET.mode==='client')clientSendInput();},33);
 function clientSendInput(){
   if(NET.host&&NET.host.open&&player&&state!=='attract'){const k=input.keys,p=player;
-    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb||input.stab?32:0)|(input.rmb?64:0)|(p.grabMode?128:0)|(p.rev?256:0),
+    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb||input.stab?32:0)|(input.rmb?64:0)|(p.grabMode?128:0)|(p.rev?256:0)|(p.sword&&!TOUCH&&input.keys.KeyG?512:0),
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
@@ -11051,7 +11115,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
     if(m0&&f!==player){const x0=m0.get(o0.i),x1=m1.get(o0.i);if(x0&&x1&&!!x1.a===!!o0.a&&!!x1.rg===!!o0.rg){q=x0;o={...o0,p:x1.p,y:x1.y,v:x1.v,w:x1.w&&o0.w&&x1.w[0]===o0.w[0]?x1.w:o0.w,fs:x1.fs||o0.fs,rg:x1.rg||o0.rg};a=ab;ex=exB;}}
     f.pos.set(lerp(q.p[0],o.p[0],a),lerp(q.p[1],o.p[1],a),lerp(q.p[2],o.p[2],a));f.vel.set(o.v[0],0,o.v[1]);if(ex&&o.a&&!o.rg){f.pos.x+=o.v[0]*ex;f.pos.z+=o.v[1]*ex;}   // a late packet: keep walking briefly instead of stopping dead
     if(f!==player||!f.alive){f.yaw=lerpA(q.y,o.y,a);f.pitch=o.pi;}
-    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;{const L=o.lc&&LADDERS[o.lc[0]];f.climb=L&&o.lc[1]>=0?{d:L,t:o.lc[1]}:null;f.ladCarry=L&&o.lc[1]<0?L:null;f.cartHold=o.ch===99&&ROAD&&ROAD.cart?ROAD.cart.d:o.ch>=0&&RAID&&RAID.team[o.ch]?RAID.team[o.ch].cart:null;f.roadHold=o.rh?{off:o.rh===1?TUG_HOLD:-TUG_HOLD}:null;f.wheelHold=o.wh>=0&&RAID&&RAID.team[o.wh]?RAID.team[o.wh]:null;}f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;f.revW=o.rv?1:0;if(f!==player||!f.alive)f.commit=!!o.cm;
+    if(o.bl)f.bal.set(o.bl[0],0,o.bl[1]);f.crouch=!!o.cr;if(o.og){const G=f.offG||(f.offG={off:true,pos:V(),vel:V(),tgtW:V(),tgtV:V(),grab:null,cd:0,w:0}),q=G.w>.05;_v.set(o.og[0],o.og[1],o.og[2]);if(q)G.pos.lerp(_v,.35);else G.pos.copy(_v);G.w=o.og[3];}else if(f.offG)f.offG.w=Math.max(0,f.offG.w-.2);{const L=o.lc&&LADDERS[o.lc[0]];f.climb=L&&o.lc[1]>=0?{d:L,t:o.lc[1]}:null;f.ladCarry=L&&o.lc[1]<0?L:null;f.cartHold=o.ch===99&&ROAD&&ROAD.cart?ROAD.cart.d:o.ch>=0&&RAID&&RAID.team[o.ch]?RAID.team[o.ch].cart:null;f.roadHold=o.rh?{off:o.rh===1?TUG_HOLD:-TUG_HOLD}:null;f.wheelHold=o.wh>=0&&RAID&&RAID.team[o.wh]?RAID.team[o.wh]:null;}f.kickT=o.k;f.slideT=o.sl;f.stagger=o.st;f.hp=o.hp;f.stamina=o.sa;f.burn=o.b;f.outside=!!o.ou;f.mainArm=o.ma||null;f.downed=!!o.dn;f.revW=o.rv?1:0;if(f!==player||!f.alive)f.commit=!!o.cm;
     if(f.alive&&!o.a)f.alive=false;
     for(const bn of o.sv||[])if(f.bones[bn]&&!f.bones[bn].userData.severed)f.sever(bn,V(0,1.5,0));
     o.ar.forEach((id,k)=>{const cur=f.armor[ARMOR_SLOTS[k]];if((cur?cur.def.id:'')!==id){if(id&&ARMOR[id])f.equip(ARMOR[id]);else f.unequip(ARMOR_SLOTS[k]);}});
