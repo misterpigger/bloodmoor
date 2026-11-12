@@ -431,7 +431,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=202;
+const BUILD=203;
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -642,9 +642,9 @@ const MATS={
   winLit:std({color:0x140b05,emissive:0xff9a3a,emissiveIntensity:2.4,roughness:.4}),
   winDark:std({color:0x07090d,metalness:.5,roughness:.2}),
   glassLit:std({color:0x101018,emissive:0xb06a40,emissiveIntensity:1.6,roughness:.3}),
-  leaf:std({color:0x1c2a16,roughness:1}),
+  leaf:std({color:0x24331a,roughness:1}),
   leaf2:std({color:0x26331a,roughness:1}),
-  bark:std({color:0x2b221a,roughness:1}),
+  bark:std({color:0x4a3f33,roughness:1}),
   cloth1:std({map:tex(clothCanvas('#7a1c16','#d8ccb0')),roughness:1,side:THREE.DoubleSide}),
   cloth2:std({map:tex(clothCanvas('#1e3560','#c9b98f')),roughness:1,side:THREE.DoubleSide}),
   cloth3:std({map:tex(clothCanvas('#2f4a26','#bfa45c')),roughness:1,side:THREE.DoubleSide}),
@@ -655,7 +655,7 @@ for(let i=0;i<6;i++)MATS['her'+i]=heraldryMat(i*37+5);const HER_BAN=['her0','her
 MATS.ashlar=std({map:TX.stone,color:0xd8c8a8,roughness:.95});
 MATS.slate=std({map:TX.tile,color:0x6a6e72,roughness:.8,side:THREE.DoubleSide});
 MATS.floorPlank=std({map:TX.wood,color:0x8a6a50,roughness:.85,side:THREE.DoubleSide});MATS.boards=std({map:TX.wood,color:0x7a5a40,roughness:.9});
-MATS.villageGround=std({map:TX.ground,roughness:1});MATS.palisade=std({color:0x3a2c20,map:TX.wood,roughness:1});
+MATS.villageGround=std({map:TX.ground,roughness:1});MATS.meadow=std({map:TX.ground,roughness:1,color:0x86a060});MATS.palisade=std({color:0x3a2c20,map:TX.wood,roughness:1});
 MATS.cobble=std({map:TX.cobble,bumpMap:TX.cobbleb,bumpScale:3,roughness:.82,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
 for(let v=0;v<3;v++)MATS['plaster'+v]=std({map:TX['plaster'+v],bumpMap:TX['plaster'+v+'b'],bumpScale:1.6,roughness:.95});
 
@@ -700,8 +700,8 @@ const _m4=new THREE.Matrix4(),_qq=new THREE.Quaternion(),_eu=new THREE.Euler();
 function T(x,y,z,ry=0,rx=0,rz=0,sx=1,sy=1,sz=1){_eu.set(rx,ry,rz,'YXZ');_qq.setFromEuler(_eu);return new THREE.Matrix4().compose(V(x,y,z),_qq,V(sx,sy,sz));}
 let GEO_TARGET=null;   // when set, addGeo collects into this object instead (a house that can burn down gets its own meshes)
 function addGeo(key,geo,m){const g=geo.index?geo.toNonIndexed():geo.clone();g.applyMatrix4(m);for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);((GEO_TARGET||batch)[key]??=[]).push(g);}
-function batchGroup(B){const grp=new THREE.Group();for(const k in B){const m=new THREE.Mesh(mergeGeometries(B[k],false),MATS[k]);m.castShadow=!['winLit','glassLit'].includes(k);m.receiveShadow=true;grp.add(m);}return grp;}
-function flushBatch(){for(const k in batch){const merged=mergeGeometries(batch[k],false);const m=new THREE.Mesh(merged,MATS[k]);m.castShadow=!['winLit','glassLit'].includes(k);m.receiveShadow=true;world.add(m);}for(const k in batch)delete batch[k];}
+function batchGroup(B){const grp=new THREE.Group();for(const k in B){const m=new THREE.Mesh(mergeGeometries(B[k],false),MATS[k]);m.castShadow=!['winLit','glassLit','leaded'].includes(k);m.receiveShadow=true;grp.add(m);}return grp;}
+function flushBatch(){for(const k in batch){const merged=mergeGeometries(batch[k],false);const m=new THREE.Mesh(merged,MATS[k]);m.castShadow=!['winLit','glassLit','leaded'].includes(k);m.receiveShadow=true;world.add(m);}for(const k in batch)delete batch[k];}
 function wallPlane(w,h,tw=3,th=3){const g=new THREE.PlaneGeometry(w,h);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*w/tw,uv.getY(i)*h/th);return g;}
 function boxUV(w,h,d,t=2){const g=new THREE.BoxGeometry(w,h,d);const uv=g.attributes.uv;const n=g.attributes.normal;for(let i=0;i<uv.count;i++){const ax=Math.abs(n.getX(i)),ay=Math.abs(n.getY(i));let sx,sy;if(ax>.5){sx=d;sy=h;}else if(ay>.5){sx=w;sy=d;}else{sx=w;sy=h;}uv.setXY(i,uv.getX(i)*sx/t,uv.getY(i)*sy/t);}return g;}
 function gableTri(S,rh){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([-S/2,0,0,S/2,0,0,0,rh,0],3));g.setAttribute('normal',new THREE.Float32BufferAttribute([0,0,1,0,0,1,0,0,1],3));g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,S/3,0,S/6,rh/3],2));return g;}
@@ -1045,28 +1045,57 @@ function bush(x,z,s=1){const n=2+((srand()*2)|0),I=new THREE.Matrix4(),C=V();
       if(g.attributes.position.array.some((v,k)=>k%3===1&&v<.02)){const P=g.attributes.position;for(let k=0;k<P.count;k++)P.setY(k,Math.max(.03,P.getY(k)));}
       const P=g.attributes.position,N=g.attributes.normal;for(let k=0;k<P.count;k++){const nn=V(P.getX(k)-C.x,P.getY(k)-C.y+.3*s,P.getZ(k)-C.z).normalize();N.setXYZ(k,nn.x,nn.y,nn.z);}
       addGeo(srand()<.5?'leafCard':'leafCard2',g,I);}}}
-function tree(x,z,s=1){
-  const th=3.4*s;addGeo('bark',new THREE.CylinderGeometry(.13*s,.3*s,th,8),T(x,th/2,z));
-  const boughs=3+((srand()*2)|0),tops=[];
-  for(let b=0;b<boughs;b++){const a=b/boughs*6.283+srand(),L=(1.6+srand()*.8)*s,el=.6+srand()*.4,ox=Math.cos(a)*Math.cos(el)*L,oy=Math.sin(el)*L,oz=Math.sin(a)*Math.cos(el)*L;
-    const g=new THREE.CylinderGeometry(.05*s,.11*s,L,6);g.translate(0,L/2,0);const q=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),V(ox,oy,oz).normalize());
-    addGeo('bark',g,new THREE.Matrix4().compose(V(x,th*.85,z),q,V(1,1,1)));tops.push([x+ox,th*.85+oy,z+oz]);}
-  tops.push([x,th+1.3*s,z]);
-  // each clump: a dark core wrapped in leaf cards set on its surface facing outward, their normals bent to the clump's sphere so the
-  // whole crown shades as one soft mass (single big cards scattered round the core read as floating tufts of grass)
-  const I=new THREE.Matrix4(),C=V();
-  for(const [cx,cy,cz] of tops){addGeo('leaf',new THREE.IcosahedronGeometry(.72*s,1),T(cx,cy,cz));C.set(cx,cy+.15*s,cz);
-    for(let i=0;i<16;i++){const u=srand()*2-1,ph=srand()*6.283,r=Math.sqrt(1-u*u),d=V(r*Math.cos(ph),u*.8+.15,r*Math.sin(ph)).normalize(),w=(1.1+srand()*.6)*s;
-      const g=new THREE.PlaneGeometry(w,w*.85);g.applyMatrix4(new THREE.Matrix4().compose(V().copy(C).addScaledVector(d,(.75+srand()*.35)*s),new THREE.Quaternion().setFromUnitVectors(V(0,0,1),d).multiply(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),srand()*6.283)),V(1,1,1)));
-      const P=g.attributes.position,N=g.attributes.normal;for(let k=0;k<P.count;k++){const n=V(P.getX(k)-C.x,P.getY(k)-C.y,P.getZ(k)-C.z).normalize();N.setXYZ(k,n.x,n.y,n.z);}
-      addGeo(srand()<.5?'leafCard':'leafCard2',g,I);}}
+// (Build 203) a trunk that stands like a tree: roots flaring into the ground in a few buttress lobes, a taper, a slight lean, and UVs in
+// metres so the bark scan lies on it at its real size (it was a plain eight-sided cone in one flat brown)
+function trunkGeo(r0,r1,h,o={}){const seg=o.seg||10,rings=o.rings||7,fl=o.flare??.6,ph=o.ph||0,lx=o.lx||0,lz=o.lz||0,pos=[],uv=[],idx=[],U=Math.max(1,Math.round(6.283*r0/.8));
+  for(let j=0;j<=rings;j++){const t=j/rings,y=h*Math.pow(t,1.7),k=Math.exp(-y/(r0*1.6)),r=(r0+(r1-r0)*y/h)*(1+fl*k),cx=lx*(y/h)**2,cz=lz*(y/h)**2;
+    for(let i=0;i<=seg;i++){const a=i/seg*6.283185,rr=r*(1+.22*fl*k*Math.cos(a*5+ph)+.05*Math.sin(a*3+ph*2));pos.push(cx+Math.cos(a)*rr,y-.06,cz+Math.sin(a)*rr);uv.push(i/seg*U,y/1.15);}}
+  for(let j=0;j<rings;j++)for(let i=0;i<seg;i++){const a0=j*(seg+1)+i,b0=a0+seg+1;idx.push(a0,b0,a0+1,a0+1,b0,b0+1);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  // the seam: the first and last vertex of each ring are the same point, so they share one normal
+  {const N=g.attributes.normal;for(let j=0;j<=rings;j++){const a0=j*(seg+1),a1=a0+seg,nx=N.getX(a0)+N.getX(a1),ny=N.getY(a0)+N.getY(a1),nz=N.getZ(a0)+N.getZ(a1),l=Math.hypot(nx,ny,nz)||1;N.setXYZ(a0,nx/l,ny/l,nz/l);N.setXYZ(a1,nx/l,ny/l,nz/l);}}
+  return g;}
+function limbGeo(r0,r1,L,seg=6){const g=new THREE.CylinderGeometry(r1,r0,L,seg,1,true);g.translate(0,L/2,0);scaleUV(g,Math.max(1,Math.round(6.283*r0/.8)),L/1.15);return g;}
+// one clump of a crown: a core the colour of leaves in shade, wrapped in leaf cards set on its surface facing outward, their normals bent to
+// the clump's sphere so the whole crown shades as one soft mass
+function leafClump(cx,cy,cz,R,n=16,srand=Math.random){const I=new THREE.Matrix4(),C=V(cx,cy+.12*R,cz),core=new THREE.IcosahedronGeometry(R*.76,0);core.scale(1,.82,1);addGeo('leaf',core,T(cx,cy,cz,srand()*6));
+  for(let i=0;i<n;i++){const u=srand()*2-1,ph=srand()*6.283,r=Math.sqrt(1-u*u),d=V(r*Math.cos(ph),u*.8+.15,r*Math.sin(ph)).normalize(),w=(1.5+srand()*.8)*R;
+    const g=new THREE.PlaneGeometry(w,w*.85);g.applyMatrix4(new THREE.Matrix4().compose(V().copy(C).addScaledVector(d,(.86+srand()*.3)*R),new THREE.Quaternion().setFromUnitVectors(V(0,0,1),d).multiply(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),srand()*6.283)),V(1,1,1)));
+    const P=g.attributes.position,N=g.attributes.normal;for(let k=0;k<P.count;k++){const nn=V(P.getX(k)-C.x,P.getY(k)-C.y,P.getZ(k)-C.z).normalize();N.setXYZ(k,nn.x,nn.y,nn.z);}
+    addGeo(srand()<.5?'leafCard':'leafCard2',g,I);}}
+function tree(x,z,s=1,lite=false){   // lite: a tree nobody gets near (fewer boughs and leaf cards, a plainer trunk)
+  // its own run of random numbers, started from the map's, and the map's is then moved on by exactly what the old tree drew, so nothing built after a tree moves
+  const s0=seed,bo=3+((srand()*2)|0);let ls=s0;const sr=()=>{ls=(ls*16807)%2147483647;return (ls-1)/2147483646;};seed=s0;for(let i=0,n=1+3*bo+96*(bo+1);i<n;i++)srand();
+  const th=(3.1+sr()*.9)*s,r0=(.17+sr()*.05)*s,lx=(sr()-.5)*.5*s,lz=(sr()-.5)*.5*s;
+  addGeo('bark',trunkGeo(r0,r0*.55,th,{ph:sr()*6,lx,lz,seg:lite?6:10,rings:lite?4:7}),T(x,0,z));
+  const fork=V(x+lx*.72,th*.84,z+lz*.72),top=V(x+lx,th,z+lz),boughs=lite?3:4+((sr()*2)|0),tops=[],a0=sr()*6.283;
+  for(let b=0;b<boughs;b++){const a=a0+b/boughs*6.283+(sr()-.5)*.7,L=(1.7+sr()*.9)*s,el=.5+sr()*.45,d=V(Math.cos(a)*Math.cos(el),Math.sin(el),Math.sin(a)*Math.cos(el)),at=b%2?fork:V().lerpVectors(fork,top,.55);
+    addGeo('bark',limbGeo(r0*.42,r0*.16,L,lite?4:6),new THREE.Matrix4().compose(at,new THREE.Quaternion().setFromUnitVectors(V(0,1,0),d),V(1,1,1)));
+    tops.push([at.x+d.x*L,at.y+d.y*L,at.z+d.z*L,.78+sr()*.25]);
+    if(!lite&&sr()<.6)tops.push([at.x+d.x*L*.55+(sr()-.5)*.5*s,at.y+d.y*L*.55+.45*s,at.z+d.z*L*.55+(sr()-.5)*.5*s,.62+sr()*.2]);}   // a clump part way out, so the crown closes up
+  addGeo('bark',limbGeo(r0*.5,r0*.2,1.5*s),new THREE.Matrix4().compose(top.clone().setY(th-.1),new THREE.Quaternion().setFromUnitVectors(V(0,1,0),V(lx*.4,1,lz*.4).normalize()),V(1,1,1)));
+  tops.push([top.x+lx*.3,th+1.55*s,top.z+lz*.3,.9+sr()*.2]);
+  for(const [cx,cy,cz,R] of tops)leafClump(cx,cy,cz,R*s*(lite?1.15:1),lite?9:14,sr);
   addCircle(x,z,.35*s,4);
 }
-{const c=mkCanvas(256,256),g=c.getContext('2d');let sd=11;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
-  for(let i=0;i<420;i++){const x=128+(r()-.5)*230*Math.sqrt(r()),y=128+(r()-.5)*220*Math.sqrt(r()),a=r()*6.28,L=10+r()*12,l=28+r()*26;
-    g.fillStyle=`hsl(${85+r()*35},${35+r()*25}%,${l}%)`;g.save();g.translate(x,y);g.rotate(a);g.beginPath();g.ellipse(0,0,L/2,L/5,0,0,6.283);g.fill();g.restore();}
-  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
-  MATS.leafCard=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x7c9260});MATS.leafCard2=std({map:t,alphaTest:.5,side:THREE.DoubleSide,roughness:.9,color:0x5f7a4a});}
+// a ring of far woods round a map: two bands of painted tree tops (the nearer darker, the further hazier), so the country beyond the
+// last real tree is forest to the hills instead of bare ground to the horizon
+function forestRing(rx,rz,cz=0,h=13,c1=0x2f3d2a,c2=0x55664f){
+  const mk=(seed)=>{const c=mkCanvas(1024,128),g=c.getContext('2d');let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};g.clearRect(0,0,1024,128);
+    for(let pass=0;pass<2;pass++)for(let i=0;i<150;i++){const x=r()*1024,w=14+r()*22,hh=34+r()*60,l=pass?150+r()*50:105+r()*40;g.fillStyle=`rgb(${l|0},${l|0},${l|0})`;
+      for(const xo of [-1024,0,1024]){g.beginPath();g.ellipse(x+xo,128-hh,w,w*.8,0,0,6.283);g.fill();for(let k=0;k<5;k++){g.beginPath();g.ellipse(x+xo+(r()-.5)*w*1.6,128-hh+(r()-.2)*w,w*.55,w*.5,0,0,6.283);g.fill();}g.fillRect(x+xo-w*.9,128-hh+w*.2,w*1.8,hh);}}
+    const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=THREE.RepeatWrapping;t.anisotropy=MAXANI;return t;};
+  const band=(k,hh,col,seed,rep)=>{const N=96,pos=[],uv=[],idx=[];for(let i=0;i<=N;i++){const a=i/N*6.283185;pos.push(Math.cos(a)*rx*k,-1,cz+Math.sin(a)*rz*k,Math.cos(a)*rx*k,hh,cz+Math.sin(a)*rz*k);uv.push(i/N*rep,0,i/N*rep,1);if(i<N)idx.push(i*2,i*2+1,i*2+2,i*2+1,i*2+3,i*2+2);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);
+    world.add(new THREE.Mesh(g,new THREE.MeshBasicMaterial({map:mk(seed),color:col,alphaTest:.5,fog:false,side:THREE.DoubleSide})));};
+  band(1.32,h*1.5,c2,91,7);band(1,h,c1,37,9);}
+{const c=mkCanvas(512,512),g=c.getContext('2d');let sd=11;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  // a spray of leaves: thick toward the middle, ragged at the edge, each a pointed oval with a lighter midrib; darker ones drawn first
+  for(let i=0;i<1500;i++){const rr=Math.pow(r(),.62)*236,an=r()*6.283,x=256+Math.cos(an)*rr,y=256+Math.sin(an)*rr*.9,a=r()*6.28,L=15+r()*13,k=i/1500,l=20+k*20+r()*10;
+    g.save();g.translate(x,y);g.rotate(a);g.fillStyle=`hsl(${88+r()*26},${38+r()*20}%,${l}%)`;g.beginPath();g.moveTo(-L/2,0);g.quadraticCurveTo(0,-L*.3,L/2,0);g.quadraticCurveTo(0,L*.3,-L/2,0);g.fill();
+    g.strokeStyle=`hsla(${80+r()*20},40%,${l+12}%,.5)`;g.lineWidth=.8;g.beginPath();g.moveTo(-L/2,0);g.lineTo(L/2,0);g.stroke();g.restore();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=MAXANI;
+  MATS.leafCard=std({map:t,alphaTest:.42,side:THREE.DoubleSide,roughness:.9,color:0xa8bc84});MATS.leafCard2=std({map:t,alphaTest:.42,side:THREE.DoubleSide,roughness:.9,color:0x8aa26a});}
 function barrel(x,z){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=srand()*6;const b=new THREE.Mesh(new THREE.CylinderGeometry(.33,.3,.9,14),MATS.propWood);b.position.y=.45;g.add(b);
   for(const y of [.2,.72]){const r=new THREE.Mesh(new THREE.TorusGeometry(.335,.02,4,16),MATS.iron);r.position.y=y;r.rotation.x=Math.PI/2;g.add(r);}
   const old=[...g.children];placeModel('wine_barrel_01',{parent:g,fit:[.68,.92,.68],onload:()=>old.forEach(o=>o.visible=false)});   // the real barrel replaces the drawn one when it loads
@@ -1125,8 +1154,11 @@ function placeModel(id,o={},fallback=null){const g=new THREE.Group();g.position.
   return g;}
 // a run of castle wall from the scanned fort kit: n pieces of one kit wall laid end to end, centred on (x,z), running along x when
 // alongX, each stretched to fit; fallback(g) draws the old wall if the kit can't load
-function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;for(let i=0;i<n;i++){const o=-len/2+seg*(i+.5);
-    placeModel('modular_fort_01',{node:'modular_fort_01_'+node,x:alongX?x+o:x,z:alongX?z:z+o,ry:alongX?Math.PI/2:0,fit:[thick,H,seg+.02]},i===0?fallback:null);}}
+function kitWall(node,x,z,alongX,len,H,thick,n,fallback){const seg=len/n;
+  // (Build 203) the plain wall stands in until the kit has come down the wire (2.5 MB): on a slow line a match began in a yard with no walls, open to the horizon
+  let ph=null;if(fallback&&!MDL_SCN.modular_fort_01){ph=new THREE.Group();ph.position.set(x,0,z);world.add(ph);fallback(ph);}
+  for(let i=0;i<n;i++){const o=-len/2+seg*(i+.5);
+    placeModel('modular_fort_01',{node:'modular_fort_01_'+node,x:alongX?x+o:x,z:alongX?z:z+o,ry:alongX?Math.PI/2:0,fit:[thick,H,seg+.02],onload:i===0&&ph?()=>{ph.removeFromParent();}:null},null);}}
 // a few models scattered round: picks from a list, random turn and size, kept where ok(x,z) allows
 function scatterModels(list,n,ok,seed,smin=.8,smax=1.3,dyn=null){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};let k=0;
   for(let i=0;i<n*20&&k<n;i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const id=list[(r()*list.length)|0],po={x,z,y:-.07,ry:r()*6.28,s:smin+r()*(smax-smin)};if(dyn&&dyn[id])dynModel(id,po,dyn[id]);else placeModel(id,po);k++;}}
@@ -1591,7 +1623,15 @@ function buildTavern(){const W=16,D=11,Hc=5.6;TAV.rails=[];TAV.spots=[];
   addBox(-W-1,W+1,D,D+1,Hc);addBox(-W-1,W+1,-D-1,-D,Hc);addBox(W,W+1,-D,D,Hc);addBox(-W-1,-W,-D,D,Hc);
   // the door (shut) and windows on the south wall, with a little evening light still in them
   addGeo('wood',boxUV(1.6,2.4,.12,1),T(0,1.2,-D+.07));for(const y of [.5,1.9])addGeo('iron',boxUV(1.65,.08,.14,1),T(0,y,-D+.08));
-  for(const x of [-11.5,-6,6,11.5]){addGeo('glassLit',new THREE.BoxGeometry(1,1.2,.06),T(x,2.1,-D+.04));addGeo('beam',boxUV(1.2,.1,.14,1),T(x,1.45,-D+.08));}
+  // (Build 203) leaded windows with the night behind them: diamond panes in a lattice of lead, moonlit, in an oak frame (they were blank glowing rectangles)
+  if(!MATS.leaded){const c=mkCanvas(256,320),g=c.getContext('2d');let sd=23;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+    const gr=g.createLinearGradient(0,0,0,320);gr.addColorStop(0,'#34496c');gr.addColorStop(.55,'#1c2a44');gr.addColorStop(1,'#0e1626');g.fillStyle=gr;g.fillRect(0,0,256,320);
+    for(let i=0;i<260;i++){g.fillStyle=`rgba(${110+r()*70|0},${150+r()*60|0},${190+r()*50|0},${.03+r()*.07})`;g.beginPath();g.ellipse(r()*256,r()*320,6+r()*16,6+r()*16,0,0,6.283);g.fill();}   // old glass: no two panes alike
+    g.strokeStyle='#07080b';g.lineWidth=3.2;for(let c0=-320;c0<600;c0+=36){g.beginPath();g.moveTo(c0,0);g.lineTo(c0+224,320);g.stroke();g.beginPath();g.moveTo(c0,0);g.lineTo(c0-224,320);g.stroke();}
+    g.strokeStyle='rgba(150,160,175,.22)';g.lineWidth=1;for(let c0=-320;c0<600;c0+=36){g.beginPath();g.moveTo(c0+1.6,0);g.lineTo(c0+225.6,320);g.stroke();}   // a glint along the lead
+    const t=tex(c);t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;MATS.leaded=std({map:t,emissive:0xffffff,emissiveMap:t,emissiveIntensity:.5,roughness:.25,metalness:.1});}
+  for(const x of [-11.5,-6,6,11.5]){addGeo('leaded',new THREE.PlaneGeometry(1.04,1.24),T(x,2.1,-D+.05));addGeo('beam',boxUV(1.3,.11,.16,1),T(x,1.44,-D+.08));addGeo('beam',boxUV(1.3,.1,.14,1),T(x,2.76,-D+.07));
+    for(const sx of [-.57,.57])addGeo('beam',boxUV(.1,1.3,.14,1),T(x+sx,2.1,-D+.07));addGeo('beam',boxUV(.05,1.24,.08,1),T(x,2.1,-D+.07));addGeo('beam',boxUV(1.04,.045,.08,1),T(x,2.1,-D+.07));}
   // the hearth on the west wall: an open firebox you can walk, fall or be thrown into
   const hz=-6,fd=1.05,fw=1.0;TAV.fire={x0:-W,x1:-W+fd,z0:hz-fw,z1:hz+fw};
   for(const s of [-1,1]){addGeo('stone',boxUV(fd+.1,1.45,.45,1.2),T(-W+(fd+.1)/2,.72,hz+s*(fw+.22)));addBox(-W,-W+fd+.1,s<0?hz-fw-.45:hz+fw,s<0?hz-fw:hz+fw+.45,1.45);}
@@ -1918,8 +1958,8 @@ function onRoad(x,z){
 // tufts did
 let GRASS=null;
 function grassCard(){const c=mkCanvas(128,128),g=c.getContext('2d');g.clearRect(0,0,128,128);
-  for(let i=0;i<16;i++){const x0=40+Math.random()*48,lean=(Math.random()-.5)*60,h=60+Math.random()*64,w=3+Math.random()*4;
-    const gr=g.createLinearGradient(0,128,0,128-h);const d=Math.random();gr.addColorStop(0,`rgb(${24+d*10|0},${34+d*12|0},${14+d*6|0})`);gr.addColorStop(.6,`rgb(${70+d*30|0},${92+d*30|0},${38+d*14|0})`);gr.addColorStop(1,`rgb(${120+d*40|0},${130+d*30|0},${70+d*20|0})`);
+  for(let i=0;i<22;i++){const x0=36+Math.random()*56,lean=(Math.random()-.5)*64,h=56+Math.random()*68,w=2.2+Math.random()*3;
+    const gr=g.createLinearGradient(0,128,0,128-h);const d=Math.random();gr.addColorStop(0,`rgb(${46+d*14|0},${62+d*16|0},${26+d*8|0})`);gr.addColorStop(.6,`rgb(${78+d*30|0},${104+d*30|0},${42+d*14|0})`);gr.addColorStop(1,`rgb(${126+d*40|0},${140+d*30|0},${72+d*20|0})`);   /* (Build 203) the foot of each blade was near black, and from above the foot is most of what shows */
     g.fillStyle=gr;g.beginPath();g.moveTo(x0-w,128);g.quadraticCurveTo(x0+lean*.3,128-h*.5,x0+lean,128-h);g.quadraticCurveTo(x0+lean*.3+w*.4,128-h*.5,x0+w,128);g.closePath();g.fill();}
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
 function buildGrass(R,ok,day){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[],idx=[];let sd=4242;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
@@ -1936,7 +1976,7 @@ function buildGrass(R,ok,day){const T=48,N=TOUCH?12000:40000,pos=[],uv=[],base=[
   const mt=new THREE.CanvasTexture(c);mt.flipY=false;
   const U={uCam:{value:new THREE.Vector2()},uT:{value:0},uTile:{value:T},uMask:{value:mt},uMR:{value:R}};
   const m=new THREE.MeshLambertMaterial({map:grassCard(),alphaTest:.45,side:THREE.DoubleSide,color:0xd0dcb0});
-  if(day){m.color.setHex(0xc4cc9a);m.emissive.setHex(0x39431f);m.emissiveMap=m.map;}   // (Build 199) in daylight: this material takes no light from the sky map, so blades in a tree's shade went black beside ground that didn't; a little of their own colour stands in for it
+  if(day){m.color.setHex(0xd2dca2);m.emissive.setHex(0x6c7c3c);m.emissiveMap=m.map;}   // (Build 199) in daylight: this material takes no light from the sky map, so blades in a tree's shade went black beside ground that didn't; a little of their own colour stands in for it
   m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader='uniform vec2 uCam;uniform float uT,uTile,uMR;uniform sampler2D uMask;attribute vec2 aBase;\n'+sh.vertexShader
     .replace('#include <beginnormal_vertex>','vec3 objectNormal=vec3(0.,1.,0.);')
     .replace('#include <begin_vertex>',`vec2 rel=mod(aBase-uCam+uTile*.5,uTile)-uTile*.5;vec2 wp=uCam+rel;
@@ -1984,7 +2024,7 @@ function buildWorld(){
   for(const [x,z] of [[8,-22],[-8,22],[22,-8],[-22,8],[8,50],[-8,-50],[50,8],[-50,-8],[-30,-30],[30,-30],[-30,30]]){
     if(!isFree(x,z,.6))continue;streetTorch(x,z,lightBudget.n++<lightBudget.max+2);}
   // trees outside the wall
-  for(let i=0;i<90;i++){const a=srand()*Math.PI*2,r=MAP+6+srand()*50;tree(Math.cos(a)*r,Math.sin(a)*r,1+srand()*.8);}
+  for(let i=0;i<90;i++){const a=srand()*Math.PI*2,r=MAP+6+srand()*50;tree(Math.cos(a)*r,Math.sin(a)*r,1+srand()*.8,true);}
   // stones in the dirt, and weeds and long grass along every wall, fence and doorstep where feet don't wear it away
   scatterModels(['wooden_bucket_01','wooden_bucket_02','wicker_basket_01','wooden_crate_02'],50,(x,z)=>isFree(x,z,.8)&&!isFree(x,z,1.8)&&Math.abs(x)>4&&Math.abs(z)>4,29,.7,1.1,{wooden_bucket_01:{m:2.5,auto:'cyl'},wooden_bucket_02:{m:2.2,auto:'cyl'},wicker_basket_01:{m:1.4,auto:'cyl'},wooden_crate_02:{m:13,auto:'box'}});
   placeModel('stone_fire_pit',{x:9,z:9,h:.3});
@@ -2420,8 +2460,8 @@ function buildBreach(){
   const WZ=6,WT=2.4,WH=7.2,XW=22,ZB=-24,gx=9,ghw=1.8,bx=-4.5,bhw=2.6;
   const B=BREACH={WZ,XW,ZB,open:[{x:bx,hw:bhw}],gate:null,banner:null,ramT:0,hold:0};
   // ground: the yard inside is gravel, the field outside grass
-  {const g=new THREE.PlaneGeometry(220,WZ+110);g.rotateX(-Math.PI/2);scaleUV(g,220/6.5,(WZ+110)/6.5);const m=new THREE.Mesh(g,MATS.gravel);m.position.z=WZ-(WZ+110)/2;m.receiveShadow=true;world.add(m);}
-  {const g=new THREE.PlaneGeometry(220,110);g.rotateX(-Math.PI/2);scaleUV(g,220/7,110/7);const m=new THREE.Mesh(g,MATS.villageGround||MATS.gravel);m.position.set(0,.004,WZ+55);m.receiveShadow=true;world.add(m);}
+  {const w=2*XW+4,d=WZ-ZB+3,g=new THREE.PlaneGeometry(w,d);g.rotateX(-Math.PI/2);scaleUV(g,w/6.5,d/6.5);const m=new THREE.Mesh(g,MATS.gravel);m.position.set(0,.008,WZ-d/2);m.receiveShadow=true;world.add(m);}
+  {const g=new THREE.PlaneGeometry(700,700,35,35);g.rotateX(-Math.PI/2);scaleUV(g,700/7,700/7);const m=new THREE.Mesh(g,MATS.meadow);m.position.set(0,.002,0);m.receiveShadow=true;world.add(m);}   // (Build 203) meadow, out to the far woods
   // a stretch of dressed-stone wall from x0 to x1 along the wall line, with a walkway parapet and merlons on top
   const wallRun=(x0,x1,z,h,t,cren=true)=>{const L=x1-x0,cx=(x0+x1)/2;addGeo('ashlar',boxUV(L,h,t,3),T(cx,h/2,z));addGeo('ashlar',boxUV(L,.35,t+.25,3),T(cx,.17,z));   // a plinth
     if(cren){for(let x=x0+.45;x<x1-.3;x+=1.25)addGeo('ashlar',boxUV(.7,.9,.5,1.5),T(x+.35,h+.45,z+t/2-.25));addGeo('ashlar',boxUV(L,.18,t+.2,3),T(cx,h-.09,z));}};
@@ -2485,7 +2525,9 @@ function buildBreach(){
     const head=new THREE.Mesh(new THREE.CylinderGeometry(.26,.26,.4,10),MATS.iron);head.rotation.x=Math.PI/2;head.position.z=-2.5;RG.add(head);
     for(const zz of [-1.2,1.4])for(const s of [-1,1]){const ch=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,1.2,4),MATS.iron);ch.position.set(s*.12,.6,zz);ch.rotation.z=s*.1;RG.add(ch);}}
   for(const [x,z] of [[-12,WZ+18],[8,WZ+20],[22,WZ+16]]){addFlame(x,.3,z,1.2,true);addGeo('stone',new THREE.TorusGeometry(.5,.12,6,12).rotateX(Math.PI/2),T(x,.1,z));}
-  addMountains(0x8d99ae,0xa9b4c6);
+  {let sd=331;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let k=0;k<(TOUCH?40:110);k++){const x=(r()-.5)*230,z=WZ+44+r()*r()*80;tree(x,z,1.1+r()*.7,true);}}   // (Build 203) woods beyond the camp, then painted ones to the hills
+  forestRing(150,160,WZ+10);addMountains(0x7d8b74,0x9aa79a);
+  buildGrass(MAP+6,(x,z)=>z>WZ+WT/2+.4&&!(Math.abs(x-gx)<2.2&&z<WZ+8),true);   // (Build 203) grass over the field outside, worn away where the ram stands
   flushBatch();
 }
 // lead a bot through the wall by a way that's open; the defenders' men-at-arms hold the yard rather than sally out after them
@@ -2585,7 +2627,7 @@ function raidZ(s,lz){return (s?1:-1)*(RAID_W0-lz);}
 function buildRaid(){
   const WH=6,WT=2.2,XW=20,BK=-26,gx=7,ghw=1.9,bx=-8,bhw=2.5;
   const R=RAID={W0:RAID_W0,XW,BK,gx,bx,ghw,bhw,WH,team:[],racks:[],lad:[]};
-  {const g=new THREE.PlaneGeometry(200,220);g.rotateX(-Math.PI/2);scaleUV(g,200/7,220/7);const m=new THREE.Mesh(g,MATS.villageGround||MATS.gravel);m.receiveShadow=true;world.add(m);}
+  {const g=new THREE.PlaneGeometry(700,700,35,35);g.rotateX(-Math.PI/2);scaleUV(g,700/7,700/7);const m=new THREE.Mesh(g,MATS.meadow);m.receiveShadow=true;world.add(m);}   // (Build 203) meadow, out to the far woods
   // the road between the gates, a ribbon of rutted dirt that wanders a little
   const rx=z=>gx+1.2*Math.sin(z/9)*Math.max(0,1-Math.abs(z)/(RAID_W0+1)*0)*(Math.abs(z)<RAID_W0-3?1:0);R.roadX=rx;
   {const pos=[],uv=[],idx=[];let n=0;for(let z=-RAID_W0-4;z<=RAID_W0+4;z+=.8){const x=rx(z),w=2.2+.3*Math.cos(z/7);pos.push(x-w,.012,z,x+w,.012,z);uv.push(0,z/4,w/2,z/4);if(n)idx.push(2*n-2,2*n,2*n-1,2*n-1,2*n,2*n+1);n++;}
@@ -2671,7 +2713,7 @@ function buildRaid(){
   // the field: trees along the sides, a ruined chapel and a farm wall in the middle for cover, fallen trunks
   let sd=4219;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   for(let k=0;k<150;k++){const side=r()<.5?-1:1,x=side*(25+Math.pow(r(),1.6)*22),z=(r()-.5)*150;tree(x,z,.85+r()*.5);addCircle(x,z,.32,4);}
-  for(let k=0;k<26;k++){const x=(r()-.5)*36,z=(r()-.5)*(2*RAID_W0-14);if(Math.abs(x-rx(z))<4||Math.abs(x-R.bx)<4.5||Math.abs(x+18)<6&&Math.abs(z-2)<7)continue;if(r()<.6)tree(x,z,.8+r()*.4);addCircle(x,z,.32,4);}
+  for(let k=0;k<26;k++){const x=(r()-.5)*36,z=(r()-.5)*(2*RAID_W0-14);if(Math.abs(x-rx(z))<4||Math.abs(x-R.bx)<4.5||Math.abs(x+18)<6&&Math.abs(z-2)<7)continue;if(r()<.6){tree(x,z,.8+r()*.4);addCircle(x,z,.32,4);}}   // (Build 203: the spots that drew no tree still got its collider, so the field had a dozen invisible posts)
   for(let k=0,t=0;k<70&&t<1400;t++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!(Math.abs(z)<RAID_W0-4&&Math.abs(x-rx(z))>3.5))continue;bush(x,z,.7+r()*.6);k++;}   // (Build 191: drawn bushes, not the scanned shrubs that looked like floating leaves)
   // the chapel: broken walls waist to head high, an arch standing
   {const cx=-18,cz=2,st=(x0,x1,z0,z1,h)=>{addGeo('ashlar',boxUV(x1-x0,h,z1-z0,2),T((x0+x1)/2,h/2,(z0+z1)/2));addBox(x0,x1,z0,z1,h);};
@@ -2680,6 +2722,8 @@ function buildRaid(){
   for(const [x,z,a] of [[1.5,-14,.3],[-1.5,13,-.4],[15,6,1.2],[-17,-16,.8],[18,-20,.1]]){addGeo('bark',new THREE.CylinderGeometry(.28,.34,4.2,8),T(x,.3,z,a,0,Math.PI/2));const c=Math.cos(a),sn=Math.sin(a);for(let t=-1.8;t<=1.8;t+=.6)addCircle(x+c*t,z-sn*t,.36,.6);}
   // the edges of the field: nobody wanders off into the woods
   addBox(-60,-44,-90,90,4);addBox(44,60,-90,90,4);addBox(-60,60,-90,-68,4);addBox(-60,60,68,90,4);
+  {let sd=613;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let k=0;k<(TOUCH?40:130);k++){const side=r()<.5?-1:1,x=side*(48+r()*50),z=(r()-.5)*190;tree(x,z,1.1+r()*.7,true);}}   // (Build 203) the woods go on behind the field's edge, out to the painted ones
+  forestRing(132,162,0);addMountains(0x7d8b74,0x9aa79a);
   buildGrass(MAP+6,(x,z)=>Math.abs(x)<44&&Math.abs(z)<68&&!(Math.abs(x)<XW+1&&Math.abs(z)>RAID_W0-1.2)&&!(Math.abs(z)<RAID_W0+2&&Math.abs(x-rx(z))<2.8),true);   // (Build 199) grass over the field between the castles (not in the yards, not on the road)
   flushBatch();}
 function raidZoneOf(x,z,ext=0){if(!RAID)return -1;for(const t of RAID.team){const Z=t.zone;if(x>Z.x0-ext*.3&&x<Z.x1+ext*.3&&z>Z.z0-ext&&z<Z.z1+ext)return t.s;}return -1;}
@@ -2822,7 +2866,7 @@ function roadGate(x,z,hw,h,side){const G=new THREE.Group();G.position.set(x,0,z)
   return {G,box:addBox(x-hw,x+hw,z-.3,z+.3,h),x,z,hw,h,side,st:'shut'};}
 function buildRoad(){
   const Z0=-68,Z1=70,R=ROAD={Z0,Z1,cart:null,log:null,amb:[-46,-17,13,44],end:64};
-  {const g=new THREE.PlaneGeometry(220,220);g.rotateX(-Math.PI/2);scaleUV(g,220/7,220/7);const m=new THREE.Mesh(g,MATS.villageGround||MATS.gravel);m.receiveShadow=true;world.add(m);}
+  {const g=new THREE.PlaneGeometry(700,700,35,35);g.rotateX(-Math.PI/2);scaleUV(g,700/7,700/7);const m=new THREE.Mesh(g,MATS.meadow);m.receiveShadow=true;world.add(m);}   // (Build 203) meadow, out to the far woods
   // the road: a ribbon of rutted dirt along the curve, a little wider at the bends
   {const pos=[],uv=[],idx=[];let n=0,acc=0,pz=Z0-6;for(let z=Z0-6;z<=Z1+8;z+=.8){const [dx,dz]=roadDir(z),x=roadX(z),w=2.3+.4*Math.abs(Math.cos(z/22));acc+=Math.hypot(x-roadX(pz),z-pz);pz=z;
       pos.push(x-dz*w,.012,z+dx*w,x+dz*w,.012,z-dx*w);uv.push(0,acc/4,w*2/4,acc/4);if(n)idx.push(2*n-2,2*n,2*n-1,2*n-1,2*n,2*n+1);n++;}   /* wound to face up */
@@ -2831,6 +2875,8 @@ function buildRoad(){
   let sd=4711;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
   // the forest: trees thick a few metres off the road, thinning out with distance; shrubs between
   for(let k=0;k<260;k++){const z=Z0-10+r()*(Z1-Z0+24),side=r()<.5?-1:1,off=5+Math.pow(r(),1.9)*28,x=roadX(z)+side*off;if(z>Z1-6&&Math.abs(x)<16||z<Z0+5&&Math.abs(x-roadX(z))<46)continue;tree(x,z,.85+r()*.55);addCircle(x,z,.32,4);}
+  {let sd=977;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};   // (Build 203) the wood goes on behind: thinner, bigger trees out to where the painted woods take over
+    for(let k=0;k<(TOUCH?50:150);k++){const z=Z0+6+r()*(Z1-Z0-14),side=r()<.5?-1:1,off=30+r()*52,x=roadX(z)+side*off;tree(x,z,1.1+r()*.7,true);}}
   {let sd=55;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};for(let k=0,t=0;k<110&&t<2200;t++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP,d=Math.abs(x-roadX(z));if(!(d>3.4&&d<14&&z<Z1-6))continue;bush(x,z,.7+r()*.7);k++;}}   // (Build 191: drawn bushes)
   // fallen trunks the bandits hide behind, a wayside cross, a milestone
   for(let k=0;k<10;k++){const z=Z0+8+k*13+r()*4,side=k%2?1:-1,x=roadX(z)+side*(7+r()*6);addGeo('bark',new THREE.CylinderGeometry(.28,.34,4.5,8),T(x,.3,z,r()*3,0,Math.PI/2));addBox(x-1.3,x+1.3,z-1.3,z+1.3,.6);}
@@ -2871,7 +2917,7 @@ function buildRoad(){
     for(let k=0;k<5;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.05,.09,1.6,5),MATS.bark||MATS.wood);b.position.set(-3+k*1.4,.6,(k%2?1:-1)*.4);b.rotation.set(k%2?.8:-.8,0,.3);G.add(b);}
     R.log={G,z,box:addBox(x-3.6,x+3.6,z-.45,z+.45,.75),st:'down'};}
   buildGrass(MAP+6,(x,z)=>z>R.Zs+1&&z<Z1-5&&Math.abs(x-roadX(z))>2.9,true);   // (Build 199) the forest floor is grass, as round the village: bare flat ground under the trees read as unfinished
-  addMountains(0x7d8b74,0x9aa79a);
+  forestRing(128,158,1);addMountains(0x7d8b74,0x9aa79a);
   flushBatch();
 }
 // (Build 194) put the physical powder cart on the road at z, shafts pointing north along it, at rest
@@ -2924,7 +2970,10 @@ float wn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(wh(i)
 float wfbm(vec2 p){return wn(p)*.5+wn(p*2.03+7.1)*.3+wn(p*4.1+3.3)*.2;}`;
 function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);
   sh.vertexShader='varying vec3 vWW;\n'+sh.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWW=(modelMatrix*vec4(transformed,1.)).xyz;');
-  sh.fragmentShader='varying vec3 vWW;\n'+WN+'\n'+sh.fragmentShader.replace('#include <map_fragment>',kind==='ground'?`#include <map_fragment>
+  sh.fragmentShader='varying vec3 vWW;\n'+WN+'\n'+sh.fragmentShader.replace('#include <map_fragment>',kind==='meadow'?`#include <map_fragment>
+    { float big=wfbm(vWW.xz*.045),mid=wfbm(vWW.xz*.33+7.),fine=wn(vWW.xz*1.7+3.);   // lusher and drier stretches over tens of metres, patches of a few, so the scan never shows its repeat
+      vec3 lush=diffuseColor.rgb*vec3(.74,1.04,.6),dry=diffuseColor.rgb*vec3(1.04,1.,.72);
+      diffuseColor.rgb=mix(lush,dry,smoothstep(.36,.72,big))*mix(.8,1.1,mid)*mix(.93,1.05,fine); }`:kind==='ground'?`#include <map_fragment>
     { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);
       diffuseColor.rgb*=mix(.74,1.12,big)*mix(.88,1.07,mid);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.8,.72),smoothstep(.55,.8,big)*.5);   // damp, darker brown patches
       float trod=smoothstep(14.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.14*trod;   // the middle is packed down by feet
@@ -2937,6 +2986,7 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
   const k0=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>k0+'|w'+kind;return m;}
 for(const k of ['lime','limeDark','stone','stoneLight','ashlar','beam','plaster0','plaster1','plaster2','woodPale','wood','tile'])if(MATS[k])weather(MATS[k],'wall');
 for(const k of ['gravel','sand'])if(MATS[k])weather(MATS[k],'ground');
+weather(MATS.meadow,'meadow');
 // photo-scanned surfaces (CC0, Poly Haven; see CREDITS.md). They replace the drawn ones as they arrive; if they can't load, the drawn ones stay.
 // Each set is colour, normal and a packed map (red = ambient occlusion, green = roughness). rep = tiles per unit of the geometry's UVs.
 const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
@@ -2945,7 +2995,7 @@ const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
   slate:{mats:{slate:{rep:.8,ns:1.3,col:0x8e949c},towerSlate:{rep:.8,ns:1.3,col:0x8e949c}}},
   floor:{mats:{floorPlank:{rep:1,ns:1.3,col:0xf0e0d0}}},boards:{mats:{boards:{rep:1,ns:1.2,col:0xe0c8b0},woodLight:{rep:1,ns:1.2,col:0xf4e2cc}}},
-  grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},
+  grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},meadow:{mats:{meadow:{rep:2.6,ns:1,col:0x7ca65a}}},bark:{mats:{bark:{rep:1,ns:1.4,col:0xb8ac9c}}},
   rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
@@ -3023,7 +3073,7 @@ function buildArena(){
     addGeo('woodLight',boxUV(3.2,.16,.16,1),T(x,.75,z,ry));for(let k=-1;k<=1;k++){const ox=Math.cos(-ry)*k*1.2,oz=Math.sin(-ry)*k*1.2;addGeo('woodLight',boxUV(.1,1.7,.1,1),T(x+ox,.75,z+oz,ry,.7));addGeo('woodLight',boxUV(.1,1.7,.1,1),T(x+ox,.75,z+oz,ry,-.7));}
     const c=Math.abs(Math.cos(ry)),sn=Math.abs(Math.sin(ry));addBox(x-1.7*c-.3,x+1.7*c+.3,z-1.7*sn-.3,z+1.7*sn+.3,1.1);}
   for(let i=0;i<6;i++){const a=i/6*6.283+rand(0,.8),rr=rand(5,26),x=Math.cos(a)*rr,z=Math.sin(a)*rr;if(!isFree(x,z,1.6))continue;const t=i%3;if(t===0){crate(x,z);crate(x+.85,z+.1,.4);barrel(x+.3,z+.9);}else if(t===1){barrel(x,z);barrel(x+.75,z+.2);crate(x-.2,z+.9);}else{addGeo('woodLight',boxUV(2.2,.1,.1,1),T(x,1.5,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x-1,.8,z));addGeo('woodLight',boxUV(.12,1.6,.12,1),T(x+1,.8,z));addBox(x-1.1,x+1.1,z-.2,z+.2,1.6);}}
-  for(let i=0;i<40;i++){const a=srand()*6.283,rr=70+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  for(let i=0;i<40;i++){const a=srand()*6.283,rr=70+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6,true);}
   clutter(500,(x,z)=>Math.hypot(x,z)<Rr-.4,(x,z)=>clamp(1-(Rr-Math.hypot(x,z)-.4)/1.2,0,1),23);
   buildCrowd(r0,wallH,dr,dy,tiers);
   addMountains(0x8d99ae,0xa9b4c6);
@@ -3086,7 +3136,7 @@ function buildPit(){
   for(let i=0;i<10;i++){const a=i/10*6.283+.2,r=24+(i%3)*6;placeModel(i%2?'tree_stump_01':'tree_stump_02',{x:Math.cos(a)*r,z:Math.sin(a)*r,s:.9+(i%3)*.2,ry:a});}
   placeModel('dead_tree_trunk',{x:-22,z:9,ry:.7,s:1.2});
   clutter(800,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<W-.5&&Math.hypot(x-PIT.x,z-PIT.z)>PIT.r+.7,(x,z)=>{const e=W-Math.max(Math.abs(x),Math.abs(z)),f=Math.abs(Math.max(Math.abs(x),Math.abs(z))-F);return Math.max(clamp(1-(e-.5)/1.4,0,1),clamp(1-f/.5,0,1)*.7);},17);
-  for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6);}
+  for(let i=0;i<40;i++){const a=srand()*6.283,rr=26+srand()*40;tree(Math.cos(a)*rr,Math.sin(a)*rr,1+srand()*.6,true);}
   addMountains(0x8d99ae,0xa9b4c6);
   flushBatch();
 }
@@ -3115,7 +3165,9 @@ function buildYard(){
   if(false)for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
   // the gatehouse in the north wall: an iron-banded door under a little tiled roof
   placeModel('large_castle_door',{x:0,z:W-.95,ry:Math.PI,fit:[3.6,4.2,.35]},g=>{const m=new THREE.Mesh(boxUV(3.6,4.2,0.3,1.5),MATS.wood);m.position.y=2.1;g.add(m);for(const y of [.9,2.1,3.3]){const b=new THREE.Mesh(boxUV(3.7,.12,0.36,1),MATS.iron);b.position.y=y;g.add(b);}});
-  addGeo('lime',boxUV(5.2,1.1,1.2,1.5),T(0,4.75,W-1.1));for(const sd of [-1,1])addGeo('tile',boxUV(5.8,.1,1.6,2),T(0,5.65,W-1.55+sd*.0-.3,0,.5));
+  // (Build 203) a timber hood over the gate: a lintel beam, joists out from the wall on braces, tiles on top (it was a pale block of another stone stuck on the wall)
+  addGeo('beam',boxUV(4.5,.3,.5,1),T(0,4.38,W-1.2));for(const sx of [-2,-.67,.67,2]){addGeo('beam',boxUV(.16,.16,1.5,1),T(sx,4.78,W-1.7,0,.3));if(Math.abs(sx)>1)addGeo('beam',boxUV(.14,.14,1.2,1),T(sx,4.2,W-1.45,0,-.85));}
+  addGeo('tile',boxUV(4.9,.1,1.7,2),T(0,5.0,W-1.72,0,.3));
   // the castle beyond the walls: a stone keep with a slate roof, a hall, a tall round tower and roofs over the side walls, so the skyline isn't empty
   {const b={pv:0,thatch:false,chimney:true,door:0,torch:false,light:false,noDoor:true};
     house(-6,W+9,0,12,8,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(9,W+6,0,9,6,4,{...b,pv:1,gf:true,slate:true});
@@ -3205,9 +3257,9 @@ const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
   arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
   colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
-  tavern:{entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
+  tavern:{shR:36,entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
-  mill:{shR:16,entry:{x:-12.2,z:-4,dx:1,dz:0},name:'The Mill',build:()=>buildMill(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:3,lootR:13,ceil:7.4,loot:14,fighters:8,light:'mill',noRing:true,spot:()=>[rand(-11.5,11.5),rand(-6.8,3.7)]},
+  mill:{shR:30,entry:{x:-12.2,z:-4,dx:1,dz:0},name:'The Mill',build:()=>buildMill(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:3,lootR:13,ceil:7.4,loot:14,fighters:8,light:'mill',noRing:true,spot:()=>[rand(-11.5,11.5),rand(-6.8,3.7)]},
   breach:{shR:30,entry:{x:-4.5,z:16,dx:0,dz:-1},name:'The Breach',build:()=>buildBreach(),MAP:44,arena:0,zoneR:60,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   raid:{shR:40,entry:{x:7,z:0,dx:0,dz:1},name:'The Raid',build:()=>buildRaid(),MAP:80,arena:0,zoneR:90,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   road:{shR:24,entry:{x:0,z:-32,dx:0,dz:1},name:'The Road',build:()=>buildRoad(),MAP:90,arena:0,zoneR:80,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
@@ -3879,7 +3931,7 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
 const WOOLT=(()=>{const L=new THREE.TextureLoader(),mk=(k)=>{const m=L.load('assets/tex/'+k+'_d.jpg'),n=L.load('assets/tex/'+k+'_n.jpg');m.colorSpace=THREE.SRGBColorSpace;for(const x of [m,n]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(22,22);x.anisotropy=MAXANI;}return {m,n};};return {wool:mk('wool'),twill:mk('twill')};})();
 const GARB={1:{id:'shirt',belt:'belt_shirt',mat:'linen'},2:{id:'aketon',mat:'quilt'},3:{id:'cote',belt:'belt_cote',mat:'wool'},4:{id:'doublet',belt:'belt_doublet',mat:'twill'}};
 // body armour over a draped garment: the part it covers isn't drawn (the cloth would poke through the steel); x = half-width, y = from
-const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.215,1.03,1.39],mail:[.465,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
+const GARB_CLIP={plate:[.3,.64,1.37],brigandine:[.215,1.065,1.39],mail:[.465,.74,9]},GARB_NOCLIP=new THREE.Vector3(9,9,9);   // [half-width, from, to] (Build 132: mail hides the cloth only above its own hem, ~.74; at .45 a cote's or aketon's hem was left as a lone band round the shins with nothing above it, like hose round the ankles. Build 128: up to the plate's top edge, so the shirt still shows at the neck instead of bare skin)
 // the legs push the skirt out of their way (Build 127): each frame the hips, knees and ankles go to the garment's shader in its own space and
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m,pad=0){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile,PD=pad.toFixed(4);   /* pad: a belt lies that much further out than the cloth it's on */
@@ -5159,7 +5211,9 @@ function fitPieces(body,def){if(!OLD_PLATE&&(def.id==='plate'||def.id==='vambrac
       S('fauld',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftUpLeg','RightUpLeg']))>.6&&y>hy-.13&&y<hy+.09;},off:.05,smooth:10,bodySmooth:4,minK:.85,rim:.004,skirt:{y0:hy+.01,flare:.12,hold:.7},loose:(x,y,z)=>(hy-y)/.14*.45,fallback:'Hips'},faulMat,['Hips','Spine']),
       // spaulders: lames over the shoulder and down the top of the upper arm
       S('spaulder',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,['LeftArm','RightArm','LeftShoulder','RightShoulder'])>.55&&w(v,['LeftForeArm','RightForeArm'])<.05&&w(v,neck)<.15&&y>J.LeftArm.y-.15;},off:.05,smooth:10,bodySmooth:6,rim:.004,fallback:'LeftArm'},faulMat,['LeftShoulder','RightShoulder','LeftArm','RightArm'])];
-    case 'brigandine':{const sh=S('brig2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35&&w(v,neck)<.3&&y>hy-.07&&y<J.Neck.y-.01;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),skirt:{y0:hy-.02,flare:.06},hemAt:hy-.012,rimSmooth:5,loose:(x,y,z)=>(hy-.02-y)/.1*.4},brigMat,torso);   /* (Build 199: cut level at the hip; it used to keep the strip of skin down the cleft of the seat, which hung below the hem as a pointed tail) */let hemY=9;{const P=sh[0].attributes.position;for(let i=0;i<P.count;i++)hemY=Math.min(hemY,P.getY(i));}return [sh,[edgeBinding(sh[0],.0055,5,p=>(Math.abs(p.x)>.1&&p.y>hy+.22)||(Math.abs(p.x)<.06&&p.y>hemY+.007)),strapMat]];}   /* (Build 199: nor up the seam where the two legs' halves meet at the back and front, which drew a dark notch at the middle of the hem) */   /* (not round the armholes: the arm swings through there) */   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
+    case 'brigandine':{const ax=Math.abs(J.LeftArm.x)-.03;   /* (Build 203) the armhole is a straight cut just inside the shoulder joint: choosing the cloth by skin weights alone cut the back away to a strap between the shoulder blades, and the front to narrow braces */
+      const sh=S('brig3',{keep:(v,P,w)=>{const x=Math.abs(P.getX(v)),y=P.getY(v);if(!(y>hy-.035&&y<J.Neck.y-.01)||w(v,neck)>=.3||w(v,['LeftForeArm','RightForeArm'])>.02)return false;
+        return x<ax&&w(v,['LeftArm','RightArm'])<.8||w(v,torso.concat(['LeftShoulder','RightShoulder']))>.5&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.35;},off:.046,smooth:30,bodySmooth:24,minK:.9,rim:.005,shape:convexTorso(0,.3,.22,.5,4),hemAt:hy-.012,rimSmooth:5},brigMat,torso);   /* (Build 199: cut level at the hip; it used to keep the strip of skin down the cleft of the seat, which hung below the hem as a pointed tail) */let hemY=9;{const P=sh[0].attributes.position;for(let i=0;i<P.count;i++)hemY=Math.min(hemY,P.getY(i));}return [sh,[edgeBinding(sh[0],.0055,5,p=>Math.abs(p.x)>.1&&p.y>hy+.22),strapMat]];}   /* (Build 199: nor up the seam where the two legs' halves meet at the back and front, which drew a dark notch at the middle of the hem) */   /* (not round the armholes: the arm swings through there) */   // rides the spine only: shoulder weights pulled the chest into bulges when the arms came up
     case 'mail':return [S('hauberk2',{keep:(v,P,w)=>{const y=P.getY(v);return w(v,neck)<.4&&w(v,['Hands*'])<.1&&Math.abs(P.getX(v))<J.LeftForeArm.x+.06&&y>hy-.28&&y<J.Neck.y+.02&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05;},off:.032,smooth:6,bodySmooth:4,minK:.85,rim:.003,cuff:Math.abs(J.LeftForeArm.x)+.015,rimSmooth:6,shape:convexTorso(0,.35,.2,.6),skirt:{y0:hy+.03,flare:.3,hold:1,hem:true},loose:(x,y,z)=>Math.pow((hy-.03-y)/.25,1.3)*.75},mailMat,null)];
     case 'vambraces':return [S('vamb',{keep:(v,P,w)=>w(v,['LeftForeArm','RightForeArm'])>.6&&w(v,['LeftHand','RightHand'])<.05,off:.025,smooth:8,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftForeArm','RightForeArm']),
       S('couter',{keep:(v,P,w)=>w(v,['LeftArm','RightArm'])>.22&&w(v,['LeftForeArm','RightForeArm'])>.22,off:.036,smooth:6,rim:.004,fallback:'LeftForeArm'},steelFitMat,['LeftArm','RightArm','LeftForeArm','RightForeArm']),   // a cup over the elbow
@@ -5672,10 +5726,10 @@ function natGuide(f,g,tgt){const F=tgt?natForearm(f,tgt,_nfF):f.foreF;if(!F||F.l
   return g;}
 function edgeHome(s,out){const f=s.owner,A=s.axis;   /* (Build 147: the forearm's knuckle side pointed sideways for an overhead longsword, so a downward cut came in flat) */
   f.fwd(out);out.y=0;out.normalize().addScaledVector(A,-out.dot(A));if(out.lengthSq()<.12){out.set(0,1,0).addScaledVector(A,-A.y);}if(out.lengthSq()<1e-6)return null;return out.normalize();}
-const AXE_RL=40;function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind==='fist')return 0;const A=s.axis;
+const AXE_RL=40;let AXE_RLC=+(new URLSearchParams(location.search).get('axerlc')??75);function rollLimit(s,out){const f=s.owner;if(!f||!f.foreF||s.free||s.def.kind==='fist')return 0;const A=s.axis;
   _rr.copy(f.foreF).addScaledVector(A,-f.foreF.dot(A));if(_rr.lengthSq()<.25)return 0;   // blade near the forearm line: the knuckle reference is unreliable_rr.normalize();
   let c=_rr.dot(s.edge);if(s.def.kind==='blade'&&c<0){_rr.negate();c=-c;}
-  const mx=(s.def.kind==='blade'?(twoH(s.def)?RL2:RL1):s.def.kind==='axe'?AXE_RL:twoH(s.def)?100:70)*Math.PI/180,th=Math.acos(clamp(c,-1,1));if(th<=mx)return 0;
+  const mx=(s.def.kind==='blade'?(twoH(s.def)?RL2:RL1):s.def.kind==='axe'?(f.commit&&s.tipVel.lengthSq()>49?AXE_RLC:AXE_RL):twoH(s.def)?100:70)*Math.PI/180,th=Math.acos(clamp(c,-1,1));if(th<=mx)return 0;
   _rp.copy(s.edge).addScaledVector(_rr,-c);if(_rp.lengthSq()<1e-8)_rp.crossVectors(A,_rr);_rp.normalize();
   const sg=Math.sign(_wl1.crossVectors(_rr,s.edge).dot(A))||1;out.copy(_rr).multiplyScalar(Math.cos(mx)).addScaledVector(_rp,Math.sin(mx));return (th-mx)*sg;}
 // wrist joint limit: a gripped weapon stays between 12 and 112 degrees of the forearm line; it can't fold back past the hand

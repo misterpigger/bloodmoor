@@ -78,3 +78,76 @@ The Arena, Pit/Mutiny, duel and training-yard/Tavern themes (Build 86) add more 
 - Weapon models (since Build 173, `assets/models/w_*.glb`, optimised to WebP textures and meshopt): Poly Haven [Antique Estoc](https://polyhaven.com/a/antique_estoc) (`w_estoc`, the greatsword), [Ornate Medieval Mace](https://polyhaven.com/a/ornate_medieval_mace) (`w_mace`), [Wooden Axe](https://polyhaven.com/a/wooden_axe) (`w_axe`, its haft drawn out to a two-hander's length), **CC0 1.0**.
 - Arming sword and longsword (since Build 174, `assets/models/w_arming.glb`; the longsword is the same sword with its grip drawn out): [15th Century Arming Sword](https://sketchfab.com/3d-models/15th-century-arming-sword-new-background-v-2-6f41723835684677bdfcbd154df5370e) by [The Oakeshott Institute](https://sketchfab.com/oakeshott), **CC BY 4.0** ([licence](http://creativecommons.org/licenses/by/4.0/)), fetched from its Objaverse copy on Zenodo (record 10282988), optimised (WebP textures, meshopt) and brightened in the game.
 - Visored helmet (since Build 174, `assets/models/w_barbute.glb`, worn as the bascinet): [Visored Barbute Helmet](https://sketchfab.com/3d-models/visored-barbute-helmet-5e3d0edb528e429e8f2e7b705423b0a9) by [D3 (dentro)](https://sketchfab.com/dentro), **CC BY 4.0** ([licence](http://creativecommons.org/licenses/by/4.0/)), from Zenodo record 10241751; optimised, scaled to each head and drawn in the game's armour steel.
+
+## Textures and sky
+Photo-scanned surfaces and the daylight sky are from [Poly Haven](https://polyhaven.com), released under **CC0 1.0**. They were downloaded by `tools/fetch_cc0.py` and resized and repacked for the web (colour, normal, and a packed map with ambient occlusion in red and roughness in green); `assets/cc0.json` lists them.
+- Ground gravel: [Rocky Trail](https://polyhaven.com/a/rocky_trail)
+- Arena sand: [Gravelly Sand](https://polyhaven.com/a/gravelly_sand)
+- Stone walls: [Castle Wall Slates](https://polyhaven.com/a/castle_wall_slates)
+- Village and Arena surfaces (since Build 94), fetched by `tools/fetch_polyhaven_textures.py` (run on GitHub's servers from the `fetch-models` branch) and resized to 1024 px (packed map 512 px):
+  - House plaster (`plaster_*`): [Plastered Wall 03](https://polyhaven.com/a/plastered_wall_03)
+  - Timber framing and boards (`timber_*`): [Rough Wood](https://polyhaven.com/a/rough_wood)
+  - Thatch (`thatch_*`): [Riet 01](https://polyhaven.com/a/riet_01)
+  - Roof tiles (`rooftile_*`): [Clay Roof Tiles](https://polyhaven.com/a/clay_roof_tiles)
+  - Village stone (`stone_*`): [Medieval Blocks 05](https://polyhaven.com/a/medieval_blocks_05)
+  - Street cobbles (`cobble_*`): [Cobblestone Floor 04](https://polyhaven.com/a/cobblestone_floor_04)
+  - Slate roofs (`slate_*`, since Build 95, ridge row cropped): [Roof Slates 03](https://polyhaven.com/a/roof_slates_03)
+  - Tavern floor and ship deck (`floor_*`, since Build 95): [Wooden Planks](https://polyhaven.com/a/wooden_planks)
+  - Tavern panelling and ceiling (`boards_*`, since Build 95): [Old Planks 02](https://polyhaven.com/a/old_planks_02)
+  - Village ground (`grass_*`, since Build 96): [Sparse Grass](https://polyhaven.com/a/sparse_grass)
+  - Arena ashlar (`ashlar_*`): [Large Sandstone Blocks](https://polyhaven.com/a/large_sandstone_blocks)
+  - Tree bark (`bark_*`, since Build 203): [Bark Brown 02](https://polyhaven.com/a/bark_brown_02)
+  - Meadow ground on the Road, the Raid's field and outside the Breach (`meadow_*`, since Build 203): [Grass Ground](https://polyhaven.com/a/grass_ground)
+- Sky: [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky)
+
+Gear materials (since Build 58), released under **CC0 1.0**, fetched by `tools/fetch_cc0_2.py` (on the `cc0-fetch` branch) and resized to 512 px and repacked:
+- Brushed steel roughness (`steel_r.jpg`): [ambientCG Metal009](https://ambientcg.com/view?id=Metal009)
+- Riveted mail (`mail_d.jpg`, `mail_orm.jpg` with opacity, roughness and metalness): [ambientCG Chainmail004](https://ambientcg.com/view?id=Chainmail004)
+- Linen weave (`cloth_d.jpg`, `cloth_n.jpg`): [ambientCG Fabric062](https://ambientcg.com/view?id=Fabric062)
+- Wood for hafts (`wood2_d.jpg`, `wood2_n.jpg`): [ambientCG Wood049](https://ambientcg.com/view?id=Wood049)
+- Leather for grips and belts (`leather_d.jpg`, `leather_n.jpg`): [Poly Haven Brown Leather](https://polyhaven.com/a/brown_leather)
+
+## Animation
+- Leg clips `guard` (from *Sword_Idle*) and `crouchwalk` (from *Crouch_Fwd_Loop*) in `fighters.json` (since Build 59): [Quaternius](https://quaternius.com) — *Universal Animation Library* (Standard), released under **CC0 1.0** ([OpenGameArt](https://opengameart.org/content/universal-animation-library)). Fetched by `tools/fetch_cc0_3.py` on the `cc0-fetch` branch and retargeted onto the fighters' skeleton by `tools/anim-retarget.mjs`.
+
+## Code libraries
+- [three.js](https://threejs.org) (MIT)
+- [Rapier](https://rapier.rs) physics, `@dimforge/rapier3d-compat` (Apache-2.0), only loaded for the Rigid body engine
+- [PeerJS](https://peerjs.com) (MIT) for browser-to-browser multiplayer
+
+## 3D models
+
+Scanned and modelled props and scenery from [Poly Haven](https://polyhaven.com), released under **CC0 1.0**. They were downloaded by `tools/fetch_polyhaven_models.py` (run on GitHub's servers by `.github/workflows/fetch-models.yml`) and optimised with glTF-Transform (WebP textures at 512 or 1024 px, meshopt geometry, simplified where heavy) into `assets/models/*.glb`.
+
+- Wooden Table 01: [WoodenTable_01](https://polyhaven.com/a/WoodenTable_01)
+- Dead Tree Trunk: [dead_tree_trunk](https://polyhaven.com/a/dead_tree_trunk)
+- Dutch Ship Large 01: [dutch_ship_large_01](https://polyhaven.com/a/dutch_ship_large_01)
+- Kite Shield: [kite_shield](https://polyhaven.com/a/kite_shield)
+- Large Castle Door: [large_castle_door](https://polyhaven.com/a/large_castle_door)
+- Modular Fort 01: [modular_fort_01](https://polyhaven.com/a/modular_fort_01)
+- Shrub 02: [shrub_02](https://polyhaven.com/a/shrub_02)
+- Shrub 03: [shrub_03](https://polyhaven.com/a/shrub_03)
+- Shrub 04: [shrub_04](https://polyhaven.com/a/shrub_04)
+- Spinning Wheel 01: [spinning_wheel_01](https://polyhaven.com/a/spinning_wheel_01)
+- Stone Fire Pit: [stone_fire_pit](https://polyhaven.com/a/stone_fire_pit)
+- Treasure Chest: [treasure_chest](https://polyhaven.com/a/treasure_chest)
+- Tree Stump 01: [tree_stump_01](https://polyhaven.com/a/tree_stump_01)
+- Tree Stump 02: [tree_stump_02](https://polyhaven.com/a/tree_stump_02)
+- Wicker Basket 01: [wicker_basket_01](https://polyhaven.com/a/wicker_basket_01)
+- Wine Barrel 01: [wine_barrel_01](https://polyhaven.com/a/wine_barrel_01)
+- Wine Bottles 01: [wine_bottles_01](https://polyhaven.com/a/wine_bottles_01)
+- Wooden Bowl 01: [wooden_bowl_01](https://polyhaven.com/a/wooden_bowl_01)
+- Wooden Bucket 01: [wooden_bucket_01](https://polyhaven.com/a/wooden_bucket_01)
+- Wooden Bucket 02: [wooden_bucket_02](https://polyhaven.com/a/wooden_bucket_02)
+- Wooden Crate 01: [wooden_crate_01](https://polyhaven.com/a/wooden_crate_01)
+- Wooden Crate 02: [wooden_crate_02](https://polyhaven.com/a/wooden_crate_02)
+- Wooden Ladder: [wooden_ladder](https://polyhaven.com/a/wooden_ladder)
+- Wooden Lantern 01: [wooden_lantern_01](https://polyhaven.com/a/wooden_lantern_01)
+- Wooden Stool 02: [wooden_stool_02](https://polyhaven.com/a/wooden_stool_02)
+- Lantern Chandelier 01: [lantern_chandelier_01](https://polyhaven.com/a/lantern_chandelier_01)
+- Wooden Barrels 01: [wooden_barrels_01](https://polyhaven.com/a/wooden_barrels_01)
+- Gothic Cabinet 01: [GothicCabinet_01](https://polyhaven.com/a/GothicCabinet_01)
+- Jug 01: [jug_01](https://polyhaven.com/a/jug_01)
+- Cheese Box 01: [CheeseBox_01](https://polyhaven.com/a/CheeseBox_01)
+- Drawer Cabinet: [drawer_cabinet](https://polyhaven.com/a/drawer_cabinet)
+- Wooden Chair 01: [WoodenChair_01](https://polyhaven.com/a/WoodenChair_01)
