@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=226;
+const BUILD=227;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -4615,6 +4615,8 @@ function tintMaterial(m,mode,pal,mats){
         diffuseColor.rgb=mix(c,t*l*gain,msk*.9);
         if(uMode<.5){float w1=tn3(vBind*7.),w2=tn3(vBind*19.+4.),w3=tn3(vBind*61.);   // (Build 225) worn cloth: faded unevenly, grimy in patches, a little yellowed; it was one flat tone from collar to hem
           diffuseColor.rgb*=(.66+.42*w1)*(1.-.26*smoothstep(.5,.82,w2))*(.9+.18*w3);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.8,.66),smoothstep(.3,.75,w1*w2*2.2)*.55);}
+        else if(uMode>1.5){float s1=tn3(vBind*9.),s2=tn3(vBind*31.+2.),ex=max(smoothstep(1.42,1.52,vBind.y),smoothstep(.4,.52,abs(vBind.x)));   // (Build 227) skin that has been outdoors: face, neck, forearms and hands browner than what the clothes cover, uneven, with dirt worked into the hands and wrists
+          diffuseColor.rgb*=mix(vec3(1.),vec3(.82,.74,.66),ex*.6)*(.9+.16*s1);float gr=smoothstep(.5,.8,s2*.7+smoothstep(.58,.74,abs(vBind.x))*.55);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.6,.52,.44),gr*.5*ex);}
         vec2 mu=vec2(vBind.x+vBind.z,vBind.y)*9.;float mop=texture2D(uMailO,mu).r;
         diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.12,.1,.08),texture2D(uMailD,mu).rgb*1.4,mop),${mail});
       }
@@ -7897,7 +7899,7 @@ function woundMat(kind){
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
   return WOUND_MAT[kind]=new THREE.MeshStandardMaterial({map:t,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4,roughness:kind==='bruise'?.8:.3,metalness:0});
 }
-const _wr=new THREE.Raycaster(),_wa=V(),_wb=V(),_wq=V(),_wn=V(),_wt=V(),_wx=V();
+const _wnr=V(),_wr=new THREE.Raycaster(),_wa=V(),_wb=V(),_wq=V(),_wn=V(),_wt=V(),_wx=V();
 // (Build 198) where a blow meets the skin. three.js casts a ray into a skinned mesh by skinning every vertex of it twice over (the
 // bounding sphere, then all ~30,000 triangles): several milliseconds, a dropped frame at the very moment of every hit, and 6-8% of a
 // big fight. Only the triangles that ride the struck limb's bones (and their neighbours) are skinned and tested now.
@@ -7908,21 +7910,29 @@ function triByBone(geo){let T=geo.userData._tb;const n0=geo.index?geo.index.coun
   for(let t=0;t+2<n;t+=3){const a=ix?ix.getX(t):t,b=ix?ix.getX(t+1):t+1,c=ix?ix.getX(t+2):t+2,ba=top(a),bb=top(b),bc=top(c);
     for(const q of (ba===bb&&bb===bc?[ba]:[...new Set([ba,bb,bc])])){let L=tmp.get(q);if(!L)tmp.set(q,L=[]);L.push(a,b,c);}}
   for(const [k,L] of tmp){const ids=new Map(),vid=[],tri=new Uint32Array(L.length);for(let i=0;i<L.length;i++){let j=ids.get(L[i]);if(j==null){j=vid.length;ids.set(L[i],j);vid.push(L[i]);}tri[i]=j;}T.set(k,{tri,vid:Uint32Array.from(vid)});}return T;}   /* each list's own vertices, so each is skinned once a cast */
-function skinRay(mesh,origin,dir,far,bones,out){if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return false;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;
+// (Build 227) where a world point lies in a mesh's bind pose, going by one bone: skin near a wound is found there first, so only that patch is skinned
+// (skinning every vertex that rides a trunk's bones was 10 ms of a 12 ms wound). Returns the bind-space radius for a world one, or 0
+const _bpM=new THREE.Matrix4(),_bpV=V();let _srF=new Uint8Array(3000);
+function bindNear(mesh,bone,C,rad){const sk=mesh.skeleton,i=sk?sk.bones.indexOf(bone):-1;if(i<0||!C)return 0;_bpM.multiplyMatrices(bone.matrixWorld,sk.boneInverses[i]).multiply(mesh.bindMatrix);const sc=_bpM.getMaxScaleOnAxis()||1;_bpV.copy(C).applyMatrix4(_bpM.invert());return rad/sc;}
+function skinRay(mesh,origin,dir,far,bones,out,C,rad,bone){const br=C&&bone?bindNear(mesh,bone,C,rad):0,br2=br*br,bx=_bpV.x,by=_bpV.y,bz=_bpV.z,PA=mesh.geometry.attributes.position;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return false;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;
   _srM.copy(mesh.matrixWorld).invert();_srRay.origin.copy(origin).applyMatrix4(_srM);_srRay.direction.copy(dir).transformDirection(_srM);
   let best=Infinity;const done=new Set();
   for(const bn of bones){const bi=SB.indexOf(bn);if(bi<0||done.has(bi))continue;done.add(bi);const E=T.get(bi);if(!E)continue;const L=E.tri,vid=E.vid,nv=vid.length;
-    if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);for(let i=0;i<nv;i++){mesh.getVertexPosition(vid[i],_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
-    for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
+    if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);if(_srF.length<nv)_srF=new Uint8Array(nv+300);
+    for(let i=0;i<nv;i++){const v=vid[i];if(br){const dx=PA.getX(v)-bx,dy=PA.getY(v)-by,dz=PA.getZ(v)-bz;if(dx*dx+dy*dy+dz*dz>br2){_srF[i]=0;continue;}}_srF[i]=1;mesh.getVertexPosition(v,_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
+    for(let i=0;i<L.length;i+=3){if(!_srF[L[i]]||!_srF[L[i+1]]||!_srF[L[i+2]])continue;const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
       if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(_srRay.origin);if(d<best){best=d;_srO.copy(_srH);}}}}
   if(best===Infinity)return false;out.copy(_srO).applyMatrix4(mesh.matrixWorld);return origin.distanceTo(out)<=far;}
 // several casts into the same limb at once (the skinning is the cost): rays=[{o,d}] in world space, each gets .hit (a world point) or null
-function skinRayN(mesh,rays,far,bones,C,rad){for(const r of rays)r.hit=null,r._b=Infinity;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;_srM.copy(mesh.matrixWorld).invert();
-  for(const r of rays){r._o=r.o.clone().applyMatrix4(_srM);r._d=r.d.clone().transformDirection(_srM);}const done=new Set();let cx=0,cy=0,cz=0,r2=Infinity;if(C){_srC.copy(C).applyMatrix4(_srM);cx=_srC.x;cy=_srC.y;cz=_srC.z;const rl=rad*_srM.getMaxScaleOnAxis();r2=rl*rl;}   // (only triangles near the cut are tried: nine rays against every triangle of a trunk was 25 ms a wound)
+function skinRayN(mesh,rays,far,bones,C,rad,bone){for(const r of rays)r.hit=null,r._b=Infinity;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;_srM.copy(mesh.matrixWorld).invert();
+  for(const r of rays){r._o=r.o.clone().applyMatrix4(_srM);r._d=r.d.clone().transformDirection(_srM);}const done=new Set();const br=C&&bone?bindNear(mesh,bone,C,rad+.06):0,br2=br*br,bx=_bpV.x,by=_bpV.y,bz=_bpV.z,PA=mesh.geometry.attributes.position;   // (only triangles near the cut are tried: nine rays against every triangle of a trunk was 25 ms a wound)
   for(const bn of bones){const bi=SB.indexOf(bn);if(bi<0||done.has(bi))continue;done.add(bi);const E=T.get(bi);if(!E)continue;const L=E.tri,vid=E.vid,nv=vid.length;
-    if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);for(let i=0;i<nv;i++){mesh.getVertexPosition(vid[i],_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
-    for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;{const dx=_srP[a]-cx,dy=_srP[a+1]-cy,dz=_srP[a+2]-cz;if(dx*dx+dy*dy+dz*dz>r2)continue;}_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
-      for(const r of rays){_srRay.origin.copy(r._o);_srRay.direction.copy(r._d);if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(r._o);if(d<r._b){r._b=d;(r.hit||(r.hit=V())).copy(_srH);}}}}}
+    if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);if(_srF.length<nv)_srF=new Uint8Array(nv+300);
+    for(let i=0;i<nv;i++){const v=vid[i];if(br){const dx=PA.getX(v)-bx,dy=PA.getY(v)-by,dz=PA.getZ(v)-bz;if(dx*dx+dy*dy+dz*dz>br2){_srF[i]=0;continue;}}_srF[i]=1;mesh.getVertexPosition(v,_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
+    for(let i=0;i<L.length;i+=3){if(!_srF[L[i]]||!_srF[L[i+1]]||!_srF[L[i+2]])continue;const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
+      const gx=(_srA.x+_srB.x+_srC.x)/3,gy=(_srA.y+_srB.y+_srC.y)/3,gz=(_srA.z+_srB.z+_srC.z)/3,tr2=Math.max((_srA.x-gx)**2+(_srA.y-gy)**2+(_srA.z-gz)**2,(_srB.x-gx)**2+(_srB.y-gy)**2+(_srB.z-gz)**2,(_srC.x-gx)**2+(_srC.y-gy)**2+(_srC.z-gz)**2);
+      for(const r of rays){const vx=gx-r._o.x,vy=gy-r._o.y,vz=gz-r._o.z,tt=vx*r._d.x+vy*r._d.y+vz*r._d.z;if(vx*vx+vy*vy+vz*vz-tt*tt>tr2)continue;   // (the ray's line passes outside the triangle's own round)
+        _srRay.origin.copy(r._o);_srRay.direction.copy(r._d);if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(r._o);if(d<r._b){r._b=d;(r.hit||(r.hit=V())).copy(_srH);}}}}}
   for(const r of rays)if(r.hit){r.hit.applyMatrix4(mesh.matrixWorld);if(r.hit.distanceTo(r.o)>far)r.hit=null;}}
 // the bones a hit capsule's skin rides on: the chain from its first bone to its second, the bone above, and every child of those
 function capBones(B,c){if(c._bn&&c._bnOf===B.bones)return c._bn;c._bnOf=B.bones;const bn=B.bones,A=bn[c.ba],E=bn[c.bb],S=new Set();if(!A)return c._bn=[];let x=E;const chain=[];while(x&&x!==A&&x.isBone){chain.push(x);x=x.parent;}chain.push(A);
@@ -7940,7 +7950,7 @@ function addWound(B,ci,P,axis,dmg,kind){
   const far=camera.position.distanceToSquared(_wq)>196;let hit=null;
   if(!far){B.model.updateMatrixWorld(true);_wb.copy(_wq).addScaledVector(_wn,c.r+.3);_wx.copy(_wn).negate();
     if(window.__oldRay){for(const m of RS)m.boundingSphere=null;_wr.set(_wb,_wx);_wr.far=c.r+.35;hit=_wr.intersectObjects(RS,false)[0]||null;}
-    else{const bs=capBones(B,c);let bd=Infinity;for(const m of RS)if(skinRay(m,_wb,_wx,c.r+.35,bs,_wt)){const d=_wt.distanceToSquared(_wb);if(d<bd){bd=d;hit={point:_wt.clone()};}}}}   /* (Build 188) far from the camera the capsule's surface will do: casting into a skinned body was 7% of a big fight */const S=hit?hit.point.clone():_wq.clone().addScaledVector(_wn,c.r*.8);
+    else{const bs=capBones(B,c);let bd=Infinity;_wnr.copy(_wq).addScaledVector(_wn,c.r*.7);for(const m of RS)if(skinRay(m,_wb,_wx,c.r+.35,bs,_wt,_wnr,Math.max(.13,c.r*.8),B.bones[c.ba])){const d=_wt.distanceToSquared(_wb);if(d<bd){bd=d;hit={point:_wt.clone()};}}}}   /* (Build 188) far from the camera the capsule's surface will do: casting into a skinned body was 7% of a big fight */const S=hit?hit.point.clone():_wq.clone().addScaledVector(_wn,c.r*.8);
   // a fresh cut or stab landing on an old one opens it wider instead of leaving a second mark beside it
   let grown=0;if(kind!=='bruise')for(let i=0;i<B.wounds.length;i++){const w=B.wounds[i],u=w.userData;if(u.kind!==kind||!w.parent)continue;w.localToWorld(_wx.copy(u.c));
     if(_wx.distanceToSquared(S)<.0036){dmg+=u.dmg*.75;grown=1;S.lerp(_wx,.5);w.parent.remove(w);w.geometry.dispose();B.wounds.splice(i,1);break;}}
@@ -7960,7 +7970,7 @@ function addWound(B,ci,P,axis,dmg,kind){
       // the body is not the cylinder: where the real skin stands along the cut (nine casts, skinned once), so the trough follows it
       const NH=9,hs=new Array(NH).fill(null);if(hit&&RS[0]){const rays=[];for(let i=0;i<NH;i++){const x=(-1+2*i/(NH-1))*hl,st=clamp(cp*x/R,-.97,.97),th=Math.asin(st),v=sp*x,rn=V().copy(_wt).multiplyScalar(Math.sin(th)).addScaledVector(_wn,Math.cos(th));
           rays.push({o:V().copy(S).addScaledVector(_wn,-R).addScaledVector(_wa,v).addScaledVector(rn,R+.12),d:rn.clone().negate(),rn});}
-        skinRayN(RS[0],rays,.3,capBones(B,c),S,hl+.14);for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
+        skinRayN(RS[0],rays,.3,capBones(B,c),S,hl+.05,B.bones[c.ba]);for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
       // only as far as the skin runs on smoothly either way (a cut can't carry on across thin air where the neck or an armpit falls away)
       const ok=i=>hs[i]!=null&&Math.abs(hs[i]-hs[i>4?i-1:i+1])<.022;let kL=0,kR=0;if(hs[4]==null||Math.abs(hs[4])>.03)break gash;while(kL<4&&ok(3-kL))kL++;while(kR<4&&ok(5+kR))kR++;
       const fr=Math.min(kL,kR)/4;if(fr<.5)break gash;hl*=fr;if(!stb){hw=clamp(hl*.14,.0055,.015);D=hw*1.5;}
