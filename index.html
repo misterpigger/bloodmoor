@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=224;
+const BUILD=225;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -3632,7 +3632,7 @@ function cryptHazards(h){const C=CRYPT,R=RUN;if(!C||NET.mode==='client')return;
 function cryptDrop(){const R=RUN,P=player,h0=CRYPT&&CRYPT.hole;if(!R||!R.crypt||R.over||R.busy||!P||!h0)return;R.busy=true;
   setTimeout(()=>{R.busy=false;if(RUN!==R||R.over||player!==P||!P.alive)return;const CA=CAREER,ren=4+2*R.depth;CA.renown+=ren;R.ren+=ren;CA.deep=Math.max(CA.deep||0,R.depth+1);careerSave();R.depth++;
     for(const f of [...fighters])if(f!==P)f.dispose();fighters.length=0;fighters.push(P);
-    for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;for(const it of [...loot])removeLoot(it);for(const sw of freeSwords)sw.dispose();freeSwords.length=0;spurts.length=0;
+    for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;debrisPoolsClear();for(const it of [...loot])removeLoot(it);for(const sw of freeSwords)sw.dispose();freeSwords.length=0;spurts.length=0;
     for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;lampClear(P.lamp);
     CRYPT_DEPTH=R.depth;loadMap('crypt');physStatic();const S=CRYPT.shaftIn,dx=S.x-h0.x,dz=S.z-h0.z,dy=S.top+Math.max(0,-CR.LS-.5-P.pos.y),sh=v=>{if(v&&v.isVector3){v.x+=dx;v.y+=dy;v.z+=dz;}};
     sh(P.pos);if(P.ragdoll){const G=P.ragdoll;for(const n in G.P){sh(G.P[n]);sh(G.Q[n]);}}if(P.ar){const G=P.ar;for(const n in G.P){sh(G.P[n]);sh(G.Q[n]);}}
@@ -3760,7 +3760,7 @@ function cryptFade(fn){const d=el('cfade');if(!d){fn();return;}d.classList.add('
 function cryptDescend(){const R=RUN;if(!R||!R.crypt||R.over||R.busy||!player||!player.alive||player.ragdoll)return;R.busy=true;const C=CAREER,ren=4+2*R.depth;C.renown+=ren;R.ren+=ren;C.deep=Math.max(C.deep||0,R.depth+1);careerSave();
   cryptFade(()=>{R.busy=false;if(RUN!==R||R.over||!player)return;R.depth++;const P=player;
     for(const f of [...fighters])if(f!==P)f.dispose();fighters.length=0;fighters.push(P);
-    for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;for(const it of [...loot])removeLoot(it);for(const s of freeSwords)s.dispose();freeSwords.length=0;spurts.length=0;
+    for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;debrisPoolsClear();for(const it of [...loot])removeLoot(it);for(const s of freeSwords)s.dispose();freeSwords.length=0;spurts.length=0;
     for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;clearDetails();lampClear(P.lamp);
     CRYPT_DEPTH=R.depth;loadMap('crypt');physStatic();const S=CRYPT.start;P.pos.set(S.x,0,S.z);P.vel.set(0,0,0);P.yaw=S.yaw;P.bal.set(0,0,0);P.balV.set(0,0,0);P.ar=null;P.offH=null;if(P.lamp)P.lamp.fresh=true;
     if(P.sword&&P.sword.def.kind!=='fist'){const ht=P.handTarget(V());P.sword.reset(ht,P.guideDir(ht,V()));}else P.giveFists();
@@ -4603,7 +4603,7 @@ function tintMaterial(m,mode,pal,mats){
   const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.5)*(1.-step(.36,abs(vBind.x)))';
   m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
     s.vertexShader='varying vec3 vBind;varying vec3 vWPb;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPb=(modelMatrix*vec4(transformed,1.0)).xyz;');
-    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform sampler2D uMailD,uMailO;uniform float uParty,uMode,uNoHose,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];uniform vec4 uWg['+BL_N+'],uWh['+BL_N+'];\n'+s.fragmentShader
+    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform sampler2D uMailD,uMailO;uniform float uParty,uMode,uNoHose,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];uniform vec4 uWg['+BL_N+'],uWh['+BL_N+'];\nfloat tnh3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}float tn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(tnh3(i),tnh3(i+vec3(1,0,0)),f.x),mix(tnh3(i+vec3(0,1,0)),tnh3(i+vec3(1,1,0)),f.x),f.y),mix(mix(tnh3(i+vec3(0,0,1)),tnh3(i+vec3(1,0,1)),f.x),mix(tnh3(i+vec3(0,1,1)),tnh3(i+vec3(1,1,1)),f.x),f.y),f.z);}\n'+s.fragmentShader
     .replace('#include <map_fragment>',`#include <map_fragment>
       { vec3 c=diffuseColor.rgb;float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sat=(mx-mn)/max(mx,1e-4),l=dot(c,vec3(.299,.587,.114));
         float msk,gain;
@@ -4613,6 +4613,8 @@ function tintMaterial(m,mode,pal,mats){
         vec3 t=vBind.y<.95?(uParty>.5&&vBind.x<0.?uTint:uHose):(uParty>.5&&vBind.x>0.?uTrim:uTint);   /* (Build 205) parti-coloured hose with a parti-coloured coat: the leg under the trim half takes the coat's colour */
         if(uNoHose>.5&&vBind.y<.95)t=uParty>.5&&vBind.x>0.?uTrim:uTint;   // (a draped garment is one cloth all the way down)
         diffuseColor.rgb=mix(c,t*l*gain,msk*.9);
+        if(uMode<.5){float w1=tn3(vBind*7.),w2=tn3(vBind*19.+4.),w3=tn3(vBind*61.);   // (Build 225) worn cloth: faded unevenly, grimy in patches, a little yellowed; it was one flat tone from collar to hem
+          diffuseColor.rgb*=(.66+.42*w1)*(1.-.26*smoothstep(.5,.82,w2))*(.9+.18*w3);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.8,.66),smoothstep(.3,.75,w1*w2*2.2)*.55);}
         vec2 mu=vec2(vBind.x+vBind.z,vBind.y)*9.;float mop=texture2D(uMailO,mu).r;
         diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.12,.1,.08),texture2D(uMailD,mu).rgb*1.4,mop),${mail});
       }
@@ -4794,10 +4796,10 @@ const MHP_MAT=new Map(),HAIRCAP=new URLSearchParams(location.search).has('hairca
 // over it without one, so strands end soft instead of in hard alpha-test steps; a sheen lights the hair's edges as real hair catches light
 function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?'|s':'');if(MHP_MAT.has(k))return MHP_MAT.get(k);const T=P.H.tex;
   const thr=kind==='brow'?.3:kind==='lash'?.5:.5;
-  const m=new THREE.MeshPhysicalMaterial({map:mhPartTex(T.d,true),color:P.H.locks?col.clone().multiplyScalar(.66):col,roughness:kind==='lash'?.6:.5,metalness:0,side:THREE.DoubleSide,alphaTest:soft?.18:(MSAA_ON()?.25:thr),alphaToCoverage:!soft&&MSAA_ON(),transparent:!!soft,depthWrite:!soft,
-    sheen:kind==='lash'?0:P.H.locks?.2:.55,sheenRoughness:.45,sheenColor:new THREE.Color().copy(col).lerp(new THREE.Color(1,.95,.85),P.H.locks?.15:.35),specularIntensity:kind==='lash'?0:P.H.locks?.18:.4});   /* (Build 201: the locks take far less sheen; in the sun it laid a pale veil over the hair, straw from one side and black from the other) */if(kind==='lash')m.envMapIntensity=0;   /* (Build 198: lashes caught the sun as white specks under the eyes) */
+  const m=new THREE.MeshPhysicalMaterial({map:mhPartTex(T.d,true),color:P.H.locks?col.clone().multiplyScalar(.66):kind==='beard'?col.clone().multiplyScalar(.6):col,roughness:kind==='lash'?.6:.5,metalness:0,side:THREE.DoubleSide,alphaTest:soft?.18:(MSAA_ON()?.25:thr),alphaToCoverage:!soft&&MSAA_ON(),transparent:!!soft,depthWrite:!soft,
+    sheen:kind==='lash'?0:P.H.locks?.2:kind==='beard'?.12:.55,sheenRoughness:.45,sheenColor:new THREE.Color().copy(col).lerp(new THREE.Color(1,.95,.85),P.H.locks||kind==='beard'?.15:.35),specularIntensity:kind==='lash'?0:P.H.locks?.18:kind==='beard'?.14:.4});   /* (Build 225: beards too; in the sun a brown-haired man's beard was a pale grey felt) */   /* (Build 201: the locks take far less sheen; in the sun it laid a pale veil over the hair, straw from one side and black from the other) */if(kind==='lash')m.envMapIntensity=0;   /* (Build 198: lashes caught the sun as white specks under the eyes) */
   if(T.n)m.normalMap=mhPartTex(T.n,false);
-  const kk=kind==='hair'||kind==='beard';
+  const kk=kind==='hair'||kind==='beard',edge=kind==='beard'&&!P.H.strands;
   m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n roughnessFactor='+(kind==='lash'?'1.':'mix(.75,.42,diffuseColor.r/max(diffuseColor.r+.05,.1))')+';')
     .replace('#include <alphatest_fragment>','#include <alphatest_fragment>'+(soft?'\n if(diffuseColor.a>='+thr.toFixed(2)+')discard;':''));
     // (Build 129) hair's own highlight (Kajiya-Kay): light catches a strand across its length, not as a round spot, so a bright band runs
@@ -4809,12 +4811,24 @@ function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?
       vec3 V=normalize(vViewPosition)*-1.,L=directionalLights[0].direction,Hh=normalize(L+V);float lit=clamp(dot(Nn,L)*.6+.4,0.,1.);
       float t1=dot(normalize(T+Nn*.12),Hh),t2=dot(normalize(T-Nn*.18),Hh);float s1=pow(sqrt(max(0.,1.-t1*t1)),90.),s2=pow(sqrt(max(0.,1.-t2*t2)),24.);
       reflectedLight.directSpecular+=directionalLights[0].color*lit*(s1*.16+s2*.1*diffuseColor.rgb*2.)*smoothstep(.2,.6,diffuseColor.a)*${P.H.locks?'.4':'1.'}; }
-    #endif`);};
-  m.customProgramCacheKey=()=>'bm-mhpart'+(soft?'s':'')+(kk?'k':'')+(kind==='lash'?'l':'')+(P.H.locks?'L':'');MHP_MAT.set(k,m);return m;}
+    #endif`);
+    // (Build 225) a beard's edge thins out into single hairs (aEdge: 0 on the part's open edge, 1 two centimetres in); it ended in a clean line like felt glued on
+    if(edge){sh.vertexShader='attribute float aEdge;varying float vEdge;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvEdge=aEdge;');
+      sh.fragmentShader='varying float vEdge;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n{float eh=fract(sin(dot(floor(vMapUv*vec2(700.,90.)),vec2(12.9898,78.233)))*43758.5453),eh2=fract(sin(dot(floor(vMapUv*vec2(260.,40.)),vec2(39.3,11.1)))*24634.6);diffuseColor.a*=smoothstep(-.12,.12,vEdge-(.25+.75*eh)*(.55+.45*eh2));}');}};
+  m.customProgramCacheKey=()=>'bm-mhpart'+(soft?'s':'')+(kk?'k':'')+(kind==='lash'?'l':'')+(P.H.locks?'L':'')+(edge?'E':'');MHP_MAT.set(k,m);return m;}
+function partEdge(g){if(g.attributes.aEdge)return;const P=g.attributes.position,n=P.count,ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,id=new Int32Array(n),key=new Map();let nu=0;
+  for(let i=0;i<n;i++){const k=Math.round(P.getX(i)*5e3)+','+Math.round(P.getY(i)*5e3)+','+Math.round(P.getZ(i)*5e3);let j=key.get(k);if(j==null){j=nu++;key.set(k,j);}id[i]=j;}
+  const ec=new Map(),adj=Array.from({length:nu},()=>[]),px=new Float32Array(nu*3);for(let i=0;i<n;i++){const j=id[i]*3;px[j]=P.getX(i);px[j+1]=P.getY(i);px[j+2]=P.getZ(i);}
+  const E=(a,b)=>{if(a===b)return;const k=a<b?a*nu+b:b*nu+a;ec.set(k,(ec.get(k)||0)+1);};
+  for(let t=0;t<nt;t++){const a=id[ix?ix[t*3]:t*3],b=id[ix?ix[t*3+1]:t*3+1],c=id[ix?ix[t*3+2]:t*3+2];E(a,b);E(b,c);E(c,a);}
+  const d=new Float32Array(nu).fill(1e9),q=[];for(const [k,c] of ec){const a=Math.floor(k/nu),b=k%nu;adj[a].push(b);adj[b].push(a);if(c===1){if(d[a]>0){d[a]=0;q.push(a);}if(d[b]>0){d[b]=0;q.push(b);}}}
+  for(let h=0;h<q.length;h++){const a=q[h];if(d[a]>.03)continue;for(const b of adj[a]){const l=Math.hypot(px[a*3]-px[b*3],px[a*3+1]-px[b*3+1],px[a*3+2]-px[b*3+2]),nd=d[a]+l;if(nd<d[b]-1e-5){d[b]=nd;q.push(b);}}}
+  const e=new Float32Array(n);for(let i=0;i<n;i++)e[i]=Math.min(1,d[id[i]]/.02);g.setAttribute('aEdge',new THREE.BufferAttribute(e,1));}
 function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_([ABCD])/)||[])[1]||'A';const root=body.parent;
   mhPart(id).then(P=>{if(!P||!body.parent||body.parent!==root)return;let mo=root;while(mo.parent&&!mo.userData.mh&&!mo.userData.sway)mo=mo.parent;const SWU=(kind==='hair'||kind==='beard')&&!mat?mo.userData.sway:null;
     const swm=x=>SWU?looseMat(ownMat(x),SWU,'n'):x;   // (Build 128) hair and beards swing with the head's ring of chains again (swayStep), as the old long hair did
-    const m=new THREE.SkinnedMesh(P.H.strands?strandGeo(P,body):mhPartGeo(P,b),mat||swm(mhPartMat(P,col,kind)));
+    const pg=P.H.strands?strandGeo(P,body):mhPartGeo(P,b);if(kind==='beard'&&!P.H.strands)partEdge(pg);
+    const m=new THREE.SkinnedMesh(pg,mat||swm(mhPartMat(P,col,kind)));
     const cov=P.A[(P.A[b+'cov']?b:Object.keys(P.H.builds||{})[0])+'cov'];
     if(cov&&P.A[b+'pos']){const bit=GARB_BIT[id]??(GARB_BIT[id]=1<<Object.keys(GARB_BIT).length);const gb=body.geometry;let at=gb.getAttribute('aCov');
       if(!at){at=new THREE.BufferAttribute(new Float32Array(gb.attributes.position.count),1);gb.setAttribute('aCov',at);}
@@ -5029,11 +5043,12 @@ function dressMH(model,look,pal,mats){
   const bi=look.b!=null?look.b:((look.o*7+look.h*3+look.sk*5+(look.bd?1:0))%4),want=MH_BODIES[bi];
   const drop=[];let body=null;model.traverse(m=>{if(!m.isMesh)return;if(m.name===want){body=m;return;}if(m.name===want.replace('Body','Eyes'))return;drop.push(m);});
   for(const m of drop)m.removeFromParent();
+  model.traverse(m=>{if(m.isMesh&&/Eyes/.test(m.name)&&m.material&&!m.userData.eyeFix){m.userData.eyeFix=1;m.material=m.material.clone();m.material.color.multiplyScalar(.74);if('envMapIntensity' in m.material)m.material.envMapIntensity=.45;}});   /* (Build 225) eye whites are grey in the shade of the brow, not paper white */
   if(look.sh){let eyes=null;model.traverse(m=>{if(m.isMesh&&m.name===want.replace('Body','Eyes'))eyes=m;});shapeBody(body,eyes,look.sh);}
   const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
   const skin=std({map:skinPhoto(look),normalMap:T.n,normalScale:new THREE.Vector2(.7,.7),color:new THREE.Color(.93,.92,.92),roughness:.52});
   tintMaterial(skin,2,pal,mats);model.userData.skinMat=skin;
-  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.55,.45,.3,.45,.3][look.h]||0},uBeardAmt:{value:[.42,.3,0,.3,.25][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()},uCov:{value:0},uHH:{value:new THREE.Vector4(-1,-1,-1,-1)},uHelmY:{value:99},uRot:{value:0}};
+  const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.55,.45,.3,.45,.3][look.h]||0},uBeardAmt:{value:[.42,.6,0,.62,.4][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()},uCov:{value:0},uHH:{value:new THREE.Vector4(-1,-1,-1,-1)},uHelmY:{value:99},uRot:{value:0}};
   const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
     // skin under a draped garment is left out (aCov: a bit per garment on the body's vertices, uCov: the garments this fighter wears)
     sh.vertexShader='attribute float aCov;flat varying float vCov;uniform vec4 uHH;varying float vHd;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCov=aCov;vHd=uHH.x<0.?0.:dot(vec4(equal(skinIndex,vec4(uHH.x)))+vec4(equal(skinIndex,vec4(uHH.y)))+vec4(equal(skinIndex,vec4(uHH.z)))+vec4(equal(skinIndex,vec4(uHH.w))),skinWeight);');
@@ -5227,6 +5242,7 @@ float sfn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(sfh(
 float sfDim(vec2 p){vec2 i=floor(p),f=fract(p);float h=0.;for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 g=vec2(float(x),float(y)),o=vec2(sfh(i+g),sfh(i+g+7.31))*.8+.1;float d=length(g+o-f);h=max(h,1.-smoothstep(0.,.72,d));}return h;}
 vec2 sfPlane(vec3 p,vec3 n){vec3 a=abs(n);return a.z>a.x&&a.z>a.y?p.xy:a.x>a.y?p.zy:p.xz;}
 float mailRing(vec2 p){float h=0.,row=floor(p.y*2.);for(int dy=-1;dy<=1;dy++){float r=row+float(dy),off=mod(r,2.)*.5,cy=(r+.5)*.5,cx0=floor(p.x-off)+.5+off;for(int dx=-1;dx<=1;dx++){vec2 d=(p-vec2(cx0+float(dx),cy))*vec2(1.,1.35);float w=1.-smoothstep(.06,.13,abs(length(d)-.4));float sg=mod(r,2.)<1.?1.:-1.;h=max(h,w*(.55+.45*clamp(sg*d.x/.45,-1.,1.)));}}return h;}
+float sfh3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}float sfn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(sfh3(i),sfh3(i+vec3(1,0,0)),f.x),mix(sfh3(i+vec3(0,1,0)),sfh3(i+vec3(1,1,0)),f.x),f.y),mix(mix(sfh3(i+vec3(0,0,1)),sfh3(i+vec3(1,0,1)),f.x),mix(sfh3(i+vec3(0,1,1)),sfh3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 vec3 sfBump(vec3 nrm,float hgt,vec3 vp){vec3 dpx=dFdx(-vp),dpy=dFdy(-vp);vec3 r1=cross(dpy,nrm),r2=cross(nrm,dpx);float det=dot(dpx,r1);return normalize(abs(det)*nrm-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));}`;
 function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
   sh.vertexShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSfP=position;vSfN=normal;\n#ifdef USE_UV\nvSfU=uv;\n#else\nvSfU=vec2(0.);\n#endif');
@@ -5257,13 +5273,17 @@ function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)
   else if(kind==='gothic'){   // (Build 205) planished plate with sprays of flutes: ridges fanning up and out from the waist, drawn in the piece's bind frame
     col=`vec2 sfQ=sfPlane(vSfP,vSfN)*36.;float sfF=clamp(1.-fwidth(sfQ.x)*.7,0.,1.);float sfD=sfDim(sfQ),sfW=sfn(sfQ*.21);
       float gPh=atan(abs(vSfP.x),vSfP.y-.8)*96.;float gFd=clamp(1.-fwidth(gPh)*.45,0.,1.);float gS=sin(gPh);float gR=pow(max(0.,gS),3.);   /* a crest every ~4 deg (2-3 cm apart on the breast), sharp on top, the hollows between them broad */
-      diffuseColor.rgb*=(1.-.025*(1.-sfD)*sfF)*(1.-.16*(1.-gR)*gFd);`;
-    rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);`;
+      diffuseColor.rgb*=(1.-.025*(1.-sfD)*sfF)*(1.-.16*(1.-gR)*gFd);
+      float wT=sfn3(vSfP*8.)*.6+sfn3(vSfP*21.+3.1)*.4,wTa=smoothstep(.36,.7,wT),wR=smoothstep(.8,.93,sfn3(vSfP*240.))*smoothstep(.4,.7,sfn3(vSfP*13.+9.)),wG=1.-smoothstep(-.8,.15,vSfN.y),wS=sfn(vec2(dot(vSfP,vec3(310.,40.,180.)),dot(vSfP,vec3(-9.,14.,6.))));   /* (Build 225) used steel: tarnish in broad patches, rust specks gathering in some of them, grime under every downward face, the polish's own fine streaks */
+      diffuseColor.rgb*=.8*mix(vec3(1.),vec3(.46,.42,.36),wTa*.85)*(1.-.3*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.7);`;
+    rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF+gR*.0026*gFd,vViewPosition);`;}
   else{   // plate
     col=`vec2 sfQ=sfPlane(vSfP,vSfN)*36.;float sfF=clamp(1.-fwidth(sfQ.x)*.7,0.,1.);float sfD=sfDim(sfQ),sfW=sfn(sfQ*.21);   /* (planished then polished: the dents are faint ripples in the reflection, not a hammered texture) */
-      diffuseColor.rgb*=1.-.025*(1.-sfD)*sfF;`;
-    rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);`;
+      diffuseColor.rgb*=1.-.025*(1.-sfD)*sfF;
+      float wT=sfn3(vSfP*8.)*.6+sfn3(vSfP*21.+3.1)*.4,wTa=smoothstep(.36,.7,wT),wR=smoothstep(.8,.93,sfn3(vSfP*240.))*smoothstep(.4,.7,sfn3(vSfP*13.+9.)),wG=1.-smoothstep(-.8,.15,vSfN.y),wS=sfn(vec2(dot(vSfP,vec3(310.,40.,180.)),dot(vSfP,vec3(-9.,14.,6.))));   /* (Build 225) used steel: tarnish in broad patches, rust specks gathering in some of them, grime under every downward face, the polish's own fine streaks */
+      diffuseColor.rgb*=.8*mix(vec3(1.),vec3(.46,.42,.36),wTa*.85)*(1.-.3*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.7);`;
+    rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF,vViewPosition);`;}
   sh.fragmentShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);};
   const k0=m.customProgramCacheKey.bind(m);m.customProgramCacheKey=()=>k0()+'|sf'+kind;return m;}
@@ -6104,7 +6124,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       S(plateLoft(F,{tb:.45,tt:.52,thc:Math.PI*1.5,span:2.2,clr:.019,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'ForeArm')},body),strapMat);
       // gauntlet: a flared cuff and a plate over the back of the hand
       const H=limbMap(body,J[sd+'Hand'],J[sd+'HandMiddle1']||J[sd+'Hand'].clone().add(V(sd==='Left'?.09:-.09,0,0)),(v,W)=>W(v,[sd+'Hand'])>.4,{key:sd+'hand',ref:V(0,1,0),t0:-.6,t1:1.2,sw:4,st:2});
-      S(plateLoft(H,{tb:-.55,tt:-.05,thc:0,span:Math.PI*2,clr:.016,clrF:(t)=>.007*sstep(-.25,-.55,t),roll:{t:1,b:1,s:0,rt:1},NU:12,NV:36,bones:blend2(sd+'ForeArm',sd+'Hand',-.4,-.15)},body),PM);
+      S(plateLoft(F,{tb:.8,tt:1.02,thc:0,span:Math.PI*2,clr:.0165,clrF:(t)=>.009*sstep(.97,.8,t),roll:{t:1,b:1,s:0,rb:1},NU:10,NV:36,bones:one(sd+'ForeArm')},body),PM);   /* (Build 225) the cuff is the wrist's own round with a little flare toward the elbow; measured round the hand (flat and 10 cm wide) it stood off the wrist as a great hollow ring */
       S(plateLoft(H,{tb:-.05,tt:.95,thc:0,span:2.1,clr:.012,ridge:[.25,.003],roll:{t:1,b:0,s:1},NU:12,NV:22,bones:one(sd+'Hand')},body),PM);}
   }
   if(def.cls==='greaves'){
@@ -7931,8 +7951,8 @@ function addWound(B,ci,P,axis,dmg,kind){
   if(kind==='cut'){Lh=Math.min(.3,.07+dmg*.005);Wh=GASH?Lh*.62:Math.min(.075,.02+dmg*.0008);   /* (Build 223: the texture carries the gash's own narrow shape; the patch is as broad as the bruising round it) */phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
   else if(kind==='stab'){Lh=Wh=Math.min(.065,.03+dmg*.001);}
   else{Lh=Math.min(.1,.04+dmg*.0016);Wh=Lh*.8;phi=Math.random()*3;}
-  gash:if(kind==='cut'&&dmg>=11&&hit&&!window.__noGash){   // (Build 224) a real gash: a trough of flesh below the skin, which the skin's shader parts along the same lens
-    let hl=Math.min(.15,.045+dmg*.0026,R*1.5),hw=clamp(hl*.14,.0055,.015),D=hw*1.5;const cp=Math.cos(phi),sp=Math.sin(phi),NS=22,pos=[],col=[],idx=[],sd=(S.x*731+S.z*419+dmg*17)%1,jr=i=>.5+.5*Math.sin(i*12.9898+sd*78.233)*Math.cos(i*4.1+sd*9);
+  gash:if((kind==='cut'&&dmg>=11||kind==='stab'&&dmg>=9)&&hit&&!window.__noGash){const stb=kind==='stab';if(stb)phi=Math.random()*Math.PI;   /* (Build 225) a stab is a hole too: a short deep slit the width of the blade */   // (Build 224) a real gash: a trough of flesh below the skin, which the skin's shader parts along the same lens
+    let hl=stb?clamp(.012+dmg*.0005,.014,.028):Math.min(.15,.045+dmg*.0026,R*1.5),hw=stb?hl*.3:clamp(hl*.14,.0055,.015),D=stb?hw*3:hw*1.5;const cp=Math.cos(phi),sp=Math.sin(phi),NS=22,pos=[],col=[],idx=[],sd=(S.x*731+S.z*419+dmg*17)%1,jr=i=>.5+.5*Math.sin(i*12.9898+sd*78.233)*Math.cos(i*4.1+sd*9);
       const RG=[[1.22,.0006,.40,.07,.07],[1.0,.0012,.46,.09,.08],[.93,-.0015,.62,.40,.26],[.84,-D*.22,.60,.36,.2],[.7,-D*.42,.42,.05,.05],[.42,-D*.8,.27,.02,.025],[.12,-D,.09,.004,.008]];   // [share of the half width, height against the skin, colour]: swollen lip, cut skin, fat, muscle, the dark bottom
       const pt=(x,y,h)=>{const st=clamp((cp*x-sp*y)/R,-.97,.97),th=Math.asin(st),v=sp*x+cp*y,r=R+h;pos.push(S.x+_wt.x*r*Math.sin(th)+_wa.x*v+_wn.x*(r*Math.cos(th)-R),S.y+_wt.y*r*Math.sin(th)+_wa.y*v+_wn.y*(r*Math.cos(th)-R),S.z+_wt.z*r*Math.sin(th)+_wa.z*v+_wn.z*(r*Math.cos(th)-R));};
       const lin=v=>Math.pow(v,2.2);for(const g of RG){g[2]=lin(g[2]);g[3]=lin(g[3]);g[4]=lin(g[4]);}
@@ -7942,7 +7962,7 @@ function addWound(B,ci,P,axis,dmg,kind){
         skinRayN(RS[0],rays,.3,capBones(B,c));for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
       // only as far as the skin runs on smoothly either way (a cut can't carry on across thin air where the neck or an armpit falls away)
       const ok=i=>hs[i]!=null&&Math.abs(hs[i]-hs[i>4?i-1:i+1])<.022;let kL=0,kR=0;if(hs[4]==null||Math.abs(hs[4])>.03)break gash;while(kL<4&&ok(3-kL))kL++;while(kR<4&&ok(5+kR))kR++;
-      const fr=Math.min(kL,kR)/4;if(fr<.5)break gash;hl*=fr;hw=clamp(hl*.14,.0055,.015);D=hw*1.5;
+      const fr=Math.min(kL,kR)/4;if(fr<.5)break gash;hl*=fr;if(!stb){hw=clamp(hl*.14,.0055,.015);D=hw*1.5;}
       const h0=u=>{u*=fr;const f=(u+1)*.5*(NH-1),i=Math.min(NH-2,Math.max(0,Math.floor(f))),t=f-i;return (hs[i]||0)*(1-t)+(hs[i+1]||0)*t;};
       const NRg=RG.length,row=2*NRg;   // across each station: one side's rings from the outside in, then the other's from the inside out
       for(let i=0;i<=NS;i++){const u=-1+2*i/NS,lens=Math.pow(Math.max(0,1-u*u),.7),x=u*hl;
@@ -7955,7 +7975,7 @@ function addWound(B,ci,P,axis,dmg,kind){
       const dW=V().copy(_wt).multiplyScalar(cp).addScaledVector(_wa,sp),mW=V().copy(_wt).multiplyScalar(-sp).addScaledVector(_wa,cp);
       B.bones[c.ba].attach(m);m.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(m.matrixWorld).invert();g.computeBoundingSphere();
       m.userData={kind,dmg,c:m.worldToLocal(S.clone())};
-      (B.bloodSrc||(B.bloodSrc=[])).push({o:m,c:m.userData.c.clone(),amt:clamp(dmg/40,.18,1),born:simTime,gd:dW.transformDirection(inv),gm:mW.transformDirection(inv),hl,hw});
+      (B.bloodSrc||(B.bloodSrc=[])).push({o:m,c:m.userData.c.clone(),amt:clamp(dmg/(stb?30:40),.18,1),born:simTime,gd:dW.transformDirection(inv),gm:mW.transformDirection(inv),hl,hw});
       B.wounds.push(m);if(B.wounds.length>28){const o=B.wounds.shift();o.parent&&o.parent.remove(o);o.geometry.dispose();}return;}
   const NR=4,NA=14,pos=[],uv=[],idx=[],cp=Math.cos(phi),sp=Math.sin(phi);
   for(let i=0;i<=NR;i++)for(let j=0;j<NA;j++){const rho=i/NR,al=j/NA*Math.PI*2,a=rho*Math.cos(al),b=rho*Math.sin(al);
@@ -8008,8 +8028,8 @@ DESC.Spine1=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftH
 const LIMB_OF={LeftHand:'armL',RightHand:'armR',LeftFoot:'legL',RightFoot:'legR',LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
 let _spR=null;
 const ATTACKS=[
-  {n:'fromRight',s:[.5,.28],e:[-.5,.05]},{n:'fromLeft',s:[-.5,.3],e:[.5,.02]},{n:'overhead',s:[.08,.55],e:[0,-.38]},
-  {n:'diagR',s:[.48,.52],e:[-.42,-.36]},{n:'diagL',s:[-.48,.52],e:[.42,-.36]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
+  {n:'fromRight',s:[.53,.4],e:[-.56,.02]},{n:'fromLeft',s:[-.53,.4],e:[.56,.02]},{n:'overhead',s:[.08,.58],e:[0,-.42]},
+  {n:'diagR',s:[.52,.56],e:[-.5,-.4]},{n:'diagL',s:[-.52,.56],e:[.5,-.4]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
 const X_AXIS=V(1,0,0);
 let SIT=+(new URLSearchParams(location.search).get('sit')??.24),FEETF=+(new URLSearchParams(location.search).get('feetf')??.04);const _sitQ=new THREE.Quaternion(),_sitV=V();
 let fid=0;
@@ -9170,7 +9190,7 @@ class Fighter{
      fall where they stood; both cut faces are flesh, and what was inside spills. Only on the slain (resolveHit kills first). */
   bisect(vel){const bone=this.bones.Spine1;if(!bone||bone.userData.severed||this.undead==='skel')return false;if(this.alive)this.die(null,'cut in two',null);
     this.root.updateMatrixWorld(true);if(this.sword&&this.sword.owner===this)this.dropSword();
-    spawnDebris(this,'Spine1',vel);const D=debris[debris.length-1];
+    spawnDebris(this,'Spine1',vel);const D=debris[debris.length-1];if(D)D.trunk=true;
     bone.userData.severed=true;bone.scale.setScalar(1e-4);this.severedBones.push(bone);this.sevNames.push('Spine1');netEv(['x',this.id,'Spine1',r3v(vel)]);
     const up=new Set(DESC.Spine1);for(const n of up)this.detached.add(n);if(this.ragdoll){this.ragdoll.drop(up);this.ragdoll.sleep=false;}
     for(const z of ['armL','armR','head'])if(this.limbs[z]){this.limbs[z].sev=true;this.limbs[z].hp=0;}this.mainArm=null;if(this.pb)this.physCapsOn();
@@ -10292,7 +10312,7 @@ function clearMatch(){
   villageStep.spark=false;
   physStatic();clearDetails();specStop();SPEC.dismissed=false;lampClear();
   for(const f of fighters)f.dispose();fighters.length=0;
-  for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;
+  for(const d of debris){scene.remove(d.clone);scene.remove(d.root);}debris.length=0;debrisPoolsClear();
   for(const it of [...loot])removeLoot(it);
   for(const s of freeSwords)s.dispose();freeSwords.length=0;spurts.length=0;
   for(let i=0;i<DEC_N;i++)decals.setMatrixAt(i,_zero);decals.instanceMatrix.needsUpdate=true;
@@ -10829,7 +10849,7 @@ function logic(dt){FR_TICK++;
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   if(HSW)hsStep(dt);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
-  for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
+  for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}debrisPool(d,dt);}
 }
 let lastFrameAt=0;
 // (Build 189) anything that goes wrong shows in a small box (first few distinct errors), so a player can screenshot it for the fix
@@ -10973,6 +10993,12 @@ function markMesh(n,foot,op){const g=new THREE.PlaneGeometry(1,1).rotateX(-Math.
   m.frustumCulled=false;for(let i=0;i<n;i++)m.setMatrixAt(i,_zero);scene.add(m);return {m,n,i:0};}
 const PRINTS=markMesh(1,true,0),DRAGS=markMesh(1,false,0);PRINTS.m.visible=DRAGS.m.visible=false;   // (footprints and drag marks were dropped in Build 63)
 function addMark(M,x,z,yaw,sx,sz){const gy=groundY(x,z,.5);if(gy<-.5&&!PIT)return;_dq.setFromAxisAngle(Y_AXIS,yaw);_mx.compose(_dp.set(x,gy+.011+Math.random()*.002,z),_dq,_ds.set(sx,1,sz));M.m.setMatrixAt(M.i,_mx);M.i=(M.i+1)%M.n;M.m.instanceMatrix.needsUpdate=true;}
+/* (Build 225) what is cut off bleeds too: a pool spreads from the cut end of a severed limb, a broad one under a severed trunk */
+const DPOOLS=[];function debrisPoolsClear(){for(const m of DPOOLS){scene.remove(m);m.material.dispose();}DPOOLS.length=0;}
+function debrisPool(d,dt){if(d.dry||d.wep)return;
+  if(!d.pool){if(simTime-d.born<1.1)return;let cf=null;for(const o of d.root.children)if(o.userData&&o.userData.cutFace){cf=o;break;}if(!cf){d.dry=true;return;}cf.getWorldPosition(_v);const gy=groundY(_v.x,_v.z,_v.y+.1);
+    if(_v.y-gy<.3&&(d.rag.sleep||simTime-d.born>3)){d.pool=makePool(_v.x,_v.z,gy+.011+.0013*(debris.indexOf(d)%5));d.pool.userData={r:.05,max:d.trunk?.85:.26+Math.random()*.12,t0:simTime};DPOOLS.push(d.pool);}return;}
+  const P=d.pool.userData,t=simTime-P.t0;if(t<50){P.r+=(P.max-P.r)*dt*.1;d.pool.scale.setScalar(P.r*2);}}
 // ---- blood pools spreading under the dead and the dying
 const POOL_TEX=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.filter='blur(1.5px)';x.fillStyle='#fff';
   x.beginPath();for(let i=0;i<=48;i++){const a=i/48*6.283,r=44+7*Math.sin(a*3+1)+5*Math.sin(a*7)+3*Math.sin(a*13);i?x.lineTo(64+Math.cos(a)*r,64+Math.sin(a)*r):x.moveTo(64+Math.cos(a)*r,64+Math.sin(a)*r);}x.fill();
@@ -12123,7 +12149,7 @@ function clientFrame(dt){{let a=Math.min(dt,.1);while(a>1e-4){const hh=Math.min(
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   sub^=1;if(sub)for(const d of debris)if(!d.wep)d.rag.step(H*2);
   propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
-  for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}}
+  for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}debrisPool(d,dt);}
 }
 function clientEvents(ev){
   const P=a=>V(a[0],a[1],a[2]);
