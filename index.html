@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=236;
+const BUILD=237;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -3039,7 +3039,7 @@ const LAMPS=[],LAMP_LEN=.25,LAMP_H=.407;let LAMP_SH=null,LAMP_PARTS=null;
 if(!TOUCH){LAMP_SH=new THREE.PointLight(0xffa860,0,14,1.1);LAMP_SH.castShadow=true;LAMP_SH.shadow.mapSize.set(512,512);LAMP_SH.shadow.camera.near=.06;LAMP_SH.shadow.camera.far=14;LAMP_SH.shadow.bias=-.008;LAMP_SH.shadow.normalBias=.05;LAMP_SH.shadow.autoUpdate=false;LAMP_SH.visible=false;LAMP_SH.position.set(0,-60,0);scene.add(LAMP_SH);}
 /* (Build 235) three kinds of lantern, as down any real cellar: the square horn-paned hand lantern (0), a round pierced lantern with a
    conical cap (1: dimmer and warmer), and an open iron lamp bowl hung on three chains (2: a bare flame, brighter, guttering) */
-const LAMP_KINDS=[{I:1,d:14,col:0xffa860,fs:1,fk:1},{I:.78,d:11,col:0xff9a50,fs:.9,fk:.8},{I:1.22,d:15,col:0xffb46a,fs:1.9,fk:2.4}],LAMP_PK={};
+const LAMP_KINDS=[{I:1,d:14,col:0xffbe88,fs:1,fk:1},{I:.78,d:11,col:0xffb074,fs:.9,fk:.8},{I:1.22,d:15,col:0xffc48c,fs:1.9,fk:2.4}],LAMP_PK={};
 function lampParts(kind=0){if(kind){if(LAMP_PK[kind])return LAMP_PK[kind];const iron=[],add=(g,x,y,z)=>{g.translate(x,y,z);iron.push(g.index?g.toNonIndexed():g);};
     {const g=new THREE.TorusGeometry(.026,.005,6,14);add(g,0,-.026,0);}let panes,wax;
     if(kind===1){add(new THREE.BoxGeometry(.007,.1,.007),0,-.1,0);add(new THREE.ConeGeometry(.074,.085,12),0,-.175,0);add(new THREE.CylinderGeometry(.066,.066,.012,12),0,-.2,0);add(new THREE.CylinderGeometry(.066,.06,.02,12),0,-.398,0);
@@ -3195,7 +3195,7 @@ function findTake(q){const R=RUN,F=FINDS[q.kind];if(!R||!F||q.gone)return;
   else{const v=Math.round(rand(F[1][0],F[1][1])+R.depth*(q.kind==='purse'?1.5:1));R.coin+=v;R.found=(R.found||0)+1;toast(`${F[0][0].toUpperCase()+F[0].slice(1)} · ${v} coin`);if(q.kind==='idol'&&CRYPT.cult&&CRYPT.cult.grp&&!CRYPT.cult.woke)CRYPT.cult.woke=simTime;}
   cryptHud();}
 function cryptSconce(x,y,z,nx,nz,n=1){   /* (Build 234) rebuilt after Half Sword's: one fat candle in an iron cup on a wooden shelf with a brace under it, or a wrought-iron bracket of three arms with drip pans. The light is a candle's: warm yellow, a small pool, dark beyond it */
-  const ry=Math.atan2(nx,nz),tx=nz,tz=-nx,P=(o,u,v)=>V(x+nx*o+tx*u,y+v,z+nz*o+tz*u),COL=0xffb066;
+  const ry=Math.atan2(nx,nz),tx=nz,tz=-nx,P=(o,u,v)=>V(x+nx*o+tx*u,y+v,z+nz*o+tz*u),COL=0xffc488;
   const candle=(p,r,h,light)=>{const g=lathe([[0,0],[r*1.02,0],[r,h*.9],[r*.92,h*.97],[r*.5,h],[0,h*.985]],9);addGeo('wax',g,T(p.x,p.y,p.z));
     for(let k=0;k<3;k++){const a=k*2.1+p.x*7,dl=h*(.25+((k*37+7)%10)/22);addGeo('wax',new THREE.CylinderGeometry(r*.16,r*.22,dl,5),T(p.x+Math.cos(a)*r*.98,p.y+h*.93-dl/2,p.z+Math.sin(a)*r*.98));}   // runs of wax down the side
     addFlame(p.x,p.y+h+.005,p.z,.2,light,1.9,1.55,light?.36:0,COL);};
@@ -3527,10 +3527,10 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
     drum(.34,.8,'paintRed',r);drum(.8,.86,'cryptDark',r+.004);drum(.86,1.02,'paintPale',r+.002);for(let i=0;i<10;i++){const a=i/10*6.283;addGeo('paintRed',new THREE.BoxGeometry(.07,.07,.012),T(x+Math.sin(a)*(r+.004),.94,z+Math.cos(a)*(r+.004),a,0,Math.PI/4));}drum(1.02,1.08,'cryptDark',r+.004);
     drum(1.08,top-.5,'cryptWall',r);drum(top-.5,top-.44,'cryptDark',r+.004);drum(top-.44,top-.2,'paintPale',r+.002);drum(top-.2,top,'paintRed',r);
     addGeo('cryptVault',new THREE.CylinderGeometry(r+.2,r+.02,.2,14),T(x,top+.1,z));addGeo('cryptVault',boxUV(2*r+.5,.22,2*r+.5,2),T(x,H-.11,z));addCircle(x,z,r+.04,H);};
-  const candleStand=(x,z,lit=true)=>{addGeo('iron',lathe([[0,0],[.15,0],[.15,.02],[.03,.06],[.018,1.25],[.04,1.3],[0,1.3]],8),T(x,0,z));for(let i=0;i<3;i++){const a=i*2.094+R(),ex=x+Math.cos(a)*.17,ez=z+Math.sin(a)*.17,ey=1.34+(i-1)*.06;vRod('iron',V(x,1.22,z),V(ex,ey-.05,ez),.008,4);addGeo('iron',new THREE.CylinderGeometry(.035,.02,.02,8),T(ex,ey-.04,ez));const hh=.1+R()*.12;addGeo('wax',new THREE.CylinderGeometry(.016,.019,hh,6),T(ex,ey-.03+hh/2,ez));if(lit)addFlame(ex,ey+hh+.02,ez,.13,i===0,1.5,3.2,.5,0xffb066);}addCircle(x,z,.12,1.3);};
-  const candleField=(x,z,n=14,rr=.7)=>{for(let i=0;i<n;i++){const a=R()*6.283,d=Math.sqrt(R())*rr,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d,hh=.04+R()*.16;addGeo('wax',new THREE.CylinderGeometry(.014+R()*.008,.02+R()*.008,hh,6),T(px,hh/2,pz));if(R()<.5){const g=new THREE.CircleGeometry(.04+R()*.03,7);g.rotateX(-Math.PI/2);addGeo('wax',g,T(px,.003,pz));}if(R()<.75)addFlame(px,hh+.05,pz,.1,i<2,1.6,3,.4,0xffb066);}};
+  const candleStand=(x,z,lit=true)=>{addGeo('iron',lathe([[0,0],[.15,0],[.15,.02],[.03,.06],[.018,1.25],[.04,1.3],[0,1.3]],8),T(x,0,z));for(let i=0;i<3;i++){const a=i*2.094+R(),ex=x+Math.cos(a)*.17,ez=z+Math.sin(a)*.17,ey=1.34+(i-1)*.06;vRod('iron',V(x,1.22,z),V(ex,ey-.05,ez),.008,4);addGeo('iron',new THREE.CylinderGeometry(.035,.02,.02,8),T(ex,ey-.04,ez));const hh=.1+R()*.12;addGeo('wax',new THREE.CylinderGeometry(.016,.019,hh,6),T(ex,ey-.03+hh/2,ez));if(lit)addFlame(ex,ey+hh+.02,ez,.13,i===0,1.5,3.2,.5,0xffc488);}addCircle(x,z,.12,1.3);};
+  const candleField=(x,z,n=14,rr=.7)=>{for(let i=0;i<n;i++){const a=R()*6.283,d=Math.sqrt(R())*rr,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d,hh=.04+R()*.16;addGeo('wax',new THREE.CylinderGeometry(.014+R()*.008,.02+R()*.008,hh,6),T(px,hh/2,pz));if(R()<.5){const g=new THREE.CircleGeometry(.04+R()*.03,7);g.rotateX(-Math.PI/2);addGeo('wax',g,T(px,.003,pz));}if(R()<.75)addFlame(px,hh+.05,pz,.1,i<2,1.6,3,.4,0xffc488);}};
   const moonShaft=(x,z,H,rr=.55)=>{const m=new THREE.Mesh(new THREE.CircleGeometry(rr,18),MATS.cryptSky);m.rotation.x=Math.PI/2;m.position.set(x,H-.014,z);world.add(m);for(let i=-2;i<=2;i++){addGeo('iron',boxUV(2*rr,.03,.03,1),T(x,H-.03,z+i*rr*.4));addGeo('iron',boxUV(.03,.03,2*rr,1),T(x+i*rr*.4,H-.03,z));}{const g=new THREE.TorusGeometry(rr+.03,.05,5,18);g.rotateX(Math.PI/2);addGeo('cryptVault',g,T(x,H-.02,z));}
-    for(const [r0,r1] of [[rr,rr+1.1],[rr*.6,rr+.6]]){const sh=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,H,20,1,true),MATS.cryptShaft);sh.position.set(x,H/2,z);sh.renderOrder=4;world.add(sh);}
+    for(const [r0,r1] of [[rr*.6,rr+.5]]){const sh=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,H,20,1,true),MATS.cryptShaft);sh.position.set(x,H/2,z);sh.renderOrder=4;world.add(sh);}
     torchLights.push({position:V(x,Math.min(2.4,H-.8),z),color:new THREE.Color(0x8fb0ff),intensity:9,distance:9,decay:1.2,visible:true});C.moon.push([x,z]);};
   const barrow=(x,z,ry)=>{const c2=Math.cos(ry),s2=Math.sin(ry),at=(lx,ly,lz)=>V(x+lx*c2+lz*s2,ly,z-lx*s2+lz*c2);addGeo('wood',boxUV(.62,.035,.9,1),T(x,.42,z,ry,.16));for(const sx of [-1,1]){const p=at(sx*.31,.52,0);addGeo('wood',boxUV(.03,.22,.9,1),T(p.x,p.y,p.z,ry,.16));vRod('wood',at(sx*.3,.36,.4),at(sx*.36,.62,-1.05),.022,5);vRod('wood',at(sx*.28,.4,-.35),at(sx*.3,0,-.4),.022,5);}
     {const p=at(0,.25,.62);addGeo('wood',new THREE.CylinderGeometry(.25,.25,.05,14).rotateZ(Math.PI/2),T(p.x,p.y,p.z,ry));addGeo('iron',new THREE.TorusGeometry(.25,.014,5,16).rotateY(Math.PI/2),T(p.x,p.y,p.z,ry));}{const p=at(0,.5,.45);addGeo('wood',boxUV(.62,.2,.03,1),T(p.x,p.y,p.z,ry,.16));}for(let i=0;i<5;i++){const p=at((R()-.5)*.4,.5+R()*.06,(R()-.5)*.6);addGeo('cryptWall',boxUV(.14+R()*.1,.1+R()*.06,.14+R()*.1,2),T(p.x,p.y,p.z,R()*3,R()*.5,R()*.5));}addCircle(x,z,.42,.6);};
@@ -3559,7 +3559,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       C.soft={x:cx,z:cz,r:2.2};
       if(D>1){const xs=cx+c.stairU,S=stairRun(xs,cz-hz-WT/2,0,false);C.ways.push({x:xs,z:cz-hz-WT/2,dx:0,dz:-1,c,to:null,force:true});}   /* (Build 231) below the first floor you come in down the stair, through the door at its foot */
       else{const m=new THREE.Mesh(new THREE.CircleGeometry(.5,20),MATS.cryptSky);m.rotation.x=Math.PI/2;m.position.set(cx,H-.012,cz);world.add(m);
-        for(const [r0,r1] of [[.5,1.75],[.36,1.3],[.2,.8]]){const sh=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,H,24,1,true),MATS.cryptShaft);sh.position.set(cx,H/2,cz);sh.renderOrder=4;world.add(sh);}
+        for(const [r0,r1] of [[.3,.95]]){const sh=new THREE.Mesh(new THREE.CylinderGeometry(r0,r1,H,24,1,true),MATS.cryptShaft);sh.position.set(cx,H/2,cz);sh.renderOrder=4;world.add(sh);}
         torchLights.push({position:V(cx,2.2,cz),color:new THREE.Color(0xfff2dc),intensity:11,distance:8,visible:true});}
       if(D===1)note(cx+1.2,.03,cz-1.1,.5);
       const [fx,fz]=free[0],[rx,rz]=inner(c,fx,fz,-1.2,.5);{const ry=Math.atan2(-fx,-fz);for(const sx of [-1,1])for(const sz of [-.85,.85]){const lx=rx+Math.cos(ry)*sx*.0+Math.sin(ry)*0;addGeo('wood',boxUV(.07,.38,.07,1),T(rx+(fx?0:sz),.19,rz+(fx?sz:0)+(fx?0:0),0,0,0));}addGeo('wood',boxUV(fx?.7:1.9,.06,fx?1.9:.7,1),T(rx,.36,rz,0,0,.05));for(let i=0;i<5;i++)addGeo('wood',boxUV(fx?.66:.09,.025,fx?.09:.66,1),T(rx+(fx?0:-.7+i*.35),.4,rz+(fx?-.7+i*.35:0),(R()-.5)*.1));addGeo('burlap',lathe([[0,.07],[.25,.06],[.35,.03],[.38,0]],10),T(rx,.42,rz,0,0,0,fx?1:2.3,1,fx?2.3:1));addBox(rx-(fx?.38:1),rx+(fx?.38:1),rz-(fx?1:.38),rz+(fx?1:.38),.45);}   // (Build 215) a plank cot with a rotten pallet, not a rack of spears you can't take
@@ -3645,8 +3645,10 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
         if(wl){const [dx,dz]=wl,[x,z]=inner(c,dx,dz,(R()-.5)*2.4,.3);bones(x,0,z,Math.atan2(-dx,-dz),'sit');find('purse',x-dx*.38,.03,z-dz*.38+.2);}}
       else if(K==='dig'&&wl){   /* grave robbers broke through this wall into something and the roof answered: the hole, their tools, their lamp, their sacks, and one of them under the stone */
         const [dx,dz]=wl,ry=Math.atan2(-dx,-dz),W2=(u,ins)=>inner(c,dx,dz,u,ins);
-        {const [x,z]=W2(0,.014),m=new THREE.Mesh(new THREE.CircleGeometry(.78,10),MATS.cryptDark);m.scale.set(1,1.18,1);m.position.set(x,.82,z);m.rotation.y=ry;world.add(m);}
-        for(let i=0;i<13;i++){const a=i/13*6.283+R()*.2,u=Math.cos(a)*.88,y=.85+Math.sin(a)*1.02;if(y<.12)continue;const [x,z]=W2(u,.05);addGeo('cryptWall',boxUV(.26+R()*.2,.18+R()*.12,.16,2),T(x,y,z,ry+(R()-.5)*.4,(R()-.5)*.3,a+(R()-.5)*.5));}
+        {const [x,z]=W2(0,.016),sh=new THREE.Shape();for(let i=0;i<11;i++){const a=i/11*6.283,rr=.5+R()*.16;if(i)sh.lineTo(Math.cos(a)*rr,Math.sin(a)*rr*1.15);else sh.moveTo(rr,0);}const m=new THREE.Mesh(new THREE.ShapeGeometry(sh),MATS.cryptDark);m.position.set(x,.8,z);m.rotation.y=ry;world.add(m);}
+        /* (Build 237) the breach has an edge: two rings of broken wall stone standing out round a smaller, ragged dark, the inner ones leaning into it (it was a flat black disc on the wall with a few blocks near it) */
+        for(let k=0;k<2;k++)for(let i=0;i<(k?17:12);i++){const a=i/(k?17:12)*6.283+R()*.25,rr=k?.92+R()*.14:.62+R()*.08,u=Math.cos(a)*rr,y=.8+Math.sin(a)*rr*1.15;if(y<.1)continue;const out=k?.05+R()*.05:.1+R()*.12,[x,z]=W2(u,out);addGeo(R()<.3?'cryptVault':'cryptWall',boxUV(.2+R()*.18,.15+R()*.12,k?.14:.24+R()*.1,2),T(x,y,z,ry+(R()-.5)*.5,(R()-.5)*.4,a+(R()-.5)*.6));}
+        for(let i=0;i<5;i++){const [x,z]=W2((R()-.5)*.7,.25+R()*.3);addGeo('wood',boxUV(.06,.9+R()*.6,.05,1),T(x,.5+R()*.3,z,ry+R(),(R()-.5)*.9,(R()-.5)*1.2));}
         {const [x,z]=W2(0,.85);rubble(x,z,30,1.0);addCircle(x,z,.55,.4);const [x2,z2]=W2(.5,1.5);rubble(x2,z2,10,.5);}
         {const [x,z]=W2(.25,1.15);bones(x,.12,z,ry+2.2);for(let i=0;i<5;i++)addGeo('cryptWall',boxUV(.3+R()*.25,.2+R()*.14,.3+R()*.2,2),T(x+(R()-.5)*.5,.22+R()*.12,z+(R()-.5)*.5,R()*3,R()*.5,R()*.5));}
         {const [ax2,az2]=W2(1.25,.55),[bx2,bz2]=W2(1.3,.06);vRod('wood',V(ax2,0,az2),V(bx2,1.05,bz2),.019,6);addGeo('iron',boxUV(.5,.04,.045,1),T(bx2,1.04,bz2,ry,0,.25));}   // a pick against the wall
@@ -3680,7 +3682,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
         const G=C.tomb={x:cx,z:cz,spots:[],woke:0,stand:1,sword:[cx+.1,cz+1.55]};
         addGeo('cryptVault',boxUV(1.5,.16,2.8,2),T(cx,.08,cz));addGeo('cryptWall',boxUV(1.1,.62,2.4,2),T(cx,.47,cz));addGeo('cryptVault',boxUV(1.24,.09,2.54,2),T(cx,.825,cz));addBox(cx-.62,cx+.62,cz-1.27,cz+1.27,.87);
         {const S=shroudGeo(R),m=new THREE.Mesh(S.g,MATS.cryptVault);m.position.set(cx,.87,cz);m.scale.set(1.04,1.05,1.04);m.castShadow=m.receiveShadow=true;world.add(m);addGeo('cryptVault',boxUV(.44,.12,.3,2),T(cx,.93,cz-.98));}   // the effigy, head on a stone pillow
-        for(const sx of [-1,1])for(const sz of [-1,1]){const x=cx+sx*.95,z=cz+sz*1.6;addGeo('iron',lathe([[0,0],[.13,0],[.13,.02],[.03,.05],[.02,1.2],[.07,1.24],[.07,1.26],[0,1.26]],8),T(x,0,z));addGeo('wax',new THREE.CylinderGeometry(.028,.032,.2,7),T(x,1.36,z));if(sx*sz>0)addFlame(x,1.52,z,.18,true,1.5,2.4,.55,0xffb066);addCircle(x,z,.1,1.3);}
+        for(const sx of [-1,1])for(const sz of [-1,1]){const x=cx+sx*.95,z=cz+sz*1.6;addGeo('iron',lathe([[0,0],[.13,0],[.13,.02],[.03,.05],[.02,1.2],[.07,1.24],[.07,1.26],[0,1.26]],8),T(x,0,z));addGeo('wax',new THREE.CylinderGeometry(.028,.032,.2,7),T(x,1.36,z));if(sx*sz>0)addFlame(x,1.52,z,.18,true,1.5,2.4,.55,0xffc488);addCircle(x,z,.1,1.3);}
         find('reliquary',cx+.3,.87,cz+1.02);C.lootX.push([G.sword[0],G.sword[1],'tomb']);
         for(const [dx,dz] of free){const al=dx?hz:hx;for(const u of [-al*.5,al*.5]){const [x,z]=inner(c,dx,dz,u,.8);if(isFree(x,z,.3)&&G.spots.length<4)G.spots.push([x,z]);}}
         for(const [dx,dz] of free.slice(0,2)){const [x,z]=inner(c,dx,dz,0,.02),ry=Math.atan2(-dx,-dz);wallShieldC(x,1.9,z,ry);}}
@@ -3986,7 +3988,7 @@ function cryptDrop(){const R=RUN,P=player,h0=CRYPT&&CRYPT.down;if(!R||!R.crypt||
     if(P.sword)for(const k of ['H','Hp','T','Tp'])sh(P.sword[k]);for(const k of ['R','L']){const a=P.fists[k];if(a)sh(a.pos);}if(P.offH){sh(P.offH.p);sh(P.offH.tp);}if(P.offG)sh(P.offG.pos);if(P._cbPos)sh(P._cbPos);for(const k of ['chest','headPos','shR','shL'])sh(P[k]);
     if(P.lamp){sh(P.lamp.g.position);P.lamp.fresh=true;}sh(camera.position);camY+=dy;P.root.position.copy(P.pos);P.root.updateMatrixWorld(true);
     cryptPopulate();setTimeout(warmShaders,0);cryptHud();setTimeout(()=>{if(RUN===R)toast(`Depth ${R.depth}`);},2500);},0);}
-function cryptVisual(dt){const C=CRYPT;if(!C)return;trapVisual(dt);for(const d of C.doors)d.g.rotation.y=d.base+d.th;   /* (this line was lost in Build 236 and no door was drawn opening) */
+function cryptVisual(dt){const C=CRYPT;if(!C)return;trapVisual(dt);for(const d of C.doors)d.g.rotation.y=d.base+d.th;   /* (Build 237: this line was lost in Build 236 and no door was drawn opening) */
   if(C.gate&&!C.gate.locked&&C.gate.up<1){const G=C.gate;G.up=Math.min(1,G.up+dt/1.6);G.g.position.y=2.25*smooth(G.up);if(Math.random()<dt*14)noiseBurstAt(_la.set(G.x,2,G.z),.12,'bandpass',1400,9,.03);}
   for(const k of C.caskets){if(k.ang!=null){k.lid.rotation.x=-k.ang;continue;}if(k.opened&&k.open<1){k.open=Math.min(1,k.open+dt*2.2);const e=k.open*k.open*(3-2*k.open);k.lid.rotation.x=-1.85*e;}}}
 /* (Build 214) lids are lifted by hand, as in Half Sword: E takes the lid's front edge in your free hand, your aim raises and lowers it (the
@@ -4236,7 +4238,7 @@ const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   slate:{mats:{slate:{rep:.8,ns:1.3,col:0x8e949c},towerSlate:{rep:.8,ns:1.3,col:0x8e949c}}},
   floor:{mats:{floorPlank:{rep:1,ns:1.3,col:0xf0e0d0}}},boards:{mats:{boards:{rep:1,ns:1.2,col:0xe0c8b0},woodLight:{rep:1,ns:1.2,col:0xf4e2cc}}},
   grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},meadow:{mats:{meadow:{rep:2.6,ns:1,col:0x7ca65a}}},bark:{mats:{bark:{rep:1,ns:1.4,col:0xb8ac9c}}},
-  rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptVault:{rep:1.2,ns:1.4,col:0xa89e90},cryptWall:{rep:1.0,ns:1.6,col:0x9a9082},cryptFloor:{rep:.78,ns:1.7,col:0x8c8478},cryptEarth:{rep:1.0,ns:1.6,col:0x4a4034}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
+  rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptVault:{rep:1.9,ns:.85,col:0x9c968c},cryptWall:{rep:1.75,ns:.9,col:0xa29c92},cryptFloor:{rep:1.25,ns:.8,col:0x6f695f},cryptEarth:{rep:1.4,ns:.9,col:0x463e34}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
     Promise.all([get('d',true),get('n',false),get('orm',false)]).then(([d,n,m])=>{for(const [mk,c] of Object.entries(o.mats)){const M=MATS[mk];if(!M)continue;
@@ -4498,7 +4500,7 @@ LIGHTS.tavern={fog:0x15120f,dens:.01,top:0x15120f,mid:0x15120f,hor:0x15120f,glow
 LIGHTS.mill={fog:0x2c261e,dens:.008,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.3,.55,-.75],stars:0,hs:0xb0a48e,hg:0x5a4a36,hi:1.15,sun:0xffdcae,si:5,dir:[.3,.5,-.8],moon:false,exp:1.3,cool:.7,halo:.25,shR:16,shMap:4096,
   env:[[0,'#3a3a3c'],[.42,'#6a6058'],[.5,'#8a7a64'],[.55,'#4a3c2c'],[1,'#241c14']]};
 // (Build 207) under the church: no sun at all. What you see is what a flame reaches
-LIGHTS.crypt={fog:0x090706,dens:.03,top:0x050404,mid:0x050404,hor:0x050404,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x6a6058,hg:0x16120e,hi:.045,sun:0x000000,si:0,dir:[.2,.9,.2],moon:false,exp:1.38,cool:.45,halo:.16,shR:10,shMap:1024,
+LIGHTS.crypt={fog:0x090706,dens:.03,top:0x050404,mid:0x050404,hor:0x050404,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x566482,hg:0x15171c,hi:.12,sun:0x000000,si:0,dir:[.2,.9,.2],moon:false,exp:1.38,cool:.62,halo:.16,shR:10,shMap:1024,
   env:[[0,'#060505'],[.5,'#100c0a'],[1,'#050404']]};
 LIGHTS.cryptDeep={...LIGHTS.crypt,fog:0x0a0e16,dens:.036,hs:0x5c6a86,hg:0x12141a,hi:.14,cool:.9,env:[[0,'#06080c'],[.5,'#0c1018'],[1,'#040506']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
@@ -4540,13 +4542,13 @@ function splatCanvas(){const S=256,c=mkCanvas(S,S),g=c.getContext('2d'),C=S/2;le
 const DEC_N=1600;const decalGeo=new THREE.PlaneGeometry(2,2);decalGeo.rotateX(-Math.PI/2);
 const splatTex=new THREE.CanvasTexture(splatCanvas());
 const DEC_T={value:0},decBorn=new THREE.InstancedBufferAttribute(new Float32Array(DEC_N).fill(-999),1);decalGeo.setAttribute('aBorn',decBorn);
-const decalMat=std({alphaMap:splatTex,alphaTest:.35,color:0xffffff,roughness:.5,metalness:0,envMapIntensity:.5,transparent:true,opacity:.95,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-6});
+const decalMat=std({alphaMap:splatTex,alphaTest:.1,color:0xffffff,roughness:.5,metalness:0,envMapIntensity:.14,transparent:true,opacity:.95,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-6});
 // a splash lands wet: deep red and glossy, a thin pink-red rim where it soaks into the sand; over a minute it dries dark brown and matte
 decalMat.onBeforeCompile=sh=>{sh.vertexShader='attribute float aBorn;varying float vAge;varying vec2 vDUv;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvAge=aBorn<-900.?999.:uDTv-aBorn;vDUv=uv;').replace('void main','uniform float uDTv;\nvoid main');
   sh.uniforms.uDTv=DEC_T;
   sh.fragmentShader='varying float vAge;varying vec2 vDUv;\n'+sh.fragmentShader.replace('#include <alphamap_fragment>',`#include <alphamap_fragment>
     float dA=texture2D(alphaMap,vAlphaMapUv).g,dDry=smoothstep(8.,70.,vAge),dThk=smoothstep(.45,.95,dA);
-    diffuseColor.rgb=mix(mix(vec3(.2,.014,.01),vec3(.075,.004,.003),dThk),mix(vec3(.12,.045,.03),vec3(.05,.018,.012),dThk),dDry);diffuseColor.a*=mix(1.,.72,dDry);`)
+    diffuseColor.rgb=mix(mix(vec3(.105,.008,.006),vec3(.045,.003,.002),dThk),mix(vec3(.075,.03,.02),vec3(.035,.013,.009),dThk),dDry);diffuseColor.a=smoothstep(.2,.52,dA)*.95*mix(1.,.72,dDry);   /* (Build 237) darker, with a soft soaked edge and far less sky in it: in daylight the splats were flat magenta shapes with a cut-out edge */`)
    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(mix(.35,.08,dThk),.9,dDry);');};
 decalMat.customProgramCacheKey=()=>'splat';
 const decals=new THREE.InstancedMesh(decalGeo,decalMat,DEC_N);
@@ -5490,8 +5492,8 @@ function dressMH(model,look,pal,mats){
   model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
     if(m===body)m.material=skin;else m.material=std({map:T.eye,roughness:.12,alphaTest:.5});});
   const C=hsCloth(body),o=look.o|0;
-  const cloth=(geo,dyed,folds)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';
-    if(!dyed){mt.userData.U.uTint.value.set(0xe9dfca);mt.userData.U.uTrim.value.set(0xe9dfca);}
+  const cloth=(geo,dyed,folds,ucol=0xe9dfca)=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.8,.8),roughness:.95});tintMaterial(mt,0,pal,mats);clothFolds(mt,folds);mt.customProgramCacheKey=()=>'bm-cloth';
+    if(!dyed){mt.userData.U.uTint.value.set(ucol);mt.userData.U.uTrim.value.set(ucol);mt.userData.U.uHose.value.set(ucol);if(mt.userData.U.uParty){mt.userData.U.uParty.value=0;mt.userData.noParty=true;}}
     const sm=new THREE.SkinnedMesh(geo,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);};
   const M=bodyMarks(body),hy=M.J.Hips.y;HU.uEyeB.value.set(M.hx,M.ey,M.ez);body.userData.helmY=M.ey+.058;{let hid=false;for(let o=body.parent;o;o=o.parent)if(o.userData.hideHair){hid=true;break;}HU.uHelmY.value=hid?body.userData.helmY:99;}
   const shell=(key,opt,mt,hair)=>{const g=fitShell(body,key,opt);const sm=new THREE.SkinnedMesh(g,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';if(hair)sm.userData.hair=true;body.parent.add(sm);return sm;};
@@ -5512,7 +5514,7 @@ function dressMH(model,look,pal,mats){
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   for(let i=nKids0;i<body.parent.children.length;i++)body.parent.children[i].userData.shellGarb=true;   // (the body-grown garment: the stand-in until the draped one arrives)
   {const hz=(o>=1||!!window.__garb)&&!look.bl;   // joined hose under every garment (Build 126: the shirt had braies)
-    if(!hz)cloth(C.braies,true,.003);
+    if(!hz)cloth(C.braies,false,.003,0xfffaf0);   /* (Build 237) drawers are plain linen, not the coat's colours */
     else{const W=WOOLT.wool,mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.55,.55),roughness:.94});tintMaterial(mt,0,pal,mats);clothFolds(mt,.0016);mt.customProgramCacheKey=()=>'bm-hose';if((look.o|0)<2){mt.userData.noParty=true;mt.userData.U.uParty.value=0;}   /* (Build 205) parti-coloured hose go with a parti-coloured coat, not with a plain shirt */   /* (Build 202) hose are wool, not the shirt's linen */
       const sm=new THREE.SkinnedMesh((look.ft|0)?C.hoseF:C.hose,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}}
   // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
@@ -6588,7 +6590,7 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
   if(def.id==='kettle'){
     // a kettle hat: a round bowl with a low comb, riveted to a broad brim that slopes down and out
     S(helmLoft(M,{kind:'round',clr:.024,yC:ey+.035,yT:top+.035,rimY:()=>ey+.035,ridge:[.18,.004],rivets:14}),steelFitMat);
-    const r0x=M.rx+.026,r0z=M.rz+.026,NV=72,NU=8,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,w=.095*u,dy=-.05*Math.pow(u,1.3)-(u>.92?(u-.92)*.04:0);for(let j=0;j<=NV;j++){const th=j/NV*Math.PI*2;
+    const r0x=M.rx+.026,r0z=M.rz+.026,NV=72,NU=8,pos=[],idx=[];for(let i=0;i<=NU;i++){const u=i/NU,w=.064*u,dy=-.05*Math.pow(u,1.3)-(u>.92?(u-.92)*.04:0);for(let j=0;j<=NV;j++){const th=j/NV*Math.PI*2;
       const bead=u>.93?.003*Math.sin((u-.93)/.07*Math.PI):0;pos.push(cx+Math.sin(th)*(r0x+w),ey+.04+dy+bead,cz+Math.cos(th)*(r0z+w));}}
     for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,c,b,b,c,d);}
     const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();S(bg.toNonIndexed(),steelFitMat);
