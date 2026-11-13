@@ -344,6 +344,8 @@ body.touch #prompt{top:auto;bottom:24%}
     <div class="frow">Cut <div class="seg" id="fpat" role="radiogroup" aria-label="Pattern"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Split</button></div></div>
     <div class="frow">Build <div class="seg" data-look="b" role="radiogroup" aria-label="Build"><button data-v="3" role="radio">Lean</button><button data-v="0" role="radio">Athletic</button><button data-v="2" role="radio">Strong</button><button data-v="1" role="radio">Heavy</button></div></div>
     <div class="frow">Garb <div class="seg" data-look="o" role="radiogroup" aria-label="Outfit"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Shirt</button><button data-v="3" role="radio">Tunic</button><button data-v="4" role="radio">Doublet</button><button data-v="2" role="radio">Gambeson</button></div></div>
+    <div class="frow">Fastening <div class="seg" data-look="tr" role="radiogroup" aria-label="Fastening and trim"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Buttoned</button><button data-v="2" role="radio">Braided</button></div></div>
+    <div class="frow">Cloth <div class="seg" data-look="pt" role="radiogroup" aria-label="Cloth"><button data-v="0" role="radio">Plain</button><button data-v="1" role="radio">Rayed</button><button data-v="2" role="radio">Barred</button></div></div>
     <div class="frow">Head <div class="seg" data-look="hd" role="radiogroup" aria-label="Head covering"><button data-v="0" role="radio">Bare</button><button data-v="1" role="radio">Coif</button><button data-v="2" role="radio">Hood</button></div></div>
     <div class="frow">Feet <div class="seg" data-look="ft" role="radiogroup" aria-label="Footwear"><button data-v="0" role="radio">Barefoot</button><button data-v="1" role="radio">Shoes</button><button data-v="2" role="radio">Boots</button></div></div>
     <div class="frow">Hair <div class="seg" data-look="h" role="radiogroup" aria-label="Hair"><button data-v="0" role="radio">Bald</button><button data-v="1" role="radio">Shorn</button><button data-v="2" role="radio">Cropped</button><button data-v="4" role="radio">Tousled</button><button data-v="5" role="radio">Bowl</button><button data-v="3" role="radio">Long</button></div></div>
@@ -455,7 +457,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=240;
+const BUILD=241;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -5027,13 +5029,13 @@ const LOOK={outfits:['bare','peasant','ranger'],hair:[null,'Hair_Buzzed','Hair_P
 // the wardrobe (looks only, never protection or damage): armour finish af, tabard sc, helmet crest pl, weapon steel wf, grip wg
 const WARD={af:['Bright','Blackened','Russet','Gilt'],sc:['None','Plain','Quartered','Cross','Bend'],pl:['None','Plume','Crest'],wf:['Bright','Blackened','Gilt hilt','Blued'],ws:['Standard','Knightly','Northern'],
   wg:['#5a3a24','#1a1614','#7a1a14','#1e2e5a','#2e4a26','#c8b89a'],wgN:['Brown','Black','Red','Blue','Green','Pale']};
-const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1,b:0,hd:0,ft:1,mk:0,af:0,sc:0,pl:0,wf:0,wg:0,ws:0};
+const DEF_LOOK={o:1,h:2,bd:1,hc:1,sk:1,b:0,hd:0,ft:1,mk:0,tr:0,pt:0,af:0,sc:0,pl:0,wf:0,wg:0,ws:0};
 function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Number.isInteger(v)&&v>=0&&v<=max?v:null;
-  const o={o:n(l.o,4),h:n(l.h,5),bd:n(l.bd,4)??(l.bd?1:0),hc:n(l.hc,LOOK.hairCol.length-1),sk:n(l.sk,LOOK.skin.length-1),hd:n(l.hd,2)??0,ft:n(l.ft,2)??0,mk:n(l.mk,2)??0,
+  const o={o:n(l.o,4),h:n(l.h,5),bd:n(l.bd,4)??(l.bd?1:0),hc:n(l.hc,LOOK.hairCol.length-1),sk:n(l.sk,LOOK.skin.length-1),hd:n(l.hd,2)??0,ft:n(l.ft,2)??0,mk:n(l.mk,2)??0,tr:n(l.tr,2)??0,pt:n(l.pt,2)??0,
     af:n(l.af,WARD.af.length-1)??0,sc:n(l.sc,WARD.sc.length-1)??0,pl:n(l.pl,WARD.pl.length-1)??0,wf:n(l.wf,WARD.wf.length-1)??0,wg:n(l.wg,WARD.wg.length-1)??0,ws:n(l.ws,WARD.ws.length-1)??0};const b=n(l.b,3);if(b!==null)o.b=b;
   const sh=n(l.sh,SHAPES.length-1);if(sh)o.sh=sh;if(l.bl)o.bl=1;   /* (Build 234) bl: bare legs (no hose, linen drawers under the shirt), as the crypt's prisoners go */   // sh: an exaggerated shape (SHAPES), for the odd characters
   return o.o===null||o.h===null||o.hc===null||o.sk===null?null:o;}
-function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:[0,1,2,2,3,4,4,5][(q()*8)|0],bd:[0,1,1,2,3,4][(q()*6)|0],hc:q()<.12?4:[0,1,2,3,5,6,7][(q()*7)|0],sk:(q()*6)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.82?0:q()<.6?1:2,
+function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:[0,1,2,2,3,4,4,5][(q()*8)|0],bd:[0,1,1,2,3,4][(q()*6)|0],hc:q()<.12?4:[0,1,2,3,5,6,7][(q()*7)|0],sk:(q()*6)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.82?0:q()<.6?1:2,tr:q()<.55?0:q()<.5?1:2,pt:q()<.8?0:q()<.6?1:2,
   af:q()<.6?0:1+((q()*3)|0)*(q()<.8?1:0),sc:q()<.7?0:1+((q()*4)|0),pl:q()<.85?0:1+((q()*2)|0),wf:q()<.6?0:1+((q()*3)|0),wg:(q()*6)|0,ws:(q()*3)|0};}
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
@@ -5161,6 +5163,25 @@ function garmentDetail(m,kind,M){const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs
         float eye=(1.-smoothstep(.0018,.0032,length(vec2(ax-(w+.004),(fract(d*22.5)-.5)/22.5))));
         diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.16,.1,.06),max(lace*.9,eye*.6));}`:''}
       diffuseColor.rgb*=k; }`);};}
+/* (Build 241) how a coat is fastened and trimmed, and what cloth it is cut from, after 14th-century dress (looks only):
+   tr 1 buttoned: a close row of small cast pewter buttons down the breast and from elbow to wrist, as on the cotehardie and the pourpoint of
+        Charles de Blois (c. 1364); tr 2 braided: a woven braid in the trim colour at the collar and cuffs.
+   pt 1 rayed: cloth woven in stripes of the coat and trim colours running down the body and along the sleeves (the 'ray' of the London and
+        Ghent drapers); pt 2 barred: the same stripes laid across. Drawn in the garment's bind space, so nothing swims when it moves */
+function clothTrim(m,look,M,o){const tr=look.tr|0,pt=o===1?0:look.pt|0;if(!pt&&!tr||o===1&&tr!==2)return;const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs(J.LeftArm.x),ex=Math.abs(J.LeftForeArm.x),wx=Math.abs(J.LeftHand.x),ay=J.LeftForeArm.y,az=J.LeftForeArm.z,zc=J.Spine1.z,btn=tr===1&&o!==1,f=v=>v.toFixed(4);
+  const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+    { vec3 b=vBind;float ax=abs(b.x);vec3 swap=uTrim/max(uTint,vec3(.03));
+      ${pt?`{ float u=${pt===1?`ax<${f(sx)}?b.x*22.:(b.z*19.+b.y*9.)`:`ax<${f(sx)}?b.y*19.:ax*19.`};float st=step(.5,fract(u));float thin=step(.86,fract(u*2.+.25));
+        diffuseColor.rgb*=mix(vec3(1.),swap,st*.92);diffuseColor.rgb*=1.-.18*thin*(1.-st); }`:''}
+      ${tr===2?`{ float col=step(${f(ny-.034)},b.y)*step(ax,.13),cuf=smoothstep(${f(wx-.062)},${f(wx-.058)},ax);float band=max(col,cuf);
+        if(band>0.){vec2 q=col>.5?vec2(atan(b.x,b.z-${f(zc)})*14.,b.y*110.):vec2(atan(b.y-${f(ay)},b.z-${f(az)})*5.,ax*110.);float loz=abs(fract(q.x)-.5)+abs(fract(q.y)-.5);
+          vec3 br=uTrim*(.75+.5*step(loz,.32))*(1.-.35*step(.46,abs(fract(q.y*.5)-.5)));diffuseColor.rgb=mix(diffuseColor.rgb,br*.9,band*.94);} }`:''}
+      ${btn?`{ float front=step(${f(zc)},b.z),d=${f(ny-.03)}-b.y;
+        if(front>.5&&d>0.&&b.y>${f(hy-.16)}&&ax<.012){float cy=(fract(d/.021)-.5)*.021,r=length(vec2(b.x-.004,cy));diffuseColor.rgb*=1.-.4*(1.-smoothstep(.0008,.0022,abs(b.x)));
+          float dome=1.-smoothstep(.0042,.0052,r);vec3 pw=vec3(.56,.55,.5)*(.7+.9*smoothstep(.0035,.0,length(vec2(b.x-.0052,cy-.0012))));diffuseColor.rgb=mix(diffuseColor.rgb,pw,dome);diffuseColor.rgb*=1.-.35*(1.-dome)*(1.-smoothstep(.0052,.008,r));}
+        if(ax>${f(ex+.02)}&&ax<${f(wx-.012)}&&b.y>${f(ay)}){float cx=(fract(ax/.017)-.5)*.017,r=length(vec2(cx,b.z-${f(az-.012)}));
+          float dome=1.-smoothstep(.0036,.0046,r);vec3 pw=vec3(.56,.55,.5)*(.7+.9*smoothstep(.003,.0,length(vec2(cx-.001,b.z-${f(az-.011)}))));diffuseColor.rgb=mix(diffuseColor.rgb,pw,dome);diffuseColor.rgb*=1.-.3*(1.-dome)*(1.-smoothstep(.0046,.007,r));} }`:''}
+    }`);};const ck=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>ck+'|ct'+tr+pt+o+f(ny)+f(sx)+f(wx)+f(ay);}
 function quilt(m){const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);
   sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
     { vec3 b=vBind;float limb=smoothstep(.2,.26,abs(b.x));float chT=b.x*80.+b.z*30.,chL=b.y*80.+b.z*20.;
@@ -5575,7 +5596,7 @@ function dressMH(model,look,pal,mats){
     const gm=G.mat==='quilt'?(()=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';return mt;})()
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
-    gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm);addMHPart(body,G.id,null,'cloth',false,gm);
+    clothTrim(gm,look,M,look.o);gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm);addMHPart(body,G.id,null,'cloth',false,gm);
     if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0xb07a4a);   /* (Build 238: lighter again, it still drew near black) (Build 197: 0x4a2e1c over the leather maps read as a flat black band) */bm.side=THREE.DoubleSide;looseMat(bm,SWU,'h');garbClip(bm);garbLegs(bm,.007);bm.userData.isBelt=true;if(look.bl){bm.color.setHex(0xa08a5c);bm.roughness=1;bm.userData.cord=1;}   /* (Build 236) a prisoner's shirt is tied with a length of cord, not a leather belt */addMHPart(body,G.belt,null,'belt',false,bm);}}}   /* (Build 198) the belt swings and is pushed off the thighs with the cloth it's on: in a fighting stance the shirt was pushed out over it and only a black patch of it showed at the back */
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
     // hair, beard, brows and lashes are MakeHuman's own (Build 126; the shells and the painted cap are no longer used)
@@ -10047,7 +10068,15 @@ function combatStep(h){
         const ts=s.tipVel.length();
         if(ts>=1.5||s.Hv.length()>=1.2||s.def.thrust>.5&&(A.thrust||A.ctrl.z>.5||(A.revW||0)>.5||s.def.kind==='spear'&&A.commit)&&s.Hv.length()>=.4){   /* (Build 150: a point being pressed in is checked too) */
           let hit=null,ht=0;
-          outer:for(const t of SAMPLES)for(let k=0;k<2;k++){s.pointAt(t,_bp);if(k===1){_cq.copy(s.Hprev).lerp(s.Tp,t);_bp.lerp(_cq,.5);}for(const c of B.caps){if(!c.on)continue;const rr=c.r+.02+(c.zone==='head'&&B.armor.head?.025:0);if(distPointSeg2(_bp,c.a,c.b)<rr*rr){hit=c;ht=t;break outer;}}}   // a helmet stands off the skull: the blow lands on the steel
+          /* (Build 241) precise hits. The whole blade, as a line from 0.2 of its length to the point, is tested against each limb at the body's real
+             surface (capSurf: the skin, or the steel over it, plus 1.2 cm), where it is now, halfway back to where it was a step ago and where it was;
+             the deepest contact is the hit. Before, ten points along the blade were tested against capsules 2 to 6 cm fatter than the body, so blows
+             landed in the air beside a man, and a limb could pass between two points untouched. ?oldhit is the old test */
+          if(HIT_OLD){outer:for(const t of SAMPLES)for(let k=0;k<2;k++){s.pointAt(t,_bp);if(k===1){_cq.copy(s.Hprev).lerp(s.Tp,t);_bp.lerp(_cq,.5);}for(const c of B.caps){if(!c.on)continue;const rr=c.r+.02+(c.zone==='head'&&B.armor.head?.025:0);if(distPointSeg2(_bp,c.a,c.b)<rr*rr){hit=c;ht=t;break outer;}}}}
+          else{let best=0;for(let k=0;k<3;k++){const w=k*.5;_hq0.copy(s.H).lerp(s.Hprev,w);_hq1.copy(_bt).lerp(s.Tp,w);_hqa.copy(_hq0).lerp(_hq1,.2);
+              for(const c of B.caps){if(!c.on)continue;const rr=capSurf(B,c)+HIT_PAD,d2=segSeg(_hqa,_hq1,c.a,c.b,_c1,_c2);if(d2<rr*rr){const pen=rr-Math.sqrt(d2)+(k===0?.004:0);if(pen>best){best=pen;hit=c;ht=.2+.8*SS.s;_bp.copy(_c1);}}}
+              if(hit&&k===0)break;}}
+          if(hit&&window.__hitGap){const d=Math.sqrt(distPointSeg2(_cq.copy(_bp),hit.a,hit.b));window.__hitGap.push(d-(hit.r-(CAP_IN[hit.ba]||0)));}
           if(hit)resolveHit(A,B,hit,ht,_bp.clone());
         }
       }
@@ -10056,6 +10085,7 @@ function combatStep(h){
   }
 }
 const BIND=!/[?&]nobind/.test(location.search);
+const HIT_OLD=/[?&]oldhit/.test(location.search),HIT_PAD=+(new URLSearchParams(location.search).get('hitpad')??.012),_hq0=V(),_hq1=V(),_hqa=V();
 function clash(A,B){
   const s=A.sword,s2=B.sword;if(s)s._px=1;if(s2)s2._px=1;if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
   const d2=segSeg(s.H,_bt,s2.H,_pb,_c1,_c2),cr=.05+Math.min(.1,_wl3.subVectors(s.tipVel,s2.tipVel).length()*H*.9);if(d2>=cr*cr)return;   /* Build 146: the reach grows with how fast the blades close (at 25 m/s a blade moves 10 cm a step and slipped through a guard between steps) */
