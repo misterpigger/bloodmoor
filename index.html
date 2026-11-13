@@ -458,7 +458,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=242;
+const BUILD=243;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -3112,7 +3112,7 @@ function lampStep(dt){if(!LAMPS.length){lampSelf(null);if(LAMP_SH){LAMP_SH.inten
 // Dark: a few candles, one shaft of daylight on the straw where you wake, your lantern. Corridors are 1.9 m wide under a barrel vault
 // 2.4 m high, so long weapons strike stone (`Sword.worldClip`). Doors swing when walked into; some are boarded and have to be broken open.
 let CRYPT=null,CRYPT_DEPTH=1,CRYPT_SEED=7;const CRYPT_SEEN=new Set();   /* story rooms already met this run: each is seen once */const CTRAP=new URLSearchParams(location.search).get('ctraps');const CKINDS=(new URLSearchParams(location.search).get('ckinds')||'').split(',').filter(Boolean).length?new URLSearchParams(location.search).get('ckinds').split(','):null;
-const CR={P:11.5,WT:.6,CW:1.08,CS:1.5,DW:.68,DS:1.42,HR:2.1,LS:4.5,SL:5.6,SD:2.8,SLD:2.2},CRYPT_KINDS=['ossuary','coffins','chapel','pit','cells','store','fallen','slab','ossuary','coffins','plain'],CRYPT_POOR=['knife','cleaver','rondel','stave','falchion','poker','axe'];
+const CR={P:11.5,WT:.6,CW:1.08,CS:1.5,DW:.68,DS:1.42,HR:2.1,LS:4.5,SL:5.6,SD:2.8,SLD:2.2},CRYPT_KINDS=['ossuary','coffins','chapel','pit','cells','store','fallen','slab','ossuary','coffins','plain'],CRYPT_POOR=['knife','cleaver','rondel','stave','falchion','poker','axe','cudgel','cudgel','billhook','pitchfork','rustsword','rustsword'];
 function cryptPlan(depth,seed){let s=(seed*9301+depth*49297+11)%233280||7;const R=()=>{s=(s*9301+49297)%233280;return s/233280;};
   const GW=depth>=4?4:3,GH=depth<2?2:3,P=CR.P,cells=[];
   for(let j=0;j<GH;j++)for(let i=0;i<GW;i++)cells.push({i,j,k:j*GW+i,cx:(i-(GW-1)/2)*P,cz:(j-(GH-1)/2)*P,hx:3+R()*1.2,hz:3+R()*1.2,type:'room',links:[],H:3.2});
@@ -4152,7 +4152,7 @@ function cryptPopulate(){const C=CRYPT,R=RUN,D=R.depth,rk=careerRank();
      and better the deeper you go */
   const tierL=clamp(Math.floor((D-1)/2),0,CAREER_FOES.length-1);
   for(const [x,z] of C.lootAt)if(Math.random()<.75)spawnWeaponLoot(WEAPONS[D>=3&&Math.random()<.5?pick(CAREER_FOES[tierL])[0]:pick(CRYPT_POOR)],x,z);
-  if(D===1&&C.kit.length)spawnWeaponLoot(WEAPONS[pick(['knife','stave','poker','cleaver'])],...C.kit[(Math.random()*C.kit.length)|0]);
+  if(D===1&&C.kit.length)spawnWeaponLoot(WEAPONS[pick(['knife','stave','poker','cleaver','cudgel','billhook','rustsword'])],...C.kit[(Math.random()*C.kit.length)|0]);
   {const read=CAREER.lore||(CAREER.lore=[]);let nx=0;for(const n of C.notes){while(nx<CRYPT_LORE.length&&read.includes(nx))nx++;n.i=nx<CRYPT_LORE.length?nx++:(Math.random()*CRYPT_LORE.length)|0;}}
   const spots=[...C.spots].filter(s=>isFree(s.x,s.z,.5)&&cryptGround(s.x,s.z,0)>-.1&&cryptGround(s.x+.5,s.z,0)>-.1&&cryptGround(s.x-.5,s.z,0)>-.1).sort(()=>Math.random()-.5),n=Math.min(spots.length,2+Math.round(D*1.1)),names=BOT_NAMES(),tier=clamp(Math.floor((D-2)/2)+(rk>=4&&D>=3?1:0),0,CAREER_FOES.length-1);
   for(let i=0;i<n;i++){const sp=spots[i],sk=clamp(.24+D*.06+rand(-.04,.04),.22,.88),en=botEntrant(names[i],sk);en.foe=true;
@@ -6157,6 +6157,21 @@ function makeRondel(st=0){const disc=(R,T)=>toCreasedNormals(lathe([[0,-T/2],[R*
     [gripP(.105,.0128,{swell:.1,ris:[.3,.7]}),gripMat,0,-.026,0],[peenP(.005),steelHilt,0,-.0895,0,Math.PI,0,0]]);}
 const _hs=()=>.9;
 // a war hammer: a square hammer face with four prongs, a beak behind, a top spike, langets down the haft
+/* (Build 243) poor men's weapons and rich men's. Poor: what a labourer or a levy had to hand, the cudgel, the hayfork and the hedging bill,
+   and blades gone to rust. Rich: the same arms a knight carried, with the hilt gilded (looks; the stats are the plain weapon's). */
+function makeCudgel(){const P=[];   // a blackthorn club: a thin handle swelling to a knotted head, the bark left on, a thong through the butt
+  P.push([lathe([[0,-.13],[.014,-.13],[.016,-.11],[.0135,-.06],[.0135,.1],[.017,.3],[.024,.48],[.036,.6],[.043,.68],[.041,.74],[.03,.79],[0,.8]],10),MATS.bark||woodMat,0,0,0]);
+  for(const [a,y,r] of [[.4,.62,.016],[2.2,.69,.019],[4.1,.6,.015],[5.3,.72,.016],[1.2,.75,.013],[3.3,.52,.012]]){const k=new THREE.SphereGeometry(r,7,5);k.scale(1,.8,1);P.push([k,MATS.bark||woodMat,Math.cos(a)*.034,y,Math.sin(a)*.034]);}
+  P.push([new THREE.TorusGeometry(.03,.004,5,12),gripMat,0,-.145,0,Math.PI/2,0,0]);return wpnGroup(P);}
+function makePitchfork(){const P=[];   // a hayfork: an ash shaft, a forged socket, two long tines drawn out and bent up a little
+  P.push([lathe([[0,-.46],[.017,-.46],[.018,-.2],[.0185,.6],[.0165,1.34],[0,1.34]],10),woodMat,0,0,0]);
+  P.push([toCreasedNormals(lathe([[.0185,-.07],[.021,-.07],[.019,.05],[.012,.09],[0,.09]],8).toNonIndexed(),.4),steelDark,0,1.33,0]);
+  for(const sg of [-1,1]){const c=new THREE.CatmullRomCurve3([V(0,1.4,0),V(sg*.03,1.44,0),V(sg*.05,1.5,0),V(sg*.052,1.6,.006),V(sg*.048,1.7,.016)]),t=new THREE.TubeGeometry(c,14,.0062,6,false),p=t.attributes.position;
+    for(let i=0;i<p.count;i++){const y=p.getY(i);if(y>1.62){const k=1-(y-1.62)/.085;const cx=sg*.049,cz=.012;p.setX(i,cx+(p.getX(i)-cx)*Math.max(.12,k));p.setZ(i,cz+(p.getZ(i)-cz)*Math.max(.12,k));}}t.computeVertexNormals();P.push([t,steelDark,0,0,0]);}
+  return wpnGroup(P);}
+function makeBillhook(){const P=[];   // a hedging bill: a broad single-edged blade whose point hooks forward, on a short ash handle with an iron ferrule
+  P.push([flatBlade([[-.012,.14],[.03,.14],[.05,.2],[.056,.36],[.06,.46],[.085,.52],[.1,.5],[.105,.56],[.07,.62],[.02,.62],[-.012,.56],[-.014,.3],[-.012,.14]],[[.03,.14],[.05,.2],[.056,.36],[.06,.46],[.085,.52],[.1,.5]],.005,.014),kitchenSteel,0,0,0]);
+  P.push([lathe([[0,-.12],[.015,-.12],[.017,-.1],[.014,-.04],[.0145,.1],[.016,.14],[0,.14]],10),woodMat,0,0,0]);P.push([new THREE.CylinderGeometry(.0165,.0165,.03,8),steelDark,0,.135,0]);return wpnGroup(P);}
 function makeWarhammer(st=0){const P=[],hy=.6;
   P.push([lathe([[0,-.15],[.0165,-.15],[.018,-.13],[.0155,-.1],[.015,.1],[.0165,.5],[.0175,.64],[0,.64]],12),woodMat,0,0,0]);
   P.push([gripP(.2,.0168,{swell:.04,ris:[.5]}),gripMat,0,-.035,0],[wireP(.0175,.01),steelDark,0,.066,0],[wireP(.0175,.01),steelDark,0,-.136,0]);
@@ -6199,6 +6214,12 @@ const WEAPONS={
   // (Build 205)
   falchion:{id:'falchion',name:'Falchion',kind:'blade',len:.74,grip2:-.09,weight:.95,cut:1.25,thrust:.55,sever:1.3,pen:.2,hitFrom:.22,tier:1,make:makeFalchion},
   rondel:{id:'rondel',name:'Rondel dagger',kind:'blade',len:.36,grip2:0,weight:.36,cut:.5,thrust:1.5,sever:0,pen:.5,hitFrom:.25,tier:1,make:makeRondel,parts:[['box',[.009,.15,.004],[0,.19,0],.2],['cap',[.05,.013],[0,-.03,0],.16]]},
+  cudgel:{id:'cudgel',name:'Cudgel',kind:'blunt',poor:1,len:.8,grip2:-.11,weight:.8,cut:.68,thrust:.2,sever:0,pen:.3,hitFrom:.45,tier:0,make:makeCudgel,parts:[['cap',[.34,.016],[0,.2,0],.4],['cap',[.1,.038],[0,.66,0],.6]]},
+  pitchfork:{id:'pitchfork',name:'Hayfork',kind:'spear',poor:1,len:1.7,grip2:.46,weight:.95,cut:.25,thrust:1.1,sever:0,pen:.3,hitFrom:.25,tier:0,make:makePitchfork},
+  billhook:{id:'billhook',name:'Billhook',kind:'blade',poor:1,len:.62,grip2:-.08,weight:.8,cut:1.1,thrust:.25,sever:1.05,pen:.15,hitFrom:.24,tier:0,make:makeBillhook},
+  rustsword:{id:'rustsword',name:'Rusted sword',kind:'blade',poor:1,wf:4,len:.82,grip2:-.1,weight:.85,cut:.82,thrust:.85,sever:.8,pen:.14,hitFrom:.22,tier:0,make:st=>makeBlade(.78,.024,.15,st),styles:3},
+  knightsword:{id:'knightsword',name:'Knightly sword',kind:'blade',rich:1,wf:2,st:1,len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:3,make:st=>makeBlade(.78,.024,.15,st),styles:3},
+  giltmace:{id:'giltmace',name:'Gilt mace',kind:'blunt',rich:1,wf:2,len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:3,make:makeMace,styles:3},
   warhammer:{id:'warhammer',name:'War hammer',kind:'blunt',len:.7,grip2:-.12,weight:1.2,cut:1.35,thrust:.3,sever:0,pen:.92,hitFrom:.6,tier:2,make:makeWarhammer,parts:[['cap',[.36,.017],[0,.2,0],.55],['box',[.07,.03,.022],[.01,.6,0],.8]]},
   poleaxe:{id:'poleaxe',name:'Poleaxe',kind:'axe',len:1.46,grip2:-.5,weight:1.85,cut:1.3,thrust:.9,sever:1.5,pen:.7,hitFrom:.72,tier:3,make:makePoleaxe,parts:[['cap',[.93,.019],[0,.38,0],1.1],['box',[.09,.1,.016],[.03,1.26,0],1.5]]},
   glaive:{id:'glaive',name:'Glaive',kind:'spear',len:1.96,grip2:.48,weight:1.35,cut:1.7,thrust:1.15,sever:1.2,pen:.4,hitFrom:.25,bladeFrom:.76,tier:2,make:makeGlaive,parts:[['cap',[.93,.019],[0,.56,0],1.5],['box',[.03,.23,.006],[.01,1.73,0],.6]]},
@@ -6335,6 +6356,12 @@ Object.assign(HANDLING,{   // (Build 205)
   falchion:  {...HANDLING.arming,effort:.92,grip:[540,1000],accel:[235,455],wrist:[360,700],tipDamp:[.78,.32],sag:.36,edgeTurn:.2},   // blade-heavy: a touch slower to start and stop than an arming sword
   rondel:    {...HANDLING.knife,reach:.15},
   warhammer: {...HANDLING.mace,effort:1.2,wrist:[270,300],tipDamp:[.88,.42],sag:.55},
+  cudgel:    {...HANDLING.mace,effort:.82,sag:.36},
+  pitchfork: {...HANDLING.spear},
+  billhook:  {...HANDLING.arming,effort:.92,grip:[540,1000],accel:[235,455],wrist:[360,700],tipDamp:[.78,.32],sag:.36,edgeTurn:.2},
+  rustsword: {...HANDLING.arming},
+  knightsword:{...HANDLING.arming},
+  giltmace:  {...HANDLING.mace},
   poleaxe:   {...HANDLING.axe,effort:2.15,grip:[430,800],gripDamp:1.0,accel:[205,390],wrist:[220,440],tipDamp:[.86,.52],sag:.5},
   glaive:    {...HANDLING.spear,effort:1.2,wrist:[270,520],tipDamp:[.78,.34],sag:.34,edgeTurn:.14},
 });
@@ -6342,7 +6369,7 @@ const handling=d=>HANDLING[d.id]||HANDLING.longsword;
 // mass felt at the hand, kg: the weapon's weight, more for a head-heavy one (an axe or mace head is far out on the haft)
 let TIP_BRK=+(new URLSearchParams(location.search).get('brk')??150),TIP_REL=+(new URLSearchParams(location.search).get('trel')??.6),TIP_RET=+(new URLSearchParams(location.search).get('tret')??.45);   /* Build 230: see Sword.step */
 const smooth=x=>x*x*(3-2*x);
-const WMASS={chest:5.5,knife:.45,brokenBottle:.4,cleaver:.9,mug:.7,bottle:.6,stool:2.3,poker:1.0,arming:1.15,longsword:1.6,greatsword:3.2,axe:2.7,mace:2.7,spear:2.0,falchion:1.3,rondel:.4,warhammer:2.5,poleaxe:4.3,glaive:2.4,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
+const WMASS={cudgel:1.5,pitchfork:1.7,billhook:1.2,rustsword:1.15,knightsword:1.15,giltmace:2.7,chest:5.5,knife:.45,brokenBottle:.4,cleaver:.9,mug:.7,bottle:.6,stool:2.3,poker:1.0,arming:1.15,longsword:1.6,greatsword:3.2,axe:2.7,mace:2.7,spear:2.0,falchion:1.3,rondel:.4,warhammer:2.5,poleaxe:4.3,glaive:2.4,fists:.25,legLimb:3,armLimb:1.6,plank:1.6,stave:1,board:.9};
 const SLOT_NAME={head:'Head',body:'Body',arms:'Arms',legs:'Legs'};
 // armour was shaped for a slimmer body; these widen it to the Quaternius fighters (bone-local x, y, z)
 const ARMOR_FIT={Spine2:[1.16,1.04,1.2],Hips:[1.1,1,1.1],LeftForeArm:1.22,RightForeArm:1.22,LeftLeg:1.18,RightLeg:1.18},ARMOR_OFF={Spine2:[0,1.5,-2.5],Hips:[0,0,3.5]},
@@ -7446,15 +7473,15 @@ const _hbv=V(),_hba=V(),_wc1=V(),_wc2=V(),_wc3=V(),_wc4=V(),_wc5=V();
 function wepMat(base,wf,wg){if(base===gripMat){if(!wg)return base;const k=base.uuid+'|g'+wg;let x=FIN_CACHE.get(k);if(!x){x=base.clone();x.color.set(WARD.wg[wg]).multiplyScalar(1.8);FIN_CACHE.set(k,x);}return x;}
   const blade=base===bladeMat||base===headMat,hilt=base===steelDark||base===hiltMat;if(!(blade||hilt)||!wf)return base;if(wf===2&&!hilt)return base;
   const k=base.uuid+'|w'+wf;let x=FIN_CACHE.get(k);if(x)return x;x=base.clone();x.onBeforeCompile=base.onBeforeCompile;if(base.customProgramCacheKey)x.customProgramCacheKey=base.customProgramCacheKey;
-  if(wf===1){x.color.multiplyScalar(.3);x.roughness=.45;x.metalness=.7;}else if(wf===2){x.color.setHex(0xc29a48);x.roughness=.26;x.metalness=.96;}else{x.color.setHex(blade?0x4a5c80:0x3a4866);x.roughness=.28;x.metalness=.92;}
+  if(wf===4){x.color.setHex(blade?0x6e4a34:0x553a2a);x.roughness=.9;x.metalness=.35;x.envMapIntensity=.3;}else if(wf===1){x.color.multiplyScalar(.3);x.roughness=.45;x.metalness=.7;}else if(wf===2){x.color.setHex(0xc29a48);x.roughness=.26;x.metalness=.96;}else{x.color.setHex(blade?0x4a5c80:0x3a4866);x.roughness=.28;x.metalness=.92;}
   FIN_CACHE.set(k,x);return x;}
 function weaponStyle(sw,st){const def=sw.def;if(!def||!def.styles||!sw.mesh||sw.bloodU)return;st=Math.min(def.styles-1,st|0);if((sw._st|0)===st)return;sw._st=st;
   const n=def.make(st);if(n.parent)n.parent.remove(n);while(sw.mesh.children.length)sw.mesh.remove(sw.mesh.children[0]);while(n.children.length)sw.mesh.add(n.children[0]);sw._fin=null;if(typeof wmodelAttach==='function')wmodelAttach(sw.mesh,def,st);}
-function weaponFinish(sw,look){if(!sw.mesh||sw.bloodU)return;if(sw.def)weaponStyle(sw,look.ws|0);const wf=look.wf|0,wg=look.wg|0,key=wf+'|'+wg;if(sw._fin===key)return;sw._fin=key;
+function weaponFinish(sw,look){if(!sw.mesh||sw.bloodU)return;if(sw.def)weaponStyle(sw,sw.def.st??(look.ws|0));const wf=sw.def&&sw.def.wf||(look.wf|0),wg=look.wg|0,key=wf+'|'+wg;if(sw._fin===key)return;sw._fin=key;
   sw.mesh.traverse(m=>{if(!m.isMesh)return;const b=m.userData.baseMat||(m.userData.baseMat=m.material);m.material=wepMat(b,wf,wg);});}
 class Sword{
   get owner(){return this._own;}
-  set owner(f){this._own=f;if(f&&f.look)weaponFinish(this,f.look);}
+  set owner(f){this._own=f;if(f&&f.look)weaponFinish(this,f.look);else if(!f&&this.def&&(this.def.wf||this.def.st)&&this.mesh&&!this._fin)weaponFinish(this,{});}
   constructor(def){this.def=def;this.len=def.len;this.mesh=def.make();this.H=V();this.Hv=V();this.Hp=V();this.T=V();this.Tp=V();this.axis=V(0,1,0);this.edge=V(1,0,0);this.tipVel=V();this.free=false;this.age=0;this.arc=0;this.lastDir=V(1,0,0);this.power=0;this.swings=0;this.flying=false;this.thrower=null;this.Hprev=V();this.stuck=null;this.owner=null;this.rb=null;this.wallCd=0;this.id=swordId++;if(PW)this.physMake();}
   reset(h,dir){this.hook=null;if(this.planted){this.planted=false;if(this.rb)this.rb.setBodyType(R.RigidBodyType.Dynamic,true);}this.H.copy(h);this.Hp.copy(h);this.Hv.set(0,0,0);this.axis.copy(dir).normalize();this.T.copy(h).addScaledVector(this.axis,this.len);this.Tp.copy(this.T);if(this.owner){this.owner.right(this.edge);}else this.edge.set(1,0,0);   // edge starts on the holder's right, the same for every fighter whichever way they face
     this.edge.addScaledVector(this.axis,-this.edge.dot(this.axis));if(this.edge.lengthSq()<1e-4)this.edge.set(0,0,1).addScaledVector(this.axis,-this.axis.z);this.edge.normalize();this.arc=0;if(this.rb)this.physPose();}
@@ -7611,7 +7638,7 @@ class Sword{
     // weight: the arm is a force-limited muscle moving its own mass plus the weapon's mass felt at the hand (WMASS, kg).
     // A heavy weapon gets going slowly, stops slowly, and a committed swing carries on past where you aimed it
     const Hd=handling(this.def),m=commit?1:0,me=WMASS[this.def.id]??1.5,two=twoH(this.def)?1.35:1;
-    const k=Hd.grip[m]/(.5+.32*me)*(this.owner&&this.owner.thrust&&!this.stuck&&this.def.kind==='blade'?THR_K:1),c=2*Math.sqrt(k)*Hd.gripDamp*(m?clamp(1.05-me*.12,.6,1):1);
+    const k=Hd.grip[m]*(m?1:1+(FIRM-1)*.6)/(.5+.32*me)*(this.owner&&this.owner.thrust&&!this.stuck&&this.def.kind==='blade'?THR_K:1),c=2*Math.sqrt(k)*Hd.gripDamp*(m?clamp(1.05-me*.12,.6,1):1);
     // the arm hangs off the body: when the body lurches (a shove, a stagger, a collision, a stop) the hand goes with it for free,
     // and the grip only works against where you aim relative to the body. Without this the hand trailed every lurch and then
     // sprang back after it (the weapon "rubber-banding"); standing still nothing changes
@@ -7634,7 +7661,7 @@ class Sword{
     {const o=this.owner;if(o&&o.armLen&&o._cbPos&&!this.free){const sh=o.mainArm==='L'?o.shL:o.shR;_wl1.copy(sh).add(o.pos).sub(o._cbPos);{const dO=o.hs&&o.hs.dO&&(o.hs.dO[o.mainArm==='L'?'LeftArm':'RightArm']||o.hs.dO.Spine2);if(dO)_wl1.add(dO);}_wl2.subVectors(this.H,_wl1);const R=o.armLen[0]+o.armLen[1]+.02,d=_wl2.length();   // the arm is only so long: a heavy head swung hard pulls on the shoulder, it doesn't pull the grip out of the hand
       if(d>R){_wl2.multiplyScalar(1/d);this.H.copy(_wl1).addScaledVector(_wl2,R);const vo=this.Hv.dot(_wl2)-o.vel.dot(_wl2);if(vo>0)this.Hv.addScaledVector(_wl2,-vo);}}}
     // the wrist steers the blade onto its line; the head lags and carries through by tipDamp
-    const gk=Hd.wrist[m]*(this.knockT>0&&this.def.kind==='spear'?.12:1),tw=Math.sqrt(gk);   // a beaten-aside shaft swings on before the hands can master it
+    const gk=Hd.wrist[m]*(m?1:FIRM)*(this.knockT>0&&this.def.kind==='spear'?.12:1),tw=Math.sqrt(gk);   /* (Build 243, the player: they hold everything so flimsy) in guard the wrist is firmer and the head sags less, so a weapon is held, not dangled; swings are as they were */   // a beaten-aside shaft swings on before the hands can master it
     /* Build 230: a swung weapon keeps its speed. The head's damping was against the air (its whole speed, 15 a second for a greatsword in a
        swing), and the wrist could stop any blade dead on its line: a greatsword went from 21 m/s to nothing in a tenth of a second, in mid-air,
        while the aim was still moving. In a committed swing the damping now works against the line the wrist is steering to (so a blade keeping
@@ -7648,7 +7675,7 @@ class Sword{
       if(sp>1e-6){const al=_wl2.dot(_v)/sp,cap=lerp(1e9,TIP_BRK/Math.sqrt(WMASS[this.def.id]||this.def.weight||1.5),cw)*h*h;if(al<-cap){_wl2.addScaledVector(_v,(-cap-al)/sp);this._over=.3;}}
       if(this._over>0)this._over-=h;_v.add(_wl2);this.Tp.copy(this.T);this.T.add(_v);}
     else{_v.multiplyScalar(1-dmp);this.Tp.copy(this.T);this.T.add(_v).addScaledVector(_g,gk*h*h);}
-    this.T.y-=9.8*Hd.sag*h*h;
+    this.T.y-=9.8*Hd.sag*(this.owner&&!this.owner.commit?.65:1)*h*h;
     {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.03)this.T.y=gy+.03;}
     this.worldClip(h);
     this.constrain(h);
@@ -10061,7 +10088,7 @@ function playerLootCandidate(){
     _t3.subVectors(p,camera.position).normalize();const s=d+(1-_t3.dot(_t1))*2;if(s<bs){bs=s;best=it;}}
   return best;
 }
-const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['w','falchion',7],['w','warhammer',6],['w','poleaxe',4],['w','glaive',5],['w','rondel',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','sallet',3],['a','gothic',2],['a','gvambraces',4],['a','ggreaves',4],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
+const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['w','falchion',7],['w','warhammer',6],['w','poleaxe',4],['w','glaive',5],['w','rondel',4],['w','cudgel',6],['w','pitchfork',5],['w','billhook',5],['w','rustsword',5],['w','knightsword',2],['w','giltmace',2],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','sallet',3],['a','gothic',2],['a','gvambraces',4],['a','ggreaves',4],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
 function rollLoot(){const tot=LOOT_TABLE.reduce((s,r)=>s+r[2],0);let x=Math.random()*tot;for(const r of LOOT_TABLE){x-=r[2];if(x<=0)return r;}return LOOT_TABLE[0];}
 function spawnMapLoot(n){
   for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2)&&(!SHIP||shipIn(x,z,.6))&&millOk(x,z);}
@@ -10114,6 +10141,19 @@ function combatStep(h){
     }
   }
 }
+/* (Build 243) a man who is stabbed does not just take it. The point going in doubles him over round it and drives him back a step, his knees give for a
+   moment, his guard drops and (a bot) he breaks off what he was doing and gives ground; a stab in the weapon arm can open the hand; one in a leg
+   buckles it. All of it scales with the wound, and none of it for the walking dead, who feel nothing */
+function stabReact(A,B,cap,dir,dmg){if(!B.alive||B.ragdoll||B.undead)return;const k=clamp(dmg/22,.35,1.4),z=cap.zone;
+  B.stagger=Math.max(B.stagger,.45+.4*k);B._impT=simTime;B.painK=Math.max(B.painK||0,Math.min(1,.5+.5*k));B.painT=Math.max(B.painT||0,simTime+.7+.8*k);
+  B.shove(dir,1.3+1.5*k);B.vel.addScaledVector(_srv.copy(dir).setY(0),.5+.5*k);
+  if(z==='torso'||z==='neck'){B.crouchK=Math.min(1,Math.max(B.crouchK||0,.35+.3*k));if(B.pbd)B.pbd.buckle=Math.min(1,(B.pbd.buckle||0)+.25*k);if(B.bodyHit)B.bodyHit(cap.ba==='Hips'?'Spine1':'Spine2',dir,2.2+2.4*k,.5);}
+  else if(z==='legL'||z==='legR'){B.crouchK=Math.min(1,Math.max(B.crouchK||0,.6));if(B.pbd)B.pbd.buckle=Math.min(1,(B.pbd.buckle||0)+.5+.3*k);}
+  else if(z==='head'){if(B.bodyHit)B.bodyHit('Head',dir,3+3*k,.6);}
+  else if((z==='armL'||z==='armR')&&B.sword&&B.sword.def.kind!=='fist'&&z===(B.mainArm==='L'?'armL':'armR')&&Math.random()<.2+.3*k&&NET.mode!=='client'){B.dropSword();}
+  B.commit=false;B.thrust=false;if(B.ai&&!B.isPlayer){B.ai.backT=Math.max(B.ai.backT||0,.6+.5*k);if(B.ai.phase&&B.ai.phase!=='guard'){B.ai.phase='recover';B.ai.pt=0;}}
+  if(B.ctrlT)B.ctrlT.y=Math.min(B.ctrlT.y,-.35);}
+const _srv=V(),FIRM=+(new URLSearchParams(location.search).get('firm')??1.4);
 const BIND=!/[?&]nobind/.test(location.search),STAM_COST=+(new URLSearchParams(location.search).get('stam')??.5);
 const HIT_OLD=/[?&]oldhit/.test(location.search),HIT_PAD=+(new URLSearchParams(location.search).get('hitpad')??.012),_hq0=V(),_hq1=V(),_hqa=V();
 function clash(A,B){
@@ -10428,7 +10468,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
           if(l>1e-4){const inc=Math.abs(dir.dot(_iao))/l;pen*=.5+.6*inc;}}}}}   /* (Build 226) plate is a surface: an edge or point that meets it square bites as before (a little better), one that comes in at a slant skids (down to half) */   // as in Half Sword: edges skid off plate, points find mail, blunt force goes through
   const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:7*W.cut,flat:1.8,haft:1.4,poke:1.2};
   // momentum, not just speed: a heavy head hits harder at the same speed; flats, hafts and pokes need real speed to hurt
-  const vmin=(mode==='flat'||mode==='haft'||mode==='poke')?4:mode==='thrust'?1:2,mw=Math.pow(W.weight/1.1,.8);
+  const vmin=(mode==='flat'||mode==='haft'||mode==='poke')?4:mode==='thrust'?1:2,mw=mode==='thrust'?Math.max(.85,Math.pow(W.weight/1.1,.8)):Math.pow(W.weight/1.1,.8);   /* (Build 243) a thrust is driven by the arm and the body behind it, not by the blade's own weight: a knife's stab counted for 40% of a sword's at the same speed, so knives did next to nothing */
   // a thrust hurts by the point's own drive; walking onto a held point only adds part of the closing speed
   const hitSp=pressIn?speed:(mode==='thrust'||mode==='poke')?Math.min(speed,_va.length()+.3*Math.max(0,speed-_va.length())):speed;
   const base=Math.max(0,hitSp-vmin)*MODE_K[mode]*mw*ZONE_MULT[cap.zone]*arcF*stamF*(A.commit?1.1:1);
@@ -10559,7 +10599,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     const deep=!ax&&((shortB&&dmg>8)||(A.revW||0)>.5);   // left in a body that falls with it: only a reverse-grip stab or a knife (a sword thrust that kills comes back out with the body's fall, as before)
     const dep=ax?0:Math.min(_v.subVectors(E,P).dot(s.axis),s.len*(1-t));   /* Build 145/146: the anchor slides up the blade (the hilt stays in the hand); how far in it then goes is the hand's doing, below */
     if(!ax){E.copy(P).addScaledVector(s.axis,dep);}
-    if(embed(s,B,cap,Math.min(s.len,t*s.len+dep),E,dnB?((A.revW||0)>.5?1e9:.6):ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15,down:dnB,deep,drive:ax?0:shortB?.12:cap.zone==='torso'?(dmg>25?.42:.26):.14})){if(!dnB)B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax&&B.alive)B.addBleed(shortB?1.4:1.1,10);if(!ax&&!dnB&&B.alive&&cap.zone==='torso'&&B.startClutch)B.startClutch(cap.ba==='Hips'?'belly':'chest',dmg*1.2);   /* Build 146: run through, the free hand goes to the wound */tell(A,ax?'The axe bites deep':dnB?'Driven in':shortB?'Stabbed':'Run through','red');}}
+    if(embed(s,B,cap,Math.min(s.len,t*s.len+dep),E,dnB?((A.revW||0)>.5?1e9:.6):ax?.8:shortB?.55:1.5,{rip:ax?5:shortB?2.2+dmg*.06:4+dmg*.15,down:dnB,deep,drive:ax?0:shortB?.12:cap.zone==='torso'?(dmg>25?.42:.26):.14})){if(!dnB)B.stagger=Math.max(B.stagger,shortB?.35:.5);if(!ax&&!dnB)stabReact(A,B,cap,dir,dmg);if(!ax&&B.alive)B.addBleed(shortB?1.4:1.1,10);if(!ax&&!dnB&&B.alive&&cap.zone==='torso'&&B.startClutch)B.startClutch(cap.ba==='Hips'?'belly':'chest',dmg*1.2);   /* Build 146: run through, the free hand goes to the wound */tell(A,ax?'The axe bites deep':dnB?'Driven in':shortB?'Stabbed':'Run through','red');}}
   s.arc=0;
 }
 // ---- contacts from the solver: every hit, clash and bounce below is a real collision between bodies
@@ -12215,7 +12255,7 @@ function roadTick(){const R=RUN,RD=ROAD;if(!RD)return;const h=1/240,c=RD.cart;
   if(c.z>=RD.end&&!R.ended&&!R.fight){R.ended=true;banner('Through the gate','The cart is safe');R.next=simTime+3;R.after=()=>endRun(R.H,'Victory',`The cart got through · ${R.kills} bandits slain`,'');}}
 // ---- training yard: dummies to hit, any weapon on the number keys, and a readout of every blow
 const inYard=()=>NET.mode==='client'?NET.mode2==='yard':!!(RUN&&RUN.mode==='yard');
-const YARD_W=['arming','longsword','greatsword','axe','mace','spear','fists','falchion','warhammer','poleaxe','glaive','rondel'];
+const YARD_W=['arming','longsword','greatsword','axe','mace','spear','fists','falchion','warhammer','poleaxe','glaive','rondel','cudgel','pitchfork','billhook','rustsword','knightsword','giltmace'];
 const YARD_D=[{x:-2.2,armor:[],name:'Bare dummy'},{x:0,armor:['kettle','mail'],name:'Mail dummy'},{x:2.2,armor:['greathelm','plate','vambraces','greaves'],name:'Plate dummy'}];
 const YARD_DM=['Still','Guard','Spar'];
 const YARD={log:[],peak:0,cur:0,run:0,shown:''};
