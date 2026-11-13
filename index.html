@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=231;
+const BUILD=232;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -5505,7 +5505,7 @@ function bladeGeo(L,w,base=.045,leaf=false){const NS=44,sec=[[1,0],[.66,.55],[.3
   {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0],4,0);put(r0[(k+1)%K],(k+1)%K,0);put(r0[k],k,0);}}   // the shoulder of the blade under the guard
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);return toCreasedNormals(g,.6);}   // (Build 128: smooth across each face, a crease only at the bevels and fuller edges; flat facets banded like a rail)
-const bladeMat=new THREE.MeshPhysicalMaterial({color:0xc6c4c0,metalness:.94,roughness:.3,envMapIntensity:1.3,vertexColors:true});   /* (Build 229) a satin polish, lighter: as a near-mirror the flat of a blade showed only the dark band of walls round the horizon and read as a grey plank */steelDetail(bladeMat,'blade');surfDetail(bladeMat,'blade');   /* (Build 129: no clearcoat, it laid a milky plastic sheen over the steel. Build 130: the steel's photo-scanned grain and grinding marks are back; since Build 127 the call sat inside a comment, so blades were bare untextured shapes) */
+const bladeMat=new THREE.MeshPhysicalMaterial({color:0xb9bcc1,metalness:.94,roughness:.24,envMapIntensity:1.15,vertexColors:true});   /* (Build 229) a satin polish, lighter: as a near-mirror the flat of a blade showed only the dark band of walls round the horizon and read as a grey plank */steelDetail(bladeMat,'blade');surfDetail(bladeMat,'blade');   /* (Build 129: no clearcoat, it laid a milky plastic sheen over the steel. Build 130: the steel's photo-scanned grain and grinding marks are back; since Build 127 the call sat inside a comment, so blades were bare untextured shapes) */
 const gripMat=std({color:0x9a7050,roughness:.72});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1,3);x.anisotropy=MAXANI;}Object.assign(gripMat,{map:ld,normalMap:ln});gripMat.normalScale.set(.6,.6);}
 // a grip bound in leather over cord: the wrap's ridges spiral down it, waisted or swelling along its length
 function gripGeo(len,r,swell=0){const g=new THREE.CylinderGeometry(r,r,len,24,Math.max(8,Math.round(len*260)),true),p=g.attributes.position;
@@ -5553,6 +5553,7 @@ const kitchenSteel=new THREE.MeshPhysicalMaterial({color:0xb8b4ac,metalness:.72,
 const hiltMat=std({color:0x6a6761,metalness:.9,roughness:.3,envMapIntensity:1.05});surfDetail(hiltMat,'forged');   /* (its own steel: the shared brushed-steel texture is mapped in metres and drew coarse diagonal hatching across a cross) */
 surfDetail(gripMat,'leather');const steelHilt=hiltMat;const latten=std({color:0xb48c4c,metalness:.92,roughness:.32,vertexColors:false});steelDetail(latten,'c');latten.side=THREE.DoubleSide;
 const chappeMat=std({color:0x8a5c3a,roughness:.78});{const L=new THREE.TextureLoader(),ld=L.load('assets/tex/leather_d.jpg'),ln=L.load('assets/tex/leather_n.jpg');ld.colorSpace=THREE.SRGBColorSpace;for(const x of [ld,ln]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.anisotropy=MAXANI;}Object.assign(chappeMat,{map:ld,normalMap:ln});}surfDetail(chappeMat,'leather');
+const BLADE_NX=+(new URLSearchParams(location.search).get('bnx')??3.2);
 function bladeP(L,w,o={}){
   const NS=64,NX=12,sec=o.sec||'diamond',ful=o.ful??0,fw=o.fw??.3,ric=o.ric??0,base=o.base??.04,th0=o.th0??.0036,th1=o.th1??.0012,pt=o.pt??.22,tw=o.tw??.72,eb=.09;
   const width=u=>{if(o.leaf)return w*(.32+.68*Math.sin(Math.PI*Math.pow(u,.72)))*(1-Math.pow(u,6));const u0=1-pt;return u<u0?w*(1-(1-tw)*u/u0):w*tw*Math.cos((u-u0)/pt*Math.PI/2);};
@@ -5567,13 +5568,17 @@ function bladeP(L,w,o={}){
   const ring=j=>{const u=j/NS,y=u*L,wd=width(u),pts=[];
     for(let i=0;i<=NX;i++){const a=A[i];pts.push([a*wd,y,prof(a,u,y),a]);}for(let i=NX-1;i>=0;i--){const a=A[i];pts.push([-a*wd,y,prof(a,u,y),a]);}
     const top=pts,bot=[];for(let i=top.length-2;i>=1;i--){const p=top[i];bot.push([p[0],p[1],-p[2],p[3]]);}return top.concat(bot);};
-  const pos=[],col=[];const shade=(a,u)=>{const fu=ful>0?clamp((ful-u)/.06,0,1):0;return a>1-eb?1.16:a>.82?1.04:(fu>0&&a<fw*.85)?.84:1;};
+  const pos=[],col=[];const shade=(a,u)=>{const fu=ful>0?clamp((ful-u)/.06,0,1):0;return a>1-eb?1.3:a>.82?1.06:(fu>0&&a<fw*.85)?.72:(sec==='diamond'&&a<.07)?1.1:1;};
   const put=p=>{pos.push(p[0],p[1],p[2]);const u=p[1]/L,c=shade(p[3],u)*(ric>0&&p[1]<ric?.94:1);col.push(c,c,c);};
   let prev=ring(0);const K=prev.length;for(let j=1;j<=NS;j++){const cur=ring(j);for(let k=0;k<K;k++){const k2=(k+1)%K;put(prev[k]);put(prev[k2]);put(cur[k2]);put(prev[k]);put(cur[k2]);put(cur[k]);}prev=cur;}
   {const r0=ring(0);for(let k=0;k<K;k++){put([0,0,0,0]);put(r0[(k+1)%K]);put(r0[k]);}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
   const uv=new Float32Array(pos.length/3*2);for(let i=0;i<uv.length/2;i++){uv[i*2]=pos[i*3]/(w*2)+.5;uv[i*2+1]=pos[i*3+1]/L;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.translate(0,base,0);
   const out=toCreasedNormals(g,.5);out.userData.surf=y=>prof(0,clamp((y-base)/L,0,1),y-base);
+  /* Build 232: a blade is a few millimetres thick, so its faces lie within five degrees of each other and, lit, it read as one flat plank. The
+     normals are leaned out across the blade as if the section were three times as deep: the two faces of a diamond section, the hollow of a
+     fuller and the bevels to the edge each catch a different part of the sky and ground, which is what makes steel read as steel */
+  {const N=out.attributes.normal;for(let i=0;i<N.count;i++){const x=N.getX(i)*BLADE_NX,y=N.getY(i)*1.5,z=N.getZ(i),l=Math.hypot(x,y,z)||1;N.setXYZ(i,x/l,y/l,z/l);}}
   out.userData.surfXY=(x,y)=>{const u=clamp((y-base)/L,0,1);return prof(Math.min(1,Math.abs(x)/Math.max(1e-4,width(u))),u,y-base);};return out;}
 // the mark laid onto both faces of the blade, each vertex dropped onto the steel's own curve so it lies flush on a ridge or in a fuller
 function markOn(b,y,s,kind){const parts=[];for(const sd of [1,-1]){const g=smithMark(s,kind);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),yy=p.getY(i)+y,dz=p.getZ(i);p.setXYZ(i,sd*x,yy,sd*(b.userData.surfXY(x,yy)-.00012+dz*.9));}if(sd<0){const ix=g.index;}g.computeVertexNormals();parts.push(g.index?g.toNonIndexed():g);}
@@ -5590,8 +5595,8 @@ function smithMark(s,kind=0){const sh=new THREE.Shape();
   return mergeGeometries(S.map(([a,b,c,d])=>{const g=st(a*s,b*s,c*s,d*s,t);return g.index?g.toNonIndexed():g;}));}
 // a cross: one forged bar, octagonal in section, tapering out from an écusson and finishing in flared, knobbed or down-turned terminals
 function crossP(S,H,D,o={}){const term=o.term||'flare',bend=o.bend||0,NS=8,NX=56,pos=[];const bw=o.bw||.02;
-  const half=S/2,ec=o.ec||0;const prof=x=>{const ax=Math.abs(x),t=clamp((ax-bw/2)/Math.max(1e-4,half-bw/2),0,1);let k=ax<bw/2?1:1-.28*Math.pow(t,.8);
-    if(term==='flare')k*=1+.55*Math.pow(clamp((t-.78)/.22,0,1),1.6);if(term==='knob')k*=t>.86?1+.6*Math.sin(clamp((t-.86)/.14,0,1)*Math.PI):1;
+  const half=S/2,ec=o.ec||0;const prof=x=>{const ax=Math.abs(x),t=clamp((ax-bw/2)/Math.max(1e-4,half-bw/2),0,1);let k=ax<bw/2?1:(1-.28*Math.pow(t,.8))*(1-.36*smooth(clamp(t/.14,0,1)));   /* (Build 232) the arms of the cross are slender bars (they were as thick as the block over the blade, 2.5-3 cm square: a crowbar) */
+    if(term==='flare')k*=1+.45*Math.pow(clamp((t-.78)/.22,0,1),1.6);if(term==='knob')k*=t>.86?1+.6*Math.sin(clamp((t-.86)/.14,0,1)*Math.PI):1;
     const end=t>.975?Math.sqrt(Math.max(0,(1-t)/.025))*.75+.25:1,el=ec>0?ec*Math.max(0,1-ax/(bw*.7)):0;return [H/2*k*end+el,D/2*k*end*(ax<bw/2?1.12:1)];};   /* (the écusson: the bar swells into a lozenge over the blade's shoulder and down over the grip) */
   const XS=[];for(let i=0;i<=NX;i++){const u=i/NX;XS.push(-half+S*(.5-.5*Math.cos(Math.PI*u)));}if(ec>0)for(let i=0;i<=20;i++)XS.push(-bw*.75+bw*1.5*i/20);XS.sort((a,b)=>a-b);
   const ring=i=>{const x=XS[i],[hy,hz]=prof(x),f=Math.abs(x)/half,yo=bend*f*f*f;const out=[];
