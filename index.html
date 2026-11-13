@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=223;
+const BUILD=224;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -4450,6 +4450,8 @@ function breathStep(dt){if(!AC||!player||!player.alive||state!=='playing')return
   if(breathIn)noiseBurst(t,per*.4,'bandpass',1500+400*k,1.2,v*.7);else{noiseBurst(t,per*.5,'bandpass',900+300*k,1.1,v);noiseBurst(t,per*.25,'lowpass',380,.7,v*.6);}
   breathIn=!breathIn;}
 function noiseBurst(t0,dur,type,freq,q,vol){const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8+Math.random()*.4;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const g=AC.createGain();g.gain.setValueAtTime(vol,t0);g.gain.exponentialRampToValueAtTime(.001,t0+dur);s.connect(f);f.connect(g);g.connect(master);s.start(t0,Math.random());s.stop(t0+dur+.05);}
+// steel grating along steel: a short hiss of high noise with a ring in it
+function sScrape(p,power=1,net=true){if(net)netEv(['sc',r3v(p),r3(power)]);if(!AC)return;const v=distVol(p)*clamp(power,.1,1)*.16;if(!(v>=.006))return;const t=AC.currentTime;noiseBurst(t,.07+Math.random()*.05,'bandpass',3800+Math.random()*2600,2.2,v);noiseBurst(t,.05,'highpass',7000,.7,v*.5);}
 function sClang(p,power=1){netEv(['c',r3v(p),power]);if(sfx(power>.55?'clash':'block',p,.75*clamp(power+.3,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1.2)*.5;if(v<.01)return;const t=AC.currentTime,base=650+Math.random()*500;
   [1,2.41,3.93,5.82,8.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='sine';o.frequency.value=base*r*(1+(Math.random()-.5)*.01);const g=AC.createGain();g.gain.setValueAtTime(v/(1+i*.7),t);g.gain.exponentialRampToValueAtTime(.0005,t+.9/(1+i*.35));o.connect(g);g.connect(master);o.start(t);o.stop(t+1);});
   noiseBurst(t,.06,'highpass',3500,.7,v*.8);}
@@ -4596,12 +4598,12 @@ function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
   // blood on the body: every wound wets the skin round it and runs down from it, further the longer it bleeds; cloth soaks dark.
   // One set of wound positions per fighter, shared by all their materials (fed each frame by bodyBlood)
-  if(!mats.bloodU)mats.bloodU={uWd:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,-99,0,0))},uWa:{value:new Array(BL_N).fill(0)},uSweat:{value:0},uDirt:{value:0},uDirtCol:DIRT_U};Object.assign(U,mats.bloodU);
+  if(!mats.bloodU)mats.bloodU={uWd:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,-99,0,0))},uWa:{value:new Array(BL_N).fill(0)},uWg:{value:Array.from({length:BL_N},()=>new THREE.Vector4(1,0,0,0))},uWh:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,1,0,0))},uSweat:{value:0},uDirt:{value:0},uDirtCol:DIRT_U};Object.assign(U,mats.bloodU);
   m.userData.U=U;mats.push(m);
   const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.5)*(1.-step(.36,abs(vBind.x)))';
   m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
     s.vertexShader='varying vec3 vBind;varying vec3 vWPb;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPb=(modelMatrix*vec4(transformed,1.0)).xyz;');
-    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform sampler2D uMailD,uMailO;uniform float uParty,uMode,uNoHose,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];\n'+s.fragmentShader
+    s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform sampler2D uMailD,uMailO;uniform float uParty,uMode,uNoHose,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];uniform vec4 uWg['+BL_N+'],uWh['+BL_N+'];\n'+s.fragmentShader
     .replace('#include <map_fragment>',`#include <map_fragment>
       { vec3 c=diffuseColor.rgb;float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sat=(mx-mn)/max(mx,1e-4),l=dot(c,vec3(.299,.587,.114));
         float msk,gain;
@@ -4625,7 +4627,11 @@ function tintMaterial(m,mode,pal,mats){
         float run=d.y<.02?exp(-dot(q,q)/wd)*exp(d.y/(.05+.38*a*(1.-cl*.45))):0.;
         float run2=d.y<0.?exp(-dot(q+vec2(.035,-.02),q+vec2(.035,-.02))/(wd*.6))*exp(d.y/(.03+.22*a)):0.;   // and splits off
         float c0=spot*1.3+run*(1.6-cl*.6)+run2*(1.-cl);bld+=c0;dryA+=c0*uWa[i];
-        if(cl>.5){float tr=(.026+.028*min(a,1.))*(.6+.8*nz2);if(length(d)<tr)discard;}}   // the cloth is torn open where the blade went through
+        vec4 gg=uWg[i];if(gg.w>0.){vec4 gh=uWh[i];float gu=dot(d,gg.xyz)/gg.w;   // (Build 224) an open gash: the skin is parted along the cut (the flesh below is its own mesh), the cloth slashed wider
+          if(abs(gu)<1.15){float gy=abs(dot(d,gh.xyz)),gz=dot(d,cross(gg.xyz,gh.xyz)),lens=pow(max(0.,1.-gu*gu),.7);
+            if(cl>.5){if(abs(gu)<1.1&&gy<(gh.w*1.7+.004)*pow(max(0.,1.-gu*gu/1.21),.5)*(.75+.5*nz)&&abs(gz)<.09)discard;}
+            else if(abs(gu)<1.&&gy<gh.w*lens&&abs(gz)<.05)discard;}}
+        else if(cl>.5){float tr=(.026+.028*min(a,1.))*(.6+.8*nz2);if(length(d)<tr)discard;}}   // the cloth is torn open where the blade went through
       float dry=bld>.001?clamp(dryA/bld,0.,1.):0.;bld=clamp(bld,0.,1.);
       vec3 bcol=mix(vec3(.42,.03,.03),vec3(.2,.01,.01),bld)*(uMode<.5?.85:1.);bcol=mix(bcol,vec3(.11,.035,.022),dry*.9);   // fresh blood is red and wet, old blood brown-black and matte
       diffuseColor.rgb=mix(diffuseColor.rgb,bcol,bld*.92);
@@ -5031,7 +5037,7 @@ function dressMH(model,look,pal,mats){
   const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
     // skin under a draped garment is left out (aCov: a bit per garment on the body's vertices, uCov: the garments this fighter wears)
     sh.vertexShader='attribute float aCov;flat varying float vCov;uniform vec4 uHH;varying float vHd;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCov=aCov;vHd=uHH.x<0.?0.:dot(vec4(equal(skinIndex,vec4(uHH.x)))+vec4(equal(skinIndex,vec4(uHH.y)))+vec4(equal(skinIndex,vec4(uHH.z)))+vec4(equal(skinIndex,vec4(uHH.w))),skinWeight);');
-    sh.fragmentShader='flat varying float vCov;uniform float uCov;varying float vHd;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if((int(vCov+.5)&int(uCov+.5))!=0)discard;\n if(vHd>.5)discard;');   /* your own head in first person: not drawn, but the shadow pass (its own depth material) still has it */
+    sh.fragmentShader='flat varying float vCov;uniform float uCov;varying float vHd;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if((int(vCov+.5)&int(uCov+.5))!=0){bool nw=false;for(int i=0;i<'+BL_N+';i++){vec4 w=uWd[i];if(w.w>0.){vec3 d=vWPb-w.xyz;float g=uWg[i].w;if(dot(d,d)<.007+g*g*1.5)nw=true;}}if(!nw)discard;}\n if(vHd>.5)discard;'   /* (Build 224: but it is drawn round a wound, where the cloth is torn or slashed open) */);   /* your own head in first person: not drawn, but the shadow pass (its own depth material) still has it */
     sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol,uEyeB;uniform float uHairAmt,uBeardAmt,uMark,uHelmY,uRot;\n'+sh.fragmentShader.replace('float bld=0.;',`
       if(vBind.y>uHelmY)discard;   /* (Build 201) under a helmet the crown of the head isn't drawn: the back of the skull came through the nasal helm's cone */
       { vec3 hm=texture2D(uMHMask,vMapUv).rgb;
@@ -7795,7 +7801,7 @@ function dynClient(dt){const k=1-Math.exp(-dt*16);for(const d of DYN){if(!d.tp||
 // boards, staves or a plank to fight with. The pieces are cosmetic shards and splinters (SHARDS: instanced, they fall, bounce and
 // settle on whatever floor is under them), worked out on every machine; friends hear of a break by event XS
 const SHARD_N=160,SHARD_IM=new Map(),SHARDS=[];
-const SHARD_G={chip:new THREE.TetrahedronGeometry(.035,0).scale(1,.32,1),splinter:new THREE.BoxGeometry(.025,.018,.17)};
+const SHARD_G={chip:new THREE.TetrahedronGeometry(.035,0).scale(1,.32,1),splinter:new THREE.BoxGeometry(.025,.018,.17),ring:new THREE.TorusGeometry(.0052,.0013,4,8)};let RING_MAT=null;
 function shardIM(mat,kind){const k=mat.uuid+kind;let e=SHARD_IM.get(k);if(!e){const im=new THREE.InstancedMesh(SHARD_G[kind],mat,SHARD_N);im.count=0;im.castShadow=true;im.frustumCulled=false;world.add(im);e={im,i:0,list:[]};SHARD_IM.set(k,e);}return e;}
 const _shM=new THREE.Matrix4(),_shQ=new THREE.Quaternion(),_shS=V(1,1,1),_shE=new THREE.Euler();
 function shardAdd(mat,kind,p,v,sc=1){const e=shardIM(mat,kind),slot=e.i++%SHARD_N;e.im.count=Math.min(SHARD_N,Math.max(e.im.count,slot+1));
@@ -7890,12 +7896,23 @@ function skinRay(mesh,origin,dir,far,bones,out){if(!mesh.geometry.attributes.ski
     for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
       if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(_srRay.origin);if(d<best){best=d;_srO.copy(_srH);}}}}
   if(best===Infinity)return false;out.copy(_srO).applyMatrix4(mesh.matrixWorld);return origin.distanceTo(out)<=far;}
+// several casts into the same limb at once (the skinning is the cost): rays=[{o,d}] in world space, each gets .hit (a world point) or null
+function skinRayN(mesh,rays,far,bones){for(const r of rays)r.hit=null,r._b=Infinity;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;_srM.copy(mesh.matrixWorld).invert();
+  for(const r of rays){r._o=r.o.clone().applyMatrix4(_srM);r._d=r.d.clone().transformDirection(_srM);}const done=new Set();
+  for(const bn of bones){const bi=SB.indexOf(bn);if(bi<0||done.has(bi))continue;done.add(bi);const E=T.get(bi);if(!E)continue;const L=E.tri,vid=E.vid,nv=vid.length;
+    if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);for(let i=0;i<nv;i++){mesh.getVertexPosition(vid[i],_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
+    for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
+      for(const r of rays){_srRay.origin.copy(r._o);_srRay.direction.copy(r._d);if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(r._o);if(d<r._b){r._b=d;(r.hit||(r.hit=V())).copy(_srH);}}}}}
+  for(const r of rays)if(r.hit){r.hit.applyMatrix4(mesh.matrixWorld);if(r.hit.distanceTo(r.o)>far)r.hit=null;}}
 // the bones a hit capsule's skin rides on: the chain from its first bone to its second, the bone above, and every child of those
 function capBones(B,c){if(c._bn&&c._bnOf===B.bones)return c._bn;c._bnOf=B.bones;const bn=B.bones,A=bn[c.ba],E=bn[c.bb],S=new Set();if(!A)return c._bn=[];let x=E;const chain=[];while(x&&x!==A&&x.isBone){chain.push(x);x=x.parent;}chain.push(A);
   for(const b of chain){S.add(b);for(const ch of b.children)if(ch.isBone){S.add(ch);if(/Shoulder$/.test(ch.name))for(const g2 of ch.children)if(g2.isBone)S.add(g2);}}if(A.parent&&A.parent.isBone)S.add(A.parent);return c._bn=[...S];}
+let GASH_MAT=null;
 function addWound(B,ci,P,axis,dmg,kind){
   const c=B.caps[ci];if(!c||!c.on||!B.root.parent||!B.skins)return;
   if(NET.mode==='host')netEv(['g',B.id,ci,r3v(P),r3v(axis),r3(dmg),kind]);
+  if(kind!=='bruise'&&dmg>7){const am=armorAt(B,c.zone);if(am&&am.mail&&camera.position.distanceToSquared(P)<225){   // (Build 224) mail that is cut or pierced bursts links
+      RING_MAT||(RING_MAT=new THREE.MeshStandardMaterial({color:0x8a8d92,metalness:1,roughness:.42}));const n=Math.min(14,3+(dmg*.3|0));for(let i=0;i<n;i++)shardAdd(RING_MAT,'ring',_wx.copy(P).add(_wt.set((Math.random()-.5)*.05,(Math.random()-.5)*.05,(Math.random()-.5)*.05)),_wb.set((Math.random()-.5)*2.4,.6+Math.random()*2,(Math.random()-.5)*2.4),1);sfx('hitMail',P,.4,1.25,0,false);}}
   // the struck spot on the actual body surface: cast in toward the limb's axis
   _wa.subVectors(c.b,c.a);const L2=_wa.lengthSq()||1e-9;_wq.copy(c.a).addScaledVector(_wa,clamp(_wb.subVectors(P,c.a).dot(_wa)/L2,0,1));
   _wn.subVectors(P,_wq);_wn.addScaledVector(_wa,-_wn.dot(_wa)/L2);if(_wn.lengthSq()<1e-8)_wn.set(1,0,0);_wn.normalize();
@@ -7914,6 +7931,32 @@ function addWound(B,ci,P,axis,dmg,kind){
   if(kind==='cut'){Lh=Math.min(.3,.07+dmg*.005);Wh=GASH?Lh*.62:Math.min(.075,.02+dmg*.0008);   /* (Build 223: the texture carries the gash's own narrow shape; the patch is as broad as the bruising round it) */phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
   else if(kind==='stab'){Lh=Wh=Math.min(.065,.03+dmg*.001);}
   else{Lh=Math.min(.1,.04+dmg*.0016);Wh=Lh*.8;phi=Math.random()*3;}
+  gash:if(kind==='cut'&&dmg>=11&&hit&&!window.__noGash){   // (Build 224) a real gash: a trough of flesh below the skin, which the skin's shader parts along the same lens
+    let hl=Math.min(.15,.045+dmg*.0026,R*1.5),hw=clamp(hl*.14,.0055,.015),D=hw*1.5;const cp=Math.cos(phi),sp=Math.sin(phi),NS=22,pos=[],col=[],idx=[],sd=(S.x*731+S.z*419+dmg*17)%1,jr=i=>.5+.5*Math.sin(i*12.9898+sd*78.233)*Math.cos(i*4.1+sd*9);
+      const RG=[[1.22,.0006,.40,.07,.07],[1.0,.0012,.46,.09,.08],[.93,-.0015,.62,.40,.26],[.84,-D*.22,.60,.36,.2],[.7,-D*.42,.42,.05,.05],[.42,-D*.8,.27,.02,.025],[.12,-D,.09,.004,.008]];   // [share of the half width, height against the skin, colour]: swollen lip, cut skin, fat, muscle, the dark bottom
+      const pt=(x,y,h)=>{const st=clamp((cp*x-sp*y)/R,-.97,.97),th=Math.asin(st),v=sp*x+cp*y,r=R+h;pos.push(S.x+_wt.x*r*Math.sin(th)+_wa.x*v+_wn.x*(r*Math.cos(th)-R),S.y+_wt.y*r*Math.sin(th)+_wa.y*v+_wn.y*(r*Math.cos(th)-R),S.z+_wt.z*r*Math.sin(th)+_wa.z*v+_wn.z*(r*Math.cos(th)-R));};
+      const lin=v=>Math.pow(v,2.2);for(const g of RG){g[2]=lin(g[2]);g[3]=lin(g[3]);g[4]=lin(g[4]);}
+      // the body is not the cylinder: where the real skin stands along the cut (nine casts, skinned once), so the trough follows it
+      const NH=9,hs=new Array(NH).fill(null);if(hit&&RS[0]){const rays=[];for(let i=0;i<NH;i++){const x=(-1+2*i/(NH-1))*hl,st=clamp(cp*x/R,-.97,.97),th=Math.asin(st),v=sp*x,rn=V().copy(_wt).multiplyScalar(Math.sin(th)).addScaledVector(_wn,Math.cos(th));
+          rays.push({o:V().copy(S).addScaledVector(_wn,-R).addScaledVector(_wa,v).addScaledVector(rn,R+.12),d:rn.clone().negate(),rn});}
+        skinRayN(RS[0],rays,.3,capBones(B,c));for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
+      // only as far as the skin runs on smoothly either way (a cut can't carry on across thin air where the neck or an armpit falls away)
+      const ok=i=>hs[i]!=null&&Math.abs(hs[i]-hs[i>4?i-1:i+1])<.022;let kL=0,kR=0;if(hs[4]==null||Math.abs(hs[4])>.03)break gash;while(kL<4&&ok(3-kL))kL++;while(kR<4&&ok(5+kR))kR++;
+      const fr=Math.min(kL,kR)/4;if(fr<.5)break gash;hl*=fr;hw=clamp(hl*.14,.0055,.015);D=hw*1.5;
+      const h0=u=>{u*=fr;const f=(u+1)*.5*(NH-1),i=Math.min(NH-2,Math.max(0,Math.floor(f))),t=f-i;return (hs[i]||0)*(1-t)+(hs[i+1]||0)*t;};
+      const NRg=RG.length,row=2*NRg;   // across each station: one side's rings from the outside in, then the other's from the inside out
+      for(let i=0;i<=NS;i++){const u=-1+2*i/NS,lens=Math.pow(Math.max(0,1-u*u),.7),x=u*hl;
+        for(let k=0;k<row;k++){const sdn=k<NRg?1:-1,g=RG[k<NRg?k:row-1-k],j=jr(i*3+k)*.25+.875,w=(k===0||k===row-1)?hw*lens*g[0]+.0012*lens**.3*j:hw*lens*g[0]*(.86+.28*jr(i*7+k*11)),dep=g[1]<0?g[1]*Math.pow(lens,.6)*(.8+.4*jr(i+k*7)):g[1]*Math.min(1,lens*3);
+          pt(x*(1+(k===0||k===row-1?.03:0)),sdn*w,dep+h0(u));const f=(k>1&&k<row-2)?.7+.6*jr(i*5+k*3):.85+.3*jr(i*2+k),wet=g[1]<-D*.6?1:0;col.push(g[2]*f,g[3]*f*(wet?1:1),g[4]*f);}}
+      for(let i=0;i<NS;i++)for(let k=0;k<row-1;k++){const a=i*row+k,b2=a+1,c2=a+row,d2=c2+1;idx.push(a,c2,b2,b2,c2,d2);}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+      {const nA=g.attributes.normal,pA=g.attributes.position;let dot=0;for(let i=0;i<nA.count;i+=7)dot+=nA.getX(i)*_wn.x+nA.getY(i)*_wn.y+nA.getZ(i)*_wn.z;if(dot<0){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i];ix[i]=ix[i+1];ix[i+1]=t;}g.computeVertexNormals();}}
+      const m=new THREE.Mesh(g,GASH_MAT||(GASH_MAT=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.34,metalness:0,side:THREE.DoubleSide})));m.castShadow=false;scene.add(m);
+      const dW=V().copy(_wt).multiplyScalar(cp).addScaledVector(_wa,sp),mW=V().copy(_wt).multiplyScalar(-sp).addScaledVector(_wa,cp);
+      B.bones[c.ba].attach(m);m.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(m.matrixWorld).invert();g.computeBoundingSphere();
+      m.userData={kind,dmg,c:m.worldToLocal(S.clone())};
+      (B.bloodSrc||(B.bloodSrc=[])).push({o:m,c:m.userData.c.clone(),amt:clamp(dmg/40,.18,1),born:simTime,gd:dW.transformDirection(inv),gm:mW.transformDirection(inv),hl,hw});
+      B.wounds.push(m);if(B.wounds.length>28){const o=B.wounds.shift();o.parent&&o.parent.remove(o);o.geometry.dispose();}return;}
   const NR=4,NA=14,pos=[],uv=[],idx=[],cp=Math.cos(phi),sp=Math.sin(phi);
   for(let i=0;i<=NR;i++)for(let j=0;j<NA;j++){const rho=i/NR,al=j/NA*Math.PI*2,a=rho*Math.cos(al),b=rho*Math.sin(al);
     const ex=a*Lh,ey=b*Wh,u=ex*cp-ey*sp,v=ex*sp+ey*cp,th=u/R,dn=R*Math.cos(th)-R+.003;
@@ -7926,14 +7969,14 @@ function addWound(B,ci,P,axis,dmg,kind){
   B.wounds.push(m);if(B.wounds.length>28){const o=B.wounds.shift();o.parent&&o.parent.remove(o);o.geometry.dispose();}
 }
 // each frame: the worst wounds (most blood, longest bleeding) go to the body's shader, in world space
-const _bw=V();
+const _bw=V(),_bg=V();
 function bodyBlood(f){const U=f.mats&&f.mats.bloodU;if(!U)return;const L=f.bloodSrc||[],W=U.uWd.value;
   for(let i=L.length-1;i>=0;i--)if(!L[i].o.parent)L.splice(i,1);
   const dt=Math.max(0,Math.min(.1,simTime-(f._blT??simTime)));f._blT=simTime;
   const flow=f.alive?(f.bleed>0||f.downed?1:.15):(simTime-(f.deathT||0)<8?.6:0);   // runs while the heart pumps, and a little after
   for(const b of L){b.g=(b.g||0)+dt*flow;b.a=b.amt*Math.min(1.7,.55+b.g/4.5);}
   const top=L.length>BL_N?L.slice().sort((x,y)=>y.a-x.a).slice(0,BL_N):L;
-  const WA=U.uWa.value;for(let i=0;i<BL_N;i++){const b=top[i];if(!b){W[i].w=0;continue;}b.o.localToWorld(_bw.copy(b.c));W[i].set(_bw.x,_bw.y,_bw.z,b.a);WA[i]=clamp((simTime-b.born-14)/55,0,1);}}   // a wound's blood browns and dries over a minute
+  const WA=U.uWa.value,WG=U.uWg.value,WH=U.uWh.value;for(let i=0;i<BL_N;i++){const b=top[i];if(!b){W[i].w=0;WG[i].w=0;continue;}b.o.localToWorld(_bw.copy(b.c));W[i].set(_bw.x,_bw.y,_bw.z,b.a);if(b.gd){_bg.copy(b.gd).transformDirection(b.o.matrixWorld);WG[i].set(_bg.x,_bg.y,_bg.z,b.hl);_bg.copy(b.gm).transformDirection(b.o.matrixWorld);WH[i].set(_bg.x,_bg.y,_bg.z,b.hw);}else WG[i].w=0;WA[i]=clamp((simTime-b.born-14)/55,0,1);}}   // a wound's blood browns and dries over a minute
 function clearWounds(B){if(B.bloodSrc)B.bloodSrc.length=0;for(const o of B.wounds||[]){o.parent&&o.parent.remove(o);o.geometry.dispose();}if(B.wounds)B.wounds.length=0;}
 
 // ================================================================ fighters
@@ -7960,8 +8003,9 @@ const CAPS=[
   ['RightLeg','RightFoot',.07,'legR','RightLeg',['RightUpLeg','RightLeg']],
 ];
 for(const c of CAPS)if(c[4])SEV_R[c[4]]=c[2];SEV_R.Spine1=.15;
+for(const sd of ['Left','Right']){DESC[sd+'Hand']=[sd+'HandMiddle1'];DESC[sd+'Foot']=[sd+'ToeBase'];}   // (Build 224) a limb cut through anywhere along it comes away from the next joint down
 DESC.Spine1=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1'];   // (Build 222) cut in two at the waist
-const LIMB_OF={LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
+const LIMB_OF={LeftHand:'armL',RightHand:'armR',LeftFoot:'legL',RightFoot:'legR',LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
 let _spR=null;
 const ATTACKS=[
   {n:'fromRight',s:[.5,.28],e:[-.5,.05]},{n:'fromLeft',s:[-.5,.3],e:[.5,.02]},{n:'overhead',s:[.08,.55],e:[0,-.38]},
@@ -8024,7 +8068,7 @@ class Fighter{
     if(def.slot==='head'){this.helmet=def.helm;this.model.userData.hideHair=true;this.model.userData.helmOn=def.helm;helmHair(this.model);helmSkull(this.model,true);}
     return old;
   }
-  unequip(slot){const a=this.armor[slot];if(!a)return null;if(slot==='body'){this.model.traverse(o=>{if(o.userData.underBody||o.userData.tabard)o.visible=true;});setGarbClip(this.model,null);}for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;setArmClip(this.model,this.armor);if(slot==='head'){this.helmet=-1;this.model.userData.hideHair=false;this.model.userData.helmOn=-1;helmHair(this.model);helmSkull(this.model,false);}return a.def;}
+  unequip(slot){const a=this.armor[slot];if(!a)return null;if(this.scratches)for(let i=this.scratches.length-1;i>=0;i--){const o=this.scratches[i];if(o.userData.slot===slot){o.removeFromParent();o.geometry.dispose();this.scratches.splice(i,1);}}if(slot==='body'){this.model.traverse(o=>{if(o.userData.underBody||o.userData.tabard)o.visible=true;});setGarbClip(this.model,null);}for(const g of a.groups)g.removeFromParent();if(a.def.id==='mail')this.setMail(0);this.armor[slot]=null;setArmClip(this.model,this.armor);if(slot==='head'){this.helmet=-1;this.model.userData.hideHair=false;this.model.userData.helmOn=-1;helmHair(this.model);helmSkull(this.model,false);}return a.def;}
   setMail(v){for(const m of this.mats)if(!m.userData.noMail)m.userData.U.uBodyMail.value=v;}
   prot(zone){
     const a=this.armor,p=s=>a[s]?a[s].def.prot:0,mail=a.body&&a.body.def.id==='mail';
@@ -9137,14 +9181,16 @@ class Fighter{
       if(D.rag){const R=D.rag;for(const n of R.names){R.Q[n].copy(R.P[n]).addScaledVector(_v.copy(this.vel).add(vel).setY(.6),-H*2);}}}   // a trunk is heavy: it topples off the hips, it isn't flung like a hand
     _v.setFromMatrixPosition(bone.matrixWorld);for(let i=0;i<3;i++)spawnBlood(_v,_t3.set(rand(-1.5,1.5),rand(.5,2.5),rand(-1.5,1.5)),26,2.6,1.5);
     return true;}
-  sever(boneName,vel){
+  /* (Build 224) `cutT`: the cut went through the bone above this one at that fraction of its length (0 at its upper joint), so the part
+     that comes away takes that much of the limb above the joint with it and the stump ends there, not at the joint */
+  sever(boneName,vel,cutT){
     if(boneName==='Spine1')return this.bisect(vel);
-    const bone=this.bones[boneName];if(!bone||bone.userData.severed)return false;
+    const bone=this.bones[boneName];if(!bone||bone.userData.severed)return false;if(!(cutT>.05&&cutT<.95)||this.undead==='skel')cutT=0;
     this.root.updateMatrixWorld(true);
-    spawnDebris(this,boneName,vel);
-    bone.userData.severed=true;bone.scale.setScalar(1e-4);this.severedBones.push(bone);this.sevNames.push(boneName);netEv(['x',this.id,boneName,r3v(vel)]);
+    spawnDebris(this,boneName,vel,cutT);
+    bone.userData.severed=true;bone.scale.setScalar(1e-4);this.severedBones.push(bone);this.sevNames.push(boneName);netEv(['x',this.id,boneName,r3v(vel),cutT?r3(cutT):0]);
     for(const n of DESC[boneName]||[])this.detached.add(n);if(this.ragdoll)this.ragdoll.drop(new Set(DESC[boneName]||[]));
-    const cap=this.undead==='skel'?null:cutFace(bone.parent,bone.position,bone.position,(SEV_R[boneName]||.06)*.92);if(cap&&!this.undead)(this.bloodSrc||(this.bloodSrc=[])).push({o:cap,c:V(),amt:boneName==='Head'?1.6:1.2,born:simTime});if(this.undead==='skel'){_v.setFromMatrixPosition(bone.matrixWorld);sBones(_v,1.2);}   // a stump drenches what's below it
+    const cap=this.undead==='skel'?null:cutFace(bone.parent,cutT?_v.copy(bone.position).multiplyScalar(cutT):bone.position,bone.position,(cutT?SEV_R[bone.parent.name]||SEV_R[boneName]||.06:SEV_R[boneName]||.06)*.92);if(cap&&!this.undead)(this.bloodSrc||(this.bloodSrc=[])).push({o:cap,c:V(),amt:boneName==='Head'?1.6:1.2,born:simTime});if(this.undead==='skel'){_v.setFromMatrixPosition(bone.matrixWorld);sBones(_v,1.2);}   // a stump drenches what's below it
     if(!this.undead)spurts.push({obj:cap,until:simTime+7,born:simTime,dur:7,art:boneName==='Head'||boneName.includes('UpLeg')||boneName.endsWith('Arm')?1.4:1});   // the artery pumps with the heartbeat
     const limb=LIMB_OF[boneName];this.limbs[limb].sev=true;this.limbs[limb].hp=0;if(this.pb)this.physCapsOn();
     if(limb==='head'){this.armor.head=null;this.helmet=-1;return true;}
@@ -9321,29 +9367,34 @@ function cloneLite(model){const saved=[];model.traverse(o=>{saved.push([o,o.user
    hid the other side's by shrinking its bones to nothing, which drew cones and stretched sheets wherever a garment or a plate spanned the
    cut (a body cut at the waist was two crumpled lumps). In the severed part, what its triangles still owe to bones on the other side
    rides rigidly with the part's own root bone, so nothing stretches back to the body. */
-const CUT_CACHE=new WeakMap();
-function sliceMeshes(model,clone,bone,croot){if(window.__noSlice)return;const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const A=[],B=[];model.traverse(o=>{if(o.isSkinnedMesh)A.push(o);});clone.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});croot.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});
+const CUT_CACHE=new WeakMap(),_slM=new THREE.Matrix4();
+function sliceMeshes(model,clone,bone,croot,cutT=0){if(window.__noSlice)return;const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const par=cutT?bone.parent.name:null;const A=[],B=[];model.traverse(o=>{if(o.isSkinnedMesh)A.push(o);});clone.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});croot.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});
   if(A.length!==B.length)return;const done=new Set();
   for(let k=0;k<A.length;k++){const m=A[k],c=B[k],g=m.geometry;if(!g||!g.attributes.skinIndex||g.groups&&g.groups.length>1||c.geometry!==g)continue;
-    const bones=m.skeleton.bones,key=bone.name+'|'+bones.length;let cut=null;{const e=CUT_CACHE.get(g);if(e&&e[key]&&e[key].ix===g.index)cut=e[key];}   /* (kept per geometry object and its index: the hose, the belt and the stand-in shirt are the body's own vertices under another index and shared one userData with it, so they were given the body's triangles and drew the whole body in black wool) */
+    const bones=m.skeleton.bones,key=bone.name+'|'+bones.length+'|'+(cutT?cutT.toFixed(2):0);let cut=null;{const e=CUT_CACHE.get(g);if(e&&e[key]&&e[key].ix===g.index)cut=e[key];}   /* (kept per geometry object and its index: the hose, the belt and the stand-in shirt are the body's own vertices under another index and shared one userData with it, so they were given the body's triangles and drew the whole body in black wool) */
     if(!cut){const inS=bones.map(b=>b&&sub.has(b.name)),si=g.attributes.skinIndex,sw=g.attributes.skinWeight,n=g.attributes.position.count,w=new Float32Array(n);
       for(let i=0;i<n;i++){let t=0;if(inS[si.getX(i)])t+=sw.getX(i);if(inS[si.getY(i)])t+=sw.getY(i);if(inS[si.getZ(i)])t+=sw.getZ(i);if(inS[si.getW(i)])t+=sw.getW(i);w[i]=t;}
-      const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2;(w[a]+w[b]+w[d]>=1.5?part:keep).push(a,b,d);}
+      let dd=null;if(cutT){   // through the bone above: a plane across it in the bind pose, at the cut; what lies beyond it and rides on that bone goes too
+        const bi=bones.findIndex(b=>b&&b.name===bone.name),pi=bones.findIndex(b=>b&&b.name===par);if(bi>=0&&pi>=0){const bmi=new THREE.Matrix4().copy(m.bindMatrix).invert(),p0=V().setFromMatrixPosition(_slM.copy(m.skeleton.boneInverses[pi]).invert()).applyMatrix4(bmi),p1=V().setFromMatrixPosition(_slM.copy(m.skeleton.boneInverses[bi]).invert()).applyMatrix4(bmi),nn=p1.clone().sub(p0),L=nn.length();nn.multiplyScalar(1/L);
+          const P=g.attributes.position;dd=new Float32Array(n);for(let i=0;i<n;i++){dd[i]=(P.getX(i)-p0.x)*nn.x+(P.getY(i)-p0.y)*nn.y+(P.getZ(i)-p0.z)*nn.z-L*cutT;const j=si.getX(i),k2=si.getY(i),l=si.getZ(i),q=si.getW(i);let t=w[i];if(bones[j]&&bones[j].name===par)t+=sw.getX(i);if(bones[k2]&&bones[k2].name===par)t+=sw.getY(i);if(bones[l]&&bones[l].name===par)t+=sw.getZ(i);if(bones[q]&&bones[q].name===par)t+=sw.getW(i);w[i]=t;}}}
+      const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2;(w[a]+w[b]+w[d]>=1.5&&(!dd||dd[a]+dd[b]+dd[d]>0)?part:keep).push(a,b,d);}
       const T=n>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part),ix:g.index};let e=CUT_CACHE.get(g);if(!e)CUT_CACHE.set(g,e={});e[key]=cut;}
     if(!cut.part.length){c.visible=false;continue;}   // nothing of this mesh is on the severed part
     const mk=arr=>{const q=new THREE.BufferGeometry();for(const a in g.attributes)q.setAttribute(a,g.attributes[a]);q.morphAttributes=g.morphAttributes;q.morphTargetsRelative=g.morphTargetsRelative;q.setIndex(new THREE.BufferAttribute(arr,1));q.boundingSphere=g.boundingSphere;q.boundingBox=g.boundingBox;q.userData={derived:true};return q;};
     m.geometry=mk(cut.keep);c.geometry=mk(cut.part);
     const sk=c.skeleton;if(sk&&!done.has(sk)){done.add(sk);const ri=sk.bones.findIndex(b=>b&&b.name===bone.name);sk.boneInverses=sk.boneInverses.slice();/* (a cloned skeleton shares this array with the body it was cloned from) */if(ri>=0)for(let i=0;i<sk.bones.length;i++)if(sk.bones[i]&&!sub.has(sk.bones[i].name)){sk.bones[i]=sk.bones[ri];sk.boneInverses[i]=sk.boneInverses[ri];}}}}
-function spawnDebris(f,boneName,vel){
+function spawnDebris(f,boneName,vel,cutT=0){
   const clone=cloneLite(f.model);
   f.model.updateWorldMatrix(true,true);f.model.matrixWorld.decompose(clone.position,clone.quaternion,clone.scale);scene.add(clone);clone.updateMatrixWorld(true);
   const cb=indexBones(clone);const root=cb[boneName];
   const ob=f.bones[boneName];ob.updateWorldMatrix(true,false);
   root.removeFromParent();ob.matrixWorld.decompose(root.position,root.quaternion,root.scale);scene.add(root);root.updateMatrixWorld(true);
   cb.Hips.scale.setScalar(1e-4);
-  sliceMeshes(f.model,clone,ob,root);
+  sliceMeshes(f.model,clone,ob,root,cutT);
   clone.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=o.renderOrder!==2;}});
-  const cap=cutFace(root,V(),V(0,-1,0),(SEV_R[boneName]||.06)*.92);
+  let cap;if(cutT){let up=null;f.model.traverse(o=>{if(up||!o.isSkinnedMesh||!o.skeleton)return;const bs=o.skeleton.bones,bi=bs.indexOf(ob),pi=bs.indexOf(ob.parent);if(bi<0||pi<0)return;   /* the part's meshes ride its root bone as they stood in the bind pose, so the way up the limb is the bind pose's, not the pose it was cut in */
+      up=V().setFromMatrixPosition(_slM.copy(o.skeleton.boneInverses[pi]).invert()).applyMatrix4(o.skeleton.boneInverses[bi]).negate();});if(!up)up=ob.position.clone().applyQuaternion(ob.quaternion.clone().invert());cap=cutFace(root,up.clone().multiplyScalar(-(1-cutT)),up.clone().negate(),(SEV_R[ob.parent.name]||SEV_R[boneName]||.06)*.92);}   // the cut face is up the limb from the joint, on the piece of the bone above that came with it
+  else cap=cutFace(root,V(),V(0,-1,0),(SEV_R[boneName]||.06)*.92);
   const names=[boneName,...(DESC[boneName]||[])];
   const v=f.vel.clone().add(vel);v.y+=1.2+Math.random()*1.5;
   const rag=new Ragdoll(cb,names,v,null,null);
@@ -9451,13 +9502,27 @@ function combatStep(h){
     }
   }
 }
+const BIND=!/[?&]nobind/.test(location.search);
 function clash(A,B){
   const s=A.sword,s2=B.sword;if(s)s._px=1;if(s2)s2._px=1;if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
   const d2=segSeg(s.H,_bt,s2.H,_pb,_c1,_c2),cr=.05+Math.min(.1,_wl3.subVectors(s.tipVel,s2.tipVel).length()*H*.9);if(d2>=cr*cr)return;   /* Build 146: the reach grows with how fast the blades close (at 25 m/s a blade moves 10 cm a step and slipped through a guard between steps) */
   if(window.__stats){const r=A.clashCd<=0;if(r)window.__stats.clashes=(window.__stats.clashes||0)+1;}
   const sa=SS.s,sb=SS.t;s.velAt(sa,_va);s2.velAt(sb,_vb);_rel.subVectors(_va,_vb);
   _n.subVectors(_c1,_c2);if(_n.lengthSq()<1e-8)_n.crossVectors(s.axis,s2.axis);if(_n.lengthSq()<1e-8)_n.set(1,0,0);_n.normalize();
-  const pen=Math.max(0,.05-Math.sqrt(d2));s.T.addScaledVector(_n,pen*.5);s2.T.addScaledVector(_n,-pen*.5);
+  const pen=Math.max(0,.05-Math.sqrt(d2));
+  if(BIND){   /* (Build 224) steel on steel is a contact, not only a bang: where the blades cross decides who gives. Met near your own cross (the strong) a blade
+       hardly moves; met near its point (the weak) it is turned easily, and a heavier, committed or two-handed weapon gives less. While they stay together
+       they don't close further, they drag on each other, and a blade sliding along another grates and is stopped by the cross */
+    const mA=bladeMass(A,s,sa)*(twoH(s.def)?1.3:1),mB=bladeMass(B,s2,sb)*(twoH(s2.def)?1.3:1),shA=mB/(mA+mB),shB=1-shA,la=Math.max(.3,sa),lb=Math.max(.3,sb);
+    s.T.addScaledVector(_n,pen*shA/la);s2.T.addScaledVector(_n,-pen*shB/lb);
+    const vn0=_rel.dot(_n);
+    if(pen>0&&vn0<0&&vn0>-3){const k=-vn0*.8;s.Tp.addScaledVector(_n,-k*shA/la*H);s2.Tp.addScaledVector(_n,k*shB/lb*H);}   // slow closing is taken out (a fast one is a clash, below)
+    _wl3.copy(_rel).addScaledVector(_n,-vn0);const vt=_wl3.length();
+    if(vt>.05){const xg=(sa<.09&&s.def.kind==='blade'||sb<.09&&s2.def.kind==='blade')?.3:.03,f=Math.min(1,xg+(pen>0?.02:0));   // caught on a cross it stops; otherwise steel drags a little on steel
+      s.Tp.addScaledVector(_wl3,f*shA*H);s2.Tp.addScaledVector(_wl3,-f*shB*H);
+      const bt=s._bindT=(s._bindT||0)+H;s2._bindT=bt;if(vt>1.1&&simTime>(s._scT||0)&&simTime>(s2._scT||0)){s._scT=s2._scT=simTime+.07+Math.random()*.05;_t3.addVectors(_c1,_c2).multiplyScalar(.5);sScrape(_t3,clamp(vt/7,.15,1));if(vt>3.2&&Math.random()<.5)spawnSparks(_t3,2+(vt|0),_n);s.worn(vt*.0006);s2.worn(vt*.0006);}}
+    s._bindAt=s2._bindAt=simTime;}
+  else{s.T.addScaledVector(_n,pen*.5);s2.T.addScaledVector(_n,-pen*.5);}
   {const gA=A.guardW()>.5,gB=B.guardW()>.5;if(gA!==gB){const dF=gA?A:B,aF=gA?B:A;aF.hitCd.set(dF.id,Math.max(aF.hitCd.get(dF.id)||0,simTime+.2));}}   /* Build 146: steel met by a set guard doesn't land behind it this instant, however slowly it came */
   const rs=_rel.length();if(rs<=1.4||A.clashCd>0)return;
   const spA=_va.length(),spB=_vb.length();
@@ -9757,13 +9822,14 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   const glance=prot>.2&&(mode==='cut'||mode==='thrust')&&armorF<.8&&dmg<12;if(glance&&window.__stats&&window.__stats[W.id])window.__stats[W.id].glance++;
   const organ=glance||B.dummy||B.undead?null:organAt(B,cap,P,mode,dmg);if(B.undead)dmg*=undeadK(B,mode,cap.zone);if(organ)dmg=Math.min(dmg*organ.mul+organ.add,mode==='thrust'||mode==='poke'?60:85);
   yardHit(A,W.name,mode,organ?organ.name:gap?gap.name:cap.zone,dmg,speed,glance,prot);if(gap&&dmg>6)tell(A,gap.name==='face'?'Under the brim':'Into the gap','gold');
-  let sev=null;
+  let sev=null,sevT=0;
   if(mode==='cut'&&W.sever>0&&cap.sever&&!glance){
     // whether it comes off depends on the blow: how fast, how heavy, the edge square to the cut, a full committed swing with strength
     // behind it, and where it lands (through the middle of the limb or at a joint cuts deeper than a skim off the side). Little luck.
     const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF),L=B.limbs[cap.zone];if(L&&cap.zone!=='neck')L.hp-=dmg;
     const res=sevResist(B,cap,prot,pen);if(window.__sevLog)window.__sevLog.push([cap.zone,+cp.toFixed(2),+res.toFixed(2)]);
-    if(cp>res&&cap.zone!=='head'&&cap.zone!=='torso')sev=cap.zone==='neck'?'Head':cap.sever;
+    if(cp>res&&cap.zone!=='head'&&cap.zone!=='torso'){sev=cap.zone==='neck'?'Head':cap.sever;
+      if(sev!=='Head'&&B.bones[cap.bb]&&DESC[cap.bb]&&!window.__noMidCut){_ov.subVectors(cap.b,cap.a);const u=clamp(_ow.subVectors(P,cap.a).dot(_ov)/(_ov.lengthSq()||1e-6),0,1);if(u>.3){sev=cap.bb;sevT=clamp(u,.3,.85);}}}   // (Build 224) through the limb where the edge landed, not always at the joint above
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
   /* (Build 222) a body cut in two: a heavy edge swung level through the waist with everything behind it. Rare: an axe, a greatsword, a poleaxe
      or a falchion at full swing on an unarmoured or lightly armoured man (resistance 13 against a leg's 12.5, but with no credit for where on the body it lands; armour counted as for limbs) */
@@ -9777,7 +9843,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   const arm=armorAt(B,cap.zone);
   if(arm&&prot>.2&&W.kind!=='fist'){s.worn((arm.mail?.006:.014)*speed/6);   // steel on steel scars the edge
     if(arm.mail){if(!glance)sfx('hitMail',P,.55*clamp(speed/8,.4,1.2),.85);}   // mail swallows a blow with a dull jingle
-    else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,clamp(speed*W.weight*.002,.003,.026));}}
+    else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,clamp(speed*W.weight*.002,.003,.026),mode==='cut'||mode==='thrust'?(glance?_scr.copy(dir).multiplyScalar(clamp(.05+speed*.008,.06,.15)):_scr.copy(s.axis).multiplyScalar(mode==='thrust'?.018:clamp(.02+speed*.003,.025,.06))):null);}}
   if(glance){spawnSparks(P,10,dir);sClank(P,speed/9);if(!phys){s.Tp.copy(s.T).addScaledVector(s.tipVel,.4*H);s.Hv.multiplyScalar(.4);}}   // the blade skids and bounces off
   else if(B.undead==='skel'){sBones(P,speed/8);spawnBoneChips(P,dir,mode==='blunt'?6:3);}
   else if(mode==='blunt'||mode==='flat'||mode==='haft'){if(prot<.3&&mode==='blunt')sHit(P,speed/9,false,2,dmg>22&&cap.zone!=='torso'?1:dmg>30?.6:0);else sThud(P,speed/9);if(dmg>8)spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.15).setY(.6),(4+dmg*.4)|0,1.2,1);if(prot>.3&&mode==='blunt')sClank(P,.6);}
@@ -9792,7 +9858,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   if((sev&&sev!=='Head')||(mode==='blunt'&&dmg>26&&cap.zone!=='torso'))sfx('crush',P,.7,1.45);   // bone giving way
   if(bis){cheer(.8,1);B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'cut in two',imp,P);B.bisect(dir.clone().multiplyScalar(speed*.3));sfx('crush',P,.9,1.2);tell(A,'Cut in two','red');return;}
   if(sev){cheer(.55,1);
-    B.sever(sev,dir.clone().multiplyScalar(speed*.45));
+    B.sever(sev,dir.clone().multiplyScalar(speed*.45),sevT);
     if(B.undead!=='skel')spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.3).setY(1.5),30,2.5,1.4);
     if(sev==='Head'){B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'beheaded',imp,P);tell(A,'Beheaded','red');}
     else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive)B.damage(body,A,'dismembered');}
@@ -10937,7 +11003,31 @@ function stepFx(f,p,vol,run){const a=f.armor;
 function armorAt(B,zone){const a=B.armor,mail=!!a.body&&a.body.def.id==='mail';
   const sl=zone==='head'?'head':zone==='neck'?(a.head?'head':'body'):zone==='torso'?'body':zone.startsWith('arm')?(a.arms?'arms':'body'):(a.legs?'legs':'body');
   const p=a[sl];if(!p)return null;if(sl==='body'&&zone!=='torso'&&!mail)return null;return {slot:sl,mail:p.def.id==='mail'};}
-function dentArmor(B,slot,P,dir,depth){const a=B.armor[slot];if(!a||depth<.003)return;if(NET.mode==='host')netEv(['D',B.id,slot,r3v(P),r3v(dir),r3(depth)]);
+// (Build 224) steel remembers: where an edge skids across plate it leaves a bright scratch along its travel, where it bites a short nick along the edge.
+// A strip laid on the plate's real surface (a cast into the piece), riding the bone the plate rides
+const _scr=V(),_dn=V();let SCRATCH_MAT=null;
+function scratchMat(){if(SCRATCH_MAT)return SCRATCH_MAT;const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');
+  for(let i=0;i<7;i++){const main=i===0,y=32+(main?0:(Math.random()-.5)*26),x0=main?10:20+Math.random()*90,x1=main?246:x0+40+Math.random()*110,w=main?2.6:.7+Math.random()*1.2,dy=(Math.random()-.5)*5;
+    const g=x.createLinearGradient(x0,0,x1,0);g.addColorStop(0,'rgba(20,20,24,0)');g.addColorStop(.2,'rgba(20,20,24,.8)');g.addColorStop(.85,'rgba(20,20,24,.75)');g.addColorStop(1,'rgba(20,20,24,0)');x.strokeStyle=g;x.lineWidth=w+1.6;x.beginPath();x.moveTo(x0,y+1);x.lineTo(Math.min(250,x1),y+1+dy);x.stroke();   // the burr's shadow
+    const h=x.createLinearGradient(x0,0,x1,0);h.addColorStop(0,'rgba(240,244,250,0)');h.addColorStop(.15,'rgba(240,244,250,.95)');h.addColorStop(.8,'rgba(240,244,250,.9)');h.addColorStop(1,'rgba(240,244,250,0)');x.strokeStyle=h;x.lineWidth=w;x.beginPath();x.moveTo(x0,y);x.lineTo(Math.min(250,x1),y+dy);x.stroke();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return SCRATCH_MAT=new THREE.MeshStandardMaterial({map:t,transparent:true,depthWrite:false,metalness:.85,roughness:.5,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3});}
+const _saA=V(),_saQ=V(),_saN=V(),_saT=V(),_saO=V(),_saD=V(),_saH=V(),_saX=V();
+function scratchArmor(B,a,P,scr,slot){if(!B.caps||!scr||camera.position.distanceToSquared(P)>144)return;const L=scr.length();if(L<.01)return;
+  let c=null,bd=1e9;for(const k of B.caps){if(!k.on)continue;_saA.subVectors(k.b,k.a);const l2=_saA.lengthSq()||1e-9,t=clamp(_saX.subVectors(P,k.a).dot(_saA)/l2,0,1),d=_saX.copy(k.a).addScaledVector(_saA,t).distanceTo(P)-k.r;if(d<bd){bd=d;c=k;}}if(!c||bd>.12)return;
+  _saA.subVectors(c.b,c.a);const l2=_saA.lengthSq()||1e-9;_saQ.copy(c.a).addScaledVector(_saA,clamp(_saX.subVectors(P,c.a).dot(_saA)/l2,0,1));_saN.subVectors(P,_saQ);_saN.addScaledVector(_saA,-_saN.dot(_saA)/l2);if(_saN.lengthSq()<1e-8)return;_saN.normalize();_saA.normalize();
+  _saO.copy(_saQ).addScaledVector(_saN,c.r+.16);_saD.copy(_saN).negate();let best=1e9,bone=null;const bs=capBones(B,c);B.model.updateMatrixWorld(true);
+  for(const g of a.groups)g.traverse(m=>{if(!m.isMesh||!m.visible)return;let d=1e9;if(m.isSkinnedMesh){if(skinRay(m,_saO,_saD,.34,bs,_saX))d=_saX.distanceTo(_saO);}else{_wr.set(_saO,_saD);_wr.far=.34;const h=_wr.intersectObject(m,false)[0];if(h)d=h.distance;}if(d<best){best=d;bone=B.bones[m.userData.dentBone]||null;}});
+  if(best>1e8)return;const S=_saH.copy(_saO).addScaledVector(_saD,best),R=Math.max(.04,_saX.subVectors(S,_saQ).dot(_saN));_saT.crossVectors(_saA,_saN).normalize();
+  const tx=scr.dot(_saT),ty=scr.dot(_saA);if(Math.hypot(tx,ty)<L*.3)return;const phi=Math.atan2(ty,tx),cp=Math.cos(phi),sp=Math.sin(phi),hl=L*.5*Math.hypot(tx,ty)/L+.01,hw=clamp(hl*.3,.006,.014),NS=8,pos=[],uv=[],idx=[];
+  for(let i=0;i<=NS;i++)for(let j=0;j<2;j++){const x=(-1+2*i/NS)*hl,y=(j?1:-1)*hw,st=clamp((cp*x-sp*y)/R,-.97,.97),th=Math.asin(st),v=sp*x+cp*y,r=R+.0016;
+    pos.push(S.x+_saT.x*r*Math.sin(th)+_saA.x*v+_saN.x*(r*Math.cos(th)-R),S.y+_saT.y*r*Math.sin(th)+_saA.y*v+_saN.y*(r*Math.cos(th)-R),S.z+_saT.z*r*Math.sin(th)+_saA.z*v+_saN.z*(r*Math.cos(th)-R));uv.push(i/NS,j);}
+  for(let i=0;i<NS;i++){const q=i*2;idx.push(q,q+2,q+1,q+1,q+2,q+3);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  {const n=g.attributes.normal;if(n.getX(0)*_saN.x+n.getY(0)*_saN.y+n.getZ(0)*_saN.z<0){idx.length=0;for(let i=0;i<NS;i++){const q=i*2;idx.push(q,q+1,q+2,q+1,q+3,q+2);}g.setIndex(idx);g.computeVertexNormals();}}
+  const m=new THREE.Mesh(g,scratchMat());m.renderOrder=2;m.castShadow=false;m.userData.slot=slot;scene.add(m);(bone||B.bones[c.ba]).attach(m);
+  const Ls=B.scratches||(B.scratches=[]);Ls.push(m);if(Ls.length>26){const o=Ls.shift();o.removeFromParent();o.geometry.dispose();}}
+function dentArmor(B,slot,P,dir,depth,scr){const a=B.armor[slot];if(!a||depth<.003)return;if(NET.mode==='host')netEv(['D',B.id,slot,r3v(P),r3v(dir),r3(depth),scr?r3v(scr):0]);
+  if(scr&&!window.__noScratch)scratchArmor(B,a,P,scr,slot);
   const R=.045+depth*2.6;
   for(const g of a.groups)g.traverse(m=>{if(!m.isMesh||!m.geometry||!m.geometry.attributes.position)return;
     m.updateWorldMatrix(true,false);let sc=m.matrixWorld.getMaxScaleOnAxis();_dm.copy(m.matrixWorld).invert();
@@ -10948,8 +11038,13 @@ function dentArmor(B,slot,P,dir,depth){const a=B.armor[slot];if(!a||depth<.003)r
     let any=false;const pa0=m.geometry.attributes.position;for(let i=0;i<pa0.count;i++){_dv.fromBufferAttribute(pa0,i);if(_dv.distanceToSquared(_dp)<rl*rl){any=true;break;}}if(!any)return;
     if(!m.userData.ownGeo){m.geometry=m.geometry.clone();m.userData.ownGeo=true;}   // pieces share geometry until the first dent
     const pa=m.geometry.attributes.position;
-    for(let i=0;i<pa.count;i++){_dv.fromBufferAttribute(pa,i);const d2=_dv.distanceToSquared(_dp);if(d2>rl*rl)continue;const k=1-d2/(rl*rl);_dv.addScaledVector(_dk,dl*k*k);pa.setXYZ(i,_dv.x,_dv.y,_dv.z);}
-    pa.needsUpdate=true;m.geometry.computeVertexNormals();});}
+    /* (Build 224) the normals inside the dent are leaned toward its middle by the bowl's slope. Recomputing them all (computeVertexNormals) turned a
+       plate without an index (every lofted plate) flat-shaded from its first dent: the whole breastplate went to facets */
+    const na=m.geometry.attributes.normal;
+    for(let i=0;i<pa.count;i++){_dv.fromBufferAttribute(pa,i);const d2=_dv.distanceToSquared(_dp);if(d2>rl*rl)continue;const k=1-d2/(rl*rl);
+      if(na){_dn.subVectors(_dv,_dp);_dn.addScaledVector(_dk,-_dn.dot(_dk));const dl2=_dn.length();if(dl2>1e-6){const sl=dl*4*k*dl2/(rl*rl);_dn.multiplyScalar(-sl/dl2);_dn.x+=na.getX(i);_dn.y+=na.getY(i);_dn.z+=na.getZ(i);_dn.normalize();na.setXYZ(i,_dn.x,_dn.y,_dn.z);}}
+      _dv.addScaledVector(_dk,dl*k*k);pa.setXYZ(i,_dv.x,_dv.y,_dv.z);}
+    pa.needsUpdate=true;if(na)na.needsUpdate=true;else m.geometry.computeVertexNormals();});}
 function knockHelmet(B,dir,speed){const def=B.unequip('head');if(!def)return;const p=B.bones.Head.getWorldPosition(V());const v=V(dir.x*speed*.32,1.5+speed*.1,dir.z*speed*.32);
   sClank(p,1);spawnSparks(p,6,dir);if(NET.mode==='host')netEv(['H',def.id,r3v(p),r3v(v)]);helmetFly(def.id,p,v,def);
   if(B.alive&&!B.ragdoll)B.stagger=Math.max(B.stagger||0,.4);}
@@ -12035,8 +12130,8 @@ function clientEvents(ev){
   for(const e of ev){try{switch(e[0]){
     case 'b':spawnBlood(P(e[1]),P(e[2]),e[3],e[4],e[5]);break;
     case 'k':spawnSparks(P(e[1]),e[2],e[3]?P(e[3]):null);break;
-    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
-    case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5]);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
+    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'sc':sScrape(P(e[1]),e[2],false);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
+    case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5],e[6]?P(e[6]).clone():null);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
     case 'MF':mastFall(e[1],e[2],false);break;
@@ -12046,7 +12141,7 @@ function clientEvents(ev){
     case 'P':{let bp=null,bd=.4;for(const p of PROPS){if(p.broken)continue;const dd=Math.hypot(p.x-e[1],p.z-e[2]);if(dd<bd){bd=dd;bp=p;}}if(bp)propBreak(bp,null,null);break;}
     case 'L':{const f=NET.puppets.get(e[1]);if(f&&f.limbs[e[2]]){f.limbs[e[2]].dead=true;f.limbs[e[2]].hp=0;}break;}
     case 'q':{const f=NET.puppets.get(e[1]);if(f){f.clutchP=e[2];f.clutchT=simTime+e[3];}break;}
-    case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]));break;}
+    case 'x':{const f=NET.puppets.get(e[1]);if(f&&f.bones[e[2]]&&!f.bones[e[2]].userData.severed)f.sever(e[2],P(e[3]),e[4]||0);break;}
     case 'o':if(e[1]===NET.myId)note(e[2],e[3]);break;
     case 'bl':if(e[1]===NET.myId&&player)player.blindT=simTime+e[2];break;
     case 'SF':scafCollapse(e[1],e[2],false);break;case 'SW':if(SHIP)shipWave(e[1]??0,e[2]??1);break;case 'ST':if(SHIP)SHIP.storm=e[1];break;case 'TR':railBreak(e[1],false);break;case 'VS':sinkStage(e[1],false);break;case 'HF':houseIgnite(e[1],false);break;case 'HC':houseCollapse(e[1],false,e[2]);break;case 'BT':if(e[1]===1)towerIgnite(false);else towerCollapse(e[2],false);break;
@@ -12103,6 +12198,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={dentArmor:(...a)=>dentArmor(...a),get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
