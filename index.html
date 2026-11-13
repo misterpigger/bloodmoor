@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=227;
+const BUILD=228;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -3538,7 +3538,9 @@ function cryptKickDoor(f,fw){const C=CRYPT;if(!C)return false;const ft=f.bones[(
    hands let go and push, and you get up from your knees on top */
 function findLedge(x,z,y0,y1,far){let best=null;for(let i=0;i<16;i++){const a=i/16*6.283,dx=Math.sin(a),dz=Math.cos(a);for(const r of far?[.3,.45,.62,.8,1,1.2]:[.3,.45,.62]){const qx=x+dx*r,qz=z+dz*r,gy=groundY(qx,qz,y1+.1);if(!(gy>y0&&gy<y1))continue;
       if(groundY(x,z,gy-.3)>gy-.6||groundY(x,z,gy+.1)>gy-.6)continue;   /* the hands must be beside the edge, not under the floor it belongs to */let lo=0,hi=r;for(let k=0;k<7;k++){const m=(lo+hi)/2;if(groundY(x+dx*m,z+dz*m,gy+.1)>=gy-.05)hi=m;else lo=m;}
-      const sc=hi+Math.abs(gy-(y0+y1)/2)*.2;if(!best||sc<best.sc)best={sc,x:x+dx*hi,z:z+dz*hi,y:gy,dx,dz};break;}}return best;}
+      const sc=hi+Math.abs(gy-(y0+y1)/2)*.2;if(!best||sc<best.sc)best={sc,x:x+dx*hi,z:z+dz*hi,y:gy,dx,dz};break;}}
+  if(best){let nx=0,nz=0;for(let i=0;i<24;i++){const a=i/24*6.283,sx=Math.sin(a),sz=Math.cos(a);for(const r of [.12,.24])if(groundY(best.x+sx*r,best.z+sz*r,best.y+.1)>=best.y-.05){nx+=sx;nz+=sz;}}const l=Math.hypot(nx,nz);   // (Build 228) the way in is square to the edge itself, not one of the sixteen ways it was looked for along (a body hung and climbed up to 45° askew)
+    if(l>1&&nx*best.dx+nz*best.dz>0){best.dx=nx/l;best.dz=nz/l;}}return best;}
 function hangPins(f,L){const lx=L.dz,lz=-L.dx;   // the hand on the left of the facing direction
   return [['LeftHand',V(L.x+lx*.2-L.dx*.03,L.y+.03,L.z+lz*.2-L.dz*.03)],['RightHand',V(L.x-lx*.2-L.dx*.03,L.y+.03,L.z-lz*.2-L.dz*.03)]];}
 function hangStart(f,L){const R=f.ragdoll;if(!R||!R.P.LeftHand||!R.P.RightHand)return false;const pins=hangPins(f,L);
@@ -3546,21 +3548,37 @@ function hangStart(f,L){const R=f.ragdoll;if(!R||!R.P.LeftHand||!R.P.RightHand)r
   const dd=Math.hypot(tx,ty,tz);if(dd>1.9)return false;
   if(dd<1.1){for(const n of R.names){R.P[n].x+=tx;R.P[n].y+=ty;R.P[n].z+=tz;R.Q[n].x+=tx;R.Q[n].y+=ty*.5;R.Q[n].z+=tz;}}   // the grip takes the fall: the hands go to the edge and the body comes up short under them
   else for(const pn of pins){pn[2]=pn[1].clone();pn[1].copy(R.P[pn[0]]);}   // (Build 216) a lunge for an edge further off: the hands are carried to it over a moment and the body swings in under them
-  R.pins=pins;R.reflex=0;R.tone=.45;f.knocked=99;f.hang={L,t:0,climb:-1};sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.55,f.voice);sThud(pins[0][1],.35);return true;}
+  R.pins=pins;R.reflex=0;R.tone=.45;f.knocked=99;f.hang={L,t:0,climb:-1};hangSolid(R,L);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.55,f.voice);sThud(pins[0][1],.35);return true;}
 function tryHang(f,auto){if(f.stamina<6||f.hang)return false;const L=auto?findLedge(f.pos.x,f.pos.z,f.pos.y-.4,f.pos.y+2.3,true):findLedge(f.pos.x,f.pos.z,f.pos.y+.9,f.pos.y+2.3);if(!L)return false;f.fallT=null;f.knockdown(99,V(0,0,0),f.chest.clone());if(!f.ragdoll)return false;f.ragdoll.reflex=0;if(!hangStart(f,L)){f.knocked=.8;return false;}f.hang.auto=!!auto;f.pitT=null;if(f.isPlayer)toast(auto?'Hanging on · W climb up · S let go':'Hanging on · W climb up · let go of G to drop');return true;}
 function tryHangRag(f,auto){if(f.stamina<6||(f._hangT||0)>simTime)return false;const R=f.ragdoll,h=R.P.Head,c=R.P.Spine2;if(!h||!c)return false;const vy=c.y-R.Q.Spine2.y;if(vy>-.002)return false;   // only while falling
   const L=findLedge(c.x,c.z,c.y-.2,c.y+1.1,true);if(!L){f._hangT=simTime+.12;return false;}if(!hangStart(f,L))return false;f.hang.auto=!!auto;f.pitT=null;if(f.isPlayer)toast(auto?'Hanging on · W climb up · S let go':'Hanging on · W climb up · let go of G to drop');return true;}
 function hangStep(f,h){const H=f.hang,R=f.ragdoll;if(!R||!f.alive){if(R)R.pins=null;f.hang=null;return false;}H.t+=h;f.knocked=Math.max(f.knocked,1);
   const g=f.isPlayer?(f.hang.auto?!(input.keys.KeyS||input.keys.KeyC):!!input.keys.KeyG):f.remote&&f.rin?!!(f.rin.k&512):true,w=f.isPlayer?!!input.keys.KeyW:f.remote&&f.rin?!!(f.rin.k&1):false;
-  if(H.climb<0){f.useStamina(3.2*h);if(!g||f.stamina<=0){R.pins=null;f.hang=null;f.knocked=1.1;R.tone=.22;f._hangT=simTime+(f.stamina<=0?1:3);if(PIT&&R.P.Hips&&R.P.Hips.y<-.3&&inPit(R.P.Hips.x,R.P.Hips.z,0))f.pitT=simTime;return false;}if(w&&f.stamina>10){H.climb=0;f.useStamina(10);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.6,f.voice);}return false;}
-  H.climb+=h;const L=H.L,u=Math.min(1,H.climb/1.15),k=1-Math.exp(-7*h);
-  const tc=V(L.x+L.dx*(.05+.45*u),L.y-.35+.75*u,L.z+L.dz*(.05+.45*u)),th=V(L.x+L.dx*(-.25+.65*u),L.y-.85+1.0*u,L.z+L.dz*(-.25+.65*u));
-  for(const [n,t,kk] of [['Spine2',tc,1],['Neck',tc.clone().setY(tc.y+.18),.8],['Head',tc.clone().setY(tc.y+.3),.6],['Spine1',th.clone().lerp(tc,.5),.8],['Hips',th,.7]])if(R.P[n])R.P[n].lerp(t,k*kk);
-  if(u>.55&&R.pins)R.pins=null;   // over the edge: the hands let go and push
-  if(u>=1){f.hang=null;f.knocked=.35;R.tone=.4;R.pins=null;   // up: the body is laid on the deck clear of the edge, so it gets up on top and not half over the drop
-    const H=R.P.Hips,sh=Math.max(0,.62-((H.x-L.x)*L.dx+(H.z-L.z)*L.dz));for(const n of R.names){const q=R.P[n],o=R.Q[n];q.x+=L.dx*sh;q.z+=L.dz*sh;o.x+=L.dx*sh;o.z+=L.dz*sh;const along=(q.x-L.x)*L.dx+(q.z-L.z)*L.dz;if(along<.12){const k=.12-along;q.x+=L.dx*k;q.z+=L.dz*k;o.copy(q);}if(q.y<L.y+.04){q.y=L.y+.04;o.y=q.y;}}
-    f.pos.set(L.x+L.dx*.62,L.y,L.z+L.dz*.62);f._hangT=simTime+2;}
+  if(H.climb<0){const L=H.L,k=1-Math.exp(-2.2*h),at=(al,y)=>_hgV.set(L.x+L.dx*al,L.y+y,L.z+L.dz*al);   // hanging: the body settles under the hands, facing what it hangs from, and its swinging dies down
+    if(!R.pins||!R.pins[0][2]){for(const [n,al,y,kk] of [['Spine2',-.15,-.44,1],['Hips',-.17,-.96,1],['Head',-.12,-.2,.6],['LeftFoot',-.15,-1.78,.5],['RightFoot',-.15,-1.78,.5]])if(R.P[n]){at(al,y);if(n==='LeftFoot'){_hgV.x+=L.dz*.1;_hgV.z-=L.dx*.1;}else if(n==='RightFoot'){_hgV.x-=L.dz*.1;_hgV.z+=L.dx*.1;}R.P[n].lerp(_hgV,k*kk);}
+      for(const n of R.names){const p=R.P[n],q=R.Q[n];q.x+=(p.x-q.x)*.03;q.z+=(p.z-q.z)*.03;}}
+    hangSolid(R,H.L);f.useStamina(3.2*h);if(!g||f.stamina<=0){R.pins=null;f.hang=null;f.knocked=1.1;R.tone=.22;f._hangT=simTime+(f.stamina<=0?1:3);if(PIT&&R.P.Hips&&R.P.Hips.y<-.3&&inPit(R.P.Hips.x,R.P.Hips.z,0))f.pitT=simTime;return false;}if(w&&f.stamina>10){H.climb=0;f.useStamina(10);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.6,f.voice);}return false;}
+  /* (Build 228) the climb is a mantle in four moves, with the hands on the edge until the chest is over it: pull up, chest over onto the deck, a knee and the hips up,
+     then crawl clear. It used to float the body up to a crouch in the air and then set it down on the deck, legs and all, through the boards */
+  H.climb+=h;const L=H.L,u=H.climb/1.5,k=1-Math.exp(-9*h);
+  const kf=(K)=>{let i=0;while(i<K.length-2&&u>K[i+1][0])i++;const a=K[i],b=K[i+1],t=clamp((u-a[0])/(b[0]-a[0]),0,1),e=t*t*(3-2*t);return [a[1]+(b[1]-a[1])*e,a[2]+(b[2]-a[2])*e];};
+  const at=(al,y,o)=>(o||V()).set(L.x+L.dx*al,L.y+y,L.z+L.dz*al);
+  const C=kf([[0,-.14,-.42],[.4,-.13,.2],[.7,.24,.16],[1,.45,.14],[1.3,.58,.14]]),Hp=kf([[0,-.16,-.95],[.4,-.16,-.34],[.7,-.15,.0],[.85,-.11,.16],[1,.1,.13],[1.3,.22,.13]]);   // (ends no further in than a narrow bridge allows: getting up carries him another half metre)
+  const tg=[['Spine2',at(C[0],C[1]),1],['Neck',at(C[0]+.14,C[1]+.1),.8],['Head',at(C[0]+.24,C[1]+.16),.6],['Spine1',at((C[0]+Hp[0])/2,(C[1]+Hp[1])/2),.8],['Hips',at(Hp[0],Hp[1]),.9]];
+  if(u>.62){const kn=kf([[.62,-.18,-.4],[.85,-.14,.2],[1,-.02,.16],[1.3,.2,.13]]),ft=kf([[.62,-.2,-.8],[.9,-.24,.05],[1.05,-.2,.16],[1.3,-.05,.13]]);   // the legs are drawn up outside the edge and come over it after the hips
+    for(const sd of ['Left','Right']){const o=sd==='Left'?.09:-.09,lx=L.dz*o,lz=-L.dx*o,d=sd==='Left'?0:.12;const a=at(kn[0],kn[1]-d*.5),b2=at(ft[0],ft[1]-d);a.x+=lx;a.z+=lz;b2.x+=lx;b2.z+=lz;tg.push([sd+'Leg',a,.6],[sd+'Foot',b2,.5]);}}
+  for(const [n,t,kk] of tg)if(R.P[n])R.P[n].lerp(t,k*kk);
+  if(u>.72&&R.pins)R.pins=null;   // over the edge: the hands let go and push
+  hangSolid(R,L);
+  if(u>=1.3){f.hang=null;f.knocked=.35;R.tone=.4;R.pins=null;   // up: lying on the deck clear of the edge, so it gets up on top and not half over the drop
+    for(const n of R.names){const q=R.P[n],o=R.Q[n];const along=(q.x-L.x)*L.dx+(q.z-L.z)*L.dz;if(along<.12){const k=.12-along;q.x+=L.dx*k;q.z+=L.dz*k;}if(q.y<L.y+.04)q.y=L.y+.04;o.copy(q);}
+    f.pos.set(L.x+L.dx*.4,L.y,L.z+L.dz*.4);f._hangT=simTime+2;}
   return false;}
+/* (Build 228) nothing of a hanging or climbing body passes through what it hangs from: the edge is a slab (a bridge's boards, the lip of a floor); a point in it leaves by its
+   top if it is nearly over, else by its face. The hands are on the edge and are left alone */
+const _hgV=V();
+function hangSolid(R,L){const r=.09;for(const n of R.names){if(R.pins&&(n==='LeftHand'||n==='RightHand'||n==='LeftHandMiddle1'||n==='RightHandMiddle1'))continue;const p=R.P[n],q=R.Q[n],al=(p.x-L.x)*L.dx+(p.z-L.z)*L.dz;if(al<=-r)continue;const dy=p.y-L.y;if(dy>=r||dy<-.36)continue;
+    if(dy>-.05&&al>.03){p.y=L.y+r;if(q.y>p.y)q.y=p.y;}else{const k=al+r;p.x-=L.dx*k;p.z-=L.dz*k;q.x-=L.dx*k;q.z-=L.dz*k;const va=(p.x-q.x)*L.dx+(p.z-q.z)*L.dz;if(va>0){q.x+=L.dx*va;q.z+=L.dz*va;}}}}
 function cryptTrapOpen(t){if(t.open)return;t.open=true;const [x,z]=t.ax?[t.a0+t.len/2,t.m]:[t.m,t.a0+t.len/2];_la.set(x,.1,z);sfx('crush',_la,.7,1.1,0,false);noiseBurstAt(_la,.5,'bandpass',300,3,.35);
   if(t.flags){for(const c of t.cracks)t.g.remove(c);for(const fm of t.flags){fm.userData.vy=rand(-.8,0);fm.userData.av=V(rand(-3,3),rand(-1,1),rand(-3,3));fm.userData.fall=true;}spawnDust(_la.set(x,.1,z),26,1.1,.6);}   // (Build 218) the flags break and drop into the pit, they don't vanish
   else{for(const b of t.g.children)for(let i=0;i<2;i++)shardAdd(MATS.cryptRot,'wood',_v.set(b.position.x+rand(-.5,.5),.05,b.position.z+rand(-.5,.5)),_t3.set(rand(-1,1),rand(.3,1.6),rand(-1,1)),1.2);world.remove(t.g);}if(NET.mode==='host')netEv(['CT',C_trapI(t)]);}
@@ -3969,7 +3987,7 @@ function buildPit(){
      its foot clear of the stakes */
   {const L=6.35,h=PIT.d,a=Math.sqrt(L*L-h*h);let best=null,bs=-1;for(const a0 of [Math.PI/2,-Math.PI/2,Math.PI/2+.35,Math.PI/2-.35,-Math.PI/2+.35,-Math.PI/2-.35]){const nx=-Math.cos(a0),nz=-Math.sin(a0),fx=PIT.x+Math.cos(a0)*(PIT.r-a-.05),fz=PIT.z+Math.sin(a0)*(PIT.r-a-.05);
       let m=9;for(const [x,z] of PIT.spikes)for(let t=0;t<=1;t+=.25){const px=fx-nx*a*t,pz=fz-nz*a*t;m=Math.min(m,Math.hypot(x-px,z-pz)/(t<.3?1:1.6));}if(m>bs){bs=m;best=[fx,fz,nx,nz];}}
-    if(best){const d=ladderAdd(best[0],best[1],0,L);ladderStand(d,best[0],best[1],best[2],best[3],h,-PIT.d);d.fixed=true;PIT.ladder=d;   /* spiked to the wall: it can't be knocked down or taken, or a man down there would be stuck for good */}}
+    if(best&&window.__pitLadder){const d=ladderAdd(best[0],best[1],0,L);ladderStand(d,best[0],best[1],best[2],best[3],h,-PIT.d);d.fixed=true;PIT.ladder=d;   /* (Build 228: gone, the player's call)   /* spiked to the wall: it can't be knocked down or taken, or a man down there would be stuck for good */}}
   // the yard walls, with a gate, and the wooden fences inside them
   for(const [x,z,ry,len] of [[0,W+.4,0,2*W+1.6],[0,-W-.4,0,2*W+1.6],[W+.4,0,Math.PI/2,2*W+1.6],[-W-.4,0,Math.PI/2,2*W+1.6]]){
     kitWall('wall_thin_straight_01',x,z,!ry,len,wallH+.6,1.1,4,g=>{const m=new THREE.Mesh(boxUV(len,wallH,.8,2.5),MATS.lime);m.rotation.y=ry;m.position.y=wallH/2;g.add(m);});}   // scanned castle wall
@@ -6590,7 +6608,9 @@ class Ragdoll{
           qa.x-=rx*c*.5;qa.y-=ry*c*.5;qa.z-=rz*c*.5;qb.x+=rx*c*.5;qb.y+=ry*c*.5;qb.z+=rz*c*.5;}}
       for(const [a,b,l] of this.mins){const A=this.P[a],B=this.P[b];_rv.subVectors(B,A);const d=_rv.length()||1e-6;if(d<l){const k=(d-l)/d*.5;A.addScaledVector(_rv,k);B.addScaledVector(_rv,-k);}}
       if(this.lim)this.limits(it);
-      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);millWall(p,r);if(CRYPT)cryptWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under?-1:Math.min(p.y,q0.y)-r+.03);if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
+      FLOOR_TOL=.12;for(const n of this.names){const p=this.P[n],r=RD_R[n]||.055;pitWall(p,r);shipWall(p,r);sinkWall(p,r);millWall(p,r);if(CRYPT)cryptWall(p,r);if(p.y<.3&&grateSlab(p,r)){const q=this.Q[n];q.x=p.x-(p.x-q.x)*.85;q.z=p.z-(p.z-q.z)*.85;}const q0=this.Q[n],gy=groundY(p.x,p.z,this.under&&Math.min(p.y,q0.y)<r-.03?-1:Math.min(p.y,q0.y)-r+.03);
+        if(this.under&&PIT&&!PIT.down&&q0.y<-.06-r&&p.y>-.06-r&&p.y<.1&&groundY(p.x,p.z,.3)>-.02){p.y=-.06-r;if(q0.y>p.y)q0.y=p.y;}   /* (Build 228) the bridge's boards are solid both ways: a part of a body that has gone below still rests on them if it is above them, and one below can't come up through them (it used to pass through freely once the hips were under the deck) */
+        if(p.y<gy+r){const q=this.Q[n];   /* (judged from where it was too: a part coming up from under the deck isn't put on top of it) */if(gy+r-p.y>.05)q.y=gy+r;p.y=gy+r;q.x=p.x-(p.x-q.x)*.82;q.z=p.z-(p.z-q.z)*.82;}}   // wall first, then floor; a big correction never becomes a launch
       FLOOR_TOL=.45;
       if(PIT){let deep=false;for(const n of this.names)if(this.P[n].y<-.3){deep=true;break;}   // half over the lip with the rest down the shaft: slide in
         if(deep)for(const n of this.names){const p=this.P[n];if(p.y>-.05&&p.y<.3){const dx=PIT.x-p.x,dz=PIT.z-p.z,d=Math.hypot(dx,dz);if(d<PIT.r+.5&&d>PIT.r-.45){const q=this.Q[n],ob=onBridge(p.x,p.z),mx=ob?0:dx/d*.004,mz=ob?0:dz/d*.004;p.x+=mx;p.z+=mz;q.x+=mx;q.z+=mz;}/* off the lip inward, off the bridge sideways */}}}
@@ -6899,7 +6919,7 @@ function propBreak(p,dir,by){if(p&&p.kind==='plank'&&PIT)navDirty(PIT.x-PIT.r-1,
     PIT.integ-=.1;if(maxRun>=4||n>=P.length*.4||PIT.integ<=0)bridgeCollapse(dir);}}
 // weight on the bridge wears it: running, landing and bodies lying on it crack the boards under them (host only), and it creaks as it goes
 function bridgeLoad(h){if(!PIT||PIT.down||!PIT.planks||NET.mode==='client')return;
-  for(const f of fighters){const x=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.x:f.pos.x,z=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.z:f.pos.z;if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r)continue;
+  for(const f of fighters){const x=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.x:f.pos.x,z=f.ragdoll&&f.ragdoll.P.Hips?f.ragdoll.P.Hips.z:f.pos.z;if(Math.abs(z-PIT.z)>=PIT.bw||Math.abs(x-PIT.x)>PIT.r)continue;if(f.hang||(f._hangT||0)>simTime-2)continue;   /* (Build 228) a man hauling himself up, and for a few seconds after, doesn't wear the boards: lying on them as he came over broke them under him and he fell straight back through */
     const sp=Math.hypot(f.vel.x,f.vel.z),load=f.ragdoll?(f.alive?1.1:.8):sp>3?.9:sp>1?.3:.08,arm=Object.values(f.armor||{}).filter(Boolean).length;
     const k=Math.round((x-PIT.p0)/.19);for(const j of [k-1,k,k+1]){const p=PIT.planks[j];if(!p||p.broken)continue;p.hp-=h*load*(1+.25*arm)*(j===k?1:.4);PIT.integ-=h*load*.004;
       if(p.hp<1.5&&Math.random()<h*2){sThud(V(p.x,0,p.z),.25);p.jig=.15;}
@@ -8330,11 +8350,11 @@ class Fighter{
         {const vh=(R.P.Hips.y-R.Q.Hips.y)/h;if(hy>-PIT.d+1.2){this._pitLand=false;this._pitV=Math.min(this._pitV||0,vh);}else if(this._pitLand)this._pitV=0;}   // the fastest the hips came down on the way (feet and hands land first and slow them in the last moment)
         if(hy<-PIT.d+.75){let hit=null;for(const n of ['Hips','Spine1','Spine2','Head']){const p=R.P[n],q=R.Q[n];if(!p||!q||(p.y-q.y)/h>-4)continue;for(const [x,z,ht] of PIT.spikes)if(Math.hypot(p.x-x,p.z-z)<.12&&p.y<-PIT.d+ht+.12){hit=[n,p];break;}if(hit)break;}
           if(hit&&!this._pitLand){this._pitLand=true;this._pitV=0;R.Q[hit[0]].copy(hit[1]);R.pin=hit[0];R.pinP=hit[1].clone();this._pitPin=simTime+rand(2,3.5);spawnBlood(hit[1],V(0,2.2,0),14,1.4,1.3);sThud(R.P.Hips,1.2);   /* run through: a terrible wound, not always the end; held on the stake a few seconds, then the body slides off it */
-            this.addBleed(2.2,25);this.damage(hit[0]==='Head'?95:48,this.lastHitBy,'impaled on the stakes');if(!this.alive)return;this.pitT=null;this.knocked=Math.max(this.knocked||0,4);if(this.isPlayer)toast('Run through on a stake');}
+            this.die(this.lastHitBy,'impaled on the stakes',null);return;}   /* (Build 228, the player's call) the stakes kill: whoever comes down on one stays on it */
           if(this._pitPin&&simTime>this._pitPin){this._pitPin=0;if(R.pin)R.pin=null;}
           if(hy<-PIT.d+.32&&!this._pitLand){this._pitLand=true;const vy=Math.min(0,this._pitV||0);this._pitV=0;
-            if(vy<-3){const dmg=clamp((-vy-5)*4,4,40);sThud(R.P.Hips,1.2);spawnDust(R.P.Hips.clone().setY(-PIT.d+.1),14,1,.5);this.damage(dmg,this.lastHitBy,'fell into the pit');if(!this.alive)return;if(this.isPlayer)toast('Down the pit · climb out by the ladder');}
-            this.pitT=null;this.knocked=Math.min(this.knocked||0,rand(2.2,3.2));R.reflex=.6;}}}
+            sThud(R.P.Hips,1.2);spawnDust(R.P.Hips.clone().setY(-PIT.d+.1),14,1,.5);spawnBlood(R.P.Hips,V(0,1.6,0),10,1.2,1.2);this.die(this.lastHitBy,'fell on the stakes',null);return;}}   /* (Build 228) the bottom of the shaft is death again, as the player wants it: nobody gets up down there and there is no ladder. Hanging from the edge or the bridge is the only way back */
+        this._pitIn=(hy<-2.4&&!this.hang)?(this._pitIn||0)+h:0;if(this._pitIn>8){this.die(this.lastHitBy,'fell into the pit',null);return;}}
       if(this.alive&&(this.downed||this.bleeds&&this.bleeds.length)){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<10?this.lastHitBy:null,'burned alive',null);return;}}
       if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&(!this.downed||grabbedBy(this).length)&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();   /* (Build 135) a bot that's down and dying doesn't keep thrashing to get up */
@@ -9408,10 +9428,27 @@ function sliceMeshes(model,clone,bone,croot,cutT=0){if(window.__noSlice)return;c
       let dd=null;if(cutT){   // through the bone above: a plane across it in the bind pose, at the cut; what lies beyond it and rides on that bone goes too
         const bi=bones.findIndex(b=>b&&b.name===bone.name),pi=bones.findIndex(b=>b&&b.name===par);if(bi>=0&&pi>=0){const bmi=new THREE.Matrix4().copy(m.bindMatrix).invert(),p0=V().setFromMatrixPosition(_slM.copy(m.skeleton.boneInverses[pi]).invert()).applyMatrix4(bmi),p1=V().setFromMatrixPosition(_slM.copy(m.skeleton.boneInverses[bi]).invert()).applyMatrix4(bmi),nn=p1.clone().sub(p0),L=nn.length();nn.multiplyScalar(1/L);
           const P=g.attributes.position;dd=new Float32Array(n);for(let i=0;i<n;i++){dd[i]=(P.getX(i)-p0.x)*nn.x+(P.getY(i)-p0.y)*nn.y+(P.getZ(i)-p0.z)*nn.z-L*cutT;const j=si.getX(i),k2=si.getY(i),l=si.getZ(i),q=si.getW(i);let t=w[i];if(bones[j]&&bones[j].name===par)t+=sw.getX(i);if(bones[k2]&&bones[k2].name===par)t+=sw.getY(i);if(bones[l]&&bones[l].name===par)t+=sw.getZ(i);if(bones[q]&&bones[q].name===par)t+=sw.getW(i);w[i]=t;}}}
-      const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2;(w[a]+w[b]+w[d]>=1.5&&(!dd||dd[a]+dd[b]+dd[d]>0)?part:keep).push(a,b,d);}
-      const T=n>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part),ix:g.index};let e=CUT_CACHE.get(g);if(!e)CUT_CACHE.set(g,e={});e[key]=cut;}
+      const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];
+      /* (Build 228) a cut through the middle of a limb is a clean one: a triangle the plane passes through is divided along it (new vertices on the plane, shared by both sides),
+         instead of going whole to one side, which left the cloth and skin ending in saw teeth */
+      let clip=!!dd&&!window.__noClip;if(clip)for(const a in g.attributes)if(g.attributes[a].isInterleavedBufferAttribute)clip=false;
+      const ex=[],em=new Map();let nn2=n;const mid=(a,b)=>{const k=a<b?a*4194304+b:b*4194304+a;let v=em.get(k);if(v==null){v=nn2++;em.set(k,v);const t=dd[a]/(dd[a]-dd[b]);ex.push(a,b,t);}return v;};
+      for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2,on=w[a]+w[b]+w[d]>=1.5;
+        if(!on||!dd){(on?part:keep).push(a,b,d);continue;}
+        const sa=dd[a]>0,sb=dd[b]>0,sd=dd[d]>0,c3=sa+sb+sd;
+        if(c3===3){part.push(a,b,d);continue;}if(c3===0){keep.push(a,b,d);continue;}
+        if(!clip){(dd[a]+dd[b]+dd[d]>0?part:keep).push(a,b,d);continue;}
+        const lone=c3===1,u=(lone?sa:!sa)?a:(lone?sb:!sb)?b:d,v1=u===a?b:u===b?d:a,v2=u===a?d:u===b?a:b,p=mid(u,v1),q=mid(u,v2);   // u alone on its side; (u,v1,v2) keeps the winding
+        (lone?part:keep).push(u,p,q);(lone?keep:part).push(p,v1,v2,p,v2,q);}
+      let attrs=null,morph=null;if(ex.length){const ne=ex.length/3;attrs={};
+        const grow=at=>{const A=at.array,nb=new A.constructor((n+ne)*at.itemSize);nb.set(A.subarray(0,n*at.itemSize));const o=new THREE.BufferAttribute(nb,at.itemSize,at.normalized);return o;};
+        for(const nm in g.attributes){const at=g.attributes[nm],o=grow(at),is=at.itemSize,rig=nm==='skinIndex'||nm==='skinWeight';
+          for(let e=0;e<ne;e++){const a=ex[e*3],b=ex[e*3+1],t=ex[e*3+2],v=n+e;if(rig){const s2=t<.5?a:b;for(let c=0;c<is;c++)o.setComponent(v,c,at.getComponent(s2,c));}else for(let c=0;c<is;c++)o.setComponent(v,c,at.getComponent(a,c)*(1-t)+at.getComponent(b,c)*t);}
+          attrs[nm]=o;}
+        if(g.morphAttributes){morph={};for(const nm in g.morphAttributes)morph[nm]=g.morphAttributes[nm].map(at=>{const o=grow(at),is=at.itemSize;for(let e=0;e<ne;e++){const a=ex[e*3],b=ex[e*3+1],t=ex[e*3+2];for(let c=0;c<is;c++)o.setComponent(n+e,c,at.getComponent(a,c)*(1-t)+at.getComponent(b,c)*t);}return o;});}}
+      const T=nn2>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part),ix:g.index,attrs,morph};let e=CUT_CACHE.get(g);if(!e)CUT_CACHE.set(g,e={});e[key]=cut;}
     if(!cut.part.length){c.visible=false;continue;}   // nothing of this mesh is on the severed part
-    const mk=arr=>{const q=new THREE.BufferGeometry();for(const a in g.attributes)q.setAttribute(a,g.attributes[a]);q.morphAttributes=g.morphAttributes;q.morphTargetsRelative=g.morphTargetsRelative;q.setIndex(new THREE.BufferAttribute(arr,1));q.boundingSphere=g.boundingSphere;q.boundingBox=g.boundingBox;q.userData={derived:true};return q;};
+    const mk=arr=>{const q=new THREE.BufferGeometry(),AT=cut.attrs||g.attributes;for(const a in AT)q.setAttribute(a,AT[a]);q.morphAttributes=cut.morph||g.morphAttributes;q.morphTargetsRelative=g.morphTargetsRelative;q.setIndex(new THREE.BufferAttribute(arr,1));q.boundingSphere=g.boundingSphere;q.boundingBox=g.boundingBox;q.userData={derived:true};return q;};
     m.geometry=mk(cut.keep);c.geometry=mk(cut.part);
     const sk=c.skeleton;if(sk&&!done.has(sk)){done.add(sk);const ri=sk.bones.findIndex(b=>b&&b.name===bone.name);sk.boneInverses=sk.boneInverses.slice();/* (a cloned skeleton shares this array with the body it was cloned from) */if(ri>=0)for(let i=0;i<sk.bones.length;i++)if(sk.bones[i]&&!sub.has(sk.bones[i].name)){sk.bones[i]=sk.bones[ri];sk.boneInverses[i]=sk.boneInverses[ri];}}}}
 function spawnDebris(f,boneName,vel,cutT=0){
@@ -9867,9 +9904,9 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
   /* (Build 222) a body cut in two: a heavy edge swung level through the waist with everything behind it. Rare: an axe, a greatsword, a poleaxe
      or a falchion at full swing on an unarmoured or lightly armoured man (resistance 13 against a leg's 12.5, but with no credit for where on the body it lands; armour counted as for limbs) */
-  let bis=false;if(mode==='cut'&&W.sever>0&&!glance&&cap.zone==='torso'&&!B.noSever&&!B.undead&&!B.dummy&&B.bones.Hips&&B.bones.Spine2&&!B.bones.Spine1.userData.severed){
+  let bis=false;if(mode==='cut'&&W.sever>0&&!glance&&cap.zone==='torso'&&!B.noSever&&!B.undead&&(!B.dummy||window.__bisDummy)&&B.bones.Hips&&B.bones.Spine2&&!B.bones.Spine1.userData.severed){
     _ov.setFromMatrixPosition(B.bones.Hips.matrixWorld);_ow.setFromMatrixPosition(B.bones.Spine2.matrixWorld).sub(_ov);const tW=_v.subVectors(P,_ov).dot(_ow)/(_ow.lengthSq()||1),lvl=Math.abs(dir.dot(_ow.normalize()));
-    if(tW>.1&&tW<.85&&lvl<.5){const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF)/Math.max(.3,sevPlace(cap,P)),res=(window.__bisRes||13)*(1+prot*(1-pen)*2.2)*(.7+.3*clamp(B.hp/100,0,1));if(window.__sevLog)window.__sevLog.push(['waist',+cp.toFixed(2),+res.toFixed(2)]);bis=cp>res;}}
+    if(tW>.1&&tW<.85&&lvl<.5){const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF)/Math.max(.3,sevPlace(cap,P)),res=(window.__bisRes||10.5)*(1+prot*(1-pen)*2.2)*(.7+.3*clamp(B.hp/100,0,1));if(window.__sevLog)window.__sevLog.push(['waist',+cp.toFixed(2),+res.toFixed(2)]);bis=cp>res;}}
   if(B.undead==='skel'&&!sev&&!glance&&cap.sever&&cap.zone!=='torso'&&cap.zone!=='head'&&(mode==='blunt'?dmg>14:mode==='cut'?dmg>16:false))sev=cap.zone==='neck'?'Head':cap.sever;   // (Build 214) dry bones: a fair blow knocks a limb or the skull clean off
   if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
