@@ -430,7 +430,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=237;
+const BUILD=238;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -863,7 +863,7 @@ function navBuild(){const cs=NAV.cs,r=NAV.r,M=MAP;let full=NAV.key!==mapKey||!NA
   if(PIT){const R=PIT.r+.5;rect(PIT.x-R,PIT.x+R,PIT.z-R,PIT.z+R,(x,z)=>inPit(x,z,-.38));}   // (the bridge stays open: it's the way across, and where the Pit's fights should happen)
   if(MILL)rect(-M,M,-M,M,(x,z)=>millGround(x,z,0)<-.2||millGround(x+.35,z,0)<-.2||millGround(x-.35,z,0)<-.2||millGround(x,z+.35,0)<-.2||millGround(x,z-.35,0)<-.2);
   if(SHIP)rect(-M,M,-M,M,(x,z)=>!shipIn(x,z,.45));
-  if(CRYPT&&(CRYPT.hole||CRYPT.stairs&&CRYPT.stairs.length||CRYPT.pits.length||CRYPT.gaps&&CRYPT.gaps.length)){const C=CRYPT,bad=(x,z)=>{const h=C.hole;for(const s of C.stairs||[])if(Math.abs(x-s.x)<CR.CW+.3&&z>s.z0-.2&&z<s.zd+.2&&(s.yb<0||z<s.zd-.4))return true;if(h&&(x-h.x)**2+(z-h.z)**2<h.r*h.r&&x-h.x>-.3)return true;for(const q of C.pits)if((x-q.x)**2+(z-q.z)**2<q.r*q.r)return true;for(const t of C.gaps||[]){const u=(t.ax?x:z)-t.a0;if(u>-.05&&u<t.len+.05&&Math.abs((t.ax?z:x)-t.m)<CR.CW+.3)return true;}return false;};rect(-M,M,-M,M,(x,z)=>bad(x,z)||bad(x+.35,z)||bad(x-.35,z)||bad(x,z+.35)||bad(x,z-.35));}
+  if(CRYPT&&(CRYPT.hole||CRYPT.stairs&&CRYPT.stairs.length||CRYPT.pits.length||CRYPT.gaps&&CRYPT.gaps.length)){const C=CRYPT,bad=(x,z)=>{const h=C.hole;for(const s of C.stairs||[])if(Math.abs(x-s.x)<CR.CW+.3&&z>s.z0-.2&&z<s.zd+.2&&(s.yb<0||z<s.zd-.4))return true;if(h&&(x-h.x)**2+(z-h.z)**2<h.r*h.r&&x-h.x>-.3)return true;for(const q of C.pits)if((x-q.x)**2+(z-q.z)**2<q.r*q.r)return true;for(const q of C.sunks)if(Math.abs(x-q.x)<q.ix+.25&&Math.abs(z-q.z)<q.iz+.25&&Math.abs(z-q.z)>q.bw-.2)return true;for(const t of C.gaps||[]){const u=(t.ax?x:z)-t.a0;if(u>-.05&&u<t.len+.05&&Math.abs((t.ax?z:x)-t.m)<CR.CW+.3)return true;}return false;};rect(-M,M,-M,M,(x,z)=>bad(x,z)||bad(x+.35,z)||bad(x-.35,z)||bad(x,z+.35)||bad(x,z-.35));}
   // cells beside something solid cost more, so a path keeps a little off the walls where it can
   const cl=NAV.cl;for(let j=Math.max(1,J0-1);j<=Math.min(n-2,J1+1);j++)for(let i=Math.max(1,I0-1);i<=Math.min(n-2,I1+1);i++){const k=j*n+i;cl[k]=blk[k]?0:(blk[k-1]||blk[k+1]||blk[k-n]||blk[k+n]||blk[k-n-1]||blk[k-n+1]||blk[k+n-1]||blk[k+n+1])?2:1;}
 }
@@ -1210,15 +1210,15 @@ function leanTo(x,z,w,ry){const c=Math.cos(ry),sn=Math.sin(ry),P=(u,v)=>[x+u*c+v
 // Instanced, no collision; ok(x,z) says where clutter may go, near(x,z) gives 0..1 for how close to an edge it is
 const CLUT={};
 function clutter(n,ok,near,seed=5){let sd=seed;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
-  if(!CLUT.rock){const g=new THREE.DodecahedronGeometry(1,0),p=g.attributes.position;for(let i=0;i<p.count;i++){const k=.75+((Math.sin(p.getX(i)*13.1+p.getY(i)*7.7+p.getZ(i)*5.3)+1)*.2);p.setXYZ(i,p.getX(i)*k,p.getY(i)*k*.6,p.getZ(i)*k);}g.computeVertexNormals();CLUT.rock=g;
-    CLUT.rockM=std({map:TX.lime,color:0xb8ad98,roughness:.95});
+  if(!CLUT.rock){/* (Build 238) rounded pebbles lying half in the ground, the gravel's own colour: the flat-faced pale lumps read as crumpled paper */const g=mergeVertices(new THREE.IcosahedronGeometry(1,1).deleteAttribute('uv').deleteAttribute('normal')),p=g.attributes.position;for(let i=0;i<p.count;i++){const k=.82+((Math.sin(p.getX(i)*5.1+p.getY(i)*3.7+p.getZ(i)*4.3)+1)*.12);p.setXYZ(i,p.getX(i)*k,p.getY(i)*k*.5,p.getZ(i)*k*.8);}g.computeVertexNormals();{const u=new Float32Array(p.count*2);for(let i=0;i<p.count;i++){u[i*2]=p.getX(i)*.5+.5;u[i*2+1]=p.getZ(i)*.5+.5;}g.setAttribute('uv',new THREE.BufferAttribute(u,2));}CLUT.rock=g;
+    CLUT.rockM=std({map:TX.lime,color:0x8d8473,roughness:1});
     const c=mkCanvas(128,128),x=c.getContext('2d');for(let i=0;i<70;i++){const bx=64+(r()-.5)*90,h=50+r()*70,lean=(r()-.5)*40;x.strokeStyle=`hsl(${55+r()*30},${30+r()*25}%,${26+r()*22}%)`;x.lineWidth=2+r()*2;x.beginPath();x.moveTo(bx,128);x.quadraticCurveTo(bx+lean*.3,128-h*.5,bx+lean,128-h);x.stroke();}
     const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;CLUT.tuftM=std({map:t,alphaTest:.45,side:THREE.DoubleSide,roughness:1,color:0xb0a070});
     const a=new THREE.PlaneGeometry(1,1).translate(0,.5,0),b=a.clone().rotateY(Math.PI/2),c2=a.clone().rotateY(Math.PI/4);CLUT.tuft=mergeGeometries([a,b,c2]);}
   const rocks=new THREE.InstancedMesh(CLUT.rock,CLUT.rockM,n),tufts=new THREE.InstancedMesh(CLUT.tuft,CLUT.tuftM,n);let nr=0,nt=0;const m=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
   for(let i=0;i<n*6&&(nr<n||nt<n);i++){const x=(r()-.5)*2*MAP,z=(r()-.5)*2*MAP;if(!ok(x,z))continue;const ne=near(x,z);
     if(nt<n&&ne>.2&&r()<ne){const s=.22+r()*.3;e.set(0,r()*6.3,0);q.setFromEuler(e);m.compose(V(x,0,z),q,V(s,s*(.7+r()*.6),s));tufts.setMatrixAt(nt++,m);}
-    else if(nr<n&&r()<.6){const s=.025+r()*r()*.11;e.set(r()*.6,r()*6.3,r()*.6);q.setFromEuler(e);m.compose(V(x,s*.2,z),q,V(s,s,s));rocks.setMatrixAt(nr++,m);}}
+    else if(nr<n&&r()<.6){const s=.02+r()*r()*.065;e.set(r()*.25,r()*6.3,r()*.25);q.setFromEuler(e);m.compose(V(x,s*.08,z),q,V(s,s,s));rocks.setMatrixAt(nr++,m);}}
   rocks.count=nr;tufts.count=nt;rocks.receiveShadow=tufts.receiveShadow=true;rocks.castShadow=true;world.add(rocks);world.add(tufts);}
 // ---- real 3D models (CC0, Poly Haven, see CREDITS.md): photo-scanned props and scenery in assets/models, optimised to GLB with
 // WebP textures and meshopt geometry. placeModel puts a group in the world straight away and fills it when the model arrives;
@@ -3116,7 +3116,7 @@ function cryptPlan(depth,seed){let s=(seed*9301+depth*49297+11)%233280||7;const 
   const dist=new Map([[0,0]]),qu=[cells[0]];while(qu.length){const c=qu.shift();for(const q of c.links)if(!dist.has(q.k)){dist.set(q.k,dist.get(c.k)+1);qu.push(q);}}
   let ex=null;for(const c of cells)if(c.j===GH-1&&(!ex||dist.get(c.k)>dist.get(ex.k)))ex=c;   /* (Build 231) the way down is a stair out through the far wall of the far row, so the hall that has it is on that row */
   cells[0].type='start';cells[0].hx=cells[0].hz=3.7;ex.type='exit';ex.hx=ex.hz=5.2;ex.H=5.4;   /* (Build 213) the way down is the biggest room on the floor: a pillared hall round the hole the dead were cast into */
-  for(const c of cells){if(c.type!=='room')continue;const r=R();if(c.links.length>=2&&r<.18){c.type='node';c.hx=c.hz=1.6;c.H=2.7;}else if(depth>=3&&r>.7&&!c.links.includes(ex)){c.type='hall';c.hx=c.hz=4.6;c.H=4.3;}else c.kind=CRYPT_KINDS[(R()*CRYPT_KINDS.length)|0];}
+  for(const c of cells){if(c.type!=='room')continue;const r=R();if(c.links.length>=2&&r<.18){c.type='node';c.hx=c.hz=1.6;c.H=2.7;}else if(depth>=2&&r>.7&&!c.links.includes(ex)){c.type='hall';c.hx=c.hz=4.6;c.H=4.3;}else c.kind=CRYPT_KINDS[(R()*CRYPT_KINDS.length)|0];}
   if(CKINDS){let i=0;for(const c of cells)if(c.type==='room'||c.type==='hall'){c.type='room';c.hx=Math.min(c.hx,4.2);c.hz=Math.min(c.hz,4.2);c.H=3.2;c.kind=CKINDS[i++%CKINDS.length];}}else
   {const seen={};for(const c of cells)if(c.kind==='pit'||c.kind==='chapel'||c.kind==='slab'||c.kind==='cells'){if(seen[c.kind])c.kind='plain';seen[c.kind]=1;}}   // one of each of the special rooms a floor
   if(!CKINDS){   /* (Build 235) rooms where something happened, one of each at most: a last stand behind a barricade, a game of dice that ended with a knife, grave robbers caught by the roof; from the second floor a shrine with its people at prayer, and from the fourth, sometimes, a larder at a dead end with no light in it */
@@ -3135,6 +3135,8 @@ function cryptStairAt(x,z,m=.35){const C=CRYPT;if(C&&C.stairs)for(const s of C.s
 function cryptGround(x,z,y){const C=CRYPT;if(!C)return 0;
   {const s=cryptStairAt(x,z);if(s)return cryptStairY(s,z);}
   const h=C.hole;if(h){const dx=x-h.x,dz=z-h.z;if(dx*dx+dz*dz<h.r*h.r){if(y>-.12&&(dx<-.3||!h.gone&&Math.abs(dz)<.3))return 0;return -30;}}
+  for(const q of C.sunks){const lx=x-q.x,lz=z-q.z;if(Math.abs(lx)<q.ix&&Math.abs(lz)<q.iz){   /* (Build 238) a hall with a sunken floor: a walk round it at door level, a plank bridge across, two flights down */
+      if(y>-.5&&Math.abs(lz)<q.bw)return 0;for(const st of q.st){const u=(lx-st.x0)*st.dir;if(Math.abs(lz-st.z)<.58&&u>=0&&u<=st.len)return -q.dep*(u/st.len);}return -q.dep;}}
   for(const q of C.pits){const dx=x-q.x,dz=z-q.z,d2=dx*dx+dz*dz;if(d2<q.r*q.r){if(Math.abs(dx)<(q.rw||.6)&&dz>(q.r0||0))return -q.dep*(1-(dz-(q.r0||0))/(q.r-(q.r0||0)));return -q.dep;}}
   for(const t of C.traps){const u=(t.ax?x:z)-t.a0;if(u<0||u>t.len+t.rl||Math.abs((t.ax?z:x)-t.m)>CR.CW+.32)continue;if(!t.open&&y>-.12)return 0;return u<t.len?-t.dep:-t.dep*(1-(u-t.len)/t.rl);}
   return 0;}
@@ -3145,8 +3147,12 @@ function cryptWall(p,r){const C=CRYPT;if(!C)return;
   {const cl=cryptCeil(p.x,p.z);if(p.y>cl-r){p.y=cl-r;}}   // (Build 218) nothing goes up through the roof (a low passage's above all)
   if(p.y>-.05)return;
   const h=C.hole;if(h){const dx=p.x-h.x,dz=p.z-h.z,d=Math.hypot(dx,dz),m=h.r-r-.02;if(d>m&&d<h.r+1){p.x=h.x+dx/d*m;p.z=h.z+dz/d*m;}}
+  for(const q of C.sunks){const lx=p.x-q.x,lz=p.z-q.z;if(p.y<-.3&&Math.abs(lx)<q.ix+.7&&Math.abs(lz)<q.iz+.7){p.x=q.x+clamp(lx,-(q.ix-r-.02),q.ix-r-.02);p.z=q.z+clamp(lz,-(q.iz-r-.02),q.iz-r-.02);}}
   for(const q of C.pits){const dx=p.x-q.x,dz=p.z-q.z,d=Math.hypot(dx,dz),m=q.r-r-.02;if(d>m&&d<q.r+.8&&!(Math.abs(dx)<(q.rw||.6)&&dz>(q.r0||0))){p.x=q.x+dx/d*m;p.z=q.z+dz/d*m;}}
   for(const t of C.traps){const u=(t.ax?p.x:p.z)-t.a0;if(u>-.6&&u<r&&Math.abs((t.ax?p.z:p.x)-t.m)<CR.CW+.3){if(t.ax)p.x=t.a0+r;else p.z=t.a0+r;}}}
+function cryptSteer(f,wish){const C=CRYPT;if(!C||!C.sunks.length||f.pos.y>-.12||!wish)return;const T=f.ai&&f.ai.target;if(!T||!T.pos||T.pos.y<-.8)return;   // someone down in a sunken hall whose man is up on the walk: to the foot of the nearer flight and up it
+  for(const q of C.sunks){const lx=f.pos.x-q.x,lz=f.pos.z-q.z;if(Math.abs(lx)>q.ix+.3||Math.abs(lz)>q.iz+.3)continue;let best=null,bd=1e9;for(const st of q.st){const fx=st.x0+st.dir*st.len,d=(lx-fx)**2+(lz-st.z)**2;if(d<bd){bd=d;best=st;}}
+    const on=Math.abs(lz-best.z)<.45&&(lx-best.x0)*best.dir<best.len+.4,tx=on?best.x0-best.dir*.9:best.x0+best.dir*(best.len+.5),tz=best.z;wish.set(q.x+tx-f.pos.x,0,q.z+tz-f.pos.z);if(wish.lengthSq()>1e-4)wish.normalize();return;}}
 function cryptSoft(p){const S=CRYPT&&CRYPT.soft;return !!S&&(p.x-S.x)**2+(p.z-S.z)**2<S.r*S.r;}
 function inwardGeo(g){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}const n=g.attributes.normal;for(let i=0;i<n.count;i++)n.setXYZ(i,-n.getX(i),-n.getY(i),-n.getZ(i));return g;}
 function cryptCasket(x,z,ry){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;const W=1.25,Dp=.55,Hh=.42;
@@ -3406,7 +3412,7 @@ function shroudMat(){if(MATS.shroud)return MATS.shroud;const c=document.createEl
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;MATS.shroud=new THREE.MeshStandardMaterial({map:t,roughness:1,color:0xd9cfbc});return MATS.shroud;}
 function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,CW,CS,DW,DS}=CR;
   if(!MATS.cryptRot){MATS.cryptRot=MATS.woodPale.clone();MATS.cryptRot.color.setHex(0x5e5648);}
-  const C=CRYPT={depth:D,plan:PL,stairs:[],down:null,arr:null,coffins:[],swings:[],spikes:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null,finds:[],lampsX:[],cult:null,larder:null,blades:[],lootX:[],tomb:null,gate:null,moon:[]};
+  const C=CRYPT={depth:D,plan:PL,stairs:[],down:null,arr:null,coffins:[],swings:[],spikes:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null,finds:[],lampsX:[],cult:null,larder:null,blades:[],lootX:[],tomb:null,gate:null,moon:[],sunks:[]};
   const holed=(x0,x1,z0,z1,hx,hz,hr,y,key,up)=>{const sg=up?-1:1,sh=new THREE.Shape();sh.moveTo(x0,sg*z0);sh.lineTo(x1,sg*z0);sh.lineTo(x1,sg*z1);sh.lineTo(x0,sg*z1);sh.lineTo(x0,sg*z0);const hp=new THREE.Path();hp.absarc(hx,sg*hz,hr,0,Math.PI*2,true);sh.holes.push(hp);
     const g=new THREE.ShapeGeometry(sh,28);g.rotateX(up?-Math.PI/2:Math.PI/2);const uv=g.attributes.uv,q=g.attributes.position;for(let i=0;i<uv.count;i++)uv.setXY(i,q.getX(i)/2,q.getZ(i)/2);g.computeVertexNormals();if((g.attributes.normal.getY(0)>0)!==!!up){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}g.computeVertexNormals();}addGeo(key,g,T(0,y,0));};
   const well=(x,z,r,y0,y1,key='cryptWall')=>{const g=inwardGeo(new THREE.CylinderGeometry(r,r,y1-y0,28,1,true));scaleUV(g,6,(y1-y0)/2);addGeo(key,g,T(x,(y0+y1)/2,z));};
@@ -3495,6 +3501,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
      narrower span with ribs every couple of metres, heavy oak beams carrying boards, or the old flat slab on crossed ribs; rooms differ
      in height; halls carry round arches from pillar to pillar and out to the walls; corners have piers; corridors have a rib every few metres */
   for(const k of ['sigil','findSilver','findGilt','findLeather','findDark'])if(!MATS[k])MATS[k]=k==='sigil'?std({color:0x3f0805,roughness:.85}):k==='findSilver'?std({color:0xb4b2aa,metalness:.9,roughness:.36}):k==='findGilt'?std({color:0xb08a3a,metalness:.9,roughness:.4}):k==='findLeather'?std({color:0x4a3220,roughness:.8}):std({color:0x1a1513,roughness:.55});
+  for(const c of PL.cells)if(c.type==='hall'&&!C.sunks.length&&(R()<.7||/[?&]sunk/.test(location.search))){const ix=c.hx-1.75,iz=c.hz-1.75;c.sunk={x:c.cx,z:c.cz,ix,iz,dep:2.0,bw:.8,st:[{z:-(iz-.6),x0:-ix,dir:1,len:4.0},{z:iz-.6,x0:ix,dir:-1,len:4.0}]};C.sunks.push(c.sunk);}
   for(const c of PL.cells)if(c.type==='room'){const r=R();c.H=+(2.9+R()*1.0).toFixed(2);c.roof=c.kind==='larder'||c.kind==='store'?(r<.75?'timber':'flat'):c.kind==='chapel'||c.kind==='shrine'||c.kind==='ossuary'?(r<.8?'barrel':'flat'):r<.42?'barrel':r<.75?'timber':'flat';if(c.roof==='barrel')c.H=Math.max(c.H,3.3);}
   const vaultShape=(a,b,t)=>{const sh=new THREE.Shape();sh.absellipse(0,0,a,b,0,Math.PI,false);sh.lineTo(-(a-t),0);sh.absellipse(0,0,a-t,b-t,Math.PI,0,true);sh.lineTo(a,0);return sh;};
   const ribArch=(mat,x,y,z,ry,a,b,t,dep)=>{const g=new THREE.ExtrudeGeometry(vaultShape(a,b,t),{depth:dep,bevelEnabled:false,curveSegments:10});g.translate(0,0,-dep/2);addGeo(mat,g,T(x,y,z,ry));};
@@ -3513,6 +3520,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       if(R()<.5){const u=(R()-.5)*hl,x=alongX?cx+u:cx+(R()-.5)*hs,z=alongX?cz+(R()-.5)*hs:cz+u;if(Math.hypot(x-cx,z-cz)>1.2){addGeo('wood',boxUV(.2,H-.25,.2,1),T(x,(H-.25)/2,z,(R()-.5)*.1));addGeo('cryptVault',boxUV(.42,.12,.42,2),T(x,.06,z));addCircle(x,z,.16,H);}}   // a prop under a beam that someone didn't trust
       return;}
     clg(cx-hx,cx+hx,cz-hz,cz+hz,H);
+    if(c.type==='hall'&&c.sunk){const px=c.sunk.ix+.45,pz=c.sunk.iz+.45;for(const sg of [-1,1]){archBetween(cx-px,cz+sg*pz,cx+px,cz+sg*pz,H);archBetween(cx+sg*px,cz-pz,cx+sg*px,cz+pz,H);}return;}
     if(c.type==='hall'){for(const sg of [-1,1]){archBetween(cx-1.9,cz+sg*1.9,cx+1.9,cz+sg*1.9,H);archBetween(cx+sg*1.9,cz-1.9,cx+sg*1.9,cz+1.9,H);for(const e of [-1,1]){archBetween(cx+e*1.9,cz+sg*1.9,cx+e*(hx+.2),cz+sg*1.9,H);archBetween(cx+sg*1.9,cz+e*1.9,cx+sg*1.9,cz+e*(hz+.2),H);}}return;}
     if(c.type==='exit'){for(let i=0;i<8;i++){const a=(i+.5)/8*6.283,b=(i+1.5)/8*6.283;archBetween(cx+Math.cos(a)*3.75,cz+Math.sin(a)*3.75,cx+Math.cos(b)*3.75,cz+Math.sin(b)*3.75,H,.35);}return;}
     if(c.type!=='node'){addGeo('cryptVault',boxUV(2*hx,.24,.36,2),T(cx,H-.12,cz));addGeo('cryptVault',boxUV(.36,.2,2*hz,2),T(cx,H-.1,cz));   // ribs across the ceiling, on corbels
@@ -3540,9 +3548,23 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
   for(const c of PL.cells){if(c.type==='exit'){c.stairSide=[0,1];c.stairU=0;}else if(c.type==='start'&&D>1){c.stairSide=[0,-1];c.stairU=c.hx-1.55;}}
   // ---- rooms
   for(const c of PL.cells){const {cx,cz,hx,hz,H}=c;
-    if(c.kind==='pit')holed(cx-hx-WT,cx+hx+WT,cz-hz-WT,cz+hz+WT,cx,cz,2.0,0,'cryptFloor',true);else flr(cx-hx-WT,cx+hx+WT,cz-hz-WT,cz+hz+WT);
+    if(c.kind==='pit')holed(cx-hx-WT,cx+hx+WT,cz-hz-WT,cz+hz+WT,cx,cz,2.0,0,'cryptFloor',true);
+    else if(c.sunk){const q=c.sunk,{ix,iz,dep}=q;   /* (Build 238) the sunken hall */
+      flr(cx-hx-WT,cx+hx+WT,cz-hz-WT,cz-iz);flr(cx-hx-WT,cx+hx+WT,cz+iz,cz+hz+WT);flr(cx-hx-WT,cx-ix,cz-iz,cz+iz);flr(cx+ix,cx+hx+WT,cz-iz,cz+iz);
+      {const g=new THREE.PlaneGeometry(2*ix,2*iz);g.rotateX(-Math.PI/2);const uv=g.attributes.uv,pp=g.attributes.position;for(let i=0;i<uv.count;i++)uv.setXY(i,pp.getX(i)/2,pp.getZ(i)/2);addGeo('cryptEarth',g,T(cx,-dep,cz));}
+      for(const sg of [-1,1]){addGeo('cryptWall',boxUV(2*ix+.5,dep+.04,.24,2),T(cx,-dep/2-.02,cz+sg*(iz+.12)));addGeo('cryptWall',boxUV(.24,dep+.04,2*iz+.5,2),T(cx+sg*(ix+.12),-dep/2-.02,cz));
+        addGeo('cryptVault',boxUV(2*ix+.5,.09,.3,2),T(cx,.02,cz+sg*(iz+.17)));addGeo('cryptVault',boxUV(.3,.09,2*iz+.5,2),T(cx+sg*(ix+.17),.02,cz));}   // retaining walls and a worn kerb
+      for(const st of q.st){const N=10,tw=st.len/N,th=dep/N;for(let i=0;i<N;i++){const top=-i*th,hh=dep+top+.0;addGeo('cryptVault',boxUV(tw,hh,1.14,2),T(cx+st.x0+st.dir*(i+.5)*tw,top-hh/2,cz+st.z));}}
+      for(let x=-ix+.12;x<ix;x+=.26)addGeo('wood',boxUV(.235,.05,1.6+(R()-.5)*.06,1),T(cx+x,-.03+(R()-.5)*.012,cz,(R()-.5)*.03));for(const sz of [-.62,.62])addGeo('wood',boxUV(2*ix+.3,.18,.16,1),T(cx,-.15,cz+sz));
+      for(const sx of [-1,1])for(let k=0;k<2;k++){const x=cx+sx*(ix-.12),z=cz+(k?-.62:.62);vRod('wood',V(x,-.2,z),V(x-sx*.9,-dep,z),.07,6);}   // struts from the walls under each end of the bridge
+      {addGeo('cryptVault',boxUV(1.3,.14,2.5,2),T(cx,-dep+.07,cz+1.55));addGeo('cryptWall',boxUV(.9,.66,2.1,2),T(cx,-dep+.45,cz+1.55));addGeo('cryptVault',boxUV(1.02,.09,2.22,2),T(cx,-dep+.82,cz+1.55));const b=addBox(cx-.5,cx+.5,cz+.45,cz+2.65,-dep+.88);b.y0=-dep;find('reliquary',cx,-dep+.87,cz+1.2);for(let i=0;i<3;i++){const ex=cx-.3+i*.3,ez=cz+2.45-(i&1)*.12,hh=.1+R()*.14;addGeo('wax',new THREE.CylinderGeometry(.02,.024,hh,6),T(ex,-dep+.87+hh/2,ez));addFlame(ex,-dep+.9+hh,ez,.13,i===1,1.4,3.4,.5,0xffc488);}find('cup',cx+.15,-dep+.87,cz+1.9);}   // a stone chest down there, and what was left on it
+      for(let i=0;i<3;i++)for(const [k2,g2,m2] of skeletonParts('lie',R))addGeo(k2,g2,T(cx+(R()-.5)*2*(ix-.9),-dep+.02,cz-.9-R()*(iz-1.6),R()*6.283).multiply(m2));
+      for(let i=0;i<4;i++){const x=cx+(R()-.5)*2*(ix-.5),z=cz+(R()<.5?-1:1)*(iz-.4-R()*.5);for(let k=0;k<6;k++)addGeo('cryptWall',boxUV(.14+R()*.2,.1+R()*.12,.14+R()*.2,2),T(x+(R()-.5)*.6,-dep+.06+R()*.06,z+(R()-.5)*.5,R()*3,R()*.5,R()*.5));}
+      find('purse',cx-ix+.6,-dep+.03,cz+iz-.5);moonShaft(cx+ix*.45,cz-iz*.5,H,.6);}
+    else flr(cx-hx-WT,cx+hx+WT,cz-hz-WT,cz+hz+WT);
     roofRoom(c);piers(c);for(const [dx,dz] of SIDES)side(c,dx,dz);
-    if(c.type==='hall'){const rc=R()<.55;for(const sx of [-1,1])for(const sz of [-1,1])(rc?column:pillar)(cx+sx*1.9,cz+sz*1.9,H);if(R()<.6)moonShaft(cx,cz,H,.7);for(const sx of [-1,1])if(R()<.7){const x=cx+sx*(hx-.7),z=cz+(R()-.5)*2*(hz-1.2);if(isFree(x,z,.3))candleStand(x,z,R()<.8);}trestle(cx+(R()-.5)*.6,cz+(R()-.5)*.6,R()*3.14);benchC(cx+1.1,cz+(R()-.5)*.5,R()*3.14,R()<.4?1:0);leanPlanks(cx-1.9+.36,cz+1.9,1,0,2);}
+    if(c.type==='hall'&&c.sunk){const rc=R()<.55,pp=c.sunk.ix+.45;for(const sx of [-1,1])for(const sz of [-1,1])(rc?column:pillar)(cx+sx*pp,cz+sz*(c.sunk.iz+.45),H);for(const sx of [-1,1]){const x=cx+sx*(hx-.5),z=cz+sx*(hz-1.1);if(isFree(x,z,.3))candleStand(x,z,true);}}
+    else if(c.type==='hall'){const rc=R()<.55;for(const sx of [-1,1])for(const sz of [-1,1])(rc?column:pillar)(cx+sx*1.9,cz+sz*1.9,H);if(R()<.6)moonShaft(cx,cz,H,.7);for(const sx of [-1,1])if(R()<.7){const x=cx+sx*(hx-.7),z=cz+(R()-.5)*2*(hz-1.2);if(isFree(x,z,.3))candleStand(x,z,R()<.8);}trestle(cx+(R()-.5)*.6,cz+(R()-.5)*.6,R()*3.14);benchC(cx+1.1,cz+(R()-.5)*.5,R()*3.14,R()<.4?1:0);leanPlanks(cx-1.9+.36,cz+1.9,1,0,2);}
     const free=SIDES.filter(([dx,dz])=>!linkOf(c,dx,dz)),dark=c.kind==='larder'||c.kind==='shrine'||c.type!=='start'&&R()<Math.min(.6,.12+.09*D);c.dark=dark;
     // candles: on the walls with no way through them, or beside a doorway
     if(c.type!=='node'&&!dark){const n=c.type==='hall'?3:c.type==='start'?2:1+(R()<.5?1:0);for(let i=0;i<n;i++){const [dx,dz]=SIDES[(R()*4)|0],lk=linkOf(c,dx,dz),al=dx?c.hz:c.hx,u=lk?(R()<.5?-1:1)*(1.7+R()*(al-2.1)):(R()-.5)*(al*1.3),[x,z]=inner(c,dx,dz,clamp(u,-al+.5,al-.5),0),n3=R()<.4?3:1;if(c.stairSide&&c.stairSide[0]===dx&&c.stairSide[1]===dz&&Math.abs(clamp(u,-al+.5,al-.5)-c.stairU)<CW+.4)continue;cryptSconce(x,1.72,z,-dx,-dz,n3);}}
@@ -3584,7 +3606,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       // what gathers in the corners: casks, crates, bones
       for(const [sx,sz] of [[1,1],[-1,1],[1,-1],[-1,-1]]){const r=R(),x=cx+sx*(hx-.6),z=cz+sz*(hz-.6);if(c.type==='exit'||c.kind==='ossuary'||c.kind==='cells')continue;if(r<.16)barrel(x,z);else if(r<.3)crate(x,z,.7);else if(r<.5){const n=2+(R()*4|0);for(let i=0;i<5;i++){const L=.36+R()*.12;looseGroup([['bone',prep(boneLathe(L,.013),T(x-sx*(.05+R()*.45),.03+(i>2?.04:0),z-sz*(.05+R()*.45),R()*6.283,0,Math.PI/2+(R()-.5)*.15))]],.35);}   // (Build 217) a heap of the dead swept into the corner: long bones under, skulls on them (were pale balls and sticks)
           for(let i=0;i<n;i++){const a=R()*6.283,rr=R()*.32,S=skullGeo(),Mk=T(x-sx*.12+Math.cos(a)*rr,.05+(i>2?.13:0),z-sz*.12+Math.sin(a)*rr,R()*6.283,(R()-.5)*.5,(R()-.5)*.6);looseGroup([['bone',prep(S.b,Mk)],['boneDark',prep(S.d,Mk)]],.9);}}}
-      if(c.type!=='exit'&&c.kind!=='shrine'&&c.kind!=='larder'&&c.kind!=='tomb'){const ns=c.type==='hall'?2:1;for(let i=0;i<ns;i++)C.spots.push({x:cx+(R()-.5)*(hx*1.1),z:cz+(R()-.5)*(hz*1.1),c});}
+      if(c.type!=='exit'&&c.kind!=='shrine'&&c.kind!=='larder'&&c.kind!=='tomb'){const ns=c.type==='hall'?2:1;for(let i=0;i<ns;i++)C.spots.push(c.sunk?{x:cx+(i?1:-1)*(hx-.9),z:cz+(R()-.5)*(hz*1.2),c}:{x:cx+(R()-.5)*(hx*1.1),z:cz+(R()-.5)*(hz*1.1),c});}
       const wl=free.length>used?free[free.length-1]:null,K=c.kind;   // (Build 213) what kind of room it is: the walls are the plan's, what stands in it is the room's own
       if(K==='ossuary'){const SM=skullGeoMid(),HT=1.62,DP=.36;for(const w of free.slice(used)){const [dx,dz]=w,al=dx?c.hz:c.hx,ry=Math.atan2(-dx,-dz),L=2*al-.5;   // (Build 231) rebuilt: a stacked wall of bone ends to shoulder height, with three rows of skulls
           const [mx,mz]=inner(c,dx,dz,0,DP/2),uvS=(g,u,v)=>{const q=g.attributes.uv;for(let k=0;k<q.count;k++)q.setXY(k,q.getX(k)*u,q.getY(k)*v);return g;};
@@ -4128,7 +4150,7 @@ function cryptPopulate(){const C=CRYPT,R=RUN,D=R.depth,rk=careerRank();
     let x=Lr.x,z=Lr.z;for(let k=0;k<12&&!isFree(x,z,.5);k++){x=Lr.x+rand(-1.5,1.5);z=Lr.z+rand(-1.5,1.5);}const f=spawnEntrant(en,x,z,['cleaver',[]],en.skill);f.yaw=Math.random()*6.283;f.tough=.55;f.voice=.7;f._dirt=1;f.ai.mind={mood:'hostile',dark:1,aware:0,home:[x,z],t:2,st:0,fuse:1,d:99,nerve:0,champ:1};}
   if(D%3===0){const c=charDraw()[0],en=charEntrant(c),E=C.plan.exit;en.skill=Math.max(c.style.skill,.45+D*.03);en.foe=true;const f=spawnEntrant(en,E.cx+2.4,E.cz+(E.hz-1.2),c.kit,en.skill);f.ai.mind={mood:'hostile',aware:0,home:[f.pos.x,f.pos.z],t:3,st:0,fuse:1,d:99,champ:1};R.champ=c.name;}
   cryptHud();}
-function cryptStart(H){const me=H[0];RUN={mode:'career',crypt:true,me,depth:1,coin:0,kills:0,flasks:0,ren:0};CAREER.runs=(CAREER.runs||0)+1;careerSave();roundSetup();
+function cryptStart(H){const me=H[0];RUN={mode:'career',crypt:true,me,depth:CRYPT_DEPTH,coin:0,kills:0,flasks:0,ren:0};CAREER.runs=(CAREER.runs||0)+1;careerSave();roundSetup();
   const S=CRYPT.start,f=spawnEntrant({...me,look:{...me.look,o:0,bl:1,ft:0}},S.x,S.z,['fists',[]],null);   /* (Build 234) you wake in a shirt, bare-legged and barefoot */f.yaw=S.yaw;cryptPopulate();hostSendStart();if(CRYPT.plan){const c=CRYPT.plan.cells[0];let x=S.x+1.1,z=S.z+.5;for(let k=0;k<14&&!isFree(x,z,.25);k++){x=c.cx+rand(-2,2);z=c.cz+rand(-2,2);}findDrop('shirt',x,.03,z);}banner('The Crypt','You wake on the straw with nothing. Find what you can and go down.');}
 function cryptFade(fn){const d=el('cfade');if(!d){fn();return;}d.classList.add('on');setTimeout(()=>{try{fn();}finally{setTimeout(()=>d.classList.remove('on'),250);}},520);}
 function cryptDescend(){const R=RUN;if(!R||!R.crypt||R.over||R.busy||!player||!player.alive||player.ragdoll)return;R.busy=true;const C=CAREER,ren=4+2*R.depth;C.renown+=ren;R.ren+=ren;C.deep=Math.max(C.deep||0,R.depth+1);careerSave();
@@ -4262,7 +4284,7 @@ function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoad
     LIGHTS.day.envTex=pm.fromEquirectangular(te).texture;pm.dispose();if(te!==t)te.dispose();LIGHTS.day.bg=t;
     // the photographed sky is far brighter than the painted one: polished steel was blowing out to white
     steelMat.envMapIntensity=1.05;steelDark.envMapIntensity=.9;mailMat.envMapIntensity=.9;
-    LIGHTS.day.hi=.55;if(MAPS[curMap]&&MAPS[curMap].light==='day')applyLighting('day');},undefined,()=>{});}
+    LIGHTS.day.hi=.68;if(MAPS[curMap]&&MAPS[curMap].light==='day')applyLighting('day');},undefined,()=>{});}
 let crowd=null;const crowdU={uTime:{value:0},uCheer:{value:0},uFocus:{value:new THREE.Vector3()}};
 function scaleUV(g,su,sv){const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv);return g;}
 // a flat panel w wide and h high with a round-headed opening (half-width ow, springing at sp) cut up from its foot, extruded dep deep (UVs at 2 m a tile)
@@ -4489,7 +4511,7 @@ function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=
 const LIGHTS={
   dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0x8fb9d0,hg:0x8a7458,hi:.62,sun:0xffd9a6,si:4.3,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
+  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0xa3bccb,hg:0x8f7a5e,hi:.74,sun:0xffd9a6,si:4.1,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
 LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
@@ -5013,7 +5035,7 @@ function tintMaterial(m,mode,pal,mats){
         if(uNoHose>.5&&vBind.y<.95)t=uParty>.5&&vBind.x>0.?uTrim:uTint;   // (a draped garment is one cloth all the way down)
         diffuseColor.rgb=mix(c,t*l*gain,msk*.9);
         if(uMode<.5){float w1=tn3(vBind*7.),w2=tn3(vBind*19.+4.),w3=tn3(vBind*61.);   // (Build 225) worn cloth: faded unevenly, grimy in patches, a little yellowed; it was one flat tone from collar to hem
-          diffuseColor.rgb*=(.66+.42*w1)*(1.-.26*smoothstep(.5,.82,w2))*(.9+.18*w3);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.8,.66),smoothstep(.3,.75,w1*w2*2.2)*.55);}
+          diffuseColor.rgb*=(.76+.28*w1)*(1.-.13*smoothstep(.3,.9,w2*.6+w1*.4))*(.93+.12*w3);   /* (Build 238: gentler; the grime read as square grey blotches on a pale shirt) */diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.8,.66),smoothstep(.3,.75,w1*w2*2.2)*.55);}
         else if(uMode>1.5){float s1=tn3(vBind*9.),s2=tn3(vBind*31.+2.),ex=max(smoothstep(1.42,1.52,vBind.y),smoothstep(.4,.52,abs(vBind.x)));   // (Build 227) skin that has been outdoors: face, neck, forearms and hands browner than what the clothes cover, uneven, with dirt worked into the hands and wrists
           diffuseColor.rgb*=mix(vec3(1.),vec3(.82,.74,.66),ex*.6)*(.9+.16*s1);float gr=smoothstep(.5,.8,s2*.7+smoothstep(.58,.74,abs(vBind.x))*.55);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.6,.52,.44),gr*.5*ex);}
         vec2 mu=vec2(vBind.x+vBind.z,vBind.y)*9.;float mop=texture2D(uMailO,mu).r;
@@ -5206,8 +5228,8 @@ function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?
     /* Build 234: locks have depth. The strands' own light and dark (the texture) tilt the surface, as a bump map would, and darken the gaps
        between locks, so a head of hair has body under a candle or the sun instead of shading as one smooth cap */
     if(kk&&P.H.locks)sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
-    { float l0=dot(texture2D(map,vMapUv).rgb,vec3(.333));vec2 dH=vec2(dFdx(l0),dFdy(l0))*HAIR_BUMP;vec3 sx=dFdx(-vViewPosition),sy=dFdy(-vViewPosition),R1=cross(sy,normal),R2=cross(normal,sx);float det=dot(sx,R1);
-      vec3 gr=sign(det)*(dH.x*R1+dH.y*R2);normal=normalize(abs(det)*normal-gr);diffuseColor.rgb*=.6+.62*smoothstep(.08,.75,l0); }`.replace('HAIR_BUMP',(+(new URLSearchParams(location.search).get('hbump')??.012)).toFixed(4)));
+    { float l0=dot(texture2D(map,vMapUv,1.6).rgb,vec3(.333));vec2 dH=vec2(dFdx(l0),dFdy(l0))*HAIR_BUMP;vec3 sx=dFdx(-vViewPosition),sy=dFdy(-vViewPosition),R1=cross(sy,normal),R2=cross(normal,sx);float det=dot(sx,R1);
+      vec3 gr=sign(det)*(dH.x*R1+dH.y*R2);normal=normalize(abs(det)*normal-gr);diffuseColor.rgb*=.66+.5*smoothstep(.08,.75,l0); }`.replace('HAIR_BUMP',(+(new URLSearchParams(location.search).get('hbump')??.012)).toFixed(4)));
     // (Build 129) hair's own highlight (Kajiya-Kay): light catches a strand across its length, not as a round spot, so a bright band runs
     // across the hair where the strands face the light half-way to the eye, and a second, tinted one shifted toward the roots
     if(kk)sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
@@ -5532,7 +5554,7 @@ function dressMH(model,look,pal,mats){
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
     gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm);addMHPart(body,G.id,null,'cloth',false,gm);
-    if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0x7a4e2c);   /* (Build 197: 0x4a2e1c over the leather maps read as a flat black band) */bm.side=THREE.DoubleSide;looseMat(bm,SWU,'h');garbClip(bm);garbLegs(bm,.007);bm.userData.isBelt=true;if(look.bl){bm.color.setHex(0xa08a5c);bm.roughness=1;bm.userData.cord=1;}   /* (Build 236) a prisoner's shirt is tied with a length of cord, not a leather belt */addMHPart(body,G.belt,null,'belt',false,bm);}}}   /* (Build 198) the belt swings and is pushed off the thighs with the cloth it's on: in a fighting stance the shirt was pushed out over it and only a black patch of it showed at the back */
+    if(G.belt){const bm=leatherMat.clone();bm.color.setHex(0xb07a4a);   /* (Build 238: lighter again, it still drew near black) (Build 197: 0x4a2e1c over the leather maps read as a flat black band) */bm.side=THREE.DoubleSide;looseMat(bm,SWU,'h');garbClip(bm);garbLegs(bm,.007);bm.userData.isBelt=true;if(look.bl){bm.color.setHex(0xa08a5c);bm.roughness=1;bm.userData.cord=1;}   /* (Build 236) a prisoner's shirt is tied with a length of cord, not a leather belt */addMHPart(body,G.belt,null,'belt',false,bm);}}}   /* (Build 198) the belt swings and is pushed off the thighs with the cloth it's on: in a fighting stance the shirt was pushed out over it and only a black patch of it showed at the back */
   {const hcol=new THREE.Color().setRGB(hc[0]*.42,hc[1]*.36,hc[2]*.33),mt=hairMat(hcol),mtB=hairMat(hcol.clone().multiplyScalar(.85),1.45);
     // hair, beard, brows and lashes are MakeHuman's own (Build 126; the shells and the painted cap are no longer used)
     const pc=new THREE.Color().setRGB(hc[0]*.5,hc[1]*.44,hc[2]*.4);
@@ -5625,7 +5647,7 @@ const steelMat=std({color:0x8e8b86,metalness:.9,roughness:.28,envMapIntensity:1.
 const steelDark=std({color:0x63605b,metalness:.88,roughness:.36,envMapIntensity:1.05});
 const brassMat=std({color:0xa8823a,metalness:.95,roughness:.35});
 const slitMat=std({color:0x050505,roughness:1});
-const mailMat=std({color:0xc4c8cc,metalness:.85,roughness:.5});
+const mailMat=std({color:0x9c9d9e,metalness:.38,roughness:.62,envMapIntensity:.8});   /* (Build 238) iron-grey and duller: under a blue sky bright mail with mirror-smooth rings came out as blue check cloth */
 const leatherMat=std({color:0x3a2416,roughness:.8});
 // ---- photo-scanned gear (CC0: ambientCG Metal009 brushed steel, Chainmail004 riveted mail, Wood049; Poly Haven brown_leather).
 // Steel and mail are mapped in each piece's own frame in the shader, so primitives without good UVs still get proper grain:
@@ -5726,13 +5748,13 @@ function mailDetail(m){   // (Build 175: back to the photo-scanned rings; the pl
   sh.fragmentShader='varying vec3 vSP,vMN;uniform sampler2D uMailD,uMailO;\n'+sh.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       vec3 mw=pow(abs(normalize(vMN)),vec3(4.));mw/=mw.x+mw.y+mw.z;vec2 m1=vSP.zy*8.,m2=vSP.xz*8.,m3=vSP.xy*8.;
       vec3 mo=texture2D(uMailO,m1).rgb*mw.x+texture2D(uMailO,m2).rgb*mw.y+texture2D(uMailO,m3).rgb*mw.z;
-      vec3 md=texture2D(uMailD,m1).rgb*mw.x+texture2D(uMailD,m2).rgb*mw.y+texture2D(uMailD,m3).rgb*mw.z;diffuseColor.rgb*=mix(vec3(.16,.13,.1),md*1.5,mo.r);`)   // rings over the padded coat showing through
-    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.95,mo.g*.9+.1,mo.r);')
-    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mo.r*.9;')
+      vec3 md=texture2D(uMailD,m1).rgb*mw.x+texture2D(uMailD,m2).rgb*mw.y+texture2D(uMailD,m3).rgb*mw.z;md=mix(md,vec3(dot(md,vec3(.333))),.75);diffuseColor.rgb*=mix(vec3(.16,.13,.1),md*2.3,mo.r);`)   // rings over the padded coat showing through
+    .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.95,mo.g*.5+.42,mo.r);')
+    .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mo.r*.55;')
     .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
     { float hgt=mo.r*.0025;vec3 dpx=dFdx(-vViewPosition),dpy=dFdy(-vViewPosition);vec3 r1=cross(dpy,normal),r2=cross(normal,dpx);float det=dot(dpx,r1);
       normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2)); }`);};
-  m.customProgramCacheKey=()=>'mail-gear3';}
+  m.customProgramCacheKey=()=>'mail-gear4';}
 const stumpMat=std({color:0x5a0707,roughness:.35,metalness:.1});
 mailDetail(mailMat);steelDetail(steelMat,'a');steelDetail(steelDark,'b');steelDetail(brassMat,'c');
 const stumpGeo=new THREE.SphereGeometry(1,10,8);
@@ -8816,7 +8838,7 @@ class Fighter{
     if((SINK.st==='open'||SINK.st==='cracking')&&!this.isPlayer&&!this.remote){const dx=this.pos.x-SINK.x,dz=this.pos.z-SINK.z,d=Math.hypot(dx,dz),m=SINK.r+1.4;if(d<m&&d>1e-3){const k=(m-d)/1.4*(SINK.st==='cracking'?3:1.8);wish.x+=dx/d*k;wish.z+=dz/d*k;}}
     if(PIT&&!this.isPlayer&&!this.remote){const dx=this.pos.x-PIT.x,dz=this.pos.z-PIT.z,d=Math.hypot(dx,dz),m=PIT.r+1.3;   // bots keep back from the edge
       if(d<m&&d>1e-3&&!onBridge(this.pos.x,this.pos.z)){const k=(m-d)/1.3*1.8;wish.x+=dx/d*k;wish.z+=dz/d*k;}}
-    if(MILL&&!this.isPlayer&&!this.remote)millSteer(this,wish);
+    if(MILL&&!this.isPlayer&&!this.remote)millSteer(this,wish);if(CRYPT&&!this.isPlayer&&!this.remote&&CRYPT.sunks.length)cryptSteer(this,wish);
     if(BREACH&&!this.isPlayer&&!this.remote)breachSteer(this,wish);
     if(ROAD&&!this.isPlayer&&!this.remote)roadSteer(this,wish);
     if(RAID&&!this.isPlayer&&!this.remote&&raidSteer(this,wish)){const tg=this.ai.target,td=tg&&tg.alive&&!tg.ragdoll?tg.pos.distanceTo(this.pos):99;if(td>5.5&&wish.lengthSq()>.04)this.faceDir(wish,h,6);}   /* (Build 186) walking to an objective with nobody close, face the way you're going (they backed toward it, still facing a far foe) */
@@ -11206,7 +11228,7 @@ function startGame(){
   flushMapSwitch();
   if(NET.mode==='host')for(const x of NET.conns)x.f=null;
   END=null;MODEHUD=['',''];
-  if(MODE!=='br'){paused=false;initAudio();state='playing';{const b=document.querySelector('.map.on[data-map]');let mk=b?b.dataset.map:'colosseum';if(MODE==='career'){mk='crypt';CRYPT_DEPTH=1;CRYPT_SEED=1+((Math.random()*99991)|0);loadMap('crypt');}else if(MODE==='raid')mk='raid';else if((mk==='breach'||mk==='road')&&MODE!=='gauntlet'&&MODE!=='team')mk='colosseum';else if(mk==='village'&&MODE!=='team')mk='colosseum';if(curMap!==mk)loadMap(mk);}document.body.classList.toggle('scored',MODE==='raid'||MODE==='team');modeStart();
+  if(MODE!=='br'){paused=false;initAudio();state='playing';{const b=document.querySelector('.map.on[data-map]');let mk=b?b.dataset.map:'colosseum';if(MODE==='career'){mk='crypt';CRYPT_DEPTH=+(new URLSearchParams(location.search).get('cdepth'))||1;CRYPT_SEED=1+((Math.random()*99991)|0);loadMap('crypt');}else if(MODE==='raid')mk='raid';else if((mk==='breach'||mk==='road')&&MODE!=='gauntlet'&&MODE!=='team')mk='colosseum';else if(mk==='village'&&MODE!=='team')mk='colosseum';if(curMap!==mk)loadMap(mk);}document.body.classList.toggle('scored',MODE==='raid'||MODE==='team');modeStart();
     document.getElementById('menu').classList.add('hide');document.getElementById('end').classList.add('hide');document.getElementById('hud').classList.remove('hide');showPause(false);requestLock();return;}
   document.body.classList.remove('scored');if(curMap==='breach'||curMap==='road'||curMap==='raid'||curMap==='crypt'){const b=document.querySelector('.map.on[data-map]');const mk=b?b.dataset.map:'village';loadMap(mk==='breach'||mk==='road'?'village':mk);}   // the Breach, the Road and the Raid's maps aren't for battle royale
   RUN=null;paused=false;initAudio();spawnMatch(true);state='playing';startCountdown();
