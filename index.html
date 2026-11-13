@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=222;
+const BUILD=223;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -7826,8 +7826,37 @@ function dynBreak(d,vel){if(d.gone)return;const P=d.obj.position.clone();d.obj.u
 // every hit leaves its mark where it landed: a gash along the edge, a hole from the point, a bruise from a blunt blow.
 // Each mark is a small patch bent to the limb's curve and attached to the struck bone, so it moves with the body.
 const WOUND_MAT={};
+/* (Build 223) an open cut is drawn as what it is: swollen, bruised skin drawn back from a ragged edge, a band of yellow fat in lobules,
+   red muscle with its fibres running across the cut, dark blood welling in the bottom, and in a deep one ('deep', 26+ damage) the bone.
+   512 px with its own normal map worked out from the layers' depths, so the lips stand up and the inside reads as a hollow, wet. */
+const GASH=/[?&]gash/.test(location.search);   // (still being worked on: `?gash` to see it)
+function gashMat(deep){const S=512,c=document.createElement('canvas');c.width=c.height=S;const x=c.getContext('2d'),hc=document.createElement('canvas');hc.width=hc.height=S;const hx=hc.getContext('2d');
+  let sd=deep?77:31;const rn=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  const edge=[];for(let i=0;i<=64;i++)edge.push([1+.22*(rn()-.5),1+.22*(rn()-.5)]);
+  const lip=(ctx,w,col,jag=1)=>{ctx.fillStyle=col;ctx.beginPath();const x0=S*.07,W=S*.86;ctx.moveTo(x0,S/2);for(let i=0;i<=64;i++){const u=i/64;ctx.lineTo(x0+u*W,S/2-w*Math.pow(Math.sin(u*Math.PI),.7)*(1+(edge[i][0]-1)*jag));}for(let i=64;i>=0;i--){const u=i/64;ctx.lineTo(x0+u*W,S/2+w*Math.pow(Math.sin(u*Math.PI),.7)*(1+(edge[i][1]-1)*jag));}ctx.fill();};
+  // colour
+  {const g=x.createRadialGradient(S/2,S/2,S*.1,S/2,S/2,S*.5);g.addColorStop(0,'rgba(120,20,30,.75)');g.addColorStop(.55,'rgba(110,30,60,.35)');g.addColorStop(1,'rgba(90,30,70,0)');x.save();x.translate(S/2,S/2);x.scale(1,.55);x.translate(-S/2,-S/2);x.fillStyle=g;x.fillRect(0,0,S,S);x.restore();}
+  for(let i=0;i<40;i++){const a=rn()*6.28,r=S*(.12+rn()*.3);x.fillStyle=`rgba(${90+rn()*50|0},6,10,${.25+rn()*.4})`;x.beginPath();x.ellipse(S/2+Math.cos(a)*r,S/2+Math.sin(a)*r*.5,2+rn()*9,1+rn()*5,rn()*3,0,7);x.fill();}   // smears and runs round it
+  const W0=S*.115;lip(x,W0,'rgba(104,18,24,1)');lip(x,W0*.92,'rgba(150,62,56,1)');   // the skin's cut edge, raw
+  lip(x,W0*.84,'rgba(196,150,92,1)');   // fat: a thin band, mostly under blood
+  x.save();lip(x,W0*.84,'rgba(0,0,0,0)');x.clip();for(let i=0;i<420;i++){const px=S*.07+rn()*S*.86,py=S/2+(rn()-.5)*W0*1.7;x.fillStyle=rn()<.45?`rgba(${120+rn()*40|0},14,16,.7)`:`rgba(${190+rn()*40|0},${130+rn()*50|0},${70+rn()*40|0},.55)`;x.beginPath();x.ellipse(px,py,2+rn()*4,2+rn()*3,rn()*3,0,7);x.fill();x.strokeStyle='rgba(150,70,40,.35)';x.lineWidth=.8;x.stroke();}x.restore();   // lobules
+  lip(x,W0*.68,'rgba(112,14,16,1)',.9);   // muscle
+  x.save();lip(x,W0*.68,'rgba(0,0,0,0)',.9);x.clip();for(let i=0;i<340;i++){const px=S*.07+rn()*S*.86;x.strokeStyle=rn()<.35?`rgba(${150+rn()*40|0},36,32,.4)`:'rgba(70,6,8,.5)';x.lineWidth=.6+rn()*1.4;x.beginPath();x.moveTo(px,S/2-W0*.6);x.bezierCurveTo(px+rn()*8-4,S/2-W0*.2,px+rn()*8-4,S/2+W0*.2,px+rn()*10-5,S/2+W0*.6);x.stroke();}x.restore();   // its fibres, across the cut
+  if(deep){lip(x,W0*.2,'rgba(226,214,188,1)',.3);x.save();lip(x,W0*.2,'rgba(0,0,0,0)',.3);x.clip();for(let i=0;i<60;i++){x.fillStyle='rgba(150,30,30,.35)';x.fillRect(S*.1+rn()*S*.8,S/2-W0*.2+rn()*W0*.4,2+rn()*10,1+rn()*2);}x.restore();lip(x,W0*.05,'rgba(96,60,50,1)',.2);}   // bone, scored
+  else lip(x,W0*.3,'rgba(40,1,4,1)',.8);
+  {const g=x.createLinearGradient(0,S/2-W0*.5,0,S/2+W0*.5);g.addColorStop(0,'rgba(40,0,4,0)');g.addColorStop(.5,'rgba(40,0,4,.45)');g.addColorStop(1,'rgba(40,0,4,.75)');x.save();lip(x,W0*.68,'rgba(0,0,0,0)',.9);x.clip();x.fillStyle=g;x.fillRect(0,0,S,S);x.restore();}   // blood standing in the low side
+  for(let i=0;i<26;i++){const px=S*.1+rn()*S*.8,w=3+rn()*9,L=W0*(.9+rn()*2.2);const g=x.createLinearGradient(0,S/2,0,S/2+L);g.addColorStop(0,'rgba(96,6,10,.85)');g.addColorStop(1,'rgba(96,6,10,0)');x.fillStyle=g;x.fillRect(px,S/2-W0*.3,w,L+W0*.3);}   // and running over the lower lip
+  // height
+  hx.fillStyle='#808080';hx.fillRect(0,0,S,S);{const g=hx.createRadialGradient(S/2,S/2,S*.08,S/2,S/2,S*.36);g.addColorStop(0,'#b4b4b4');g.addColorStop(1,'#808080');hx.save();hx.translate(S/2,S/2);hx.scale(1,.45);hx.translate(-S/2,-S/2);hx.fillStyle=g;hx.fillRect(0,0,S,S);hx.restore();}
+  lip(hx,W0,'#9a9a9a');lip(hx,W0*.84,'#6a6a6a');lip(hx,W0*.68,'#3c3c3c',.9);lip(hx,W0*(deep?.2:.24),deep?'#585858':'#141414',.5);
+  hx.filter='blur(3px)';hx.drawImage(hc,0,0);hx.filter='none';
+  const H=hx.getImageData(0,0,S,S).data,nc=document.createElement('canvas');nc.width=nc.height=S;const nx=nc.getContext('2d'),N=nx.createImageData(S,S),hh=(i,j)=>H[((j<0?0:j>=S?S-1:j)*S+(i<0?0:i>=S?S-1:i))*4]/255;
+  for(let j=0;j<S;j++)for(let i=0;i<S;i++){const dx=(hh(i+1,j)-hh(i-1,j))*5,dy=(hh(i,j+1)-hh(i,j-1))*5,l=Math.hypot(dx,dy,1),o=(j*S+i)*4;N.data[o]=(-dx/l*.5+.5)*255;N.data[o+1]=(dy/l*.5+.5)*255;N.data[o+2]=(1/l*.5+.5)*255;N.data[o+3]=255;}
+  nx.putImageData(N,0,0);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;const nt=new THREE.CanvasTexture(nc);
+  return new THREE.MeshStandardMaterial({map:t,normalMap:nt,normalScale:new THREE.Vector2(1.6,1.6),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4,roughness:.22,metalness:0});}
 function woundMat(kind){
   if(WOUND_MAT[kind])return WOUND_MAT[kind];
+  if(GASH&&(kind==='cut'||kind==='deep'))return WOUND_MAT[kind]=gashMat(kind==='deep');if(kind==='deep')return woundMat('cut');
   const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');
   const blot=(cx,cy,r,col,a)=>{const g=x.createRadialGradient(cx,cy,0,cx,cy,r);g.addColorStop(0,col.replace('A',a));g.addColorStop(1,col.replace('A',0));x.fillStyle=g;x.beginPath();x.arc(cx,cy,r,0,7);x.fill();};
   if(kind==='bruise'){blot(64,64,62,'rgba(60,18,52,A)',.8);for(let i=0;i<7;i++)blot(64+(Math.random()-.5)*60,64+(Math.random()-.5)*60,14+Math.random()*16,'rgba(105,14,36,A)',.55);}
@@ -7882,7 +7911,7 @@ function addWound(B,ci,P,axis,dmg,kind){
   _wa.normalize();_wt.crossVectors(_wa,_wn).normalize();
   // shape: a gash runs along the edge that made it; a stab is round; a bruise spreads
   let Lh,Wh,phi=0;
-  if(kind==='cut'){Lh=Math.min(.3,.07+dmg*.005);Wh=Math.min(.075,.02+dmg*.0008);phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
+  if(kind==='cut'){Lh=Math.min(.3,.07+dmg*.005);Wh=GASH?Lh*.62:Math.min(.075,.02+dmg*.0008);   /* (Build 223: the texture carries the gash's own narrow shape; the patch is as broad as the bruising round it) */phi=Math.atan2(axis.dot(_wa),axis.dot(_wt));}
   else if(kind==='stab'){Lh=Wh=Math.min(.065,.03+dmg*.001);}
   else{Lh=Math.min(.1,.04+dmg*.0016);Wh=Lh*.8;phi=Math.random()*3;}
   const NR=4,NA=14,pos=[],uv=[],idx=[],cp=Math.cos(phi),sp=Math.sin(phi);
@@ -7891,7 +7920,7 @@ function addWound(B,ci,P,axis,dmg,kind){
     pos.push(S.x+_wt.x*R*Math.sin(th)+_wa.x*v+_wn.x*dn,S.y+_wt.y*R*Math.sin(th)+_wa.y*v+_wn.y*dn,S.z+_wt.z*R*Math.sin(th)+_wa.z*v+_wn.z*dn);uv.push(a*.5+.5,b*.5+.5);}
   for(let i=0;i<NR;i++)for(let j=0;j<NA;j++){const a=i*NA+j,b=i*NA+(j+1)%NA,c2=(i+1)*NA+j,d=(i+1)*NA+(j+1)%NA;idx.push(a,c2,b,b,c2,d);}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
-  let mt=woundMat(kind);if(kind==='bruise'){mt=mt.clone();mt.opacity=.25;BRUISES.push({m:mt,t0:simTime});}   // a bruise comes up and darkens over the next seconds
+  let mt=woundMat(kind==='cut'&&dmg>=26?'deep':kind);if(kind==='bruise'){mt=mt.clone();mt.opacity=.25;BRUISES.push({m:mt,t0:simTime});}   // a bruise comes up and darkens over the next seconds
   const m=new THREE.Mesh(g,mt);m.renderOrder=2;scene.add(m);B.bones[c.ba].attach(m);g.computeBoundingSphere();m.userData={kind,dmg,c:g.boundingSphere.center.clone()};
   if(kind!=='bruise')(B.bloodSrc||(B.bloodSrc=[])).push({o:m,c:(g.computeBoundingSphere(),g.boundingSphere.center.clone()),amt:clamp(dmg/(kind==='stab'?30:40),.18,1),born:simTime});
   B.wounds.push(m);if(B.wounds.length>28){const o=B.wounds.shift();o.parent&&o.parent.remove(o);o.geometry.dispose();}
@@ -9292,14 +9321,15 @@ function cloneLite(model){const saved=[];model.traverse(o=>{saved.push([o,o.user
    hid the other side's by shrinking its bones to nothing, which drew cones and stretched sheets wherever a garment or a plate spanned the
    cut (a body cut at the waist was two crumpled lumps). In the severed part, what its triangles still owe to bones on the other side
    rides rigidly with the part's own root bone, so nothing stretches back to the body. */
-function sliceMeshes(model,clone,bone,croot){const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const A=[],B=[];model.traverse(o=>{if(o.isSkinnedMesh)A.push(o);});clone.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});croot.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});
+const CUT_CACHE=new WeakMap();
+function sliceMeshes(model,clone,bone,croot){if(window.__noSlice)return;const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const A=[],B=[];model.traverse(o=>{if(o.isSkinnedMesh)A.push(o);});clone.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});croot.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});
   if(A.length!==B.length)return;const done=new Set();
   for(let k=0;k<A.length;k++){const m=A[k],c=B[k],g=m.geometry;if(!g||!g.attributes.skinIndex||g.groups&&g.groups.length>1||c.geometry!==g)continue;
-    const bones=m.skeleton.bones,key=bone.name+'|'+bones.length;let cut=!g.userData.derived&&g.userData._cut&&g.userData._cut[key];
+    const bones=m.skeleton.bones,key=bone.name+'|'+bones.length;let cut=null;{const e=CUT_CACHE.get(g);if(e&&e[key]&&e[key].ix===g.index)cut=e[key];}   /* (kept per geometry object and its index: the hose, the belt and the stand-in shirt are the body's own vertices under another index and shared one userData with it, so they were given the body's triangles and drew the whole body in black wool) */
     if(!cut){const inS=bones.map(b=>b&&sub.has(b.name)),si=g.attributes.skinIndex,sw=g.attributes.skinWeight,n=g.attributes.position.count,w=new Float32Array(n);
       for(let i=0;i<n;i++){let t=0;if(inS[si.getX(i)])t+=sw.getX(i);if(inS[si.getY(i)])t+=sw.getY(i);if(inS[si.getZ(i)])t+=sw.getZ(i);if(inS[si.getW(i)])t+=sw.getW(i);w[i]=t;}
       const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2;(w[a]+w[b]+w[d]>=1.5?part:keep).push(a,b,d);}
-      const T=n>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part)};if(!g.userData.derived)(g.userData._cut||(g.userData._cut={}))[key]=cut;}
+      const T=n>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part),ix:g.index};let e=CUT_CACHE.get(g);if(!e)CUT_CACHE.set(g,e={});e[key]=cut;}
     if(!cut.part.length){c.visible=false;continue;}   // nothing of this mesh is on the severed part
     const mk=arr=>{const q=new THREE.BufferGeometry();for(const a in g.attributes)q.setAttribute(a,g.attributes[a]);q.morphAttributes=g.morphAttributes;q.morphTargetsRelative=g.morphTargetsRelative;q.setIndex(new THREE.BufferAttribute(arr,1));q.boundingSphere=g.boundingSphere;q.boundingBox=g.boundingBox;q.userData={derived:true};return q;};
     m.geometry=mk(cut.keep);c.geometry=mk(cut.part);
@@ -10263,7 +10293,7 @@ function warmShaders(){const t0=performance.now();try{const G=new THREE.Group(),
     if(s.def.styles&&s.def.make)for(const st of sts){if(st>=s.def.styles)continue;try{const n=s.def.make(st);if(n.parent)n.parent.remove(n);G.add(n.clone());add(n);}catch(e){}}}
   const tmp=[],wf=fighters.find(f=>f.alive&&f.model&&f.model.userData.mh),ad=new Set();   /* every armour fitted once (hidden) on someone, the first match only: its skinned, swinging shaders are ready before anyone puts it on */
   if(wf&&!warmShaders.arm){warmShaders.arm=1;for(const def of Object.values(ARMOR)){try{const ms=fitArmor(wf,def)||[];for(const m of ms){m.visible=false;tmp.push(m);}}catch(e){}try{const pv=armorPreview(def);if(pv)G.add(pv);}catch(e){}}}
-  {const pg=new THREE.PlaneGeometry(.01,.01);for(const k of ['cut','stab','bruise'])G.add(new THREE.Mesh(pg,woundMat(k)));G.add(new THREE.Mesh(fleshGeo,fleshMat));G.add(new THREE.Mesh(stumpGeo,cutMeat));}   /* the first wound and the first stump */
+  {const pg=new THREE.PlaneGeometry(.01,.01);for(const k of ['cut','deep','stab','bruise'])G.add(new THREE.Mesh(pg,woundMat(k)));G.add(new THREE.Mesh(fleshGeo,fleshMat));G.add(new THREE.Mesh(stumpGeo,cutMeat));}   /* the first wound and the first stump */
   G.position.y=-400;scene.add(G);G.updateMatrixWorld(true);
   const done=()=>{scene.remove(G);for(const m of tmp)if(m.parent)m.parent.remove(m);};
   if(renderer.compileAsync&&renderer.extensions.has('KHR_parallel_shader_compile'))renderer.compileAsync(scene,camera).then(done,done);else{renderer.compile(scene,camera);done();}
