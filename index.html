@@ -5321,10 +5321,15 @@ const FLESH=fleshCanvas();const fleshMat=std({map:tex(FLESH),bumpMap:tex(FLESH,f
 const fleshGeo=new THREE.CircleGeometry(1,28);
 const cutMeat=std({color:0x5a0808,roughness:.3,metalness:.08});
 // a cut face: the cross-section disc with a slight wet bulge of meat behind it, facing along `nrm` (in parent space)
+/* (Build 222) what spills from a body cut in two: a few loops of gut hanging from the cut face (wet tubes, dark red to grey-pink) */
+let GUT_M=null;
+function gutSpill(cap){if(!GUT_M)GUT_M=[std({color:0x8a3a36,roughness:.32}),std({color:0xa8605a,roughness:.28})];const k=cap.userData.k||1,r=.11*k;   // in the cap's own frame: +z is out of the cut
+  for(let q=0;q<4;q++){const a=Math.random()*6.283,b=a+rand(1.2,2.6),L=rand(.08,.2)*k,pts=[V(Math.cos(a)*r*.6,Math.sin(a)*r*.6,0),V(Math.cos(a)*r*.9,Math.sin(a)*r*.9,L*.5),V(Math.cos((a+b)/2)*r*1.2,Math.sin((a+b)/2)*r*1.2,L),V(Math.cos(b)*r*.9,Math.sin(b)*r*.9,L*.55),V(Math.cos(b)*r*.5,Math.sin(b)*r*.5,0)];
+    const m=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),18,rand(.014,.022)*k,6,false),GUT_M[q&1]);m.castShadow=true;m.userData.wep=true;cap.add(m);}}
 function cutFace(parent,pos,nrm,worldR){parent.updateWorldMatrix(true,false);parent.getWorldScale(_ps);const r=worldR/(_ps.x||1);
   const g=new THREE.Group();g.position.copy(pos);g.quaternion.setFromUnitVectors(Z_AXIS,_pp.copy(nrm).normalize());g.rotateZ(Math.random()*6.283);
   const d=new THREE.Mesh(fleshGeo,fleshMat);d.scale.setScalar(r);d.position.z=r*.24;g.add(d);
-  const b=new THREE.Mesh(stumpGeo,cutMeat);b.scale.set(r*.97,r*.97,r*.3);b.position.z=-r*.08;g.add(b);parent.add(g);return g;}
+  const b=new THREE.Mesh(stumpGeo,cutMeat);b.scale.set(r*.97,r*.97,r*.3);b.position.z=-r*.08;g.add(b);g.userData.cutFace=true;g.userData.k=r/worldR;parent.add(g);return g;}
 const SEV_R={};
 
 /* (Build 193) three.js turns a profile listed bottom to top into faces that point outward; listed top to bottom (as many here were, after a
@@ -7920,7 +7925,8 @@ const CAPS=[
   ['RightUpLeg','RightLeg',.09,'legR','RightUpLeg',['RightUpLeg']],
   ['RightLeg','RightFoot',.07,'legR','RightLeg',['RightUpLeg','RightLeg']],
 ];
-for(const c of CAPS)if(c[4])SEV_R[c[4]]=c[2];
+for(const c of CAPS)if(c[4])SEV_R[c[4]]=c[2];SEV_R.Spine1=.15;
+DESC.Spine1=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1'];   // (Build 222) cut in two at the waist
 const LIMB_OF={LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
 let _spR=null;
 const ATTACKS=[
@@ -9082,7 +9088,20 @@ class Fighter{
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
+  /* (Build 222) cut in two at the waist: the trunk above the hips comes away as its own body (arms, head and all), the hips and legs
+     fall where they stood; both cut faces are flesh, and what was inside spills. Only on the slain (resolveHit kills first). */
+  bisect(vel){const bone=this.bones.Spine1;if(!bone||bone.userData.severed||this.undead==='skel')return false;if(this.alive)this.die(null,'cut in two',null);
+    this.root.updateMatrixWorld(true);if(this.sword&&this.sword.owner===this)this.dropSword();
+    spawnDebris(this,'Spine1',vel);const D=debris[debris.length-1];
+    bone.userData.severed=true;bone.scale.setScalar(1e-4);this.severedBones.push(bone);this.sevNames.push('Spine1');netEv(['x',this.id,'Spine1',r3v(vel)]);
+    const up=new Set(DESC.Spine1);for(const n of up)this.detached.add(n);if(this.ragdoll){this.ragdoll.drop(up);this.ragdoll.sleep=false;}
+    for(const z of ['armL','armR','head'])if(this.limbs[z]){this.limbs[z].sev=true;this.limbs[z].hp=0;}this.armor.head=null;this.armor.arms=null;this.armor.body=null;this.helmet=-1;this.mainArm=null;if(this.pb)this.physCapsOn();
+    const cap=cutFace(bone.parent,bone.position,bone.position,.15);if(cap){(this.bloodSrc||(this.bloodSrc=[])).push({o:cap,c:V(),amt:2.4,born:simTime});spurts.push({obj:cap,until:simTime+9,born:simTime,dur:9,art:1.6});gutSpill(cap);}
+    if(D&&D.root){for(const o of D.root.children)if(o.userData&&o.userData.cutFace){gutSpill(o);break;}}
+    _v.setFromMatrixPosition(bone.matrixWorld);for(let i=0;i<3;i++)spawnBlood(_v,_t3.set(rand(-1.5,1.5),rand(.5,2.5),rand(-1.5,1.5)),26,2.6,1.5);
+    return true;}
   sever(boneName,vel){
+    if(boneName==='Spine1')return this.bisect(vel);
     const bone=this.bones[boneName];if(!bone||bone.userData.severed)return false;
     this.root.updateMatrixWorld(true);
     spawnDebris(this,boneName,vel);
@@ -9690,6 +9709,11 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     const res=sevResist(B,cap,prot,pen);if(window.__sevLog)window.__sevLog.push([cap.zone,+cp.toFixed(2),+res.toFixed(2)]);
     if(cp>res&&cap.zone!=='head'&&cap.zone!=='torso')sev=cap.zone==='neck'?'Head':cap.sever;
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
+  /* (Build 222) a body cut in two: a heavy edge swung level through the waist with everything behind it. Rare: an axe, a greatsword, a poleaxe
+     or a falchion at full swing on an unarmoured or lightly armoured man (resistance 19 against a leg's 12.5, armour counted as for limbs) */
+  let bis=false;if(mode==='cut'&&W.sever>0&&!glance&&cap.zone==='torso'&&!B.noSever&&!B.undead&&!B.dummy&&B.bones.Hips&&B.bones.Spine2&&!B.bones.Spine1.userData.severed){
+    _ov.setFromMatrixPosition(B.bones.Hips.matrixWorld);_ow.setFromMatrixPosition(B.bones.Spine2.matrixWorld).sub(_ov);const tW=_v.subVectors(P,_ov).dot(_ow)/(_ow.lengthSq()||1),lvl=Math.abs(dir.dot(_ow.normalize()));
+    if(tW>.1&&tW<.85&&lvl<.5){const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF)/Math.max(.3,sevPlace(cap,P)),res=(window.__bisRes||19)*(1+prot*(1-pen)*2.2)*(.7+.3*clamp(B.hp/100,0,1));if(window.__sevLog)window.__sevLog.push(['waist',+cp.toFixed(2),+res.toFixed(2)]);bis=cp>res;}}
   if(B.undead==='skel'&&!sev&&!glance&&cap.sever&&cap.zone!=='torso'&&cap.zone!=='head'&&(mode==='blunt'?dmg>14:mode==='cut'?dmg>16:false))sev=cap.zone==='neck'?'Head':cap.sever;   // (Build 214) dry bones: a fair blow knocks a limb or the skull clean off
   if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
@@ -9710,6 +9734,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     if(W.weight>1.25&&mode!=='blunt'&&dmg>15)sThud(P,.5);}
   if(!sev&&cap.zone==='head'&&B.armor.head&&!B.noSever&&(mode==='blunt'?speed*W.weight>9:speed*W.weight>13)&&Math.random()<.55)knockHelmet(B,dir,speed);   // a big blow to the head can knock the helmet clean off
   if((sev&&sev!=='Head')||(mode==='blunt'&&dmg>26&&cap.zone!=='torso'))sfx('crush',P,.7,1.45);   // bone giving way
+  if(bis){cheer(.8,1);B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'cut in two',imp,P);B.bisect(dir.clone().multiplyScalar(speed*.3));sfx('crush',P,.9,1.2);tell(A,'Cut in two','red');return;}
   if(sev){cheer(.55,1);
     B.sever(sev,dir.clone().multiplyScalar(speed*.45));
     if(B.undead!=='skel')spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.3).setY(1.5),30,2.5,1.4);
