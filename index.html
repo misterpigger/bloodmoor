@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=239;
+const BUILD=240;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -3036,7 +3036,7 @@ function roadVisual(dt){const R=ROAD;if(!R)return;const c=R.cart;roadFx(dt);
 // its ring as a damped pendulum, and lights what is round it. The player's own is the one light in the game that casts shadows
 // (LAMP_SH, never made on phones); everyone else's, and one lying on the ground, go through the flame pool. Right mouse button lifts it high.
 const LAMPS=[],LAMP_LEN=.25,LAMP_H=.407;let LAMP_SH=null,LAMP_PARTS=null;
-/* (Build 239) a faint cool light that rides with the camera in the crypt, so the man you play is a figure and not a black cut-out against his own lantern; always in the scene (never toggled), zero elsewhere */const CAM_FILL=new THREE.PointLight(0xa09da6,0,4.6,1.5);CAM_FILL.position.set(0,-60,0);scene.add(CAM_FILL);
+/* (Build 239) a faint cool light that rides with the camera in the crypt, so the man you play is a figure and not a black cut-out against his own lantern; always in the scene (never toggled), zero elsewhere */
 if(!TOUCH){LAMP_SH=new THREE.PointLight(0xffa860,0,14,1.1);LAMP_SH.castShadow=true;LAMP_SH.shadow.mapSize.set(512,512);LAMP_SH.shadow.camera.near=.06;LAMP_SH.shadow.camera.far=14;LAMP_SH.shadow.bias=-.008;LAMP_SH.shadow.normalBias=.05;LAMP_SH.shadow.autoUpdate=false;LAMP_SH.visible=false;LAMP_SH.position.set(0,-60,0);scene.add(LAMP_SH);}
 /* (Build 235) three kinds of lantern, as down any real cellar: the square horn-paned hand lantern (0), a round pierced lantern with a
    conical cap (1: dimmer and warmer), and an open iron lamp bowl hung on three chains (2: a bare flame, brighter, guttering) */
@@ -3494,10 +3494,16 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
   const rubble=(x,z,n,rad=.5)=>{for(let i=0;i<n;i++){const a=R()*6.283,rr=Math.pow(R(),.7)*rad,sz=.07+R()*.2*(1-rr/rad*.5);addGeo(rock(),boxUV(sz*(1+R()*.6),sz*(.6+R()*.5),sz*(1+R()*.6),1),T(x+Math.cos(a)*rr,sz*.3+Math.max(0,(1-rr/rad))*rad*.28*R(),z+Math.sin(a)*rr,R()*3,R()*.7,R()*.7));}};
   const pillar=(x,z,H,w=.62)=>{addGeo('cryptVault',boxUV(w+.3,.26,w+.3,2),T(x,.13,z));addGeo('cryptVault',boxUV(w+.16,.1,w+.16,2),T(x,.31,z));let y=.36;while(y<H-.34){const bh=Math.min(H-.34-y,.3+R()*.22),ww=w*(.96+R()*.07);addGeo('cryptWall',boxUV(ww,bh-.012,ww,2),T(x+(R()-.5)*.02,y+bh/2,z+(R()-.5)*.02,(R()-.5)*.05));y+=bh;}
     addGeo('cryptVault',boxUV(w+.18,.12,w+.18,2),T(x,H-.28,z));addGeo('cryptVault',boxUV(w+.34,.22,w+.34,2),T(x,H-.11,z));addBox(x-w/2-.04,x+w/2+.04,z-w/2-.04,z+w/2+.04,9);if(R()<.7)rubble(x+(R()-.5)*.5,z+(R()-.5)*.5,7+R()*8|0,.55);};
-  const trestle=(x,z,ry)=>{const c=Math.cos(ry),sn=Math.sin(ry),at=(lx,lz)=>[x+lx*c+lz*sn,z-lx*sn+lz*c];for(let k=0;k<3;k++){const [px,pz]=at(0,(k-1)*.24);addGeo('wood',boxUV(1.9+R()*.1,.045,.23,1),T(px,.78+(R()-.5)*.006,pz,ry+(R()-.5)*.02));}
+  /* (Build 240) the crypt's furniture is the scanned furniture the Tavern has (CC0 Poly Haven, already in assets/models), not planks and rods drawn in code: tables, benches, stools, buckets, baskets, bowls, jugs, a cupboard */
+  const trestle=(x,z,ry)=>{const c=Math.cos(ry),sn=Math.sin(ry),hw=Math.abs(c)*.98+Math.abs(sn)*.45,hd=Math.abs(sn)*.98+Math.abs(c)*.45;placeModel('WoodenTable_01',{x,z,ry,fit:[1.95,.8,.9]},g=>{const add=(geo,px,py,pz)=>{const m=new THREE.Mesh(geo,MATS.wood);m.position.set(px,py,pz);g.add(m);};add(boxUV(1.95,.06,.8,1),0,.77,0);for(const e of [-1,1])for(const d of [-1,1])add(boxUV(.07,.74,.07,1),e*.85,.37,d*.32);});addBox(x-hw,x+hw,z-hd,z+hd,.82);};
+  const trestleOld=(x,z,ry)=>{const c=Math.cos(ry),sn=Math.sin(ry),at=(lx,lz)=>[x+lx*c+lz*sn,z-lx*sn+lz*c];for(let k=0;k<3;k++){const [px,pz]=at(0,(k-1)*.24);addGeo('wood',boxUV(1.9+R()*.1,.045,.23,1),T(px,.78+(R()-.5)*.006,pz,ry+(R()-.5)*.02));}
     for(const e of [-1,1]){for(const sd of [-1,1]){const [ax,az]=at(e*.72,sd*.34),[bx,bz]=at(e*.72,sd*.06);vRod('wood',V(ax,0,az),V(bx,.76,bz),.032,5);}const [mx,mz]=at(e*.72,0);addGeo('wood',boxUV(.06,.05,.5,1),T(mx,.4,mz,ry));}
     const hw=Math.abs(c)*.98+Math.abs(sn)*.4,hd=Math.abs(sn)*.98+Math.abs(c)*.4;addBox(x-hw,x+hw,z-hd,z+hd,.82);};
-  const benchC=(x,z,ry,tip=0)=>{const c=Math.cos(ry),sn=Math.sin(ry);addGeo('wood',boxUV(1.5,.045,.27,1),T(x,tip?.14:.45,z,ry,tip*1.35,0));if(tip)return;for(const e of [-1,1]){const px=x+e*.6*c,pz=z-e*.6*sn;addGeo('wood',boxUV(.05,.44,.25,1),T(px,.22,pz,ry));}
+  const stoolC=(x,z)=>{if(isFree(x,z,.25))dynModel('wooden_stool_02',{x,z,ry:R()*6.283,h:.44},{m:5,auto:'table',noOb:true,grp:'m',hp:45,bits:['stave'],snd:'wood'});};
+  const odd=(x,z,k)=>{if(!isFree(x,z,.3))return;const ry=R()*6.283;if(k===0)dynModel('wooden_bucket_01',{x,z,ry,h:.4},{m:2.4,auto:'cyl',snd:'wood'});else if(k===1)dynModel('wicker_basket_01',{x,z,ry,h:.3},{m:1.3,auto:'cyl'});else if(k===2)dynModel('wooden_bucket_02',{x,z,ry,h:.36},{m:2.2,auto:'cyl',snd:'wood'});else dynModel('wooden_crate_01',{x,z,ry,h:.5},{m:9,auto:'box',snd:'wood'});};
+  const onTable=(x,z,k)=>{const ry=R()*6.283;if(k===0)dynModel('wooden_bowl_01',{x,y:.85,z,ry,h:.07},{m:.3,auto:'cyl',snd:'wood'});else dynModel('CheeseBox_01',{x,y:.85,z,ry,h:.12},{m:.6,auto:'cyl',snd:'wood'});};
+  const benchC=(x,z,ry,tip=0)=>{const c=Math.cos(ry),sn=Math.sin(ry);if(!tip){dynModel('wooden_stool_02',{x,z,ry,fit:[1.5,.46,.3]},{m:14,auto:'table',noOb:true,grp:'m',hp:90,bits:['plank'],snd:'wood'},g=>{const m=new THREE.Mesh(boxUV(1.5,.05,.28,1),MATS.wood);m.position.y=.44;g.add(m);});return;}
+    addGeo('wood',boxUV(1.5,.045,.27,1),T(x,tip?.14:.45,z,ry,tip*1.35,0));if(tip)return;for(const e of [-1,1]){const px=x+e*.6*c,pz=z-e*.6*sn;addGeo('wood',boxUV(.05,.44,.25,1),T(px,.22,pz,ry));}
     const hw=Math.abs(c)*.76+Math.abs(sn)*.15,hd=Math.abs(sn)*.76+Math.abs(c)*.15;addBox(x-hw,x+hw,z-hd,z+hd,.48);};
   const leanPlanks=(x,z,nx,nz,n=2)=>{const ry=Math.atan2(nx,nz),tx=nz,tz=-nx;for(let i=0;i<n;i++){const L=1.7+R()*.7,o=(i-(n-1)/2)*.26+(R()-.5)*.05,lean=.2+R()*.12,w=.2+R()*.06;addGeo(R()<.5?'wood':'woodPale',boxUV(w,L,.035,1),T(x+tx*o+nx*(Math.sin(lean)*L/2+.02),Math.cos(lean)*L/2,z+tz*o+nz*(Math.sin(lean)*L/2+.02),ry,lean,(R()-.5)*.06));}};
   const propLadder=(x,z,nx,nz)=>{const ry=Math.atan2(nx,nz),tx=nz,tz=-nx,L=2.5,lean=.3,top=(s)=>V(x+tx*s+nx*.02,Math.cos(lean)*L,z+tz*s+nz*.02),bot=(s)=>V(x+tx*s+nx*(Math.sin(lean)*L+.02),0,z+tz*s+nz*(Math.sin(lean)*L+.02));
@@ -3611,8 +3617,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       // what gathers in the corners: casks, crates, bones
       for(const [sx,sz] of [[1,1],[-1,1],[1,-1],[-1,-1]]){const r=R(),x=cx+sx*(hx-.6),z=cz+sz*(hz-.6);if(c.type==='exit'||c.kind==='ossuary'||c.kind==='cells')continue;if(r<.16)barrel(x,z);else if(r<.3)crate(x,z,.7);else if(r<.5){const n=2+(R()*4|0);for(let i=0;i<5;i++){const L=.36+R()*.12;looseGroup([['bone',prep(boneLathe(L,.013),T(x-sx*(.05+R()*.45),.03+(i>2?.04:0),z-sz*(.05+R()*.45),R()*6.283,0,Math.PI/2+(R()-.5)*.15))]],.35);}   // (Build 217) a heap of the dead swept into the corner: long bones under, skulls on them (were pale balls and sticks)
           for(let i=0;i<n;i++){const a=R()*6.283,rr=R()*.32,S=skullGeo(),Mk=T(x-sx*.12+Math.cos(a)*rr,.05+(i>2?.13:0),z-sz*.12+Math.sin(a)*rr,R()*6.283,(R()-.5)*.5,(R()-.5)*.6);looseGroup([['bone',prep(S.b,Mk)],['boneDark',prep(S.d,Mk)]],.9);}}}
-      if(c.type!=='exit'&&c.kind!=='shrine'&&c.kind!=='larder'&&c.kind!=='tomb'){if(c.type==='room'&&!c.dark&&R()<.28){const x=cx+(R()<.5?-1:1)*(hx-.55),z=cz+(R()-.5)*hz;if(isFree(x,z,.3))C.lampsX.push([x,z,0,R()<.6?0:1]);}   /* a lantern left standing: you start with only a candle */
-    const ns=c.type==='hall'?2:1;for(let i=0;i<ns;i++)C.spots.push(c.sunk?{x:cx+(i?1:-1)*(hx-.9),z:cz+(R()-.5)*(hz*1.2),c}:{x:cx+(R()-.5)*(hx*1.1),z:cz+(R()-.5)*(hz*1.1),c});}
+      if(c.type!=='exit'&&c.kind!=='shrine'&&c.kind!=='larder'&&c.kind!=='tomb'){const ns=c.type==='hall'?2:1;for(let i=0;i<ns;i++)C.spots.push(c.sunk?{x:cx+(i?1:-1)*(hx-.9),z:cz+(R()-.5)*(hz*1.2),c}:{x:cx+(R()-.5)*(hx*1.1),z:cz+(R()-.5)*(hz*1.1),c});}
       const wl=free.length>used?free[free.length-1]:null,K=c.kind;   // (Build 213) what kind of room it is: the walls are the plan's, what stands in it is the room's own
       if(K==='ossuary'){const SM=skullGeoMid(),HT=1.62,DP=.36;for(const w of free.slice(used)){const [dx,dz]=w,al=dx?c.hz:c.hx,ry=Math.atan2(-dx,-dz),L=2*al-.5;   // (Build 231) rebuilt: a stacked wall of bone ends to shoulder height, with three rows of skulls
           const [mx,mz]=inner(c,dx,dz,0,DP/2),uvS=(g,u,v)=>{const q=g.attributes.uv;for(let k=0;k<q.count;k++)q.setXY(k,q.getX(k)*u,q.getY(k)*v);return g;};
@@ -3739,7 +3744,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       for(let i=0;i<2;i++){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.8),.3);if(linkOf(c,dx,dz)&&Math.abs((dx?z-cz:x-cx))<CW+.5)continue;if(isFree(x,z,.3))rubble(x,z,6+R()*9|0,.5);}
       if(R()<.55){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.9),.35+R()*.3);if(isFree(x,z,.15))find(R()<.45?'purse':R()<.4?'flask':R()<.5?'bread':R()<.6?'candlestick':'cup',x,.03,z);}   /* something dropped at the foot of a wall */
       if(R()<.34){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.9),.4+R()*.4);if(isFree(x,z,.2))find(pick(D>=2?['tunic','tunic','hose','shoes','gambeson','shirt']:['tunic','hose','shoes','shoes','shirt']),x,.03,z);}   /* (Build 236) clothes: you start with none */
-      if(c.kind==='plain'||c.kind==='store'||c.kind==='fallen'||!c.kind){const tx=cx+(R()-.5)*(hx-1.6),tz=cz+(R()-.5)*(hz-1.6),ry=R()*3.14;if(isFree(tx,tz,1.2)){trestle(tx,tz,ry);tableSet(tx,tz,ry);if(R()<.55)find(R()<.4?'bread':R()<.5?'cup':R()<.6?'flask':'purse',tx+(R()-.5)*.3,.81,tz+(R()-.5)*.3);const bx=tx+Math.sin(ry)*.75,bz=tz+Math.cos(ry)*.75;if(isFree(bx,bz,.5))benchC(bx,bz,ry+(R()-.5)*.3,R()<.3?1:0);}
+      if(c.kind==='plain'||c.kind==='store'||c.kind==='fallen'||!c.kind){const tx=cx+(R()-.5)*(hx-1.6),tz=cz+(R()-.5)*(hz-1.6),ry=R()*3.14;if(isFree(tx,tz,1.2)){trestle(tx,tz,ry);tableSet(tx,tz,ry);if(R()<.7)onTable(tx+Math.cos(ry)*.55,tz-Math.sin(ry)*.55,(R()*3)|0);if(R()<.6)stoolC(tx-Math.cos(ry)*1.45,tz+Math.sin(ry)*1.45);for(let i=0;i<2;i++)if(R()<.7)odd(cx+(R()<.5?-1:1)*(hx-.5),cz+(R()-.5)*2*(hz-.9),(R()*4)|0);if(R()<.55)find(R()<.4?'bread':R()<.5?'cup':R()<.6?'flask':'purse',tx+(R()-.5)*.3,.81,tz+(R()-.5)*.3);const bx=tx+Math.sin(ry)*.75,bz=tz+Math.cos(ry)*.75;if(isFree(bx,bz,.5))benchC(bx,bz,ry+(R()-.5)*.3,R()<.3?1:0);}
         const fr=free[(R()*free.length)|0];if(fr){const [dx,dz]=fr,al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-1),0);if(isFree(x-dx*.4,z-dz*.4,.35)){if(R()<.5)leanPlanks(x,z,-dx,-dz,2+(R()<.4?1:0));else propLadder(x,z,-dx,-dz);}}
         if(c.roof!=='timber'&&R()<.28){const x=cx+(R()-.5)*(hx-1.5),z=cz+(R()-.5)*(hz-1.5);if(isFree(x,z,.8))moonShaft(x,z,H,.45);}
         if(R()<.3){const x=cx+(R()-.5)*2*(hx-1.2),z=cz+(R()-.5)*2*(hz-1.2);if(isFree(x,z,.6))barrow(x,z,R()*6.283);}}
@@ -4126,7 +4131,7 @@ function cryptMind(f,h,wish){const A=f.ai,M=A.mind,P=player;if(!M)return;navRead
 function cryptHud(){const R=RUN;if(!R||!R.crypt)return;MODEHUD=[`The Crypt · ${R.depth===1?'the cells':R.depth<4?'the crypts':'the catacombs'} · depth ${R.depth}`,`${R.coin} coin${R.flasks?` · ${R.flasks} flask${R.flasks>1?'s':''}`:''}`];}
 function cryptPopulate(){const C=CRYPT,R=RUN,D=R.depth,rk=careerRank();
   for(const l of LAMPS)if(!torchLights.includes(l.L))torchLights.push(l.L);
-  if(player&&!player.lamp&&C.lampAt)lampAdd(C.lampAt[0],C.lampAt[1],C.lampAt[2],CRYPT_DEPTH===1&&!/[?&]lantern/.test(location.search)?3:0);   /* you begin with a candle; a lantern is something you find, or take from someone */
+  if(player&&!player.lamp&&C.lampAt)lampAdd(C.lampAt[0],C.lampAt[1],C.lampAt[2],0);   /* you begin with a candle; a lantern is something you find, or take from someone */
   /* (Build 214) nothing is laid out for you any more: you wake with your hands and find the rest. What lies about is poor stuff near the top
      and better the deeper you go */
   const tierL=clamp(Math.floor((D-1)/2),0,CAREER_FOES.length-1);
@@ -4209,7 +4214,7 @@ function cryptTalk(f,o){const C=CRYPT,M=o.ai.mind;M.spoke=(M.spoke||0)+1;if(M.mo
   const H=M.hints||(M.hints=cryptHints(C));if(M.hi<H.length){sayLine(o,H[M.hi++]);return;}sayLine(o,pick(['That is all I know.','Leave me be now.','Go on, if you are going.']));}
 function cryptUse(f,probe){const C=CRYPT,R=RUN;if(!C||!R||!R.crypt||R.over||!f||!f.alive||f.ragdoll)return null;const x=f.pos.x,z=f.pos.z,fac=(px,pz)=>{const dx=px-x,dz=pz-z,d=Math.hypot(dx,dz);return d<.75||(Math.sin(f.yaw)*dx+Math.cos(f.yaw)*dz)/d>.2;};   // (Build 217) only what you face: the prompt offered a lid behind your back
   if(f.lidLift){if(probe)return TOUCH?'Thumb up to lift the lid':'Mouse up to lift the lid';lidRelease(f);return true;}
-  if(f.isPlayer){const o=cryptTalkTo(f);if(o&&!(o.ai.mind.spoke>5)){if(probe)return 'Speak to him';cryptTalk(f,o);return true;}}
+
   if(f.coffinLift){if(probe)return TOUCH?'Thumb up to shove the lid across':'Mouse up to shove the lid across';f.coffinLift.c.held=null;f.coffinLift=null;if(f.reach)f.reach.w=0;return true;}
   for(const c of C.coffins)if(!c.opened&&Math.abs(c.x-x)<1.05&&Math.abs(c.z-z)<1.3&&!c.held&&fac(c.x,c.z)&&f.isPlayer){if(probe)return 'Put a hand on the lid';const sd=c.sg||Math.sign(c.x-x)||1;c.sg=sd;c.held=f;f.coffinLift={c,auto:1,t:0};f.reach={side:f.sword&&f.sword.def.kind!=='fist'?(f.mainArm==='R'?'L':'R'):'R',pos:V(),w:1};sfx('pickup',c.lid.position,.3,.6,0,false);return true;}   // (Build 219) E puts your hand on it and shoves it across (the player couldn't find the G way with a weapon and lantern in hand); G still works
   if(f.isPlayer&&C.gate&&C.gate.locked&&(C.gate.x-x)**2+(C.gate.z-z)**2<2.6){const R=RUN;if(probe)return R.keys>0?'Unlock the gate':'Locked · someone down here has the key';
@@ -5246,7 +5251,7 @@ function mhPartMat(P,col,kind,soft){const k=P.H.id+'|'+col.getHexString()+(soft?
     if(kk&&P.H.locks)sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
     { diffuseColor.rgb*=mix(.1,1.,smoothstep(-.05,.4,dot(normalize(vNormal),normalize(vViewPosition))));   /* locks on the far side of the head, lit from beyond and seen through the gaps of the near side, sparkled as bright dots */
       float l0=dot(texture2D(map,vMapUv,1.6).rgb,vec3(.333));vec2 dH=vec2(dFdx(l0),dFdy(l0))*HAIR_BUMP;vec3 sx=dFdx(-vViewPosition),sy=dFdy(-vViewPosition),R1=cross(sy,normal),R2=cross(normal,sx);float det=dot(sx,R1);
-      vec3 gr=sign(det)*(dH.x*R1+dH.y*R2);normal=normalize(abs(det)*normal-gr);diffuseColor.rgb*=.66+.5*smoothstep(.08,.75,l0); }`.replace('HAIR_BUMP',(+(new URLSearchParams(location.search).get('hbump')??.006)).toFixed(4)));
+      vec3 gr=sign(det)*(dH.x*R1+dH.y*R2);normal=normalize(abs(det)*normal-gr);{vec3 upV=normalize((viewMatrix*vec4(0.,1.,0.,0.)).xyz);float dn=dot(normal,upV);if(dn<.05)normal=normalize(normal+upV*(.05-dn));}   /* (Build 240) hair never faces down: the locks at the nape did, and a lantern carried at the hip (which the carrier's own body doesn't shadow) lit their undersides as a scatter of bright dots */diffuseColor.rgb*=.66+.5*smoothstep(.08,.75,l0); }`.replace('HAIR_BUMP',(+(new URLSearchParams(location.search).get('hbump')??.006)).toFixed(4)));
     // (Build 129) hair's own highlight (Kajiya-Kay): light catches a strand across its length, not as a round spot, so a bright band runs
     // across the hair where the strands face the light half-way to the eye, and a second, tinted one shifted toward the roots
     if(kk)sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
@@ -11575,7 +11580,7 @@ function frame(now){
   if(state==='attract'&&fighters.filter(f=>f.alive).length<=1&&performance.now()-attractRestart>4000){attractRestart=performance.now()+1e9;setTimeout(()=>{if(state==='attract'){spawnMatch(false);attractRestart=performance.now();}},3500);}
   updateHUD(dt);renderPreview(dt);musicTick();
   {const show=!TOUCH&&state==='playing'&&!input.locked&&!paused&&!!player&&player.alive;const lh=el('lockhint');if(lh.classList.contains('hide')===show)lh.classList.toggle('hide',!show);}
-  grassStep();if(CRYPT){CAM_FILL.position.copy(camera.position);CAM_FILL.position.y+=.25;CAM_FILL.intensity=camMode==='fp'?.1:.36;}else CAM_FILL.intensity=0;composer.render();
+  grassStep();composer.render();
 }
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
