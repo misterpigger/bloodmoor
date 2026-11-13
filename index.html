@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=221;
+const BUILD=222;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -6497,6 +6497,9 @@ class Ragdoll{
       const cq=new THREE.Quaternion();bones.Spine2.updateWorldMatrix(true,false);bones.Spine2.matrixWorld.decompose(_pp,cq,_ps);
       this.offC=basisQ(_rv.subVectors(this.P.Neck,this.P.Spine1),_ru.subVectors(this.P.LeftArm,this.P.RightArm),new THREE.Quaternion()).invert().multiply(cq);
     }
+    if(!this.hips&&this.names[0]==='Spine1'&&this.P.Spine2&&this.P.Neck&&this.P.LeftArm&&this.P.RightArm){   // (Build 222) a trunk cut loose: its root and chest are turned by its own points (they weren't turned at all, so it crumpled)
+      const q=new THREE.Quaternion();bones.Spine1.updateWorldMatrix(true,false);bones.Spine1.matrixWorld.decompose(_pp,q,_ps);this.offS=basisQ(_rv.subVectors(this.P.Neck,this.P.Spine1),_ru.subVectors(this.P.LeftArm,this.P.RightArm),new THREE.Quaternion()).invert().multiply(q);
+      const cq=new THREE.Quaternion();bones.Spine2.updateWorldMatrix(true,false);bones.Spine2.matrixWorld.decompose(_pp,cq,_ps);this.offC=basisQ(_rv.subVectors(this.P.Neck,this.P.Spine1),_ru.subVectors(this.P.LeftArm,this.P.RightArm),new THREE.Quaternion()).invert().multiply(cq);}
     this.age=0;this.sleep=false;this.tone=0;this.lim=0;
     this.full={};for(const [a,m,b] of [['LeftArm','LeftForeArm','LeftHand'],['RightArm','RightForeArm','RightHand'],['LeftUpLeg','LeftLeg','LeftFoot'],['RightUpLeg','RightLeg','RightFoot']])if(this.P[a]&&this.P[m]&&this.P[b])this.full[b]=this.P[a].distanceTo(this.P[m])+this.P[m].distanceTo(this.P[b]);
   }
@@ -6631,7 +6634,9 @@ class Ragdoll{
       const hips=b.Hips;hips.parent.updateWorldMatrix(true,false);_rinv.copy(hips.parent.matrixWorld).invert();hips.position.copy(P.Hips).applyMatrix4(_rinv);
       setWorldQuat(hips,basisQ(_rv.subVectors(P.Spine1,P.Hips),_ru.subVectors(P.LeftUpLeg,P.RightUpLeg),_rq).multiply(this.offH),true);   /* (the hips' parents were brought up to date on the line above; from here every turn brings what hangs from it up to date) */
       if(P.Neck&&P.LeftArm&&P.RightArm)setWorldQuat(b.Spine2,basisQ(_rv.subVectors(P.Neck,P.Spine1),_ru.subVectors(P.LeftArm,P.RightArm),_rq).multiply(this.offC),true);
-    } else if(rootDebris){rootDebris.position.copy(P[this.names[0]]);rootDebris.updateMatrixWorld(true);}
+    } else if(rootDebris){rootDebris.position.copy(P[this.names[0]]);
+      if(this.offS){basisQ(_rv.subVectors(P.Neck,P.Spine1),_ru.subVectors(P.LeftArm,P.RightArm),_rq);rootDebris.quaternion.copy(_rq).multiply(this.offS);rootDebris.updateMatrixWorld(true);setWorldQuat(b.Spine2,_rq.multiply(this.offC),true);}
+      rootDebris.updateMatrixWorld(true);}
     const cl=!!(this.hips||rootDebris);
     // each bone is aimed from its bind-pose turn under its parent, not from wherever it was last frame: turning a bone the shortest way
     // from its previous pose every frame let the roll about its own length build up (an arm swung round and back came back wrung), so
@@ -9095,9 +9100,12 @@ class Fighter{
     spawnDebris(this,'Spine1',vel);const D=debris[debris.length-1];
     bone.userData.severed=true;bone.scale.setScalar(1e-4);this.severedBones.push(bone);this.sevNames.push('Spine1');netEv(['x',this.id,'Spine1',r3v(vel)]);
     const up=new Set(DESC.Spine1);for(const n of up)this.detached.add(n);if(this.ragdoll){this.ragdoll.drop(up);this.ragdoll.sleep=false;}
-    for(const z of ['armL','armR','head'])if(this.limbs[z]){this.limbs[z].sev=true;this.limbs[z].hp=0;}this.armor.head=null;this.armor.arms=null;this.armor.body=null;this.helmet=-1;this.mainArm=null;if(this.pb)this.physCapsOn();
-    const cap=cutFace(bone.parent,bone.position,bone.position,.15);if(cap){(this.bloodSrc||(this.bloodSrc=[])).push({o:cap,c:V(),amt:2.4,born:simTime});spurts.push({obj:cap,until:simTime+9,born:simTime,dur:9,art:1.6});gutSpill(cap);}
-    if(D&&D.root){for(const o of D.root.children)if(o.userData&&o.userData.cutFace){gutSpill(o);break;}}
+    for(const z of ['armL','armR','head'])if(this.limbs[z]){this.limbs[z].sev=true;this.limbs[z].hp=0;}this.mainArm=null;if(this.pb)this.physCapsOn();
+    {const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const done=new Set();this.model.traverse(o=>{const sk=o.isSkinnedMesh&&o.skeleton;if(!sk||done.has(sk))return;done.add(sk);const pi=sk.bones.findIndex(b=>b===bone.parent);if(pi<0)return;sk.boneInverses=sk.boneInverses.slice();
+        for(let i=0;i<sk.bones.length;i++)if(sk.bones[i]&&sub.has(sk.bones[i].name)){sk.bones[i]=sk.bones[pi];sk.boneInverses[i]=sk.boneInverses[pi];}});}   // what the hips' side still owes to the trunk's bones rides with the hips (shrunk to the cut, the waist drew in to a point like a jar's neck)
+    const cap=cutFace(bone.parent,bone.position,bone.position,.15);if(cap){cap.quaternion.setFromUnitVectors(Z_AXIS,_pp.copy(bone.position).normalize());cap.scale.set(1.18,.78,1);(this.bloodSrc||(this.bloodSrc=[])).push({o:cap,c:V(),amt:2.4,born:simTime});spurts.push({obj:cap,until:simTime+9,born:simTime,dur:9,art:1.6});gutSpill(cap);}
+    if(D&&D.root){for(const o of D.root.children)if(o.userData&&o.userData.cutFace){o.quaternion.setFromUnitVectors(Z_AXIS,_pp.set(0,-1,0));o.scale.set(1.18,.78,1);gutSpill(o);break;}
+      if(D.rag){const R=D.rag;for(const n of R.names){R.Q[n].copy(R.P[n]).addScaledVector(_v.copy(this.vel).add(vel).setY(.6),-H*2);}}}   // a trunk is heavy: it topples off the hips, it isn't flung like a hand
     _v.setFromMatrixPosition(bone.matrixWorld);for(let i=0;i<3;i++)spawnBlood(_v,_t3.set(rand(-1.5,1.5),rand(.5,2.5),rand(-1.5,1.5)),26,2.6,1.5);
     return true;}
   sever(boneName,vel){
@@ -9279,6 +9287,23 @@ function ik2(up,lo,target,pole,a,c){
 // every image into a data URL, freezing the game for seconds at each dismemberment (Build 139). Clone with userData set aside, then share it.
 function cloneLite(model){const saved=[];model.traverse(o=>{saved.push([o,o.userData]);o.userData={};});let c;try{c=SkeletonUtils.clone(model);}finally{for(const [o,u] of saved)o.userData=u;}
   const src=[],dst=[];model.traverse(o=>src.push(o));c.traverse(o=>dst.push(o));for(let i=0;i<Math.min(src.length,dst.length);i++){const u=src[i].userData,d={};for(const k in u){const v=u[k];d[k]=Array.isArray(v)?v.slice():v;}dst[i].userData=d;}return c;}
+/* (Build 222) a cut divides the meshes themselves. Every skinned mesh on the body (skin, clothes, mail, plates, hair) is split triangle by
+   triangle: those that ride mostly on the severed part's bones go with the part, the rest stay. Before, both sides kept every triangle and
+   hid the other side's by shrinking its bones to nothing, which drew cones and stretched sheets wherever a garment or a plate spanned the
+   cut (a body cut at the waist was two crumpled lumps). In the severed part, what its triangles still owe to bones on the other side
+   rides rigidly with the part's own root bone, so nothing stretches back to the body. */
+function sliceMeshes(model,clone,bone,croot){const sub=new Set();bone.traverse(o=>{if(o.isBone)sub.add(o.name);});const A=[],B=[];model.traverse(o=>{if(o.isSkinnedMesh)A.push(o);});clone.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});croot.traverse(o=>{if(o.isSkinnedMesh)B.push(o);});
+  if(A.length!==B.length)return;const done=new Set();
+  for(let k=0;k<A.length;k++){const m=A[k],c=B[k],g=m.geometry;if(!g||!g.attributes.skinIndex||g.groups&&g.groups.length>1||c.geometry!==g)continue;
+    const bones=m.skeleton.bones,key=bone.name+'|'+bones.length;let cut=!g.userData.derived&&g.userData._cut&&g.userData._cut[key];
+    if(!cut){const inS=bones.map(b=>b&&sub.has(b.name)),si=g.attributes.skinIndex,sw=g.attributes.skinWeight,n=g.attributes.position.count,w=new Float32Array(n);
+      for(let i=0;i<n;i++){let t=0;if(inS[si.getX(i)])t+=sw.getX(i);if(inS[si.getY(i)])t+=sw.getY(i);if(inS[si.getZ(i)])t+=sw.getZ(i);if(inS[si.getW(i)])t+=sw.getW(i);w[i]=t;}
+      const ix=g.index?g.index.array:null,nt=(ix?ix.length:n)/3|0,keep=[],part=[];for(let t=0;t<nt;t++){const a=ix?ix[t*3]:t*3,b=ix?ix[t*3+1]:t*3+1,d=ix?ix[t*3+2]:t*3+2;(w[a]+w[b]+w[d]>=1.5?part:keep).push(a,b,d);}
+      const T=n>65535?Uint32Array:Uint16Array;cut={keep:new T(keep),part:new T(part)};if(!g.userData.derived)(g.userData._cut||(g.userData._cut={}))[key]=cut;}
+    if(!cut.part.length){c.visible=false;continue;}   // nothing of this mesh is on the severed part
+    const mk=arr=>{const q=new THREE.BufferGeometry();for(const a in g.attributes)q.setAttribute(a,g.attributes[a]);q.morphAttributes=g.morphAttributes;q.morphTargetsRelative=g.morphTargetsRelative;q.setIndex(new THREE.BufferAttribute(arr,1));q.boundingSphere=g.boundingSphere;q.boundingBox=g.boundingBox;q.userData={derived:true};return q;};
+    m.geometry=mk(cut.keep);c.geometry=mk(cut.part);
+    const sk=c.skeleton;if(sk&&!done.has(sk)){done.add(sk);const ri=sk.bones.findIndex(b=>b&&b.name===bone.name);sk.boneInverses=sk.boneInverses.slice();/* (a cloned skeleton shares this array with the body it was cloned from) */if(ri>=0)for(let i=0;i<sk.bones.length;i++)if(sk.bones[i]&&!sub.has(sk.bones[i].name)){sk.bones[i]=sk.bones[ri];sk.boneInverses[i]=sk.boneInverses[ri];}}}}
 function spawnDebris(f,boneName,vel){
   const clone=cloneLite(f.model);
   f.model.updateWorldMatrix(true,true);f.model.matrixWorld.decompose(clone.position,clone.quaternion,clone.scale);scene.add(clone);clone.updateMatrixWorld(true);
@@ -9286,6 +9311,7 @@ function spawnDebris(f,boneName,vel){
   const ob=f.bones[boneName];ob.updateWorldMatrix(true,false);
   root.removeFromParent();ob.matrixWorld.decompose(root.position,root.quaternion,root.scale);scene.add(root);root.updateMatrixWorld(true);
   cb.Hips.scale.setScalar(1e-4);
+  sliceMeshes(f.model,clone,ob,root);
   clone.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=o.renderOrder!==2;}});
   const cap=cutFace(root,V(),V(0,-1,0),(SEV_R[boneName]||.06)*.92);
   const names=[boneName,...(DESC[boneName]||[])];
@@ -9710,10 +9736,10 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     if(cp>res&&cap.zone!=='head'&&cap.zone!=='torso')sev=cap.zone==='neck'?'Head':cap.sever;
   } else if(B.limbs[cap.zone]&&cap.zone!=='head'){B.limbs[cap.zone].hp-=dmg*.5;}
   /* (Build 222) a body cut in two: a heavy edge swung level through the waist with everything behind it. Rare: an axe, a greatsword, a poleaxe
-     or a falchion at full swing on an unarmoured or lightly armoured man (resistance 19 against a leg's 12.5, armour counted as for limbs) */
+     or a falchion at full swing on an unarmoured or lightly armoured man (resistance 13 against a leg's 12.5, but with no credit for where on the body it lands; armour counted as for limbs) */
   let bis=false;if(mode==='cut'&&W.sever>0&&!glance&&cap.zone==='torso'&&!B.noSever&&!B.undead&&!B.dummy&&B.bones.Hips&&B.bones.Spine2&&!B.bones.Spine1.userData.severed){
     _ov.setFromMatrixPosition(B.bones.Hips.matrixWorld);_ow.setFromMatrixPosition(B.bones.Spine2.matrixWorld).sub(_ov);const tW=_v.subVectors(P,_ov).dot(_ow)/(_ow.lengthSq()||1),lvl=Math.abs(dir.dot(_ow.normalize()));
-    if(tW>.1&&tW<.85&&lvl<.5){const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF)/Math.max(.3,sevPlace(cap,P)),res=(window.__bisRes||19)*(1+prot*(1-pen)*2.2)*(.7+.3*clamp(B.hp/100,0,1));if(window.__sevLog)window.__sevLog.push(['waist',+cp.toFixed(2),+res.toFixed(2)]);bis=cp>res;}}
+    if(tW>.1&&tW<.85&&lvl<.5){const cp=sevPower(A,W,cap,P,speed,mw,align,arcF,stamF)/Math.max(.3,sevPlace(cap,P)),res=(window.__bisRes||13)*(1+prot*(1-pen)*2.2)*(.7+.3*clamp(B.hp/100,0,1));if(window.__sevLog)window.__sevLog.push(['waist',+cp.toFixed(2),+res.toFixed(2)]);bis=cp>res;}}
   if(B.undead==='skel'&&!sev&&!glance&&cap.sever&&cap.zone!=='torso'&&cap.zone!=='head'&&(mode==='blunt'?dmg>14:mode==='cut'?dmg>16:false))sev=cap.zone==='neck'?'Head':cap.sever;   // (Build 214) dry bones: a fair blow knocks a limb or the skull clean off
   if(B.noSever)sev=null;
   const body=(cap.zone==='torso'||cap.zone==='head'||cap.zone==='neck')?dmg:dmg*.45;
