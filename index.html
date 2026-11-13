@@ -455,7 +455,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=225;
+const BUILD=226;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -1252,7 +1252,7 @@ function tarpGeo(a,h,c){const g=new THREE.BoxGeometry(2*a,h,2*c,10,4,10);g.trans
 MATS.clay=std({color:0x9c5636,roughness:.82});MATS.glaze=std({color:0x4d6236,roughness:.38});MATS.clayPale=std({color:0xb89a72,roughness:.8});
 MATS.apple=std({color:0x8e1f14,roughness:.45});MATS.apple2=std({color:0x7d8a2a,roughness:.5});MATS.cabbage=std({color:0x5d7a3a,roughness:.8});MATS.onion=std({color:0xa8743a,roughness:.6});
 MATS.bread=std({color:0x9a6430,roughness:.85});MATS.rope=std({color:0x7a6646,map:TX.wood,roughness:1});
-MATS.ember=std({color:0x2a0802,emissive:0xd8380a,emissiveIntensity:.9,roughness:1});MATS.coal=std({color:0x161210,roughness:1});
+MATS.ember=std({color:0x1c0501,emissive:0xff3200,emissiveIntensity:.42,roughness:1});   /* (Build 226: at .9 the tone curve turned the coals into pink blocks) */MATS.coal=std({color:0x161210,roughness:1});
 function ownGroup(x,z,ry,fn){const prev=GEO_TARGET;GEO_TARGET={};fn();const G=new THREE.Group();
   for(const k in GEO_TARGET){const m=new THREE.Mesh(mergeGeometries(GEO_TARGET[k]),MATS[k]);m.castShadow=m.receiveShadow=true;G.add(m);}
   GEO_TARGET=prev;G.position.set(x,0,z);G.rotation.y=ry;world.add(G);return G;}
@@ -1334,7 +1334,7 @@ function stall(x,z,r,cloth,kind){kind=kind??Math.floor(srand()*4);const cw=1.46,
 function brazier(x,z){ownGroup(x,z,srand()*6,()=>{
   addGeo('iron',lathe([[.44,1.2],[.46,1.19],[.42,1.15],[.3,.98],[.12,.9],[0,.89]],18),T(0,0,0));
   addGeo('coal',new THREE.CylinderGeometry(.4,.3,.08,14),T(0,1.08,0));
-  for(let i=0;i<9;i++){const a=i*2.3,rr=.08+(i%3)*.09;addGeo(i%3?'ember':'coal',new THREE.DodecahedronGeometry(.06+(i%2)*.025,0),T(Math.cos(a)*rr,1.13+(i%2)*.02,Math.sin(a)*rr,a));}
+  for(let i=0;i<22;i++){const a=i*2.399,rr=.03+Math.sqrt(i/22)*.24;addGeo(i%3?'ember':'coal',new THREE.DodecahedronGeometry(.032+(i%4)*.009,0),T(Math.cos(a)*rr,1.115+(i%3)*.016,Math.sin(a)*rr,a,a*1.7,a*.6));}
   for(let i=0;i<3;i++){const a=i*2.094,c=Math.cos(a),s=Math.sin(a);vRod('iron',V(c*.26,.97,s*.26),V(c*.36,.5,s*.36),.024,6);vRod('iron',V(c*.36,.5,s*.36),V(c*.46,.03,s*.46),.024,6,.02);
     addGeo('iron',new THREE.SphereGeometry(.035,6,4),T(c*.47,.03,s*.47));}
   addGeo('iron',new THREE.TorusGeometry(.36,.014,4,24),T(0,.5,0,0,Math.PI/2));});
@@ -4634,8 +4634,8 @@ function tintMaterial(m,mode,pal,mats){
             if(cl>.5){if(abs(gu)<1.1&&gy<(gh.w*1.7+.004)*pow(max(0.,1.-gu*gu/1.21),.5)*(.75+.5*nz)&&abs(gz)<.09)discard;}
             else if(abs(gu)<1.&&gy<gh.w*lens&&abs(gz)<.05)discard;}}
         else if(cl>.5){float tr=(.026+.028*min(a,1.))*(.6+.8*nz2);if(length(d)<tr)discard;}}   // the cloth is torn open where the blade went through
-      float dry=bld>.001?clamp(dryA/bld,0.,1.):0.;bld=clamp(bld,0.,1.);
-      vec3 bcol=mix(vec3(.42,.03,.03),vec3(.2,.01,.01),bld)*(uMode<.5?.85:1.);bcol=mix(bcol,vec3(.11,.035,.022),dry*.9);   // fresh blood is red and wet, old blood brown-black and matte
+      float dry=bld>.001?clamp(dryA/bld,0.,1.):0.;bld=clamp(bld,0.,1.);if(cl<.5)bld=smoothstep(.2,.5,bld)*(.8+.2*bld);   /* (Build 226) on skin blood is a film with an edge, not a blush: the soft falloff read as sunburn round every wound */
+      vec3 bcol=mix(vec3(.42,.03,.03),vec3(.2,.01,.01),bld)*(uMode<.5?.85:.42);   /* (Build 226: on skin .42 of what it was; the tone curve turned bright red into salmon pink) */bcol=mix(bcol,vec3(.11,.035,.022),dry*.9);   // fresh blood is red and wet, old blood brown-black and matte
       diffuseColor.rgb=mix(diffuseColor.rgb,bcol,bld*.92);
       float dirtM=0.;
       { vec3 b=vBind;float knee=exp(-pow((b.y-.5)/.08,2.))*smoothstep(-.02,.05,b.z),back=smoothstep(.0,-.08,b.z)*smoothstep(.85,1.,b.y)*smoothstep(1.6,1.4,b.y),
@@ -7364,7 +7364,7 @@ let ARMS=/[?&]arms/.test(location.search)||!/[?&]noarms/.test(location.search)&&
    hard as a trunk can (`PF_P.tq`), and moved only by the legs' push toward where the player or the bot means to go (`PF_P.acc`), so a blow
    or a body really moves him; the fighter's place follows the body (`pfSync`); what is drawn is the body as it is. Hand and weapon are the
    Build 154 physical weapon. Only the player and the nearest foe get it (it costs ~1 ms a fighter). */
-let PF=/[?&]pf\b/.test(location.search)||!/[?&]nopf/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-pf')==='1';}catch(e){return false;}})();const PF_P={sup:1,ky:120,cy:22,acc:9,kv:10,tq:420,aw:16,lose:.42,lean:.3,gnd:.13,cam:.12};try{const m=location.search.match(/[?&]pfp=([^&]*)/);if(m)Object.assign(PF_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}
+let PF=/[?&]pf\b/.test(location.search)||!/[?&]nopf/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-pf')==='1';}catch(e){return false;}})();const PF_P={sup:1,ky:120,cy:22,acc:9,kv:10,tq:420,aw:16,lose:.42,lean:.42,gnd:.13,cam:.12};try{const m=location.search.match(/[?&]pfp=([^&]*)/);if(m)Object.assign(PF_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}
 if(PF){HSBODY=true;ARMS=true;}
 let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={xs:.45,xd:.3,xf:.18,sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
 if(PF){HS_P.shadow=0;HS_P.max=2;HS_P.bb=1;}   // (the two bodies meet: the game's own push between fighters is overwritten when the place follows the body)
@@ -7917,11 +7917,11 @@ function skinRay(mesh,origin,dir,far,bones,out){if(!mesh.geometry.attributes.ski
       if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(_srRay.origin);if(d<best){best=d;_srO.copy(_srH);}}}}
   if(best===Infinity)return false;out.copy(_srO).applyMatrix4(mesh.matrixWorld);return origin.distanceTo(out)<=far;}
 // several casts into the same limb at once (the skinning is the cost): rays=[{o,d}] in world space, each gets .hit (a world point) or null
-function skinRayN(mesh,rays,far,bones){for(const r of rays)r.hit=null,r._b=Infinity;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;_srM.copy(mesh.matrixWorld).invert();
-  for(const r of rays){r._o=r.o.clone().applyMatrix4(_srM);r._d=r.d.clone().transformDirection(_srM);}const done=new Set();
+function skinRayN(mesh,rays,far,bones,C,rad){for(const r of rays)r.hit=null,r._b=Infinity;if(!mesh.geometry.attributes.skinIndex||!mesh.skeleton)return;const T=triByBone(mesh.geometry),SB=mesh.skeleton.bones;_srM.copy(mesh.matrixWorld).invert();
+  for(const r of rays){r._o=r.o.clone().applyMatrix4(_srM);r._d=r.d.clone().transformDirection(_srM);}const done=new Set();let cx=0,cy=0,cz=0,r2=Infinity;if(C){_srC.copy(C).applyMatrix4(_srM);cx=_srC.x;cy=_srC.y;cz=_srC.z;const rl=rad*_srM.getMaxScaleOnAxis();r2=rl*rl;}   // (only triangles near the cut are tried: nine rays against every triangle of a trunk was 25 ms a wound)
   for(const bn of bones){const bi=SB.indexOf(bn);if(bi<0||done.has(bi))continue;done.add(bi);const E=T.get(bi);if(!E)continue;const L=E.tri,vid=E.vid,nv=vid.length;
     if(_srP.length<nv*3)_srP=new Float32Array(nv*3+300);for(let i=0;i<nv;i++){mesh.getVertexPosition(vid[i],_srA);_srP[i*3]=_srA.x;_srP[i*3+1]=_srA.y;_srP[i*3+2]=_srA.z;}
-    for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
+    for(let i=0;i<L.length;i+=3){const a=L[i]*3,b=L[i+1]*3,c=L[i+2]*3;{const dx=_srP[a]-cx,dy=_srP[a+1]-cy,dz=_srP[a+2]-cz;if(dx*dx+dy*dy+dz*dz>r2)continue;}_srA.set(_srP[a],_srP[a+1],_srP[a+2]);_srB.set(_srP[b],_srP[b+1],_srP[b+2]);_srC.set(_srP[c],_srP[c+1],_srP[c+2]);
       for(const r of rays){_srRay.origin.copy(r._o);_srRay.direction.copy(r._d);if(_srRay.intersectTriangle(_srA,_srB,_srC,false,_srH)){const d=_srH.distanceToSquared(r._o);if(d<r._b){r._b=d;(r.hit||(r.hit=V())).copy(_srH);}}}}}
   for(const r of rays)if(r.hit){r.hit.applyMatrix4(mesh.matrixWorld);if(r.hit.distanceTo(r.o)>far)r.hit=null;}}
 // the bones a hit capsule's skin rides on: the chain from its first bone to its second, the bone above, and every child of those
@@ -7955,11 +7955,12 @@ function addWound(B,ci,P,axis,dmg,kind){
     let hl=stb?clamp(.012+dmg*.0005,.014,.028):Math.min(.15,.045+dmg*.0026,R*1.5),hw=stb?hl*.3:clamp(hl*.14,.0055,.015),D=stb?hw*3:hw*1.5;const cp=Math.cos(phi),sp=Math.sin(phi),NS=22,pos=[],col=[],idx=[],sd=(S.x*731+S.z*419+dmg*17)%1,jr=i=>.5+.5*Math.sin(i*12.9898+sd*78.233)*Math.cos(i*4.1+sd*9);
       const RG=[[1.22,.0006,.40,.07,.07],[1.0,.0012,.46,.09,.08],[.93,-.0015,.62,.40,.26],[.84,-D*.22,.60,.36,.2],[.7,-D*.42,.42,.05,.05],[.42,-D*.8,.27,.02,.025],[.12,-D,.09,.004,.008]];   // [share of the half width, height against the skin, colour]: swollen lip, cut skin, fat, muscle, the dark bottom
       const pt=(x,y,h)=>{const st=clamp((cp*x-sp*y)/R,-.97,.97),th=Math.asin(st),v=sp*x+cp*y,r=R+h;pos.push(S.x+_wt.x*r*Math.sin(th)+_wa.x*v+_wn.x*(r*Math.cos(th)-R),S.y+_wt.y*r*Math.sin(th)+_wa.y*v+_wn.y*(r*Math.cos(th)-R),S.z+_wt.z*r*Math.sin(th)+_wa.z*v+_wn.z*(r*Math.cos(th)-R));};
+      if(!stb&&dmg>=24&&c.zone!=='torso'&&c.zone!=='neck'){RG[6]=[.2,-D,.8,.75,.62];RG[5]=[.42,-D*.86,.3,.03,.03];}   // a deep cut into a limb or the skull lays the bone bare
       const lin=v=>Math.pow(v,2.2);for(const g of RG){g[2]=lin(g[2]);g[3]=lin(g[3]);g[4]=lin(g[4]);}
       // the body is not the cylinder: where the real skin stands along the cut (nine casts, skinned once), so the trough follows it
       const NH=9,hs=new Array(NH).fill(null);if(hit&&RS[0]){const rays=[];for(let i=0;i<NH;i++){const x=(-1+2*i/(NH-1))*hl,st=clamp(cp*x/R,-.97,.97),th=Math.asin(st),v=sp*x,rn=V().copy(_wt).multiplyScalar(Math.sin(th)).addScaledVector(_wn,Math.cos(th));
           rays.push({o:V().copy(S).addScaledVector(_wn,-R).addScaledVector(_wa,v).addScaledVector(rn,R+.12),d:rn.clone().negate(),rn});}
-        skinRayN(RS[0],rays,.3,capBones(B,c));for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
+        skinRayN(RS[0],rays,.3,capBones(B,c),S,hl+.14);for(let i=0;i<NH;i++)if(rays[i].hit)hs[i]=.12-rays[i].hit.distanceTo(rays[i].o);}
       // only as far as the skin runs on smoothly either way (a cut can't carry on across thin air where the neck or an armpit falls away)
       const ok=i=>hs[i]!=null&&Math.abs(hs[i]-hs[i>4?i-1:i+1])<.022;let kL=0,kR=0;if(hs[4]==null||Math.abs(hs[4])>.03)break gash;while(kL<4&&ok(3-kL))kL++;while(kR<4&&ok(5+kR))kR++;
       const fr=Math.min(kL,kR)/4;if(fr<.5)break gash;hl*=fr;if(!stb){hw=clamp(hl*.14,.0055,.015);D=hw*1.5;}
@@ -9791,6 +9792,7 @@ function organHurt(A,B,o,dmg,dir,P){
   if(o.spine&&!B.ragdoll){B.knockdown(3.5,dir.clone().multiplyScalar(1.2),P);for(const k of ['legL','legR'])B.limbs[k].hp*=.3;bad('Your legs won\'t answer');good('Down and not getting up fast');}
   if(o.blind){B.blindT=Math.max(B.blindT||0,simTime+o.blind);if(B.remote)netEv(['bl',B.id,r3(o.blind)]);if(o.name==='eye')bad('Your eye!');else bad('Blood in your eyes');B.addBleed(.4+dmg*.01,15);}
   if(o.daze&&B.alive&&!B.ragdoll&&B.bodyHit)B.bodyHit('Head',dir,4,.45);}
+const _ian=V(),_iao=V();
 function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   if(simTime<CD_END)return;const wasDown=!!B.ragdoll;
   // the neck runs from the base (Neck bone) up to the jaw, about a quarter of the way up the head; on these bodies the Head
@@ -9829,7 +9831,9 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   const arcF=isThrust?clamp(.55+s.arc*.6,.55,1):clamp(.3+s.arc*.75,.3,1.15);
   const stamF=A.stamina<12?.55:.8+.2*A.stamina/100;
   const gap=armourGap(B,cap,P,mode),prot=gap?Math.min(gap.prot,B.prot(cap.zone)):B.prot(cap.zone);let pen=clamp(W.pen*(isThrust?1.2:1),0,1);
-  if(!gap){const am=armorAt(B,cap.zone);if(am&&prot>.2){if(am.mail){if(mode==='cut')pen*=.55;else if(mode==='thrust')pen=Math.min(1,pen*1.3);}else{if(mode==='cut')pen*=.3;else if(mode==='blunt')pen=Math.min(1,pen*1.15);}}}   // as in Half Sword: edges skid off plate, points find mail, blunt force goes through
+  if(!gap){const am=armorAt(B,cap.zone);if(am&&prot>.2){if(am.mail){if(mode==='cut')pen*=.55;else if(mode==='thrust')pen=Math.min(1,pen*1.3);}else{if(mode==='cut')pen*=.3;else if(mode==='blunt')pen=Math.min(1,pen*1.15);
+        if(mode==='cut'||mode==='thrust'){_ian.subVectors(cap.b,cap.a);const u=clamp(_iao.subVectors(P,cap.a).dot(_ian)/(_ian.lengthSq()||1e-9),0,1);_iao.copy(cap.a).addScaledVector(_ian,u).sub(P);const l=_iao.length();
+          if(l>1e-4){const inc=Math.abs(dir.dot(_iao))/l;pen*=.5+.6*inc;}}}}}   /* (Build 226) plate is a surface: an edge or point that meets it square bites as before (a little better), one that comes in at a slant skids (down to half) */   // as in Half Sword: edges skid off plate, points find mail, blunt force goes through
   const MODE_K={thrust:7.5*W.thrust,cut:6*W.cut,blunt:7*W.cut,flat:1.8,haft:1.4,poke:1.2};
   // momentum, not just speed: a heavy head hits harder at the same speed; flats, hafts and pokes need real speed to hurt
   const vmin=(mode==='flat'||mode==='haft'||mode==='poke')?4:mode==='thrust'?1:2,mw=Math.pow(W.weight/1.1,.8);
@@ -9863,7 +9867,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   const arm=armorAt(B,cap.zone);
   if(arm&&prot>.2&&W.kind!=='fist'){s.worn((arm.mail?.006:.014)*speed/6);   // steel on steel scars the edge
     if(arm.mail){if(!glance)sfx('hitMail',P,.55*clamp(speed/8,.4,1.2),.85);}   // mail swallows a blow with a dull jingle
-    else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,clamp(speed*W.weight*.002,.003,.026),mode==='cut'||mode==='thrust'?(glance?_scr.copy(dir).multiplyScalar(clamp(.05+speed*.008,.06,.15)):_scr.copy(s.axis).multiplyScalar(mode==='thrust'?.018:clamp(.02+speed*.003,.025,.06))):null);}}
+    else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,mode==='blunt'?clamp(speed*W.weight*.0036,.004,.04):clamp(speed*W.weight*.002,.003,.026),mode==='cut'||mode==='thrust'?(glance?_scr.copy(dir).multiplyScalar(clamp(.05+speed*.008,.06,.15)):_scr.copy(s.axis).multiplyScalar(mode==='thrust'?.018:clamp(.02+speed*.003,.025,.06))):null);}}
   if(glance){spawnSparks(P,10,dir);sClank(P,speed/9);if(!phys){s.Tp.copy(s.T).addScaledVector(s.tipVel,.4*H);s.Hv.multiplyScalar(.4);}}   // the blade skids and bounces off
   else if(B.undead==='skel'){sBones(P,speed/8);spawnBoneChips(P,dir,mode==='blunt'?6:3);}
   else if(mode==='blunt'||mode==='flat'||mode==='haft'){if(prot<.3&&mode==='blunt')sHit(P,speed/9,false,2,dmg>22&&cap.zone!=='torso'?1:dmg>30?.6:0);else sThud(P,speed/9);if(dmg>8)spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.15).setY(.6),(4+dmg*.4)|0,1.2,1);if(prot>.3&&mode==='blunt')sClank(P,.6);}
