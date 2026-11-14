@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=274;
+const BUILD=275;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4462,10 +4462,10 @@ function bakeMat(mat){if(!mat||BAKE_SET.has(mat))return mat;BAKE_SET.add(mat);if
 vec3 bkS(vec3 q,float k){vec3 t=texture(uBk,vec3(q.x,q.z,(k*uBkNY+clamp(q.y*uBkNY,.5,uBkNY-.5))/(6.*uBkNY))).rgb;return t*t*uBkSC;}
 vec3 bkIrr(vec3 P,vec3 n){vec3 q=clamp((P-uBkMin)*uBkInv,0.,1.);vec3 w=n*n;return w.x*bkS(q,n.x>0.?0.:1.)+w.y*bkS(q,n.y>0.?2.:3.)+w.z*bkS(q,n.z>0.?4.:5.);}
 `+sh.fragmentShader.replace('#include <lights_fragment_begin>',`#include <lights_fragment_begin>
-  float bkW=0.;vec3 bkE=vec3(0.);
-  if(uBkOn>.5){vec3 bn=normalize(inverseTransformDirection(geometryNormal,viewMatrix));vec3 bq=(vBkW-uBkMin)*uBkInv;vec3 be=min(bq,1.-bq);bkW=smoothstep(0.,.03,min(be.x,be.z))*step(bq.y,1.15);
+  float bkW=0.;vec3 bkE=vec3(0.),bkR=vec3(1.);
+  if(uBkOn>.5){vec3 bn=normalize(inverseTransformDirection(geometryNormal,viewMatrix));vec3 brr=normalize(inverseTransformDirection(reflect(-geometryViewDir,geometryNormal),viewMatrix));bkR=bkIrr(vBkW+bn*.28,brr);vec3 bq=(vBkW-uBkMin)*uBkInv;vec3 be=min(bq,1.-bq);bkW=smoothstep(0.,.03,min(be.x,be.z))*step(bq.y,1.15);
     bkE=bkIrr(vBkW+bn*.28,bn)*uBkGain;irradiance=mix(irradiance,bkE,bkW);}`).replace('#include <lights_fragment_maps>',`#include <lights_fragment_maps>
-  iblIrradiance*=1.-bkW;radiance*=mix(1.,clamp(dot(bkE,vec3(.3333))/uBkOpen,0.,1.),bkW);`);};
+  iblIrradiance*=1.-bkW;radiance*=mix(vec3(1.),clamp(bkR/uBkOpen,0.,1.35)*mix(1.,dot(bkR,vec3(.3333))/max(.001,max(bkR.r,max(bkR.g,bkR.b))),.5),bkW);   /* (Build 275) what a surface mirrors is dimmed by the baked light that comes from the way it mirrors: steel turned to a shaded wall or the ground reflects dark, steel turned to the open sky bright */`);};
   mat.onBeforeCompile._bk=1;mat.customProgramCacheKey=()=>'bk|'+ph+'|'+(pk?pk.call(mat):'');mat.needsUpdate=true;return mat;}
 /* (Build 273) fighters and their weapons take the baked light too, so a man under the hoarding stands in its shade and the ground's light comes up under him. Their materials arrive over time (clothes, hair, armour put on), so the living are looked over once a second, only on a map that has a bake */
 let _bkT=0;function bakeFighters(force){if(NOBAKE||!(MAPS[curMap]&&MAPS[curMap].bake))return;const now=performance.now();if(!force&&now-_bkT<1000)return;_bkT=now;
@@ -6011,7 +6011,8 @@ float mailRing(vec2 p){float h=0.,row=floor(p.y*2.);for(int dy=-1;dy<=1;dy++){fl
 float sfh3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}float sfn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(sfh3(i),sfh3(i+vec3(1,0,0)),f.x),mix(sfh3(i+vec3(0,1,0)),sfh3(i+vec3(1,1,0)),f.x),f.y),mix(mix(sfh3(i+vec3(0,0,1)),sfh3(i+vec3(1,0,1)),f.x),mix(sfh3(i+vec3(0,1,1)),sfh3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 vec3 sfBump(vec3 nrm,float hgt,vec3 vp){vec3 dpx=dFdx(-vp),dpy=dFdy(-vp);vec3 r1=cross(dpy,nrm),r2=cross(nrm,dpx);float det=dot(dpx,r1);return normalize(abs(det)*nrm-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));}`;
 function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
-  sh.vertexShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSfP=position;vSfN=normal;\n#ifdef USE_UV\nvSfU=uv;\n#else\nvSfU=vec2(0.);\n#endif');
+  const edge=kind==='plate'||kind==='gothic';   /* (Build 275) lofted plates carry aEdge, a dark band just inside each edge; a geometry without it reads 0 */
+  sh.vertexShader=(edge?'attribute float aEdge;varying float vSfE;\n':'')+'varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSfP=position;vSfN=normal;\n'+(edge?'vSfE=aEdge;\n':'')+'#ifdef USE_UV\nvSfU=uv;\n#else\nvSfU=vec2(0.);\n#endif');
   let col='',rough='',nrm='';
   if(kind==='blade'){
     // lengthwise grinding: the steel's own frame, across the blade (x and z) against along it (y)
@@ -6051,7 +6052,8 @@ function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)
       diffuseColor.rgb*=.98*mix(vec3(1.),vec3(.66,.63,.59),wTa*.65)*(1.-.2*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.4);   /* (Build 269) brighter: kept bright by its owner, it read as lead beside Half Sword's harness */`;
     rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF,vViewPosition);`;}
-  sh.fragmentShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);};
+  if(edge){col+='\ndiffuseColor.rgb*=1.-vSfE;';rough+='\nroughnessFactor=clamp(roughnessFactor+vSfE*.5,.05,1.);';}
+  sh.fragmentShader=(edge?'varying float vSfE;\n':'')+'varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);};
   const k0=m.customProgramCacheKey.bind(m);m.customProgramCacheKey=()=>k0()+'|sf'+kind;return m;}
 
 /* (Build 176) an acid-etched panel on the blade below the hilt, as on good 15th-century blades: a border line each side, a vine running
@@ -6742,7 +6744,7 @@ function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const
   let ey=0,ez=-9,ec=0;const eyes=body.parent&&body.parent.children.find(c=>c.isMesh&&/Eyes/.test(c.name));if(eyes){const p=eyes.geometry.attributes.position;for(let i=0;i<p.count;i+=7){ey+=p.getY(i);ez=Math.max(ez,p.getZ(i));ec++;}ey/=ec||1;}else{ey=J.Head.y+.09;ez=J.Head.z+.09;}
   const bp=body.geometry.attributes.position;let x0=9,x1=-9,z0=9,z1=-9;let nz=-9;for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(x)>.2)continue;if(y>ey-.075&&y<ey+.04&&Math.abs(x)<.03)nz=Math.max(nz,z);if(y<ey-.02||y>ey+.06)continue;x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);}
   return body.userData.marks={J,ey,ez,hx:(x0+x1)/2,hz:(z0+z1)/2,rx:(x1-x0)/2,rz:(z1-z0)/2,nose:Math.max(z1,nz)};}
-const steelFitMat=steelMat.clone();steelFitMat.color.setHex(0xa2a4a8);steelFitMat.roughness=.2;steelFitMat.envMapIntensity=1.3;steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;surfDetail(steelFitMat,'plate');
+const steelFitMat=steelMat.clone();steelFitMat.color.setHex(0x888b92);steelFitMat.roughness=.28;steelFitMat.envMapIntensity=1.08;   /* (Build 275) a darker steel with a tighter polish: pale and mirror-bright it took the sky's tone all over and read as grey plastic */steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;surfDetail(steelFitMat,'plate');
 // the breastplate's own detail (Build 124), from a per-vertex (round the body, up the plate) coordinate `aCu` set when the cuirass is
 // grown: a row of domed rivets round the waist edge and across the top at the front, a rolled top edge, leather side straps with brass
 // buckles, and shoulder straps over the back. Leather is dark and matte, brass warm and metallic
@@ -6847,10 +6849,11 @@ function limbMap(body,A,B,keep,o={}){A=V(A.x,A.y,A.z);B=V(B.x,B.y,B.z);const key
   const out={A,d,e1,e2,L,r};LIMB_CACHE.set(key,out);return out;}
 // a plate lofted over a limbMap: u along the axis (t from tb to tt(θ)), v round it (θ over span(u) about θc), outward clearance plus shape
 //  o: {tb,tt (number or θ=>t),thc,span (number or u=>rad),clr,clrF(t,θ), ridge:[w,h], roll:{t:1,b:1,s:1}, NU,NV, bones:(t)=>[[name,w],..], rivets:[[t,θ]..]}
+const PLATE_EDGE=!/[?&]noedge/.test(location.search);
 function plateLoft(M,o,body){const NU=o.NU||28,NV=o.NV||40,tb=o.tb,ttF=typeof o.tt==='function'?o.tt:()=>o.tt,spF=typeof o.span==='function'?o.span:()=>o.span,thc=o.thc||0,roll=o.roll||{t:1,b:1,s:1},rw=.008,rr=o.rr??.0045;
   // rows bunched toward the edges so the rolls are smooth
   const bunch=n=>{const a=[];for(let i=0;i<=n;i++){const x=i/n;a.push(x<.12?.12*Math.pow(x/.12,1.6)*.5+x*.5:x>.88?1-(.12*Math.pow((1-x)/.12,1.6)*.5+(1-x)*.5):x);}return a;};
-  const US=bunch(NU),VS=bunch(NV),pos=[],uv=[],tt=[],idx=[],q=V();
+  const US=bunch(NU),VS=bunch(NV),pos=[],uv=[],tt=[],idx=[],col=[],q=V();
   const radius=(t,th)=>M.r(t,th)+(o.clr||.03)+(o.clrF?o.clrF(t,th):0);
   for(let i=0;i<=NU;i++){const u=US[i];for(let j=0;j<=NV;j++){const v=VS[j],sp=spF(u),th=thc+(v-.5)*sp,tT=ttF(th),t=tb+u*(tT-tb);
     let rad=radius(t,th);
@@ -6860,16 +6863,17 @@ function plateLoft(M,o,body){const NU=o.NU||28,NV=o.NV||40,tb=o.tb,ttF=typeof o.
     for(const [s,on,rope] of [[sT,roll.t,roll.rt],[sB,roll.b,roll.rb],[sS,roll.s&&sp<Math.PI*1.95,roll.rs]]){if(!on||s>rw)continue;const k=Math.sqrt(Math.max(0,1-Math.pow(s/rw,2)));let b=rr*k;if(rope&&ROPE)b*=1+.18*Math.sin((v*arc+u*(tT-tb)*M.L)*260);bead=Math.max(bead,b);}
     rad+=bead;
     q.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th)).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);if(o.warp)o.warp(q,t,th);
-    pos.push(q.x,q.y,q.z);uv.push(v,u);tt.push(t);}}
+    pos.push(q.x,q.y,q.z);uv.push(v,u);tt.push(t);
+    {let e=9;if(roll.t!==undefined||1){e=Math.min(sT,sB);if(sp<Math.PI*1.95)e=Math.min(e,sS);}const k=PLATE_EDGE&&e>=rw*.8?.7*(1-sstep(rw,rw+.03,e)):0;col.push(k);}}}   /* (Build 275) a dark band just inside each edge, behind the bright rolled bead: the line that makes plates read as separate pieces */
   for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}   // wound so the normals face out
-  let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('aEdge',new THREE.Float32BufferAttribute(col,1));g.setIndex(idx);g.computeVertexNormals();
   const parts=[g];
   // rivets: low domes standing on the plate along its normal
   if(o.rivets){const nn=V();for(const [t,th,s] of o.rivets){const rad=radius(t,th)+(o.ridge?0:0)+.0004;nn.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th));q.copy(nn).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);
     const dm=new THREE.SphereGeometry(s||.0042,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.55,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nn));dm.translate(q.x,q.y,q.z);
     const tA=new Float32Array(dm.attributes.position.count).fill(t);dm.setAttribute('aT',new THREE.BufferAttribute(tA,1));parts.push(dm);}}
   g.setAttribute('aT',new THREE.Float32BufferAttribute(tt,1));
-  const m=mergeGeometries(parts.map(p=>{if(!p.attributes.uv)p.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(p.attributes.position.count*2),2));return p.index?p.toNonIndexed():p;}));
+  const m=mergeGeometries(parts.map(p=>{if(!p.attributes.uv)p.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(p.attributes.position.count*2),2));if(!p.attributes.aEdge)p.setAttribute('aEdge',new THREE.BufferAttribute(new Float32Array(p.attributes.position.count),1));return p.index?p.toNonIndexed():p;}));
   // skin: one or two bones by where along the axis each vertex is
   const {bi}=bodyBoneW(body),n=m.attributes.position.count,si=new Uint16Array(n*4),swt=new Float32Array(n*4),T=m.attributes.aT;
   for(let i=0;i<n;i++){const bw=o.bones(T.getX(i));let s=0;bw.forEach(([nm,w],k)=>{if(k<4&&bi[nm]!=null){si[i*4+k]=bi[nm];swt[i*4+k]=w;s+=w;}});if(s>0)for(let k=0;k<4;k++)swt[i*4+k]/=s;else{swt[i*4]=1;}}
@@ -6906,7 +6910,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     // (Build 176) a mail shirt's body under the plates, so a gap at the side between breast- and backplate shows mail, not skin
     {const hy=J.Hips.y;S(fitShell(body,'mailbody',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.02&&y<J.Neck.y-.04&&Math.abs(P.getX(v))<.16&&w(v,['Neck','Head'])<.3&&w(v,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg'])<.3;},off:.014,smooth:5,bodySmooth:3,minK:.88,rim:.002,bones:null}),mailMat);}
     // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
-    {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.3&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.034,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy+.02,flare:.25,hold:1,hem:true},bones:null}),mailMat);}
+    {const hy=J.Hips.y;S(fitShell(body,'mailskirt',{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.215&&y<hy+.04&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.034,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy+.02,flare:.25,hold:1,hem:true},bones:null}),mailMat);}
     // tassets: a plate hanging from the fauld over each thigh, on two straps
     for(const sd of ['Left','Right']){const L=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh',t0:-.3,t1:1.1,sw:5,st:2}),xs=sd==='Left'?1:-1;
       S(plateLoft(L,{tb:-.14,tt:G?.5:.36,thc:-.2*xs,span:G?1.7:1.9,clr:.045,ridge:G?[.22,.008]:[.3,.003],roll:{t:1,b:1,s:1,rt:1},NU:14,NV:24,rivets:[[-.1,-.2*xs-.5],[-.1,-.2*xs+.5]],bones:()=>[['Hips',.5],[sd+'UpLeg',.5]]},body),PM);}
@@ -6939,13 +6943,13 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     for(const sd of ['Left','Right']){const U=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh2',t0:-.1,t1:1.15,sw:3,st:5}),L=limbMap(body,J[sd+'Leg'],J[sd+'Foot'],(v,W)=>W(v,[sd+'Leg'])>.5,{key:sd+'shin',t0:-.15,t1:1.05,sw:3,st:6});
       const xs=sd==='Left'?1:-1;
       // cuisse: the front of the thigh, with a medial ridge, strapped round the back
-      S(plateLoft(U,{tb:.28,tt:.9,thc:0,span:3.6,clr:.012,ridge:[.4,.004],roll:{t:1,b:1,s:1,rt:1},NU:16,NV:34,bones:one(sd+'UpLeg')},body),PM);
+      S(plateLoft(U,{tb:.2,tt:.9,thc:0,span:3.6,clr:.012,ridge:[.34,.0065],roll:{t:1,b:1,s:1,rt:1},NU:16,NV:34,bones:one(sd+'UpLeg')},body),PM);
       S(plateLoft(U,{tb:.42,tt:.47,thc:Math.PI,span:2.8,clr:.01,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'UpLeg')},body),strapMat);
       // poleyn: a cup over the knee with a heart-shaped wing on the outside
       S(plateLoft(U,{tb:.86,tt:1.12,thc:0,span:3.2,clr:.03,clrF:(t,th)=>.02*Math.exp(-Math.pow((t-.98)/.08,2))*Math.max(0,Math.cos(th)),roll:{t:1,b:1,s:1,rt:1,rb:1},NU:14,NV:30,bones:blend2(sd+'UpLeg',sd+'Leg',.95,1.05)},body),PM);
       {const kp=J[sd+'Leg'].clone();kp.x+=xs*.068;kp.z+=.02;S(discPlate(.045,.01,body,sd+'UpLeg',kp,V(xs,0,.35),false),PM);}
       // greave: closed round the shin and calf, rolled top and bottom
-      S(plateLoft(L,{tb:.08,tt:.88,thc:0,span:Math.PI*2,clr:.009,clrF:(t,th)=>.016*Math.max(0,-Math.cos(th))*clamp(1.5-t*1.5,0,1),   /* (Build 198: room for the calf, which bulges out of a rigid greave when the knee bends) */ridge:[.3,.003],roll:{t:1,b:1,s:0,rt:1},NU:20,NV:40,rivets:[[.25,Math.PI/2*xs],[.65,Math.PI/2*xs]],bones:one(sd+'Leg')},body),PM);
+      S(plateLoft(L,{tb:.08,tt:.88,thc:0,span:Math.PI*2,clr:.009,clrF:(t,th)=>.016*Math.max(0,-Math.cos(th))*clamp(1.5-t*1.5,0,1),   /* (Build 198: room for the calf, which bulges out of a rigid greave when the knee bends) */ridge:[.26,.0055],roll:{t:1,b:1,s:0,rt:1},NU:20,NV:40,rivets:[[.25,Math.PI/2*xs],[.65,Math.PI/2*xs]],bones:one(sd+'Leg')},body),PM);
       // sabaton: lames over the top of the foot
       const F=limbMap(body,J[sd+'Foot'],J[sd+'ToeBase'],(v,W)=>W(v,[sd+'Foot',sd+'ToeBase'])>.5,{key:sd+'foot',ref:V(0,1,0),t0:-.3,t1:1.5,sw:4,st:1});
       for(let k=0;k<4;k++){const a=-.1+k*.32,b=a+.36;S(plateLoft(F,{tb:a,tt:b,thc:0,span:2.4,clr:.012+k*.002,roll:{t:0,b:1,s:1},NU:6,NV:22,bones:k<2?one(sd+'Foot'):blend2(sd+'Foot',sd+'ToeBase',.9,1.1)},body),PM);}}
