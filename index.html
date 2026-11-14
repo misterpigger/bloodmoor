@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=270;
+const BUILD=271;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4451,7 +4451,7 @@ MATS.sand=std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1});
 {const l=limestoneMaps(1024);TX.lime=tex(l.map);TX.limen=tex(l.normal,false);}
 MATS.gravel=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.2,1.2),roughness:1});MATS.roadDirt=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.4,1.4),color:0xa08a6c,roughness:1});
 /* (Build 270) the Yard rebuilt from scans: plaster over stone for the walls, packed earth with gravel blended in, weathered timber, boards and old tiles */
-const YARD2=!/[?&]oldyard/.test(location.search),YARD_U={uRock:{value:null},uHasRock:{value:0}};
+const YARD2=!/[?&]oldyard/.test(location.search),YARD_U={uRock:{value:null},uHasRock:{value:0},uDirt:{value:null},uHasDirt:{value:0}};
 MATS.yardPlaster=std({map:TX.lime,color:0xd8ccb6,roughness:.95});MATS.yardGround=std({map:TX.gravel,roughness:1});MATS.yardTimber=std({color:0x8a7a68,roughness:.9});MATS.yardBoards=std({color:0x8c8072,roughness:.9});MATS.yardTile=std({color:0x9a6a52,roughness:.9});
 MATS.lime=std({map:TX.lime,normalMap:TX.limen,normalScale:new THREE.Vector2(1.1,1.1),roughness:.95,side:THREE.DoubleSide});
 MATS.limeDark=std({map:TX.lime,normalMap:TX.limen,color:0x8d8272,roughness:.95,side:THREE.DoubleSide});
@@ -4471,16 +4471,22 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
     { float big=wfbm(vWW.xz*.045),mid=wfbm(vWW.xz*.33+7.),fine=wn(vWW.xz*1.7+3.);   // lusher and drier stretches over tens of metres, patches of a few, so the scan never shows its repeat
       vec3 lush=diffuseColor.rgb*vec3(.74,1.04,.6),dry=diffuseColor.rgb*vec3(1.04,1.,.72);
       diffuseColor.rgb=mix(lush,dry,smoothstep(.36,.72,big))*mix(.8,1.1,mid)*mix(.93,1.05,fine); }`:kind==='yardground'?`#include <map_fragment>
-    { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);diffuseColor.rgb=mix(vec3(dot(diffuseColor.rgb,vec3(.3,.5,.2))),diffuseColor.rgb,.42)*vec3(1.04,1.,.93);diffuseColor.rgb*=mix(.82,1.1,big)*mix(.9,1.06,mid);
-      float trod=smoothstep(13.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.1*trod;
-      float gp=smoothstep(.56,.66,wfbm(vWW.xz*.36+31.)+.2*wn(vWW.xz*2.7)-.1);vec3 rk=texture2D(uRock,vWW.xz*.4).rgb;   /* patches of broken stone and gravel lying in the earth: a second scan blended in by world noise */
-      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(rk,vec3(.33)))*vec3(.8,.74,.66),gp*uHasRock*.85);
-      float damp=smoothstep(.6,.82,wfbm(vWW.xz*.16+50.));diffuseColor.rgb*=1.-.15*damp;
-      float wd=17.2-max(abs(vWW.x),abs(vWW.z));diffuseColor.rgb*=mix(.62,1.,smoothstep(-.1,1.7,wd))*mix(.86,1.,smoothstep(1.,4.5,wd)); }`:kind==='yardwall'?`#include <map_fragment>
-    { float h=vWW.y;vec2 wp=vec2(vWW.x+vWW.z,vWW.y);diffuseColor.rgb*=mix(.8,1.07,wfbm(wp*.3));
-      float dr=smoothstep(.45,.85,wn(vec2(wp.x*1.6,3.)))*smoothstep(1.4,5.,h)*(.45+.55*wn(vec2(wp.x*8.,h*.5)));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.56,.5,.43),dr*.5);   /* rain runs down from under the hoarding */
-      float base=smoothstep(2.4,.2,h)*(.45+.55*wfbm(wp*1.3));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.58,.53,.45),base*.75);   /* splashed and damp at the foot */
-      diffuseColor.rgb*=1.18*mix(1.,.6,smoothstep(3.6,4.9,h))*mix(.7,1.,smoothstep(0.,.5,h)); }`:kind==='ground'?`#include <map_fragment>
+    { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);   /* (Build 271) the gravel scan for its grain, greyed and pale; packed earth where feet have worn it smooth; dark heaps of broken stone; damp; shade at the wall foot */
+      diffuseColor.rgb=mix(vec3(dot(diffuseColor.rgb,vec3(.3,.5,.2))),diffuseColor.rgb,.5)*vec3(1.03,1.,.95)*1.08;
+      float tr=smoothstep(.42,.6,wfbm(vWW.xz*.22+7.)+.25*smoothstep(12.,2.,r)-.08);vec3 dt=texture2D(uDirt,vWW.xz*.33).rgb;dt=mix(vec3(dot(dt,vec3(.33))),dt,.35)*vec3(1.22,1.18,1.1);
+      diffuseColor.rgb=mix(diffuseColor.rgb,dt,tr*.75*uHasDirt);
+      diffuseColor.rgb*=mix(.8,1.1,big)*mix(.88,1.07,mid);
+      float gn=wfbm(vWW.xz*.5+31.)+.22*wn(vWW.xz*3.1)+.12*wn(vWW.xz*9.);float gp=smoothstep(.8,.86,gn);vec3 rk=texture2D(uRock,vWW.xz*.55).rgb;float rl=dot(rk,vec3(.33));
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(rl*rl*2.6)*vec3(.7,.62,.53),gp*uHasRock*.85);diffuseColor.rgb*=1.-.16*smoothstep(.7,.8,gn)*(1.-gp);
+      float cr=smoothstep(.5,.47,abs(wn(vWW.xz*1.3+90.)-.5)*8.+wn(vWW.xz*14.)*.6)*smoothstep(.55,.7,wfbm(vWW.xz*.13+3.));diffuseColor.rgb*=1.-.3*cr;
+      float damp=smoothstep(.6,.82,wfbm(vWW.xz*.16+50.));diffuseColor.rgb*=1.-.16*damp;
+      float wd=17.2-max(abs(vWW.x),abs(vWW.z));diffuseColor.rgb*=mix(.55,1.,smoothstep(-.1,1.5,wd))*mix(.86,1.,smoothstep(1.,4.5,wd)); }`:kind==='yardwall'?`#include <map_fragment>
+    { float h=vWW.y;vec2 wp=vec2(vWW.x+vWW.z,vWW.y);diffuseColor.rgb=mix(vec3(dot(diffuseColor.rgb,vec3(.3,.5,.2))),diffuseColor.rgb,.7);diffuseColor.rgb*=mix(.72,1.1,wfbm(wp*.3))*mix(.9,1.06,wfbm(wp*1.7+9.));
+      float pat=smoothstep(.68,.73,wfbm(wp*.42+70.)+.14*wn(wp*4.));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*diffuseColor.rgb*vec3(.86,.8,.72)*1.3,pat*.7);   /* where the plaster has come away the stone and old mortar show darker */
+      float dr=smoothstep(.4,.8,wn(vec2(wp.x*1.3,3.)))*smoothstep(.6,5.,h)*(.3+.7*wn(vec2(wp.x*9.,h*.35)));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.42,.39,.35),dr*.75);   /* rain runs down from under the hoarding */
+      float fine=smoothstep(.62,.9,wn(vec2(wp.x*26.,h*.9)))*smoothstep(1.,4.6,h);diffuseColor.rgb*=1.-.22*fine;
+      float base=smoothstep(2.6,.2,h)*(.4+.6*wfbm(wp*1.3));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.5,.46,.4),base*.8);   /* splashed and damp at the foot */
+      diffuseColor.rgb*=1.2*mix(1.,.6,smoothstep(3.6,4.9,h))*mix(.62,1.,smoothstep(0.,.45,h)); }`:kind==='ground'?`#include <map_fragment>
     { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);
       diffuseColor.rgb*=mix(.74,1.12,big)*mix(.88,1.07,mid);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.8,.72),smoothstep(.55,.8,big)*.5);   // damp, darker brown patches
       float trod=smoothstep(14.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.14*trod;   // the middle is packed down by feet
@@ -4494,7 +4500,7 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
       float st=wn(vec2((vWW.x+vWW.z)*3.1,vWW.y*.4));float base=smoothstep(1.4,0.,h)*(.55+.45*st);
       diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.62,.58,.5),base*.6);   // damp and splashed dirt at the foot of the wall
       float streak=smoothstep(.55,.9,wn(vec2((vWW.x+vWW.z)*2.2,vWW.y*.15+3.)))*smoothstep(0.,2.5,h);diffuseColor.rgb*=1.-.12*streak; }`);   // rain streaks
-  sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;if(kind==='yardground'){Object.assign(sh.uniforms,YARD_U);sh.fragmentShader='uniform sampler2D uRock;uniform float uHasRock;\n'+sh.fragmentShader;}};
+  sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;if(kind==='yardground'){Object.assign(sh.uniforms,YARD_U);sh.fragmentShader='uniform sampler2D uRock,uDirt;uniform float uHasRock,uHasDirt;\n'+sh.fragmentShader;}};
   const k0=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>k0+'|w'+kind;return m;}
 for(const k of ['lime','limeDark','stone','stoneLight','ashlar','beam','plaster0','plaster1','plaster2','woodPale','wood','tile'])if(MATS[k])weather(MATS[k],'wall');
 weather(MATS.yardGround,'yardground');MATS.yardGround.envMapIntensity=.5;weather(MATS.yardPlaster,'yardwall');for(const k of ['yardTimber','yardBoards','yardTile'])weather(MATS[k],'wall');
@@ -4502,8 +4508,8 @@ for(const k of ['gravel','sand'])if(MATS[k]){weather(MATS[k],'ground');MATS[k].e
 weather(MATS.meadow,'meadow');
 // photo-scanned surfaces (CC0, Poly Haven; see CREDITS.md). They replace the drawn ones as they arrive; if they can't load, the drawn ones stay.
 // Each set is colour, normal and a packed map (red = ambient occlusion, green = roughness). rep = tiles per unit of the geometry's UVs.
-const PHOTO={yardwall:{mats:{yardPlaster:{rep:.36,ns:1.25,col:0xfff6e6}}},yarddirt:{mats:{yardGround:{rep:2.3,ns:1.1,col:0xd9d2c8}}},yardwood:{mats:{yardTimber:{rep:.7,ns:1.3,col:0xa59684}}},yardboard:{mats:{yardBoards:{rep:.55,ns:1.2,col:0xb4a898}}},yardroof:{mats:{yardTile:{rep:.5,ns:1.4,col:0xd8c8bc}}},
-  ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
+const PHOTO={yardwall:{mats:{yardPlaster:{rep:.36,ns:2.2,col:0xfff8ee}}},yardwood:{mats:{yardTimber:{rep:.7,ns:1.3,col:0xa59684}}},yardboard:{mats:{yardBoards:{rep:.55,ns:1.2,col:0xb4a898}}},yardroof:{mats:{yardTile:{rep:.5,ns:1.4,col:0xd8c8bc}}},
+  ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc},yardGround:{rep:4,ns:1.9,col:0xf6f2ea}}},
   plaster:{mats:{plaster0:{rep:.75,ns:1.1,col:0xf4ecdc},plaster1:{rep:.75,ns:1.1,col:0xf0d8ae},plaster2:{rep:.75,ns:1.1,col:0xd8d2c6}}},   // village houses (rep: the geometry's UV unit / the scan's real size)
   timber:{mats:{beam:{rep:3,ns:1.2,col:0x6a5644},wood:{rep:2,ns:1.1,col:0xb09a82},woodPale:{rep:2,ns:1.1,col:0xd2c4b0},propWood:{rep:2,ns:1.1,col:0xa88a6c},palisade:{rep:3,ns:1.2,col:0x6e5c4c}}},thatch:{mats:{thatch:{rep:1.5,ns:1.4,col:0xe6c088},cryptStraw:{rep:1,ns:1.6,col:0xf0d088}}},
   ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},cryptWall:{rep:.62,ns:.8,col:0x8e8578},cryptVault:{rep:.7,ns:.75,col:0x847c70},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
@@ -4512,6 +4518,7 @@ const PHOTO={yardwall:{mats:{yardPlaster:{rep:.36,ns:1.25,col:0xfff6e6}}},yarddi
   grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},meadow:{mats:{meadow:{rep:2.6,ns:1,col:0x7ca65a}}},bark:{mats:{bark:{rep:1,ns:1.4,col:0xb8ac9c}}},
   rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptFloor:{rep:.62,ns:.75,col:0x6f695f},cryptEarth:{rep:1.4,ns:.9,col:0x463e34}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
+  L.load('assets/tex/yarddirt_d.jpg',t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;YARD_U.uDirt.value=t;YARD_U.uHasDirt.value=1;});
   L.load('assets/tex/yardrock_d.jpg',t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;YARD_U.uRock.value=t;YARD_U.uHasRock.value=1;});
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
     Promise.all([get('d',true),get('n',false),get('orm',false)]).then(([d,n,m])=>{for(const [mk,c] of Object.entries(o.mats)){const M=MATS[mk];if(!M)continue;
@@ -4535,7 +4542,7 @@ function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoad
     LIGHTS.day.envTex=pm.fromEquirectangular(te).texture;pm.dispose();if(te!==t)te.dispose();LIGHTS.day.bg=t;
     // the photographed sky is far brighter than the painted one: polished steel was blowing out to white
     steelMat.envMapIntensity=1.05;steelDark.envMapIntensity=.9;mailMat.envMapIntensity=.9;
-    LIGHTS.day.hi=.68;if(MAPS[curMap]&&MAPS[curMap].light==='day')applyLighting('day');},undefined,()=>{});}
+    LIGHTS.day.hi=.68;LIGHTS.yard.envTex=LIGHTS.day.envTex;LIGHTS.yard.bg=LIGHTS.day.bg;if(MAPS[curMap]&&/^(day|yard)$/.test(MAPS[curMap].light))applyLighting(MAPS[curMap].light);},undefined,()=>{});}
 let crowd=null;const crowdU={uTime:{value:0},uCheer:{value:0},uFocus:{value:new THREE.Vector3()}};
 function scaleUV(g,su,sv){const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv);return g;}
 // a flat panel w wide and h high with a round-headed opening (half-width ow, springing at sp) cut up from its foot, extruded dep deep (UVs at 2 m a tile)
@@ -4679,6 +4686,8 @@ function buildYard(){
     const zf=W-.8,yF=wallH-2.6,D=1.5,Lh=2*W-2.2;
     for(const rot of [0,Math.PI/2,Math.PI,-Math.PI/2]){const M=T(0,0,0,rot),A=(k,g,m)=>addGeo(k,g,M.clone().multiply(m));
       A('yardPlaster',boxUV(2*W+2,wallH+.9,1.6,1),T(0,(wallH+.9)/2,W));A('stone',boxUV(2*W-1.4,.62,.3,2),T(0,.31,zf-.1));A('stone',boxUV(2*W-1.4,.1,.4,2),T(0,.66,zf-.12));
+      for(const bx of [-12,-6,6,12]){if(rot===0&&Math.abs(bx)<3)continue;A('yardPlaster',boxUV(1.15,3.5,.75,1),T(bx,1.75,zf-.37));A('yardPlaster',boxUV(1.15,1.5,.75,1),T(bx,3.95,zf-.12,0,.46));A('stone',boxUV(1.3,.5,.9,2),T(bx,.25,zf-.4));}
+      for(let x=-W+3;x<=W-3;x+=2){A('yardTimber',boxUV(.14,.14,.3,1),T(x+(srand()-.5)*.2,2.9,zf-.1));}
       A('yardBoards',boxUV(Lh,.07,D,1),T(0,yF+.035,zf-D/2));A('yardBoards',boxUV(1.06,Lh,.06,1),T(0,yF+.6,zf-D+.03,0,0,Math.PI/2));A('yardTimber',boxUV(Lh,.11,.16,1),T(0,yF+1.18,zf-D+.03));
       A('yardTimber',boxUV(Lh,.18,.18,1),T(0,yF+2.36,zf-D+.08));A('yardTile',boxUV(2*W-1.3,.1,2.34,1),T(0,wallH+.2,zf-D/2-.08,0,-.473));A('yardTimber',boxUV(2*W-1.3,.06,.2,1),T(0,yF+2.22,zf-D-.4,0,-.473));
       for(let x=-W+2;x<=W-2+.01;x+=2){const gate=rot===0&&Math.abs(x)<2.3;A('yardTimber',boxUV(.22,.26,D+.34,1),T(x,yF-.13,zf-D/2+.02));if(!gate)A('yardTimber',boxUV(.16,.16,1.55,1),T(x,yF-.74,zf-.6,0,.76));
@@ -4787,10 +4796,11 @@ LIGHTS.mill={fog:0x2c261e,dens:.008,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:
 LIGHTS.crypt={fog:0x1a120b,dens:.042,top:0x050404,mid:0x050404,hor:0x050404,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x566482,hg:0x15171c,hi:.055,sun:0x000000,si:0,dir:[.2,.9,.2],moon:false,exp:1.3,cool:.62,halo:.16,shR:10,shMap:1024,
   env:[[0,'#060505'],[.5,'#100c0a'],[1,'#050404']]};
 LIGHTS.cryptDeep={...LIGHTS.crypt,fog:0x0a0e16,dens:.036,hs:0x5c6a86,hg:0x12141a,hi:.065,cool:.9,env:[[0,'#06080c'],[.5,'#0c1018'],[1,'#040506']]};
+LIGHTS.yard={...LIGHTS.day,hs:0xb9c6d2,hg:0xcabfae,hi:.6,sun:0xfff3e2,si:4.9,cool:.22,exp:1.04,fog:0xd9d6cf};   /* (Build 271) the Yard's own daylight: a whiter sun, far less of the orange grade, and the pale ground's light thrown back up under the hoarding and onto the lower walls */
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
-  arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:'day'},
+  arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:YARD2?'yard':'day'},
   colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{shR:36,entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
