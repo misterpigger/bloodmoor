@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=275;
+const BUILD=276;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4452,7 +4452,7 @@ MATS.sand=std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1});
 MATS.gravel=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.2,1.2),roughness:1});MATS.roadDirt=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.4,1.4),color:0xa08a6c,roughness:1});
 /* (Build 270) the Yard rebuilt from scans: plaster over stone for the walls, packed earth with gravel blended in, weathered timber, boards and old tiles */
 /* ==== baked light (Build 272): a map's indirect light, path traced offline (tools/lab/bake) into a grid of ambient cubes and read here in place of the flat sky fill. The sun and its shadows stay live. */
-const NOBAKE=/[?&]nobake/.test(location.search),BAKE_U={uBk:{value:null},uBkOn:{value:0},uBkMin:{value:new THREE.Vector3()},uBkInv:{value:new THREE.Vector3(1,1,1)},uBkNY:{value:24},uBkGain:{value:+((location.search.match(/[?&]bk=([\d.]+)/)||[])[1]||1)},uBkSC:{value:4},uBkOpen:{value:1}},BAKE_TEX={};
+const BK_GAIN=+((location.search.match(/[?&]bk=([\d.]+)/)||[])[1]||1);const NOBAKE=/[?&]nobake/.test(location.search),BAKE_U={uBk:{value:null},uBkOn:{value:0},uBkMin:{value:new THREE.Vector3()},uBkInv:{value:new THREE.Vector3(1,1,1)},uBkNY:{value:24},uBkGain:{value:+((location.search.match(/[?&]bk=([\d.]+)/)||[])[1]||1)},uBkSC:{value:4},uBkOpen:{value:1}},BAKE_TEX={};
 const BAKE_SET=new WeakSet(),BAKE_H=new WeakMap();function bakeHash(fn){if(!fn)return 0;let h=BAKE_H.get(fn);if(h==null){const t=fn.toString();h=t.length;for(let i=0;i<t.length;i+=7)h=(h*31+t.charCodeAt(i))|0;BAKE_H.set(fn,h);}return h;}
 function bakeMat(mat){if(!mat||BAKE_SET.has(mat))return mat;BAKE_SET.add(mat);if(!(mat.isMeshStandardMaterial)||(mat.onBeforeCompile&&mat.onBeforeCompile._bk))return mat;const prev=mat.onBeforeCompile,pk=mat.customProgramCacheKey,ph=bakeHash(prev);
   mat.onBeforeCompile=(sh,r)=>{if(prev)prev.call(mat,sh,r);Object.assign(sh.uniforms,BAKE_U);if(sh.fragmentShader.includes('uBkOn'))return;   /* (Build 274) a blooded weapon's material calls the clean one's hook from its own, so this ran twice on it, the shader didn't compile and the weapon wasn't drawn */
@@ -4470,8 +4470,10 @@ vec3 bkIrr(vec3 P,vec3 n){vec3 q=clamp((P-uBkMin)*uBkInv,0.,1.);vec3 w=n*n;retur
 /* (Build 273) fighters and their weapons take the baked light too, so a man under the hoarding stands in its shade and the ground's light comes up under him. Their materials arrive over time (clothes, hair, armour put on), so the living are looked over once a second, only on a map that has a bake */
 let _bkT=0;function bakeFighters(force){if(NOBAKE||!(MAPS[curMap]&&MAPS[curMap].bake))return;const now=performance.now();if(!force&&now-_bkT<1000)return;_bkT=now;
   const each=o=>{if(!o.isMesh)return;const m=o.material;if(Array.isArray(m))m.forEach(bakeMat);else bakeMat(m);};
-  for(const f of fighters){if(f.model)f.model.traverse(each);if(f.sword&&f.sword.mesh)f.sword.mesh.traverse(each);}}
-function bakeLoad(b){BAKE_U.uBkOn.value=0;if(!b||NOBAKE)return;const key=mapKey,set=t=>{if(key!==mapKey)return;BAKE_U.uBk.value=t;BAKE_U.uBkMin.value.set(...b.min);BAKE_U.uBkInv.value.set(1/b.size[0],1/b.size[1],1/b.size[2]);BAKE_U.uBkNY.value=b.n[1];BAKE_U.uBkSC.value=b.sc;BAKE_U.uBkOpen.value=b.open||1;BAKE_U.uBkOn.value=1;};
+  for(const f of fighters){if(f.model)f.model.traverse(each);if(f.sword&&f.sword.mesh)f.sword.mesh.traverse(each);}
+  if(force||now-_bkW>3000){_bkW=now;world.traverse(each);}}   /* (Build 276) and the map's own materials, whatever they are (scanned models arrive late), so a new bake needs no list of them */
+let _bkW=0;
+function bakeLoad(b){BAKE_U.uBkOn.value=0;if(!b||NOBAKE)return;const key=mapKey,set=t=>{if(key!==mapKey)return;BAKE_U.uBk.value=t;BAKE_U.uBkMin.value.set(...b.min);BAKE_U.uBkInv.value.set(1/b.size[0],1/b.size[1],1/b.size[2]);BAKE_U.uBkNY.value=b.n[1];BAKE_U.uBkSC.value=b.sc;BAKE_U.uBkOpen.value=b.open||1;BAKE_U.uBkGain.value=BK_GAIN*(b.gain||1);BAKE_U.uBkOn.value=1;};
   if(BAKE_TEX[b.f])return set(BAKE_TEX[b.f]);const im=new Image();im.onload=()=>{const [NX,NY,NZ]=b.n,cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(im,0,0);
     const src=cx.getImageData(0,0,im.width,im.height).data,D=6*NY,out=new Uint8Array(NX*NZ*D*4),cols=b.cols||12;
     for(let L=0;L<D;L++){const c=L%cols,r=(L/cols)|0;for(let z=0;z<NZ;z++){const so=((r*NZ+z)*im.width+c*NX)*4;out.set(src.subarray(so,so+NX*4),(L*NZ+z)*NX*4);}}
@@ -4806,7 +4808,7 @@ function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=
 const LIGHTS={
   dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0xa3bccb,hg:0x8f7a5e,hi:.52,sun:0xffe4c4,si:4.5,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
+  day:{fire:.2,fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0xa3bccb,hg:0x8f7a5e,hi:.52,sun:0xffe4c4,si:4.5,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
 LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
@@ -4825,7 +4827,7 @@ for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
   arena:{shR:YARD2?31:26,shC:YARD2?[0,0]:null,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:YARD2?26.5:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:YARD2?'yard':'day',bake:YARD2?{f:'assets/bake/arena.png',min:[-19.2,.1,-19.2],size:[38.4,9.6,38.4],n:[96,24,96],cols:12,sc:4,open:.65}:null},
-  colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
+  colosseum:{bake:{f:'assets/bake/colosseum.png',min:[-36,.1,-36],size:[72,9.6,72],n:[120,16,120],cols:12,sc:4,open:.65,gain:1.3},shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{shR:36,entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
   mill:{shR:30,entry:{x:-12.2,z:-4,dx:1,dz:0},name:'The Mill',build:()=>buildMill(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:3,lootR:13,ceil:7.4,loot:14,fighters:8,light:'mill',noRing:true,spot:()=>[rand(-11.5,11.5),rand(-6.8,3.7)]},
@@ -4833,7 +4835,7 @@ const MAPS={
   raid:{shR:40,entry:{x:7,z:0,dx:0,dz:1},name:'The Raid',build:()=>buildRaid(),MAP:80,arena:0,zoneR:90,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   road:{shR:24,entry:{x:0,z:-32,dx:0,dz:1},name:'The Road',build:()=>buildRoad(),MAP:90,arena:0,zoneR:80,spawn:[2,12],spacing:4,lootR:12,loot:0,fighters:8,light:'day',noRing:true,modeOnly:true},
   crypt:{shR:10,entry:{x:0,z:0,dx:0,dz:1},name:'The Crypt',build:()=>{buildCrypt();for(let k=0;k<5&&CRYPT.bad&&!window.__keepBad;k++){console.warn('crypt floor shut off at',CRYPT.badAt,'building another');clearWorld();CRYPT_SEED+=7919;buildCrypt();}},MAP:40,arena:0,zoneR:60,spawn:[2,8],spacing:3,lootR:10,ceil:2.35,loot:0,fighters:8,get light(){return CRYPT_DEPTH>=4?'cryptDeep':'crypt';},noRing:true,modeOnly:true},
-  pit:{shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
+  pit:{bake:{f:'assets/bake/pit.png',min:[-16,.1,-16],size:[32,8.8,32],n:[80,22,80],cols:12,sc:4,open:.65},shR:24,entry:{x:0,z:14.25,dx:0,dz:-1},name:'The Pit',build:()=>buildPit(),MAP:15,arena:0,zoneR:21,spawn:[5.5,12],spacing:4,lootR:12,loot:14,fighters:8,light:'day'},
 };
 let curMap='village';
 function applyLighting(k){
@@ -5313,7 +5315,8 @@ function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?
   af:q()<.65?0:q()<.6?1:2,sc:q()<.8?0:1+((q()*4)|0),pl:q()<.94?0:1+((q()*2)|0),wf:q()<.7?0:q()<.6?1:3,wg:(q()*6)|0,ws:(q()*3)|0};}
 const GAITW=!/[?&]nogaitw/.test(location.search),GAIT_P=Object.assign({wide:.065,sway:.02,dip:.022,yaw:.11,roll:.045},(()=>{try{return JSON.parse(decodeURIComponent((location.search.match(/[?&]gaitp=([^&]+)/)||[])[1]||'{}'));}catch(e){return {};}})());   // (Build 265) the walk's weight: feet apart (m a side), hip sway (m), dip (m), hip turn and roll (rad); ?gaitp={json}, ?nogaitw
 const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams(location.search).get('ls0')||.92),+(new URLSearchParams(location.search).get('ls1')||.985)],STEP_ST=+(new URLSearchParams(location.search).get('stepst')||.15),STEP_SL=+(new URLSearchParams(location.search).get('stepsl')||1);const LOOSE=!/[?&]noloose/.test(location.search),LOOSE_DIP=+((location.search.match(/[?&]ldip=([\d.]+)/)||[])[1]||.1),MEAS=+((location.search.match(/[?&]meas=([\d.]+)/)||[])[1]||.3);
-const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.34),ST_WIDE=_qn('stwide',1.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
+const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -9923,7 +9926,7 @@ class Fighter{
           _sitV.set(sx-(dx+_f.x*(nf-df)),sy-ny,sz-(dz+_f.z*(nf-df)));B.Hips.parent.worldToLocal(_sitV);B.Hips.position.copy(_sitV);
           _qr.setFromAxisAngle(X_AXIS,w);B.Hips.quaternion.premultiply(_qr);skelClean(B);setWorldQuat(S2,_sitQ,true);}}
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
-        const ff=FEETF*Math.min(1,w/.65);for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*ST_WIDE*w).addScaledVector(_f,(s===lead?.18:-.15)*w+ff);}
+        const ff=FEETF*Math.min(1,w/.65);for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*ST_WIDE*w).addScaledVector(_f,(s===lead?.15:-.12)*w+ff);}
         /* (Build 269) a step into the blow: in a committed cut the foot on the side the cut comes from passes forward (a cut travelling right to left brings the right foot through), the weight goes onto it, and it comes back when the cut is done. The plant code below turns the moved target into a real step */
         {const S=this._stp||(this._stp={w:0,s:null,hold:0}),sw=this.sword,ok=STEP_IN>0&&sw&&sw.def.kind!=='fist'&&this.commit&&!this.thrust&&!(this.revW>.3)&&!sw.stuck&&this.alive&&!this.pin&&!this.climb;
           if(ok&&sw.Hv){_wl1.copy(sw.Hv).sub(this.vel);const hs=Math.hypot(_wl1.x,_wl1.z),lr=_wl1.dot(_r);if(hs>2.2||_wl1.y<-2.5){S.hold=.5;if(!S.s)S.s=Math.abs(lr)<1?(this.mainArm==='L'?'Left':'Right'):lr<0?'Right':'Left';}}
@@ -9942,9 +9945,9 @@ class Fighter{
       const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
       if(this.gaitW<=.5)for(const s in feet){const want=feet[s];if(sp>.3)want.addScaledVector(this.vel,lead/sp*.9);let p=PL[s];
         if(!p||pw<.02){p=PL[s]={at:want.clone(),from:want.clone(),t:1};}
-        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),sdw=(this.sideW||0)*STEP_SL,th=(this.isPlayer?.13:.16)+sp*.06+.07*sdw;   /* (Build 266) stepping sideways or back, the steps are longer and take their time (they were a 0.13 s shuffle) */
-          if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*2.2)){p.from.copy(p.at);p.t=0;}
-          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)+.07*sdw));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02)+.025*sdw);
+        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),sdw=(this.sideW||0)*STEP_SL,th=(this.isPlayer?.13:.16)+sp*.035+.035*sdw;   /* (Build 266) stepping sideways or back, the steps are longer and take their time (they were a 0.13 s shuffle) */
+          if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*1.7)){p.from.copy(p.at);p.t=0;}   /* (Build 276) a foot goes sooner and a trailing one doesn't wait as long for the other: side-stepping at speed left the legs splayed a metre apart */
+          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)+.04*sdw));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02)+.025*sdw);
             if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false,this);}
           else{p.at.y=want.y;p.lift=0;}
           feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
@@ -11944,7 +11947,7 @@ function sim(h){
   physTick=!!PW&&(physPhase^=1)===1;
   for(const f of fighters)f.step(h);
   lodgeSweep();hookStep(h);
-  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz,sk=a.sword&&a.sword.stuck&&a.sword.stuck.B===b||b.sword&&b.sword.stuck&&b.sword.stuck.B===a,md=sk?.85:.6;if(d2<md*md&&d2>1e-6){const d=Math.sqrt(d2),sa=1+2.5*Math.max(0,1-Math.hypot(a.vel.x,a.vel.z)/1.2),sb=1+2.5*Math.max(0,1-Math.hypot(b.vel.x,b.vel.z)/1.2),k=(md-d)/d*(sk?.25:1),ka=k*sb/(sa+sb),kb=k*sa/(sa+sb);a.pos.x-=dx*ka;a.pos.z-=dz*ka;b.pos.x+=dx*kb;b.pos.z+=dz*kb;   /* Build 143: someone standing his ground is set (up to 3.5× as hard to move as a walker): bots walking into a still player used to plough him along */
+  for(let i=0;i<fighters.length;i++){const a=fighters[i];if(!a.alive||a.ragdoll)continue;for(let j=i+1;j<fighters.length;j++){const b=fighters[j];if(!b.alive||b.ragdoll)continue;const dx=b.pos.x-a.pos.x,dz=b.pos.z-a.pos.z,d2=dx*dx+dz*dz,sk=a.sword&&a.sword.stuck&&a.sword.stuck.B===b||b.sword&&b.sword.stuck&&b.sword.stuck.B===a,md=sk?.9:BODY_GAP;if(d2<md*md&&d2>1e-6){const d=Math.sqrt(d2),sa=1+2.5*Math.max(0,1-Math.hypot(a.vel.x,a.vel.z)/1.2),sb=1+2.5*Math.max(0,1-Math.hypot(b.vel.x,b.vel.z)/1.2),k=(md-d)/d*(sk?.25:1),ka=k*sb/(sa+sb),kb=k*sa/(sa+sb);a.pos.x-=dx*ka;a.pos.z-=dz*ka;b.pos.x+=dx*kb;b.pos.z+=dz*kb;   /* Build 143: someone standing his ground is set (up to 3.5× as hard to move as a walker): bots walking into a still player used to plough him along */
       // bodies collide: closing speed is shared out, and running into someone knocks both off balance (the one who was standing more)
       const nx=dx/d,nz=dz/d,vn=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;if(vn<-.2){const ma=(1+ARMOR_SLOTS.reduce((q,s)=>q+(a.armor[s]?.12:0),0))*sa,mb=(1+ARMOR_SLOTS.reduce((q,s)=>q+(b.armor[s]?.12:0),0))*sb,ja=-vn*mb/(ma+mb),jb=-vn*ma/(ma+mb);
         a.vel.x-=nx*ja;a.vel.z-=nz*ja;b.vel.x+=nx*jb;b.vel.z+=nz*jb;if(-vn>1&&simTime>(a.bumpT||0)&&simTime>(b.bumpT||0)){a.bumpT=b.bumpT=simTime+.35;_v.set(nx,0,nz);b.bodyHit('Spine2',_v,jb*1.1);_v.negate();a.bodyHit('Spine2',_v,ja*1.1);}if(-vn>1.6){_v.set(nx,0,nz);b.shove(_v,jb*.7);_v.negate();a.shove(_v,ja*.45);if(-vn>2.6)sThud(a.chest,.4);}}}}}

@@ -4,7 +4,7 @@ import {Worker,isMainThread,workerData,parentPort} from 'worker_threads';import 
 import * as THREE from 'three';import {MeshBVH} from 'three-mesh-bvh';
 const E=process.env,B=(E.BOUNDS||'-19.2,0.1,-19.2,19.2,9.7,19.2').split(',').map(Number),CELL=+(E.CELL||.4),RAYS=+(E.RAYS||160);
 const NX=Math.round((B[3]-B[0])/CELL),NY=Math.round((B[4]-B[1])/CELL),NZ=Math.round((B[5]-B[2])/CELL);
-const SUN_E=[4.9*1.0,4.9*.9,4.9*.76];   // the sun's colour (0xfff3e2, linear) times its strength
+const SUN_E=E.SUN?E.SUN.split(',').map(Number):[4.9*1.0,4.9*.9,4.9*.76];   // the sun's colour (0xfff3e2, linear) times its strength
 const sky=(d,o)=>{if(d.y<0){o[0]=.22;o[1]=.2;o[2]=.17;return;}const t=Math.pow(d.y,.6);o[0]=.75+(.18-.75)*t;o[1]=.82+(.34-.82)*t;o[2]=.92+(.72-.92)*t;};
 if(isMainThread){const nw=Math.max(1,os.cpus().length),t0=Date.now();const out=new Float32Array(NX*NY*NZ*37);let done=0;
   await Promise.all([...Array(nw)].map((_,w)=>new Promise(res=>{const wk=new Worker(new URL(import.meta.url),{workerData:{w,nw}});wk.on('message',m=>{if(m.p){if(w===0)process.stdout.write(`\r${(m.p*100).toFixed(0)}% ${((Date.now()-t0)/1000).toFixed(0)}s `);return;}out.set(m.data,m.y0*NX*NZ*37);done++;});wk.on('exit',res);wk.on('error',e=>{console.error(e);process.exit(1);});})));
