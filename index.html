@@ -7864,7 +7864,7 @@ class Sword{
     {const gy=groundY(this.T.x,this.T.z,this.T.y);if(this.T.y<gy+.03)this.T.y=gy+.03;}
     this.worldClip(h);
     this.constrain(h);
-    const of=this.owner,rw0=of&&of.hrW?of.hrW():0,rs=rw0>.5?-1:1;if(of&&of.foreF&&this.def.kind!=='fist'&&this.def.kind!=='spear'&&(rw0<.05||rw0>.95)){const F=of.foreF,c=rs*this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;   // (while the grip is being turned over the limit waits)
+    const of=this.owner,rw0=of&&of.hrW?of.hrW():0,rs=rw0>.5?-1:1;if(of&&of.foreF&&this.def.kind!=='fist'&&this.def.kind!=='spear'&&(rw0<.05||rw0>.95)&&!((of._shW||0)>.3)){const F=of.foreF,c=rs*this.axis.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;   // (while the grip is being turned over the limit waits)
       if(tc!==null){_wl1.copy(this.axis).multiplyScalar(rs).addScaledVector(F,-c);if(_wl1.lengthSq()<1e-8)_wl1.copy(this.edge);_wl1.normalize();
         _wl2.copy(F).multiplyScalar(tc).addScaledVector(_wl1,Math.sqrt(1-tc*tc)).multiplyScalar(rs);_wl3.copy(this.H).addScaledVector(_wl2,this.len).sub(this.T);
         const dl=_wl3.length();if(dl>1e-7){_wl3.multiplyScalar(1/dl);_wl1.subVectors(this.T,this.Tp);const vn=_wl1.dot(_wl3);if(vn<0)_wl1.addScaledVector(_wl3,-vn);   // momentum into the limit is absorbed by the wrist
@@ -9042,7 +9042,7 @@ class Fighter{
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
   guideDir_(hand,out){this._ng=1;const r=this.guideDir(hand,out);this._ng=0;return r;}
-  guideDir(hand,out){this.guideDir0(hand,out);const w=this._shW||0;if(w>.01&&this.lamp){this.fwd(_shF);this.right(_shR);const sg=this.mainArm==='L'?-1:1;_shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.5).addScaledVector(_shR,.2*sg).normalize();const e=w*w*(3-2*w);out.lerp(_shP,e).normalize();}return out;}
+  guideDir(hand,out){this.guideDir0(hand,out);const w=this._shW||0;if(w>.01&&this.lamp){this.fwd(_shF);this.right(_shR);const sg=this.mainArm==='L'?-1:1;const sm=this.mainArm==='L'?this.shL:this.shR;if(hand&&sm){_shP.copy(sm).addScaledVector(Y_AXIS,.07).addScaledVector(_shR,.07*sg).addScaledVector(_shF,-.06).sub(hand);if(_shP.lengthSq()<.0025)_shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.6);_shP.normalize();}else _shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.5).addScaledVector(_shR,.2*sg).normalize();   /* along the line from the hand over the sword shoulder, so the blade lies on it and clears the head */const e=w*w*(3-2*w);out.lerp(_shP,e).normalize();}return out;}
   guideDir0(hand,out){if(!_spR)_spR=V();
     const f=_t2,u=_t3;this.frame(f,u);
     if(this.sword&&(this.throwHold||this.throwT>=0)){
