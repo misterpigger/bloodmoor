@@ -1,0 +1,11 @@
+import {boot} from './harness.mjs';
+const OUT='../out/q218',TAG=process.env.TAG||'wc';
+const {browser,page,logs,fr,tick,shot}=await boot({W:900,HH:600,query:'?nohud'});
+await page.evaluate(async()=>{const g=window.__game;document.querySelector('.mode[data-mode="career"]').click();await new Promise(r=>setTimeout(r,120));g.startGame();window.__pause=true;for(let k=0;k<60;k++)g.logic(1/60);});
+await new Promise(r=>setTimeout(r,2500));
+await page.evaluate(()=>{const g=window.__game,T=g.THREE,C=g.CRYPT,P=g.player;const c=C.plan.cells[0];P.pos.set(c.cx+3,0,c.cz+3);P.model.visible=false;for(const f of g.fighters)if(f!==P)f.model.visible=false;
+ const ids=['cleaver','knife','poker'];ids.forEach((id,i)=>{const it=g.testLoot(id,c.cx-.25+i*.25,c.cz);const s=it.sword;s.reset(new T.Vector3(c.cx-.3+i*.3,.6,c.cz-.2),new T.Vector3(0,1,0));s.edge.set(1,0,0);s.free=false;});
+ for(let k=0;k<3;k++)g.logic(1/60);
+ const L=new T.PointLight(0xffe0c0,3,6,1.2);L.position.set(c.cx+.4,1.3,c.cz+.9);g.scene.add(L);window.__dbgCam={p:new T.Vector3(c.cx,.95,c.cz+.75),t:new T.Vector3(c.cx,.85,c.cz-.2)};});
+await tick(2);await fr(3);await shot(`${OUT}/${TAG}.jpg`,88);
+console.log(logs.slice(0,4).join('\n')||'no errors');await browser.close();process.exit(0);

@@ -1,0 +1,11 @@
+import {boot} from './harness.mjs';
+const {browser,page,logs,fr,tick,start,shot}=await boot({W:700,HH:500,query:'?nohud'});
+await start('yard','colosseum');await fr(2,1/30);await tick(120);
+const cam=`const h=B.ragdoll?B.ragdoll.P.Spine2:B.chest;const fw=new T.Vector3(Math.sin(B.yaw),0,Math.cos(B.yaw));window.__dbgCam={p:h.clone().addScaledVector(fw,1.6).add(new T.Vector3(.3,.9,0)),t:h.clone()};`;
+await page.evaluate((cam)=>{const g=window.__game,P=g.player,T=g.THREE;const B=g.fighters.find(f=>f!==P);window.__B=B;B.dummy=false;B.noSever=false;
+  const st=document.createElement('style');st.textContent='#hud,#prompt,#topc,#grip,#banner,#yard{display:none!important}';document.head.appendChild(st);eval(cam);},cam);
+await tick(3);await fr(3,1/60);await shot('bis/k0.jpg',90);
+await page.evaluate((cam)=>{const g=window.__game,P=g.player,T=g.THREE,B=window.__B;B.damage(20,P,'cut');eval(cam);},cam);await tick(20);await fr(3,1/60);await shot('bis/k1.jpg',90);
+await page.evaluate((cam)=>{const g=window.__game,P=g.player,T=g.THREE,B=window.__B;B.knockdown(3,new T.Vector3(0,0,-2),B.chest.clone());},cam);await tick(90);await page.evaluate((cam)=>{const g=window.__game,T=g.THREE,B=window.__B;eval(cam);},cam);await fr(3,1/60);await shot('bis/k2.jpg',90);
+await page.evaluate((cam)=>{const g=window.__game,P=g.player,T=g.THREE,B=window.__B;B.sever('LeftArm',new T.Vector3(1,0,0));},cam);await tick(60);await page.evaluate((cam)=>{const g=window.__game,T=g.THREE,B=window.__B;eval(cam);},cam);await fr(3,1/60);await shot('bis/k3.jpg',90);
+console.log(logs.slice(0,6).join('\n')||'no errors');await browser.close();process.exit(0);

@@ -1,0 +1,12 @@
+import {boot} from './harness.mjs';
+const [mode,map]=(process.env.MM||'br@village').split('@'),SECS=+(process.env.SECS||80);
+const {browser,page,logs,start}=await boot({W:320,HH:200,render:false,query:'?nohud'+(process.env.Q||'')});
+await page.evaluate(tn=>{const b=document.querySelector(`.tn[data-tn="${tn}"]`);if(b)b.click();},process.env.TN||'4');
+await start(mode,map,{pause:true});
+await page.evaluate(async()=>{const g=window.__game;for(let i=0;i<300&&!g.PRW;i++){await new Promise(r=>setTimeout(r,30));g.logic(1/60);}window.__L=[];window.__per={};window.__t=0;});
+for(let c=0;c<SECS;c+=10)await page.evaluate(()=>{const g=window.__game,L=window.__L,per=window.__per;
+  for(let k=0;k<600;k++){g.logic(1/60);window.__t+=1/60;const t=window.__t;if(g.player&&g.player.alive)g.player.hp=Math.max(g.player.hp,80);
+    if(k%60===0)for(const f of g.fighters){if(f.isPlayer||!f.alive||f.ragdoll||f.downed||!f.ai)continue;const P=per[f.id]||(per[f.id]={x:f.pos.x,z:f.pos.z,n:0});const mv=Math.hypot(f.pos.x-P.x,f.pos.z-P.z);P.x=f.pos.x;P.z=f.pos.z;const A=f.ai,tg=A.target;
+      const d=tg&&tg.alive?Math.hypot(tg.pos.x-f.pos.x,tg.pos.z-f.pos.z):99;if(t>5&&mv<.35&&((tg&&tg.alive&&d>5)||!tg)){P.n++;if(P.n%2===1&&L.length<60)L.push(`${t.toFixed(0)}s ${f.name} (${f.pos.x.toFixed(1)},${f.pos.y.toFixed(1)},${f.pos.z.toFixed(1)}) blk ${g.navBlocked(f.pos.x,f.pos.z)?1:0} goal ${A.gt===g.simTime?'fresh':'old'} (${(A.gx||0).toFixed(1)},${(A.gz||0).toFixed(1)}) np ${A.np?A.np.i+'/'+A.np.n:'-'} nvOn ${A.nvOn?1:0} tgt ${tg?tg.name+(tg.isPlayer?'(P)':'')+' d '+d.toFixed(1)+' y '+tg.pos.y.toFixed(1)+(tg.ragdoll?' rag':''):'none'} sw ${f.sword?f.sword.def.id:'-'} ph ${A.phase} loot ${A.loot?'y':'n'} detour ${(A.detour||0).toFixed(1)} stam ${f.stamina.toFixed(0)} hp ${f.hp.toFixed(0)} vel ${Math.hypot(f.vel.x,f.vel.z).toFixed(2)} cd ${g.simTime<0?'':''}`);}else P.n=0;}}});
+const out=await page.evaluate(()=>({L:window.__L,nav:{plans:window.__game.NAV.plans,ms:window.__game.NAV.ms}}));
+console.log(out.L.join('\n'));console.log(JSON.stringify(out.nav));console.log(logs.slice(0,5).join('\n'));await browser.close();process.exit(0);

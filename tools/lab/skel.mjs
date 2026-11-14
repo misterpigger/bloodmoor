@@ -1,0 +1,13 @@
+import {boot} from './harness.mjs';
+const {browser,page,logs,fr,tick,shot}=await boot({W:900,HH:600,query:'?nohud'});
+await page.evaluate(async()=>{const g=window.__game;document.querySelector('.mode[data-mode="career"]').click();await new Promise(r=>setTimeout(r,120));g.startGame();window.__pause=true;for(let k=0;k<60;k++)g.logic(1/60);});
+await new Promise(r=>setTimeout(r,2500));
+await page.evaluate(()=>{const g=window.__game,T=g.THREE,C=g.CRYPT,P=g.player;const c=C.plan.cells[0];P.model.visible=false;
+  const G=new T.Group();G.position.set(c.cx,0,c.cz);g.scene.add(G);let sd=5;const R=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  const put=(parts,x,z,ry)=>{for(const [k,geo,m] of parts){const mm=new T.Mesh(geo,g.MATS[k]);mm.applyMatrix4(new T.Matrix4().makeRotationY(ry).setPosition(x,0,z).multiply(m));G.add(mm);}};
+  put(g.skeletonParts('lie',R),-.6,0,0);put(g.skeletonParts('sit',R),.7,0,Math.PI);
+  const L=new T.PointLight(0xffe8d0,8,8,1.2);L.position.set(c.cx+1,2,c.cz+1.5);g.scene.add(L);window.__dbgCam={p:new T.Vector3(c.cx+.2,1.5,c.cz+1.6),t:new T.Vector3(c.cx,.2,c.cz)};});
+await tick(10);await fr(3);await shot('../out/skel_a.jpg',90);
+await page.evaluate(()=>{const g=window.__game,T=g.THREE,C=g.CRYPT,c=C.plan.cells[0];window.__dbgCam={p:new T.Vector3(c.cx-.62,.42,c.cz-.36),t:new T.Vector3(c.cx-.6,.1,c.cz-.62)};});
+await fr(3);await shot('../out/skel_b.jpg',90);
+console.log(logs.slice(0,5).join('\n')||'ok');await browser.close();process.exit(0);

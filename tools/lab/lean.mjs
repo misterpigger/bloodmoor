@@ -1,0 +1,15 @@
+import {boot} from './harness.mjs';
+const {browser,page,logs,start}=await boot({W:320,HH:200,render:false,query:'?nohud'+(process.env.Q||'')});
+await start(process.env.MODE||'yard',process.env.MAP||'arena',{pause:true});
+const r=await page.evaluate(async(PRE)=>{const g=window.__game,P=g.player;const out=[];
+  const meas=(f)=>{const B=f.bones;const e=n=>B[n].matrixWorld.elements;const fx=Math.sin(f.yaw),fz=Math.cos(f.yaw);const seg=(a,b)=>{const A=e(a),Bq=e(b);const dx=Bq[12]-A[12],dy=Bq[13]-A[13],dz=Bq[14]-A[14];return +(Math.atan2(dx*fx+dz*fz,dy)*57.3).toFixed(1);};
+    const H=e('Hips'),LF=e('LeftFoot'),RF=e('RightFoot');const mx=(LF[12]+RF[12])/2,mz=(LF[14]+RF[14])/2;
+    return {hipsNeck:seg('Hips','Neck'),hipsSpine2:seg('Hips','Spine2'),spine2Neck:seg('Spine2','Neck'),neckHead:seg('Neck','Head'),hipsAheadOfFeet:+(((H[12]-mx)*fx+(H[14]-mz)*fz)*100).toFixed(1),hipY:+H[13].toFixed(2),pitch:+f.pitch.toFixed(2),stance:+(f.stanceAmt||0).toFixed(2),calm:+(f.calmW||0).toFixed(2),crouch:+(f.crouchAmt||0).toFixed(2)};};
+  for(let k=0;k<300;k++)g.logic(1/60);
+  if(PRE)eval(PRE);
+  for(let k=0;k<120;k++)g.logic(1/60);
+  out.push(['player',P.sword&&P.sword.def.id,meas(P)]);
+  for(const f of g.fighters)if(f!==P)out.push([f.name,f.sword&&f.sword.def.id,meas(f)]);
+  return out;},process.env.PRE||'');
+for(const x of r)console.log(JSON.stringify(x));
+console.log(logs.slice(0,5).join('\n')||'no errors');await browser.close();process.exit(0);
