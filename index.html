@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=269;
+const BUILD=270;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4450,6 +4450,9 @@ MATS.sand=std({map:TX.sand,bumpMap:TX.sandb,bumpScale:2.5,roughness:1});
 {const g=gravelMaps(1024,{seed:4,base:[206,192,168],n:16000,patch:.5,rmin:1,rmax:8,ns:4,peb:[[186,178,164],[160,152,140],[208,200,186],[142,134,122],[176,160,136],[194,186,172]]});TX.gravel=tex(g.map);TX.graveln=tex(g.normal,false);}
 {const l=limestoneMaps(1024);TX.lime=tex(l.map);TX.limen=tex(l.normal,false);}
 MATS.gravel=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.2,1.2),roughness:1});MATS.roadDirt=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector2(1.4,1.4),color:0xa08a6c,roughness:1});
+/* (Build 270) the Yard rebuilt from scans: plaster over stone for the walls, packed earth with gravel blended in, weathered timber, boards and old tiles */
+const YARD2=!/[?&]oldyard/.test(location.search),YARD_U={uRock:{value:null},uHasRock:{value:0}};
+MATS.yardPlaster=std({map:TX.lime,color:0xd8ccb6,roughness:.95});MATS.yardGround=std({map:TX.gravel,roughness:1});MATS.yardTimber=std({color:0x8a7a68,roughness:.9});MATS.yardBoards=std({color:0x8c8072,roughness:.9});MATS.yardTile=std({color:0x9a6a52,roughness:.9});
 MATS.lime=std({map:TX.lime,normalMap:TX.limen,normalScale:new THREE.Vector2(1.1,1.1),roughness:.95,side:THREE.DoubleSide});
 MATS.limeDark=std({map:TX.lime,normalMap:TX.limen,color:0x8d8272,roughness:.95,side:THREE.DoubleSide});
 MATS.stoneLight=std({map:TX.stone,bumpMap:TX.stoneb,bumpScale:2,color:0xe8d9bc,roughness:.95,side:THREE.DoubleSide});
@@ -4467,7 +4470,17 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
   sh.fragmentShader='varying vec3 vWW;\n'+WN+'\n'+sh.fragmentShader.replace('#include <map_fragment>',kind==='meadow'?`#include <map_fragment>
     { float big=wfbm(vWW.xz*.045),mid=wfbm(vWW.xz*.33+7.),fine=wn(vWW.xz*1.7+3.);   // lusher and drier stretches over tens of metres, patches of a few, so the scan never shows its repeat
       vec3 lush=diffuseColor.rgb*vec3(.74,1.04,.6),dry=diffuseColor.rgb*vec3(1.04,1.,.72);
-      diffuseColor.rgb=mix(lush,dry,smoothstep(.36,.72,big))*mix(.8,1.1,mid)*mix(.93,1.05,fine); }`:kind==='ground'?`#include <map_fragment>
+      diffuseColor.rgb=mix(lush,dry,smoothstep(.36,.72,big))*mix(.8,1.1,mid)*mix(.93,1.05,fine); }`:kind==='yardground'?`#include <map_fragment>
+    { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);diffuseColor.rgb=mix(vec3(dot(diffuseColor.rgb,vec3(.3,.5,.2))),diffuseColor.rgb,.42)*vec3(1.04,1.,.93);diffuseColor.rgb*=mix(.82,1.1,big)*mix(.9,1.06,mid);
+      float trod=smoothstep(13.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.1*trod;
+      float gp=smoothstep(.56,.66,wfbm(vWW.xz*.36+31.)+.2*wn(vWW.xz*2.7)-.1);vec3 rk=texture2D(uRock,vWW.xz*.4).rgb;   /* patches of broken stone and gravel lying in the earth: a second scan blended in by world noise */
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(dot(rk,vec3(.33)))*vec3(.8,.74,.66),gp*uHasRock*.85);
+      float damp=smoothstep(.6,.82,wfbm(vWW.xz*.16+50.));diffuseColor.rgb*=1.-.15*damp;
+      float wd=17.2-max(abs(vWW.x),abs(vWW.z));diffuseColor.rgb*=mix(.62,1.,smoothstep(-.1,1.7,wd))*mix(.86,1.,smoothstep(1.,4.5,wd)); }`:kind==='yardwall'?`#include <map_fragment>
+    { float h=vWW.y;vec2 wp=vec2(vWW.x+vWW.z,vWW.y);diffuseColor.rgb*=mix(.8,1.07,wfbm(wp*.3));
+      float dr=smoothstep(.45,.85,wn(vec2(wp.x*1.6,3.)))*smoothstep(1.4,5.,h)*(.45+.55*wn(vec2(wp.x*8.,h*.5)));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.56,.5,.43),dr*.5);   /* rain runs down from under the hoarding */
+      float base=smoothstep(2.4,.2,h)*(.45+.55*wfbm(wp*1.3));diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.58,.53,.45),base*.75);   /* splashed and damp at the foot */
+      diffuseColor.rgb*=1.18*mix(1.,.6,smoothstep(3.6,4.9,h))*mix(.7,1.,smoothstep(0.,.5,h)); }`:kind==='ground'?`#include <map_fragment>
     { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);
       diffuseColor.rgb*=mix(.74,1.12,big)*mix(.88,1.07,mid);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.8,.72),smoothstep(.55,.8,big)*.5);   // damp, darker brown patches
       float trod=smoothstep(14.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.14*trod;   // the middle is packed down by feet
@@ -4481,14 +4494,16 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
       float st=wn(vec2((vWW.x+vWW.z)*3.1,vWW.y*.4));float base=smoothstep(1.4,0.,h)*(.55+.45*st);
       diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.62,.58,.5),base*.6);   // damp and splashed dirt at the foot of the wall
       float streak=smoothstep(.55,.9,wn(vec2((vWW.x+vWW.z)*2.2,vWW.y*.15+3.)))*smoothstep(0.,2.5,h);diffuseColor.rgb*=1.-.12*streak; }`);   // rain streaks
-  sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;};
+  sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;if(kind==='yardground'){Object.assign(sh.uniforms,YARD_U);sh.fragmentShader='uniform sampler2D uRock;uniform float uHasRock;\n'+sh.fragmentShader;}};
   const k0=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>k0+'|w'+kind;return m;}
 for(const k of ['lime','limeDark','stone','stoneLight','ashlar','beam','plaster0','plaster1','plaster2','woodPale','wood','tile'])if(MATS[k])weather(MATS[k],'wall');
+weather(MATS.yardGround,'yardground');MATS.yardGround.envMapIntensity=.5;weather(MATS.yardPlaster,'yardwall');for(const k of ['yardTimber','yardBoards','yardTile'])weather(MATS[k],'wall');
 for(const k of ['gravel','sand'])if(MATS[k]){weather(MATS[k],'ground');MATS[k].envMapIntensity=.5;}   /* (Build 269) less sky fill on the fighting floor, so the sun's shadows are dark and hard-edged on it */
 weather(MATS.meadow,'meadow');
 // photo-scanned surfaces (CC0, Poly Haven; see CREDITS.md). They replace the drawn ones as they arrive; if they can't load, the drawn ones stay.
 // Each set is colour, normal and a packed map (red = ambient occlusion, green = roughness). rep = tiles per unit of the geometry's UVs.
-const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
+const PHOTO={yardwall:{mats:{yardPlaster:{rep:.36,ns:1.25,col:0xfff6e6}}},yarddirt:{mats:{yardGround:{rep:2.3,ns:1.1,col:0xd9d2c8}}},yardwood:{mats:{yardTimber:{rep:.7,ns:1.3,col:0xa59684}}},yardboard:{mats:{yardBoards:{rep:.55,ns:1.2,col:0xb4a898}}},yardroof:{mats:{yardTile:{rep:.5,ns:1.4,col:0xd8c8bc}}},
+  ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   plaster:{mats:{plaster0:{rep:.75,ns:1.1,col:0xf4ecdc},plaster1:{rep:.75,ns:1.1,col:0xf0d8ae},plaster2:{rep:.75,ns:1.1,col:0xd8d2c6}}},   // village houses (rep: the geometry's UV unit / the scan's real size)
   timber:{mats:{beam:{rep:3,ns:1.2,col:0x6a5644},wood:{rep:2,ns:1.1,col:0xb09a82},woodPale:{rep:2,ns:1.1,col:0xd2c4b0},propWood:{rep:2,ns:1.1,col:0xa88a6c},palisade:{rep:3,ns:1.2,col:0x6e5c4c}}},thatch:{mats:{thatch:{rep:1.5,ns:1.4,col:0xe6c088},cryptStraw:{rep:1,ns:1.6,col:0xf0d088}}},
   ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},cryptWall:{rep:.62,ns:.8,col:0x8e8578},cryptVault:{rep:.7,ns:.75,col:0x847c70},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
@@ -4497,6 +4512,7 @@ const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},meadow:{mats:{meadow:{rep:2.6,ns:1,col:0x7ca65a}}},bark:{mats:{bark:{rep:1,ns:1.4,col:0xb8ac9c}}},
   rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptFloor:{rep:.62,ns:.75,col:0x6f695f},cryptEarth:{rep:1.4,ns:.9,col:0x463e34}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
+  L.load('assets/tex/yardrock_d.jpg',t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;YARD_U.uRock.value=t;YARD_U.uHasRock.value=1;});
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
     Promise.all([get('d',true),get('n',false),get('orm',false)]).then(([d,n,m])=>{for(const [mk,c] of Object.entries(o.mats)){const M=MATS[mk];if(!M)continue;
       const rep=t=>{const u=t.clone();u.repeat.set(c.rep,c.rep);u.needsUpdate=true;return u;};
@@ -4645,18 +4661,29 @@ function buildPit(){
   flushBatch();
 }
 // ================================================================ the yard (a walled castle yard with a fenced ring, after Half Sword's)
-function hsFence(x0,z0,x1,z1,out,collide=true){   // pale timber fence: posts, two rails and a raking brace on the outer side of each post
-  const L=Math.hypot(x1-x0,z1-z0),dx=(x1-x0)/L,dz=(z1-z0)/L,ry=-Math.atan2(dz,dx),n=Math.max(1,Math.round(L/2.4));
-  for(let k=0;k<=n;k++){const t=k/n,x=x0+(x1-x0)*t,z=z0+(z1-z0)*t;addGeo('woodPale',boxUV(.16,1.35,.16,1),T(x,.67,z));
-    addGeo('woodPale',boxUV(.12,1.25,.12,1),T(x+out[0]*.38,.5,z+out[1]*.38,Math.atan2(out[0],out[1]),.58));}   // the raking brace
+function hsFence(x0,z0,x1,z1,out,collide=true){   // (Build 270) a heavy weathered timber fence: square posts with pointed heads, two thick rails, a capping rail and a raking prop on the outer side of each post
+  const L=Math.hypot(x1-x0,z1-z0),dx=(x1-x0)/L,dz=(z1-z0)/L,ry=-Math.atan2(dz,dx),n=Math.max(1,Math.round(L/2.4)),K='yardTimber';
+  for(let k=0;k<=n;k++){const t=k/n,x=x0+(x1-x0)*t,z=z0+(z1-z0)*t,lean=(srand()-.5)*.05;addGeo(K,boxUV(.2,1.42,.2,1),T(x,.71,z,ry+lean,lean));
+    addGeo(K,new THREE.ConeGeometry(.142,.16,4,1).rotateY(Math.PI/4),T(x,1.5,z,ry+lean,lean));
+    addGeo(K,boxUV(.15,1.5,.15,1),T(x+out[0]*.5,.58,z+out[1]*.5,Math.atan2(out[0],out[1]),.68));   // the raking prop
+    addGeo(K,boxUV(.3,.1,.3,1),T(x+out[0]*.98,.05,z+out[1]*.98,ry));}   // its foot block
   const bl=L/n;for(let k=0;k<n;k++){const ax=x0+(x1-x0)*k/n,az=z0+(z1-z0)*k/n,bx=x0+(x1-x0)*(k+1)/n,bz=z0+(z1-z0)*(k+1)/n,mx=(ax+bx)/2,mz=(az+bz)/2;
-    const g=new THREE.Group();g.position.set(mx,0,mz);g.rotation.y=ry;for(const y of [.5,1.12]){const r=new THREE.Mesh(boxUV(bl+.04,.13,.09,1.5),MATS.woodPale);r.position.y=y;g.add(r);}
-    const cp=new THREE.Mesh(boxUV(bl+.06,.07,.22,1.5),MATS.woodPale);cp.position.y=1.36;g.add(cp);
+    const g=new THREE.Group();g.position.set(mx,0,mz);g.rotation.y=ry;for(const y of [.48,1.08]){const r=new THREE.Mesh(boxUV(bl+.04,.17,.1,1),MATS[K]);r.position.set(0,y,-.02);r.rotation.x=(srand()-.5)*.06;r.castShadow=r.receiveShadow=true;g.add(r);}
+    const cp=new THREE.Mesh(boxUV(bl+.06,.08,.26,1),MATS[K]);cp.position.y=1.4;cp.castShadow=cp.receiveShadow=true;g.add(cp);
     const box=collide?addBox(Math.min(ax,bx)-.12,Math.max(ax,bx)+.12,Math.min(az,bz)-.12,Math.max(az,bz)+.12,1.2):null;
     const p=propAdd('fence',g,mx,mz,bl/2,1.42,26,box);p.seg=[ax,az,bx,bz];}}
 function buildYard(){
   const W=18,F=13.5,wallH=7.5;
-  {const gg=new THREE.PlaneGeometry(170,170);gg.rotateX(-Math.PI/2);scaleUV(gg,170/6.5,170/6.5);const g=new THREE.Mesh(gg,MATS.gravel);g.receiveShadow=true;world.add(g);}
+  {const gg=new THREE.PlaneGeometry(170,170);gg.rotateX(-Math.PI/2);scaleUV(gg,170/6.5,170/6.5);const g=new THREE.Mesh(gg,YARD2?MATS.yardGround:MATS.gravel);g.receiveShadow=true;world.add(g);}
+  if(YARD2){   /* (Build 270) plastered walls with the stone showing through, a stone footing, and a timber hoarding jettied out along the top on beams and braces, boarded in front and roofed with old tiles: the wall under it stands in its shade */
+    const zf=W-.8,yF=wallH-2.6,D=1.5,Lh=2*W-2.2;
+    for(const rot of [0,Math.PI/2,Math.PI,-Math.PI/2]){const M=T(0,0,0,rot),A=(k,g,m)=>addGeo(k,g,M.clone().multiply(m));
+      A('yardPlaster',boxUV(2*W+2,wallH+.9,1.6,1),T(0,(wallH+.9)/2,W));A('stone',boxUV(2*W-1.4,.62,.3,2),T(0,.31,zf-.1));A('stone',boxUV(2*W-1.4,.1,.4,2),T(0,.66,zf-.12));
+      A('yardBoards',boxUV(Lh,.07,D,1),T(0,yF+.035,zf-D/2));A('yardBoards',boxUV(1.06,Lh,.06,1),T(0,yF+.6,zf-D+.03,0,0,Math.PI/2));A('yardTimber',boxUV(Lh,.11,.16,1),T(0,yF+1.18,zf-D+.03));
+      A('yardTimber',boxUV(Lh,.18,.18,1),T(0,yF+2.36,zf-D+.08));A('yardTile',boxUV(2*W-1.3,.1,2.34,1),T(0,wallH+.2,zf-D/2-.08,0,-.473));A('yardTimber',boxUV(2*W-1.3,.06,.2,1),T(0,yF+2.22,zf-D-.4,0,-.473));
+      for(let x=-W+2;x<=W-2+.01;x+=2){const gate=rot===0&&Math.abs(x)<2.3;A('yardTimber',boxUV(.22,.26,D+.34,1),T(x,yF-.13,zf-D/2+.02));if(!gate)A('yardTimber',boxUV(.16,.16,1.55,1),T(x,yF-.74,zf-.6,0,.76));
+        A('yardTimber',boxUV(.17,2.34,.17,1),T(x,yF+1.17,zf-D+.08));A('yardTimber',boxUV(.1,.15,2.28,1),T(x,wallH+.08,zf-D/2-.08,0,-.473));A('yardTimber',boxUV(.12,.12,.9,1),T(x+.34,yF+2.02,zf-D+.08,0,0,.0).multiply(T(0,0,0,Math.PI/2,.8)));}}
+  }else
   // high limestone curtain walls with a crenellated top and a timber gallery along the inside, square towers at the corners
   for(const [x,z,ry,sx,sz] of [[0,W,0,0,1],[0,-W,0,0,-1],[W,0,Math.PI/2,1,0],[-W,0,Math.PI/2,-1,0]]){
     kitWall('wall_thick_straight_01',x,z,!ry,2*W+2,wallH+.8,1.9,3,g=>{const m=new THREE.Mesh(boxUV(2*W+2,wallH,1.6,6),MATS.lime);m.rotation.y=ry;m.position.set(-x+x,wallH/2,0);g.add(m);});   // scanned castle wall (the old flat lime box is the fallback)
@@ -4665,20 +4692,20 @@ function buildYard(){
     for(let k=-W+2;k<=W-2;k+=2.2){const px=ry?gx-sx*.6:k,pz=ry?k:gz-sz*.6;addGeo('wood',boxUV(.12,2.4,.12,1),T(px,wallH-1.5+.2,pz));addGeo('wood',boxUV(.1,.1,1.5,1),T(ry?gx:k,wallH-1.62,ry?k:gz,ry));}
     addGeo('tile',boxUV(2*W-2,.08,1.9,2),T(gx-sx*.2,wallH+.55,gz-sz*.2,ry,(ry?sx:sz)*.42,0));}   // (the side walls' roofs used to be tipped about the wrong axis, so they hung off the wall at an angle)
   addBox(-W-1,W+1,W-.8,W+1,wallH);addBox(-W-1,W+1,-W-1,-W+.8,wallH);addBox(W-.8,W+1,-W-1,W+1,wallH);addBox(-W-1,-W+.8,-W-1,W+1,wallH);
-  for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]])placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x,z,fit:[5.6,wallH+4,5.6]});
+  if(!YARD2)for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]])placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x,z,fit:[5.6,wallH+4,5.6]});
   if(false)for(const [x,z] of [[W,W],[W,-W],[-W,W],[-W,-W]]){addGeo('lime',boxUV(4.2,wallH+3.5,4.2,6),T(x,(wallH+3.5)/2,z));for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]])for(const o of [-1.4,0,1.4])addGeo('lime',boxUV(a?.5:.9,1,a?.9:.5,1.5),T(x+a*1.85+(a?0:o),wallH+4,z+b*1.85+(b?0:o)));}
   // the gatehouse in the north wall: an iron-banded door under a little tiled roof
   placeModel('large_castle_door',{x:0,z:W-.95,ry:Math.PI,fit:[3.6,4.2,.35]},g=>{const m=new THREE.Mesh(boxUV(3.6,4.2,0.3,1.5),MATS.wood);m.position.y=2.1;g.add(m);for(const y of [.9,2.1,3.3]){const b=new THREE.Mesh(boxUV(3.7,.12,0.36,1),MATS.iron);b.position.y=y;g.add(b);}});
   // (Build 203) a timber hood over the gate: a lintel beam, joists out from the wall on braces, tiles on top (it was a pale block of another stone stuck on the wall)
-  addGeo('beam',boxUV(4.5,.3,.5,1),T(0,4.38,W-1.2));for(const sx of [-2,-.67,.67,2]){addGeo('beam',boxUV(.16,.16,1.5,1),T(sx,4.78,W-1.7,0,.3));if(Math.abs(sx)>1)addGeo('beam',boxUV(.14,.14,1.2,1),T(sx,4.2,W-1.45,0,-.85));}
-  addGeo('tile',boxUV(4.9,.1,1.7,2),T(0,5.0,W-1.72,0,.3));
+  if(!YARD2){addGeo('beam',boxUV(4.5,.3,.5,1),T(0,4.38,W-1.2));for(const sx of [-2,-.67,.67,2]){addGeo('beam',boxUV(.16,.16,1.5,1),T(sx,4.78,W-1.7,0,.3));if(Math.abs(sx)>1)addGeo('beam',boxUV(.14,.14,1.2,1),T(sx,4.2,W-1.45,0,-.85));}
+  addGeo('tile',boxUV(4.9,.1,1.7,2),T(0,5.0,W-1.72,0,.3));}
   // the castle beyond the walls: a stone keep with a slate roof, a hall, a tall round tower and roofs over the side walls, so the skyline isn't empty
   {const b={pv:0,thatch:false,chimney:true,door:0,torch:false,light:false,noDoor:true};
     house(-6,W+9,0,12,8,6,{...b,stone:true,allStone:true,slate:true,dormers:2});house(9,W+6,0,9,6,4,{...b,pv:1,gf:true,slate:true});
     house(-W-6,-3,Math.PI/2,10,6,4,{...b,pv:2});house(W+6,5,-Math.PI/2,9,6,4,{...b,stone:true,allStone:true,slate:true});house(W+5.5,-9,-Math.PI/2,7,5.5,3,{...b,pv:1,thatch:true});
     placeModel('modular_fort_01',{node:'modular_fort_01_tower_round',x:15,z:W+9,fit:[6.5,19,6.5]});}
   // heraldic banners hanging from the north gallery
-  const cl=['cloth1','cloth2','cloth3'];for(let i=0;i<12;i++){const x=-W+3.2+i*(2*W-6.4)/11;if(Math.abs(x)<3)continue;addGeo(HER_BAN[i%6],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.05,W-2.05,Math.PI));}
+  const cl=['cloth1','cloth2','cloth3'];if(YARD2){for(const [i,x] of [[0,-9],[2,-4],[4,4],[1,9]])addGeo(HER_BAN[i],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.02,W-2.34,Math.PI));}else for(let i=0;i<12;i++){const x=-W+3.2+i*(2*W-6.4)/11;if(Math.abs(x)<3)continue;addGeo(HER_BAN[i%6],wallPlane(1.15,2.7,1.15,2.7),T(x,wallH-3.05,W-2.05,Math.PI));}
   // the fenced ring the fights happen in, open on the south side
   hsFence(-F,F,F,F,[0,1]);hsFence(F,F,F,-F,[1,0]);hsFence(-F,-F,-F,F,[-1,0]);hsFence(-F,-F,-2,-F,[0,-1]);hsFence(2,-F,F,-F,[0,-1]);
   // odds and ends between fence and wall

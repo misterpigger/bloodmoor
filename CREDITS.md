@@ -151,3 +151,6 @@ Scanned and modelled props and scenery from [Poly Haven](https://polyhaven.com),
 - Cheese Box 01: [CheeseBox_01](https://polyhaven.com/a/CheeseBox_01)
 - Drawer Cabinet: [drawer_cabinet](https://polyhaven.com/a/drawer_cabinet)
 - Wooden Chair 01: [WoodenChair_01](https://polyhaven.com/a/WoodenChair_01)
+
+## The Yard (Build 270)
+Poly Haven (CC0, polyhaven.com): Plaster Stone Wall 01, Dirt Floor, Rocky Trail, Rough Wood, Wood Planks Grey, Roof Tiles 14.
