@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=268;
+const BUILD=269;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4471,7 +4471,12 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
     { float big=wfbm(vWW.xz*.07),mid=wfbm(vWW.xz*.45+11.),r=length(vWW.xz);
       diffuseColor.rgb*=mix(.74,1.12,big)*mix(.88,1.07,mid);diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.8,.72),smoothstep(.55,.8,big)*.5);   // damp, darker brown patches
       float trod=smoothstep(14.,3.,r)*(.5+.5*wn(vWW.xz*.9));diffuseColor.rgb*=1.-.14*trod;   // the middle is packed down by feet
-      float scuff=smoothstep(.62,.8,wn(vWW.xz*2.3+vec2(3.,9.)))*smoothstep(16.,4.,r);diffuseColor.rgb*=1.-.08*scuff; }`:`#include <map_fragment>
+      float scuff=smoothstep(.62,.8,wn(vWW.xz*2.3+vec2(3.,9.)))*smoothstep(16.,4.,r);diffuseColor.rgb*=1.-.08*scuff;
+      /* (Build 269) beside Half Sword's yard: paler, less orange earth, with ragged patches of dark broken stone lying on it, and long scuffs where feet have dragged */
+      float lum=dot(diffuseColor.rgb,vec3(.3,.59,.11));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(lum)*vec3(1.02,1.,.96),.34)*1.06;
+      float gp=smoothstep(.6,.7,wfbm(vWW.xz*.42+31.))*smoothstep(.3,.62,wn(vWW.xz*2.6+5.));float cell=wn(vWW.xz*34.+2.),st=smoothstep(.42,.5,cell)*(1.-smoothstep(.78,.84,cell)),sh2=wn(vWW.xz*71.);
+      diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*mix(vec3(.3,.29,.28),vec3(.62,.6,.57),sh2),gp*(.35+.65*st));
+      float dr=smoothstep(.72,.8,wn(vec2(vWW.x*.9+vWW.z*.5,vWW.z*5.-vWW.x*2.6)*.8+17.))*smoothstep(.45,.7,wfbm(vWW.xz*.2+3.));diffuseColor.rgb*=1.-.1*dr; }`:`#include <map_fragment>
     { float h=vWW.y-max(0.,uWBase),tone=wfbm(vec2(vWW.x+vWW.z,vWW.y)*.35);diffuseColor.rgb*=mix(.86,1.08,tone);
       float st=wn(vec2((vWW.x+vWW.z)*3.1,vWW.y*.4));float base=smoothstep(1.4,0.,h)*(.55+.45*st);
       diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.62,.58,.5),base*.6);   // damp and splashed dirt at the foot of the wall
@@ -4479,7 +4484,7 @@ function weather(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{
   sh.uniforms.uWBase={value:0};sh.fragmentShader='uniform float uWBase;\n'+sh.fragmentShader;};
   const k0=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>k0+'|w'+kind;return m;}
 for(const k of ['lime','limeDark','stone','stoneLight','ashlar','beam','plaster0','plaster1','plaster2','woodPale','wood','tile'])if(MATS[k])weather(MATS[k],'wall');
-for(const k of ['gravel','sand'])if(MATS[k])weather(MATS[k],'ground');
+for(const k of ['gravel','sand'])if(MATS[k]){weather(MATS[k],'ground');MATS[k].envMapIntensity=.5;}   /* (Build 269) less sky fill on the fighting floor, so the sun's shadows are dark and hard-edged on it */
 weather(MATS.meadow,'meadow');
 // photo-scanned surfaces (CC0, Poly Haven; see CREDITS.md). They replace the drawn ones as they arrive; if they can't load, the drawn ones stay.
 // Each set is colour, normal and a packed map (red = ambient occlusion, green = roughness). rep = tiles per unit of the geometry's UVs.
@@ -4741,7 +4746,7 @@ function makeEnv(stops){const c=mkCanvas(256,128),g=c.getContext('2d');const gr=
 const LIGHTS={
   dusk:{fog:0x34405c,dens:.03,top:0x0a1230,mid:0x26355c,hor:0x6e5a6c,glow:0xd2804e,glowDir:[.55,0,-.84],stars:1,hs:0x6a80b8,hg:0x2a2015,hi:.75,sun:0xa8bcff,si:1.25,dir:[-.45,.62,.64],moon:true,exp:1.25,cool:1,halo:.22,
     env:[[0,'#0c1530'],[.4,'#2c3c66'],[.5,'#9a6c5a'],[.53,'#2a2218'],[1,'#0e0b08']]},
-  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0xa3bccb,hg:0x8f7a5e,hi:.74,sun:0xffd9a6,si:4.1,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
+  day:{fog:0xd6cdbb,dens:.0055,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.42,.55,-.7],stars:0,hs:0xa3bccb,hg:0x8f7a5e,hi:.52,sun:0xffe4c4,si:4.5,dir:[.52,.5,-.62],moon:false,exp:1.0,cool:.75,halo:.05,shR:19,shMap:4096,
     env:[[0,'#5a7cae'],[.42,'#b8c6d6'],[.5,'#e6dcc6'],[.53,'#9c8664'],[1,'#5a4a34']]},
 };
 LIGHTS.sea={fog:0x7f8b94,dens:.011,top:0x4d5d6e,mid:0x7c8a98,hor:0xa9b1b6,glow:0xd8dde0,glowDir:[.3,.35,-.8],stars:0,hs:0x9aa8b8,hg:0x3a3d3a,hi:1.05,sun:0xe2e8ec,si:1.7,dir:[.35,.75,-.5],moon:false,exp:1.0,cool:.95,halo:.05,shR:14,shMap:2048,
@@ -5246,7 +5251,8 @@ function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Nu
 function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:[0,1,2,2,3,4,4,5][(q()*8)|0],bd:[0,1,1,2,3,4][(q()*6)|0],hc:q()<.12?4:[0,1,2,3,5,6,7][(q()*7)|0],sk:(q()*6)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.9?0:1,tr:q()<.7?0:q()<.7?1:3,pt:0,q:q()<.1?1:q()<.85?0:2,
   af:q()<.65?0:q()<.6?1:2,sc:q()<.8?0:1+((q()*4)|0),pl:q()<.94?0:1+((q()*2)|0),wf:q()<.7?0:q()<.6?1:3,wg:(q()*6)|0,ws:(q()*3)|0};}
 const GAITW=!/[?&]nogaitw/.test(location.search),GAIT_P=Object.assign({wide:.065,sway:.02,dip:.022,yaw:.11,roll:.045},(()=>{try{return JSON.parse(decodeURIComponent((location.search.match(/[?&]gaitp=([^&]+)/)||[])[1]||'{}'));}catch(e){return {};}})());   // (Build 265) the walk's weight: feet apart (m a side), hip sway (m), dip (m), hip turn and roll (rad); ?gaitp={json}, ?nogaitw
-const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams(location.search).get('ls0')||.92),+(new URLSearchParams(location.search).get('ls1')||.985)],STEP_ST=+(new URLSearchParams(location.search).get('stepst')||.15),STEP_SL=+(new URLSearchParams(location.search).get('stepsl')||1);const LOOSE=!/[?&]noloose/.test(location.search),LOOSE_DIP=+((location.search.match(/[?&]ldip=([\d.]+)/)||[])[1]||.14),MEAS=+((location.search.match(/[?&]meas=([\d.]+)/)||[])[1]||.3);
+const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams(location.search).get('ls0')||.92),+(new URLSearchParams(location.search).get('ls1')||.985)],STEP_ST=+(new URLSearchParams(location.search).get('stepst')||.15),STEP_SL=+(new URLSearchParams(location.search).get('stepsl')||1);const LOOSE=!/[?&]noloose/.test(location.search),LOOSE_DIP=+((location.search.match(/[?&]ldip=([\d.]+)/)||[])[1]||.1),MEAS=+((location.search.match(/[?&]meas=([\d.]+)/)||[])[1]||.3);
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.34),ST_WIDE=_qn('stwide',1.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -5974,14 +5980,14 @@ function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)
       float gPh=atan(abs(vSfP.x),vSfP.y-.8)*96.;float gFd=clamp(1.-fwidth(gPh)*.45,0.,1.);float gS=sin(gPh);float gR=pow(max(0.,gS),3.);   /* a crest every ~4 deg (2-3 cm apart on the breast), sharp on top, the hollows between them broad */
       diffuseColor.rgb*=(1.-.025*(1.-sfD)*sfF)*(1.-.16*(1.-gR)*gFd);
       float wT=sfn3(vSfP*8.)*.6+sfn3(vSfP*21.+3.1)*.4,wTa=smoothstep(.36,.7,wT),wR=smoothstep(.8,.93,sfn3(vSfP*240.))*smoothstep(.4,.7,sfn3(vSfP*13.+9.)),wG=1.-smoothstep(-.8,.15,vSfN.y),wS=sfn(vec2(dot(vSfP,vec3(310.,40.,180.)),dot(vSfP,vec3(-9.,14.,6.))));   /* (Build 225) used steel: tarnish in broad patches, rust specks gathering in some of them, grime under every downward face, the polish's own fine streaks */
-      diffuseColor.rgb*=.8*mix(vec3(1.),vec3(.46,.42,.36),wTa*.85)*(1.-.3*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.7);`;
+      diffuseColor.rgb*=.98*mix(vec3(1.),vec3(.66,.63,.59),wTa*.65)*(1.-.2*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.4);   /* (Build 269) brighter: kept bright by its owner, it read as lead beside Half Sword's harness */`;
     rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF+gR*.0026*gFd,vViewPosition);`;}
   else{   // plate
     col=`vec2 sfQ=sfPlane(vSfP,vSfN)*36.;float sfF=clamp(1.-fwidth(sfQ.x)*.7,0.,1.);float sfD=sfDim(sfQ),sfW=sfn(sfQ*.21);   /* (planished then polished: the dents are faint ripples in the reflection, not a hammered texture) */
       diffuseColor.rgb*=1.-.025*(1.-sfD)*sfF;
       float wT=sfn3(vSfP*8.)*.6+sfn3(vSfP*21.+3.1)*.4,wTa=smoothstep(.36,.7,wT),wR=smoothstep(.8,.93,sfn3(vSfP*240.))*smoothstep(.4,.7,sfn3(vSfP*13.+9.)),wG=1.-smoothstep(-.8,.15,vSfN.y),wS=sfn(vec2(dot(vSfP,vec3(310.,40.,180.)),dot(vSfP,vec3(-9.,14.,6.))));   /* (Build 225) used steel: tarnish in broad patches, rust specks gathering in some of them, grime under every downward face, the polish's own fine streaks */
-      diffuseColor.rgb*=.8*mix(vec3(1.),vec3(.46,.42,.36),wTa*.85)*(1.-.3*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.7);`;
+      diffuseColor.rgb*=.98*mix(vec3(1.),vec3(.66,.63,.59),wTa*.65)*(1.-.2*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.4);   /* (Build 269) brighter: kept bright by its owner, it read as lead beside Half Sword's harness */`;
     rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF,vViewPosition);`;}
   sh.fragmentShader='varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);};
@@ -6675,7 +6681,7 @@ function bodyMarks(body){if(body.userData.marks)return body.userData.marks;const
   let ey=0,ez=-9,ec=0;const eyes=body.parent&&body.parent.children.find(c=>c.isMesh&&/Eyes/.test(c.name));if(eyes){const p=eyes.geometry.attributes.position;for(let i=0;i<p.count;i+=7){ey+=p.getY(i);ez=Math.max(ez,p.getZ(i));ec++;}ey/=ec||1;}else{ey=J.Head.y+.09;ez=J.Head.z+.09;}
   const bp=body.geometry.attributes.position;let x0=9,x1=-9,z0=9,z1=-9;let nz=-9;for(let i=0;i<bp.count;i++){const y=bp.getY(i),x=bp.getX(i),z=bp.getZ(i);if(Math.abs(x)>.2)continue;if(y>ey-.075&&y<ey+.04&&Math.abs(x)<.03)nz=Math.max(nz,z);if(y<ey-.02||y>ey+.06)continue;x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);}
   return body.userData.marks={J,ey,ez,hx:(x0+x1)/2,hz:(z0+z1)/2,rx:(x1-x0)/2,rz:(z1-z0)/2,nose:Math.max(z1,nz)};}
-const steelFitMat=steelMat.clone();steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;surfDetail(steelFitMat,'plate');
+const steelFitMat=steelMat.clone();steelFitMat.color.setHex(0xa2a4a8);steelFitMat.roughness=.2;steelFitMat.envMapIntensity=1.3;steelDetail(steelFitMat,'fit');steelFitMat.side=THREE.DoubleSide;surfDetail(steelFitMat,'plate');
 // the breastplate's own detail (Build 124), from a per-vertex (round the body, up the plate) coordinate `aCu` set when the cuirass is
 // grown: a row of domed rivets round the waist edge and across the top at the front, a rolled top edge, leather side straps with brass
 // buckles, and shoulder straps over the back. Leather is dark and matte, brass warm and metallic
@@ -8890,7 +8896,7 @@ class Fighter{
     {const shp=SHAPES[this.look.sh];if(shp)for(const c of this.caps){if(c.zone==='head'&&shp.head)c.r*=Math.min(1.5,shp.head);if(c.ba==='Hips'&&shp.belly)c.r*=1+.22*shp.belly;}}   // a big head is a big target
     this.voice=load.voice||1;   // pitch of grunts and cries (a character's voice)
     this.ragdoll=null;this.kills=0;this.lastHitBy=null;this.lastHitT=-99;this.hitCd=new Map();this.clashCd=0;
-    this.ai={target:null,retarget:0,phase:'guard',pt:0,atk:null,cd:rand(.5,1.5),strafe:Math.random()<.5?1:-1,strafeT:rand(1,3),skill:rand(.3,.72),react:rand(.12,.3),aggr:rand(.6,1.4),block:0,blockDelay:0,threatCd:0,stuck:0,lastPos:V(x,0,z),detour:0,detourDir:V(),wander:V(rand(-30,30),0,rand(-30,30)),loot:null,lootT:rand(0,1),throwT:-1,punchT:rand(.3,1),lastSide:'L',holdR:0,holdL:0,kick:1,toss:1,fav:null};
+    this.ai={target:null,retarget:0,phase:'guard',pt:0,atk:null,cd:rand(.5,1.5),strafe:Math.random()<.5?1:-1,strafeT:rand(1,3),skill:rand(.3,.72),react:rand(.12,.3),aggr:rand(.6,1.4),block:0,blockDelay:0,threatCd:0,stuck:0,lastPos:V(x,0,z),detour:0,detourDir:V(),wander:V(rand(-30,30),0,rand(-30,30)),loot:null,lootT:rand(0,1),throwT:-1,punchT:rand(.3,1),lastSide:'L',holdR:0,holdL:0,kick:1,toss:1,fav:null,wild:Math.random()};
     this.root.position.copy(this.pos);this.root.rotation.y=this.yaw;this.root.updateMatrixWorld(true);
     this.cacheBody();
     {const ht=this.handTarget(V());this.sword.reset(ht,this.guideDir(ht,V()));}
@@ -9075,6 +9081,8 @@ class Fighter{
        height, is moved forward out of the way (a swing from one high shoulder to the other used to carry the hilt across the forehead) */
     if(this.sword&&this.sword.def.kind!=='spear'&&rw<.5&&this.bones.Head){const hd=this.bones.Head.getWorldPosition(_hv5);_wl2.subVectors(out,hd);const fz=_wl2.dot(_f),yy=_wl2.y,lx=_wl2.dot(_r);
       const near=clamp(1-Math.abs(yy+.02)/.26,0,1)*clamp(1-Math.abs(lx)/.32,0,1);const need=.42*near;if(fz<need)out.addScaledVector(_f,need-fz);}
+    /* (Build 269) a cut is made with the arms going out to their length: in a committed swing the hand is carried out from its shoulder toward 93% of the arm (it stayed at ~57%, elbows bent in by the ribs) */
+    if(REACH_K>0&&(this._exW||0)>.01&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&rw<.5&&!this.thrust){const sm=this.mainArm==='L'?this.shL:this.shR,al=(this.armLen[0]+this.armLen[1])*.93;_v.subVectors(out,sm);const d=_v.length();if(d>1e-3&&d<al)out.addScaledVector(_v,(al-d)/d*REACH_K*this._exW/(1+Math.max(0,(WMASS[this.sword.def.id]||1.5)-1.6)*.7));}   /* less for heavy heads: an axe's hand fell 50 cm behind a target that far out */
     const dOs=this.hs&&this.hs.dO&&(this.hs.dO[this.mainArm==='L'?'LeftArm':'RightArm']||this.hs.dO.Spine2);if(dOs)out.add(dOs);   /* Build 145: a blow that knocks the body back (as drawn) takes the arms and weapon with it, so the hand stays on the grip and the guard is knocked aside for real */
     const sh=dOs?_hsSh.copy(this.mainArm==='L'?this.shL:this.shR).add(dOs):this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f),fmin=.16-.46*ck;if(fd<fmin)out.addScaledVector(_f,fmin-fd);
@@ -9255,7 +9263,7 @@ class Fighter{
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
     if(legs&&onGround){
       const stF=.55+.45*clamp(this.stamina/100,0,1),K=60*stF*(this.crouch?1.4:1)*((this.stanceAmt||0)>.1?1.15:1);
-      if(this.sword&&this.commit&&ts>6){_v.copy(this.sword.tipVel).setY(0);const l=_v.length();if(l>1e-3)this.balV.addScaledVector(_v,(Math.min(ts,30)-6)*w*h/l);}   // a committed swing drags the body after it (Build 150: no more than a real 30 m/s swing would: a blade or spear point snagged and let go reads as a huge speed for a step)
+      if(this.sword&&this.commit&&ts>6){_v.copy(this.sword.tipVel).setY(0);const l=_v.length();if(l>1e-3)this.balV.addScaledVector(_v,(Math.min(ts,30)-6)*w*h/l*(1+REEL*clamp(((WMASS[this.sword.def.id]||1.5)-1.5)*.55,0,1.4)));}   // a committed swing drags the body after it (Build 150: no more than a real 30 m/s swing would: a blade or spear point snagged and let go reads as a huge speed for a step)
       const sat=Math.min(1,.07/Math.max(1e-4,Math.hypot(this.bal.x,this.bal.z)));   // ankles and hips only correct a small lean; past that you have to step
       const C=2*Math.sqrt(K)*.75*sat;
       this.balV.x+=(-K*sat*this.bal.x-C*this.balV.x)*h;this.balV.z+=(-K*sat*this.bal.z-C*this.balV.z)*h;
@@ -9606,8 +9614,9 @@ class Fighter{
       // footwork, as fencers fight: wait just out of measure, circling; step in to strike, step back out after; more careful when hurt or blown
       const cautious=this.hp<45||this.stamina<35,outD=Math.max(desired+.25,theirs*.9+.45)+(cautious?.45:0);
       if(A.lastHp==null)A.lastHp=this.hp;if(this.hp<A.lastHp-3&&!low)A.backT=Math.max(A.backT||0,rand(.35,.7));A.lastHp=this.hp;   // stung: give ground
-      if((A.ampT=(A.ampT||0)-h)<=0){A.ampT=rand(.5,1.6);A.amp=Math.random()<.25?0:rand(.35,.75);}
-      const holdOut=A.phase==='guard'&&A.cd>0&&!low&&!(A.rushT>0)&&tg.stagger<=.25;
+      if((A.ampT=(A.ampT||0)-h)<=0){A.ampT=rand(.5,1.6);A.amp=Math.random()<.25?0:rand(.35,.75)*(WILDB?1+.6*(A.wild||0):1);}
+      const holdOut=A.phase==='guard'&&A.cd>0&&!low&&!(A.rushT>0)&&tg.stagger<=.25,wl=WILDB?(A.wild||0):0;
+      if(wl>0&&holdOut&&!cautious&&d<outD+2.4&&d>desired+.3&&this.stamina>45&&kind!=='fist'&&Math.random()<h*(.06+.4*wl)*A.aggr){A.rushT=rand(.5,.9);A.cd=0;}   /* (Build 269) now and then a man just goes in: runs at him swinging */
       if(A.backT>0){A.backT-=h;wish.copy(_v).multiplyScalar(-1).addScaledVector(_r,A.strafe*.35);}
       else if(A.rushT>0){A.rushT-=h;if(d>.75){wish.copy(_v);run=this.stamina>15;}}
       else if(holdOut&&d<outD+1.2){wish.copy(_r).multiplyScalar(A.strafe*A.amp);if(d>outD+.15)wish.addScaledVector(_v,.8);else if(d<outD-.2)wish.addScaledVector(_v,-.9);}
@@ -9633,10 +9642,10 @@ class Fighter{
       } else {
         A.pt+=h;
         if(A.phase==='guard'){if(cautious&&A.cd>0)A.cd+=h*.4;this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.09+Math.sin(simTime*3.1+this.id*2.3)*.04;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.07+Math.sin(simTime*2.7+this.id*1.7)*.035;   /* (Build 257) a guard that never quite settles, as the fighters in the footage keep their points moving */this.ctrlT.z=kind==='spear'?.34:.42;
-          if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
+          if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)+wl*.3&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blade'&&reach<.45)atk=Math.random()<.75?ATTACKS[6]:pick(ATTACKS);   /* (Build 205) a dagger is for stabbing: bots slashed with knives and did 2 damage a hit */else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
             if(A.fav&&!low&&Math.random()<.35)atk=ATTACKS.find(a=>a.n===A.fav)||atk;   // a character's favourite swing
-            A.atk=atk;A.phase='windup';A.pt=0;A.feint=kind!=='fist'&&!low&&Math.random()<A.skill*.38;}}
+            A.atk=atk;A.phase='windup';A.pt=0;A.feint=kind!=='fist'&&!low&&Math.random()<A.skill*.38*(1-.7*wl);}}
         else if(A.phase==='windup'){const s=A.atk.s,ovh=(kind==='axe'||kind==='blunt'||(this.sword&&this.sword.def.weight>=1.4))&&s[1]>.45;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=ovh?.62:s[1];this.ctrlT.z=A.atk.thrust?.28:ovh?.3:.4;
           const hv=kind==='blunt'||kind==='axe'||(this.sword&&this.sword.def.weight>=1.5),tol=hv?.16:.08;const ready=(A.pt>.42/A.aggr+.1&&Math.abs(this.ctrl.x-s[0])<tol&&Math.abs(this.ctrl.y-s[1])<tol)||A.pt>(hv?.8:1.2);
           if(ready&&A.feint){A.feint=false;   // a feint: show one line, then strike another (or break off and step back out)
@@ -9648,10 +9657,10 @@ class Fighter{
           /* (Build 248) a good fighter doesn't stop after one cut: from where the blow ended he goes straight into the next from that side (a right-to-left
              cut ends high on the left, and the cut from the left starts there), so exchanges run two or three blows long. Likelier the more skilled and
              the more aggressive, not when spent, staggered or out of reach, and at most two follow-ups */
-          if(A.pt<h*1.5&&(A.chain||0)<2&&kind!=='fist'&&kind!=='spear'&&A.atk&&A.atk.e&&!A.atk.thrust&&!tg.downed&&this.stagger<=0&&this.stamina>32&&d<reach+.55&&!NOCHAIN&&Math.random()<A.skill*.62*Math.min(1.25,A.aggr)){
+          if(A.pt<h*1.5&&(A.chain||0)<(wl>.6?3:2)&&kind!=='fist'&&kind!=='spear'&&A.atk&&A.atk.e&&!A.atk.thrust&&!tg.downed&&this.stagger<=0&&this.stamina>32&&d<reach+.55&&!NOCHAIN&&Math.random()<(A.skill*.62+wl*.25)*Math.min(1.25,A.aggr)){
             const e=A.atk.e,sg=Math.sign(e[0]||1),opts=ATTACKS.filter(a=>!a.thrust&&a!==A.atk&&(Math.sign(a.s[0]||1)===sg||a.n==='overhead'&&e[1]>.2));
             if(opts.length){A.atk=pick(opts);A.phase='windup';A.pt=.42/A.aggr;A.chain=(A.chain||0)+1;A.feint=false;A.backT=0;}}
-          if(A.phase==='recover'){if(A.pt<.05&&!A.backT&&Math.random()<.65)A.backT=rand(.3,.6);if(A.pt>.4){A.phase='guard';A.pt=0;A.chain=0;A.cd=rand(.45,1.4)/A.aggr;}}}
+          if(A.phase==='recover'){if(A.pt<.05&&!A.backT&&Math.random()<.65)A.backT=rand(.3,.6)*(1+wl*.8);if(A.pt>.4){A.phase='guard';A.pt=0;A.chain=0;A.cd=rand(.45,1.4)/A.aggr*(1-.45*wl);}}}
       }
       {const RP=tg.ragdoll&&(tg.ragdoll.P.Spine2||tg.ragdoll.P.Hips);let dd=99;if(RP){_t2.set(RP.x-this.pos.x,0,RP.z-this.pos.z);dd=_t2.length();}
         const rv=kind==='blade'&&low&&!!RP&&dd<2.6;this.rev=rv;   // someone on the ground: turn the grip over, stand over the body and stab down into it
@@ -9742,7 +9751,7 @@ class Fighter{
     {const f=this;{const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.sword.def.improv&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}}   /* (Build 262, from the Half Sword crypt footage) any two-hander rides on the shoulder while you're at ease, lantern or not (Build 256 did it only with a lantern); the off hand lets go and hangs */
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
     const spS=simTime<(this._lgT||0)?0:sp;   /* (Build 149) a lunge keeps the fighting stance: the stance easing off as the body sped up drew the hips back 10 cm just as the thrust went out */
-    this.stanceAmt=lerp(this.stanceAmt||0,fight?Math.max(spS<.3?.26:spS<1.6?.26*(1-(spS-.3)/1.3)+.04:.04,STEP_ST*(this.sideW||0))*ease+(LOOSE&&this.commit&&!this.thrust&&!(this._lgT>0)&&this.sword&&this.sword.def.kind!=='fist'?LOOSE_DIP*clamp(1-spS/2.2,0,1):0):0,1-Math.exp(-(LOOSE&&this.commit?10:6)*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?Math.max(spS<.3?ST_DEEP:spS<1.6?ST_DEEP*(1-(spS-.3)/1.3)+.04:.04,STEP_ST*(this.sideW||0))*ease+(LOOSE&&this.commit&&!this.thrust&&!(this._lgT>0)&&this.sword&&this.sword.def.kind!=='fist'?LOOSE_DIP*clamp(1-spS/2.2,0,1):0):0,1-Math.exp(-(LOOSE&&this.commit?10:6)*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
     // a hurt leg hitches the gait: the body drops each time weight goes onto it
     const lgL=this.limbF('legL'),lgR=this.limbF('legR'),lg=Math.max(lgL,lgR);let limp=0;
     if(lg>.2&&Math.hypot(this.vel.x,this.vel.z)>.3&&this.acts){const A=this.acts,ph=A.walk.time/A.walk.getClip().duration;limp=lg*.5*Math.pow(Math.max(0,Math.sin((ph+(lgL>lgR?0:.5))*6.283)),2);}
@@ -9765,6 +9774,7 @@ class Fighter{
       else if(this.throwT>=0){const k=clamp(this.throwT/THROW_T,0,1),e=k*k*(3-2*k);thTw=lerp(.6,-.55,e)*sg;thLn=lerp(-.14,.34,e);}
       else if(this.throwF>0){const k=this.throwF/.5;thTw=-.55*k*(this.throwSg||1);thLn=.34*k;this.throwF-=dt;}}
     if(thLn){_qr.setFromAxisAngle(X_AXIS,thLn);B.Spine1.quaternion.premultiply(_qr);}
+    this._exW=lerp(this._exW||0,this.commit&&!this.thrust&&this.sword&&!this.sword.stuck?1:0,1-Math.exp(-(this.commit?16:5)*dt));
     let swTw=0;if(this.sword&&this.sword.def.kind!=='fist'&&this.alive&&!this.ragdoll&&!this.sword.stuck){this.right(_r);const xr=_v.subVectors(this.sword.H,this.chest).dot(_r);
       swTw=clamp(xr*2.1+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.035:0),-1.05,1.05)*(this.commit?1:.45+.3*clamp((this.ctrl.y-.1)/.4,0,1))*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
     const tw=thTw||(this.sword?swTw:clamp(-pt*2.6,-.6,.6));this.twist=lerp(this.twist,tw,1-Math.exp(-(thTw?16:this.sword?12:10)*dt));
@@ -9836,7 +9846,7 @@ class Fighter{
         let fx=(ax*cy-az*sy)*.6*lg,fz=-(ax*sy+az*cy)*.6*lg;   // inertia, in the body's right/forward frame
         if(SHIP&&this.pos.y>-.1){const gx=9.8*SHIP.pitch*.6*2,gz=9.8*SHIP.roll*.6*2;fx+=-gx*cy+gz*sy;fz+=gx*sy+gz*cy;}
         const str=this.pbd?this.pbd.str:1,k=55*str*str+15,c=2*Math.sqrt(k)*.45;Pv.vx+=(fx-k*Pv.x-c*Pv.vx)*dtc;Pv.vz+=(fz-k*Pv.z-c*Pv.vz)*dtc;Pv.x=clamp(Pv.x+Pv.vx*dtc,-.09,.09);Pv.z=clamp(Pv.z+Pv.vz*dtc,-.09,.09);
-        B.Hips.position.x-=Pv.x*100;B.Hips.position.z+=Pv.z*100;}   // (the feet are put back where they were by the leg IK below)
+        B.Hips.position.x-=Pv.x*100;B.Hips.position.z+=Pv.z*100+(this._stpK||0)*STEP_IN*18;}   // (the feet are put back where they were by the leg IK below)
       skelClean(B);this.fwd(_f);this.right(_r);
       /* (Build 200) sat back into the stance. Standing in guard, the hips were over the front foot (14 cm ahead of the middle of the feet)
          with the small of the back leaning 6° backwards to balance: a man leaning away with his belly out. Now the trunk hinges forward at
@@ -9848,7 +9858,12 @@ class Fighter{
           _sitV.set(sx-(dx+_f.x*(nf-df)),sy-ny,sz-(dz+_f.z*(nf-df)));B.Hips.parent.worldToLocal(_sitV);B.Hips.position.copy(_sitV);
           _qr.setFromAxisAngle(X_AXIS,w);B.Hips.quaternion.premultiply(_qr);skelClean(B);setWorldQuat(S2,_sitQ,true);}}
       {const w=(this.stillAmt||0)*(this.stanceAmt||0)/.4,lead=this.mainArm==='L'?'Right':'Left';   // feet wide and staggered: lead foot forward, rear foot back
-        const ff=FEETF*Math.min(1,w/.65);for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*w).addScaledVector(_f,(s===lead?.15:-.11)*w+ff);}}
+        const ff=FEETF*Math.min(1,w/.65);for(const s in feet){const f=feet[s];f.addScaledVector(_r,(s==='Right'?1:-1)*.09*ST_WIDE*w).addScaledVector(_f,(s===lead?.18:-.15)*w+ff);}
+        /* (Build 269) a step into the blow: in a committed cut the foot on the side the cut comes from passes forward (a cut travelling right to left brings the right foot through), the weight goes onto it, and it comes back when the cut is done. The plant code below turns the moved target into a real step */
+        {const S=this._stp||(this._stp={w:0,s:null,hold:0}),sw=this.sword,ok=STEP_IN>0&&sw&&sw.def.kind!=='fist'&&this.commit&&!this.thrust&&!(this.revW>.3)&&!sw.stuck&&this.alive&&!this.pin&&!this.climb;
+          if(ok&&sw.Hv){_wl1.copy(sw.Hv).sub(this.vel);const hs=Math.hypot(_wl1.x,_wl1.z),lr=_wl1.dot(_r);if(hs>2.2||_wl1.y<-2.5){S.hold=.5;if(!S.s)S.s=Math.abs(lr)<1?(this.mainArm==='L'?'Left':'Right'):lr<0?'Right':'Left';}}
+          S.hold-=dt;S.w=lerp(S.w,S.hold>0?1:0,1-Math.exp(-(S.hold>0?11:5)*dt));if(S.w<.03&&S.hold<=0){S.w=0;S.s=null;}
+          if(S.s&&S.w>0){const k=S.w*clamp(1-Math.hypot(this.vel.x,this.vel.z)/2.4,0,1),f=feet[S.s];if(f){f.addScaledVector(_f,STEP_IN*k*(S.s===lead?.55:1)).addScaledVector(_r,(S.s==='Right'?1:-1)*.03*k);}this._stpK=k;}else this._stpK=0;}}
       /* (Build 252) standing at ease a man doesn't stand square on two straight legs with his feet apart: the feet come in, his weight goes onto
          one leg with the hip over it, the other knee slack and that foot a little ahead, and every few seconds he shifts to the other leg. The
          pelvis and legs move; the spine above is put back where it was, so the chest, the hand and the camera don't */
@@ -9911,7 +9926,7 @@ class Fighter{
       _wl1.subVectors(this.vel,pv).multiplyScalar(1/dt);_wl1.y=0;if(_wl1.lengthSq()>400)_wl1.setLength(20);pv.copy(this.vel);av.lerp(_wl1,1-Math.exp(-5*dt));
       if(this.knocked||this.stagger>0)av.multiplyScalar(Math.exp(-8*dt));
       this.fwd(_f);this.right(_r);const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12?1:0,sp=Math.hypot(this.vel.x,this.vel.z);
-      const pt=gr*clamp(av.dot(_f)*WS_P,-.13,.16)+(this._pain||0)*.17/* Build 230: a hurt man hunches over it */+(this._efK=lerp(this._efK||0,this.sword&&this.commit?clamp((this.sword.tipVel.length()-7)/12,0,1):0,1-Math.exp(-10*dt)))*.1/* and a man swinging hard puts his back into it */,rl=gr*clamp(av.dot(_r)*WS_R*clamp(sp/1.5,0,1),-.1,.1);
+      const pt=gr*clamp(av.dot(_f)*WS_P,-.13,.16)+(this._pain||0)*(.17+.14*REEL)/* Build 230: a hurt man hunches over it */+(this._efK=lerp(this._efK||0,this.sword&&this.commit?clamp((this.sword.tipVel.length()-7)/12,0,1):0,1-Math.exp(-10*dt)))*.1/* and a man swinging hard puts his back into it */,rl=gr*clamp(av.dot(_r)*WS_R*clamp(sp/1.5,0,1),-.1,.1);
       this._wsP=lerp(this._wsP||0,pt,1-Math.exp(-9*dt));this._wsR=lerp(this._wsR||0,rl,1-Math.exp(-9*dt));
       if(Math.abs(this._wsP)+Math.abs(this._wsR)>.004){const par=B.Spine1.parent;par.getWorldQuaternion(_qr2).invert();
         _wl2.crossVectors(Y_AXIS,_f).normalize().multiplyScalar(this._wsP).addScaledVector(_wl3.crossVectors(Y_AXIS,_r).normalize(),this._wsR);const ang=_wl2.length();
@@ -10102,7 +10117,7 @@ class Fighter{
     /* Build 230: pain. A hurt man flinches out of what he was doing, gives ground, and his guard sags for a moment (bots; the drawn wince and hunch are in animate, from _pain) */
     if(dmg>4&&this.hp>0&&this.undead!=='zombie'&&this.undead!=='skel'){const k=clamp(dmg/30,.2,1);this.painK=Math.max(this.painT>simTime?this.painK||0:0,k);this.painT=simTime+.3+k*.9;
       if(!this.isPlayer&&!this.remote&&this.ai){const A=this.ai;A.backT=Math.max(A.backT||0,.45+k*1.1);A.cd=Math.max(A.cd||0,.15+k*.8);   /* (Build 256, the player: they should feel it and make space) a man who's been hit gives ground: he's driven back a step, reels, and backs off before he comes again */
-        if(by&&by!==this&&!this.ragdoll&&HIT_REACT){const dx=this.pos.x-by.pos.x,dz=this.pos.z-by.pos.z,d=Math.hypot(dx,dz)||1,pv=Math.min(2.4,.7+2.4*k);this.vel.x+=dx/d*pv;this.vel.z+=dz/d*pv;this.stagger=Math.max(this.stagger||0,.18+.55*k);this.shove(new THREE.Vector3(dx,0,dz),.4+1.3*k);}if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
+        if(by&&by!==this&&!this.ragdoll&&HIT_REACT){const dx=this.pos.x-by.pos.x,dz=this.pos.z-by.pos.z,d=Math.hypot(dx,dz)||1,pv=Math.min(2.4+.9*REEL,.7+(2.4+.9*REEL)*k);this.vel.x+=dx/d*pv;this.vel.z+=dz/d*pv;this.stagger=Math.max(this.stagger||0,.18+(.55+.25*REEL)*k);this.shove(new THREE.Vector3(dx,0,dz),.4+(1.3+.9*REEL)*k);if(REEL>0&&k>.45){this.crouchK=Math.min(1,Math.max(this.crouchK||0,(.25+.35*k)*REEL));if(this.pbd)this.pbd.buckle=Math.min(1,(this.pbd.buckle||0)+.2*k*REEL);}}if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
