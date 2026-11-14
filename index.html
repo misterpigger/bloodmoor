@@ -460,9 +460,9 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=256;
+const BUILD=257;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
-const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:1,B:.75,C:1.2,D:.6};   // (Build 253) see brawnInit
+const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
@@ -5712,7 +5712,7 @@ function dressMH(model,look,pal,mats){
   model.traverse(m=>{if(m.isMesh&&/Eyes/.test(m.name)&&m.material&&!m.userData.eyeFix){m.userData.eyeFix=1;m.material=m.material.clone();m.material.color.multiplyScalar(.74);if('envMapIntensity' in m.material)m.material.envMapIntensity=.45;}});   /* (Build 225) eye whites are grey in the shade of the brow, not paper white */
   if(look.sh){let eyes=null;model.traverse(m=>{if(m.isMesh&&m.name===want.replace('Body','Eyes'))eyes=m;});shapeBody(body,eyes,look.sh);}
   const T=mhTex(),tone=LOOK.skin[look.sk]||LOOK.skin[1];
-  const skin=std({map:skinPhoto(look),normalMap:T.n,normalScale:new THREE.Vector2(.7,.7),color:new THREE.Color(.93,.92,.92),roughness:.52});
+  const skin=std({map:skinPhoto(look),normalMap:T.n,normalScale:new THREE.Vector2(.4,.4),color:new THREE.Color(.93,.92,.92),roughness:.52});
   tintMaterial(skin,2,pal,mats);model.userData.skinMat=skin;
   const hc=LOOK.hairCol[look.hc]||LOOK.hairCol[0],HU={uMHMask:{value:T.m},uHairCol:{value:new THREE.Color().setRGB(hc[0]*.35,hc[1]*.3,hc[2]*.28)},uHairAmt:{value:[0,.55,.45,.3,.45,.3][look.h]||0},uBeardAmt:{value:[.42,.6,0,.62,.4][look.bd|0]??.35},uMark:{value:look.mk|0},uEyeB:{value:new THREE.Vector3()},uCov:{value:0},uHH:{value:new THREE.Vector4(-1,-1,-1,-1)},uHelmY:{value:99},uRot:{value:0}};
   const pre=skin.onBeforeCompile;skin.onBeforeCompile=sh=>{pre(sh);Object.assign(sh.uniforms,HU);
@@ -9581,7 +9581,7 @@ class Fighter{
         if(d<desired)wish.addScaledVector(_v,-.6);
       } else {
         A.pt+=h;
-        if(A.phase==='guard'){if(cautious&&A.cd>0)A.cd+=h*.4;this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.06;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.05;this.ctrlT.z=kind==='spear'?.34:.42;
+        if(A.phase==='guard'){if(cautious&&A.cd>0)A.cd+=h*.4;this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.09+Math.sin(simTime*3.1+this.id*2.3)*.04;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.07+Math.sin(simTime*2.7+this.id*1.7)*.035;   /* (Build 257) a guard that never quite settles, as the fighters in the footage keep their points moving */this.ctrlT.z=kind==='spear'?.34:.42;
           if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
             let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blade'&&reach<.45)atk=Math.random()<.75?ATTACKS[6]:pick(ATTACKS);   /* (Build 205) a dagger is for stabbing: bots slashed with knives and did 2 damage a hit */else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else atk=pick(ATTACKS);
             if(A.fav&&!low&&Math.random()<.35)atk=ATTACKS.find(a=>a.n===A.fav)||atk;   // a character's favourite swing
@@ -9712,7 +9712,7 @@ class Fighter{
       else if(this.throwF>0){const k=this.throwF/.5;thTw=-.55*k*(this.throwSg||1);thLn=.34*k;this.throwF-=dt;}}
     if(thLn){_qr.setFromAxisAngle(X_AXIS,thLn);B.Spine1.quaternion.premultiply(_qr);}
     let swTw=0;if(this.sword&&this.sword.def.kind!=='fist'&&this.alive&&!this.ragdoll&&!this.sword.stuck){this.right(_r);const xr=_v.subVectors(this.sword.H,this.chest).dot(_r);
-      swTw=clamp(xr*1.6,-.8,.8)*(this.commit?1:.45)*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
+      swTw=clamp(xr*2.1+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.035:0),-1.05,1.05)*(this.commit?1:.45)*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
     const tw=thTw||(this.sword?swTw:clamp(-pt*2.6,-.6,.6));this.twist=lerp(this.twist,tw,1-Math.exp(-(thTw?16:this.sword?12:10)*dt));
     this._swTw=this.sword&&!thTw?-this.twist*.5:0;   // an armed body's turn into the cut is put on after cacheBody (below): drawn only, so the shoulders the handling reads don't move with it
     if(!this._swTw){_qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);}
@@ -9849,6 +9849,17 @@ class Fighter{
       this._wsP=lerp(this._wsP||0,pt,1-Math.exp(-9*dt));this._wsR=lerp(this._wsR||0,rl,1-Math.exp(-9*dt));
       if(Math.abs(this._wsP)+Math.abs(this._wsR)>.004){const par=B.Spine1.parent;par.getWorldQuaternion(_qr2).invert();
         _wl2.crossVectors(Y_AXIS,_f).normalize().multiplyScalar(this._wsP).addScaledVector(_wl3.crossVectors(Y_AXIS,_r).normalize(),this._wsR);const ang=_wl2.length();
+        if(ang>1e-4){_wl2.multiplyScalar(1/ang).applyQuaternion(_qr2);_qr.setFromAxisAngle(_wl2,ang);B.Spine1.quaternion.premultiply(_qr);updSub(B.Spine1);}}}
+    /* (Build 257) a body that is alive: in guard the trunk never stands still (a slow sway and turn, each man his own rhythm), walking the shoulders turn
+       against the legs, and a committed swing pulls the trunk after the hand (it tips toward where the hand is driving and bends into the cut), as the
+       fighters in the Half Sword footage do. Drawn only, after cacheBody, so aim, reach and the camera don't move; not in first person (LIFE_OFF: ?nolife) */
+    if(!LIFE_OFF&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&dt>0&&dt<.2&&B.Spine1){const L=this._life||(this._life={t:Math.random()*50,y:0,p:0,r:0,ph:(this.id||0)*1.7,k:.8+((this.id||0)*37%10)/25});
+      L.t+=dt*L.k;const sp=Math.hypot(this.vel.x,this.vel.z),still=clamp(1-sp/1.2,0,1),cw=this.calmW||0,gd=(1-cw)*still,cm=this.commit&&this.sword&&this.sword.def.kind!=='fist'?1:0;
+      let y=gd*(.07*Math.sin(L.t*.9+L.ph)+.03*Math.sin(L.t*2.3+L.ph*2))-(this.armSw||0)*.13*(1-cm),p=gd*(.018*Math.sin(L.t*1.4+L.ph)),r=gd*(.03*Math.sin(L.t*.7+L.ph*3));
+      if(cm&&this.sword.Hv){this.fwd(_f);this.right(_r);_wl1.copy(this.sword.Hv).sub(this.vel);p+=clamp(_wl1.dot(_f)*.03-_wl1.y*.022,-.1,.2);r+=clamp(_wl1.dot(_r)*.022,-.14,.14);}
+      const e=1-Math.exp(-8*dt);L.y=lerp(L.y,y,e);L.p=lerp(L.p,p,e);L.r=lerp(L.r,r,e);
+      if(Math.abs(L.y)+Math.abs(L.p)+Math.abs(L.r)>.003){this.fwd(_f);this.right(_r);B.Spine1.parent.getWorldQuaternion(_qr2).invert();
+        _wl2.crossVectors(Y_AXIS,_f).normalize().multiplyScalar(L.p).addScaledVector(_wl3.crossVectors(Y_AXIS,_r).normalize(),L.r).addScaledVector(Y_AXIS,L.y);const ang=_wl2.length();
         if(ang>1e-4){_wl2.multiplyScalar(1/ang).applyQuaternion(_qr2);_qr.setFromAxisAngle(_wl2,ang);B.Spine1.quaternion.premultiply(_qr);updSub(B.Spine1);}}}
     /* (Build 252) carriage: the upper back rounds a little, the head is pushed ahead of the chest with the face kept level, and the shoulders roll
        forward and drop, each man by his own amount (postureOf). Drawn only, after cacheBody, so aim and reach don't move; the arms are posed
@@ -13205,7 +13216,7 @@ function loadFighters(onLoad,onErr){
    skin weights), more for the chest, neck, trapezius and arms, a little for the waist and legs, none for the head, hands and feet.
    The skeleton isn't touched, so handling, reach and the camera are unchanged. Clothes and hair parts loaded per build get the same push
    (mhPartGeo), and everything grown from the body (armour, shells, strand hair) grows from the thickened body. ?nobrawn turns it off */
-const BRAWN_F={Hips:1.05,Spine:1.07,Spine1:1.1,Spine2:1.14,Neck:1.3,LeftShoulder:1.22,RightShoulder:1.22,LeftArm:1.17,RightArm:1.17,LeftForeArm:1.15,RightForeArm:1.15,LeftUpLeg:1.09,RightUpLeg:1.09,LeftLeg:1.07,RightLeg:1.07},BRAWN_LAT={Spine1:.05,Spine2:.1};   // BRAWN_LAT: extra width across the body (bind-space x) for the chest
+const BRAWN_F={Hips:1.05,Spine:1.07,Spine1:1.1,Spine2:1.14,Neck:1.16,LeftShoulder:1.16,RightShoulder:1.16,LeftArm:1.17,RightArm:1.17,LeftForeArm:1.15,RightForeArm:1.15,LeftUpLeg:1.09,RightUpLeg:1.09,LeftLeg:1.07,RightLeg:1.07},BRAWN_LAT={Spine1:.03,Spine2:.06};   // BRAWN_LAT: extra width across the body (bind-space x) for the chest
 const BRAWN_CH={Hips:'Spine',Spine:'Spine1',Spine1:'Spine2',Spine2:'Neck',Neck:'Head',LeftShoulder:'LeftArm',RightShoulder:'RightArm',LeftArm:'LeftForeArm',RightArm:'RightForeArm',LeftForeArm:'LeftHand',RightForeArm:'RightHand',LeftUpLeg:'LeftLeg',RightUpLeg:'RightLeg',LeftLeg:'LeftFoot',RightLeg:'RightFoot'};
 let BRAWN=null;   // per bone index: [jx,jy,jz, ax,ay,az, f-1] in the bodies' bind space
 function brawnInit(g){let body=null;g.scene.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body_/.test(o.name)&&!body)body=o;});if(!body)return;
