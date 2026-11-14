@@ -299,7 +299,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead. In the Crypt: open chests (a hand on the lid, then the mouse lifts it), take a lantern (crouch and <kbd>E</kbd> sets it down), pick up what you find, drink from a flask, or leave by the oak door. The way down is the stair behind the door in the far hall. Boards across the passage floor are rotten. Boards nailed across a door come off if you get a hand on them (<kbd>G</kbd>) and haul</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
       <dt><kbd>R</kbd></dt><dd>With a sword or knife: turn the grip over, point down, and click to stab down, into a man on the ground or over a shoulder. Keep the button down and the blade stays in; let go and it comes out. <kbd>G</kbd> lets go of a blade that's in someone and leaves it there; walk up and press <kbd>E</kbd> to take hold of a blade left in a body, then step back to pull it out.</dd>
-      <dt><kbd>Z</kbd></dt><dd>Tap to put away what's in your hand, or draw what you carry. Hold it for a wheel of everything you carry: move the mouse to one and let go to take it. There are three places: the belt on your off hip, a knife or dagger on the other hip, and something long slung on your back. Pick up another weapon and the one in your hand goes to a free place by itself; when they're full there's no room, and Z swaps what's in your hand for what's carried. In the Crypt, stones, skulls, long bones and iron candle stands can be taken up in the hand (reach for one with <kbd>G</kbd>) and fought with.</dd>
+      <dt><kbd>Z</kbd></dt><dd>Tap to put away what's in your hand, or draw what you carry. Hold it for a wheel of everything you carry: move the mouse to one and let go to take it. There are two places, as men carried them: a sword in its scabbard or a mace, hammer or small axe at the belt on your off hip, and a dagger or knife on the other hip. A great sword, a two-handed axe or a polearm can't be put away: carry it in your hands or on your shoulder. Pick up another weapon and the one in your hand goes to a free place by itself; when they're full there's no room, and Z swaps what's in your hand for what's carried. In the Crypt, stones, skulls, long bones and iron candle stands can be taken up in the hand (reach for one with <kbd>G</kbd>) and fought with.</dd>
       <dt><kbd>G</kbd></dt><dd>Grab, as in Half Sword: tap to take hold, tap again to let go. With a one-handed weapon, tap it and your free hand reaches out and takes hold of what's in front of you: his sword arm (he can't swing it freely), his blade or haft (step back hauling and it comes out of his hand; a bare hand on a blade he draws back gets cut), his collar or head (step back and he's towed off balance and down), a body on the floor, a rock or a candle stand to fight with. Tap again to let go; let go while hauling and he's thrown. A hand that finds nothing comes back after a few seconds. Bare-handed, tap it to open your hands; hold a mouse button and that hand reaches out and keeps hold of whatever it takes until you tap <kbd>G</kbd> again. Going over an edge? Tap <kbd>G</kbd> and your hands catch it; <kbd>W</kbd> climbs up, <kbd>G</kbd> again drops you. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <dl class="tcontrols">
@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=260;
+const BUILD=261;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -7448,7 +7448,16 @@ const _bq=new THREE.Quaternion(),_bq2=new THREE.Quaternion();
 const SLOTS=['belt','hip2','back'];
 const beltOk=x=>x&&x.def.kind!=='fist'&&!x.debris&&x.def.id!=='chest'&&!(x.def.improv&&!BELT_IMPROV[x.def.id])&&!x.rb&&!(x.stuck&&!x.stuck.thrown);   // (Build 251, the player: no stones or skulls on the belt) what goes on the belt is gear worth something, not things picked up off the floor
 const BELT_IMPROV={knife:1,cleaver:1};
-const slotsFor=d=>(TWO_HANDED[d.id]||d.len>=1.15)?['back']:d.len<=.5?['hip2','belt']:['belt'];
+// (Build 261) a sword put away goes into a leather scabbard: a tapering sheath over the blade with a locket at the mouth and a chape at the point
+const SCAB_MAT=new THREE.MeshStandardMaterial({color:0x3d2618,roughness:.62,metalness:0}),SCAB_MET=new THREE.MeshStandardMaterial({color:0x8a8478,roughness:.38,metalness:.85});
+function scabbardOn(s,on){if(!s||!s.mesh)return;if(!s._scab){if(!on)return;let blade=null,top=-1;s.mesh.traverse(o=>{if(o.isMesh&&o.geometry){o.geometry.computeBoundingBox();const t=o.geometry.boundingBox.max.y+o.position.y;if(t>top){top=t;blade=o;}}});const g=new THREE.Group();
+    let y0=.03,y1=s.def.len-(s.def.grip||.12)*.5,w=.05,t=.012;if(blade){blade.geometry.computeBoundingBox();const bb=blade.geometry.boundingBox;y0=bb.min.y+blade.position.y;y1=bb.max.y+blade.position.y;w=bb.max.x-bb.min.x;t=bb.max.z-bb.min.z;}
+    const L=y1-y0+.03,body=new THREE.CylinderGeometry(1,.62,L,10,1);body.scale(w*.5+.007,1,t*.5+.008);const m=new THREE.Mesh(body,SCAB_MAT);m.position.y=y0-.005+L/2;g.add(m);
+    const lk=new THREE.CylinderGeometry(1,1,.035,10,1);lk.scale(w*.5+.0095,1,t*.5+.0105);const mk=new THREE.Mesh(lk,SCAB_MET);mk.position.y=y0+.012;g.add(mk);
+    const ch=new THREE.ConeGeometry(1,.07,10,1);ch.rotateX(Math.PI);ch.scale((w*.5+.007)*.66,1,(t*.5+.008)*.66);const mc=new THREE.Mesh(ch,SCAB_MET);mc.position.y=y0-.005+L+.03;g.add(mc);
+    g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});s.mesh.add(g);s._scab=g;}
+  s._scab.visible=on;}
+const slotsFor=d=>d.len<=.5?['hip2','belt']:(d.kind==='blade'&&d.len<=1.05&&!d.improv)||((d.kind==='blunt'||d.kind==='axe')&&d.len<=.86&&!TWO_HANDED[d.id])?['belt']:[];   /* (Build 261, the player: carry them as they were carried) a sword or a longsword in a scabbard at the off hip, a dagger or knife at the other hip, a mace, hammer or small axe hung from the belt by its head. Nothing is slung across the back: a great sword, a two-handed axe or a polearm stays in the hands or goes on the shoulder (Build 256) */
 const slotFree=(f,d)=>slotsFor(d).find(k=>!f[k]);
 const TWO_HANDED={candlestand:1,longsword:1,greatsword:1,axe:1,spear:1,poleaxe:1,glaive:1,legLimb:1,plank:1,chest:1},twoH=d=>!!TWO_HANDED[d.id];
 // forearm roll: a gripped haft turns only as far as the forearm rotates from the knuckle line (less with both hands on it).
@@ -9421,22 +9430,24 @@ class Fighter{
     /* (Build 250) three places to carry things: the belt on the off hip, a small thing (a knife, a stone, a skull) on the sword-side hip, and a long or two-handed one across the back.
        When they're full there's no room for more: Z with something in hand swaps it for what's in its place, empty-handed it draws the next thing carried */
     if(s&&!beltOk(s)){if(this.isPlayer)toast('Not worth carrying');return;}
+    if(s&&!slotsFor(s.def).length){if(this.isPlayer)toast(`No way to carry the ${s.def.name.toLowerCase()} but in your hands`);return;}
     const nm={belt:'belt',hip2:'hip',back:'back'};
     if(s){const k=slotFree(this,s.def);
       if(k){this.stow(s,k);this.giveFists();if(this.isPlayer)toast(`${s.def.name} at your ${nm[k]}`);return;}
       const occ=slotsFor(s.def).filter(q=>this[q]),k2=occ[(this._zr=(this._zr||0)+1)%Math.max(1,occ.length)];if(!k2){if(this.isPlayer)toast('No room on your belt');return;}
       const b=this[k2];this[k2]=null;this.stow(s,k2);this.draw(b);if(this.isPlayer)toast(`${b.def.name} drawn · ${s.def.name} at your ${nm[k2]}`);return;}
     const k=['belt','back','hip2'].find(q=>this[q]);if(!k)return;const b=this[k];this[k]=null;this.draw(b);if(this.isPlayer)toast(`${b.def.name} drawn`);}
-  stow(s,k){s.owner=null;s.unstick&&s.unstick();s.free=false;s.stuck=null;if(this.sword===s)this.sword=null;this[k]=s;this.rev=false;sfx('unsheathe',this.chest,.35,.8,0,false);}
-  draw(b){if(this.sword&&this.sword.def.kind!=='fist')this.dropSword(true);this.sword=b;b.owner=this;b.free=false;b.Hp.copy(b.H);b.Tp.copy(b.T);sfx('unsheathe',this.chest,.7,1,0,false);}
+  stow(s,k){if(s.def.kind==='blade'&&!s.def.improv&&s.def.len>.25)scabbardOn(s,true);s.owner=null;s.unstick&&s.unstick();s.free=false;s.stuck=null;if(this.sword===s)this.sword=null;this[k]=s;this.rev=false;sfx('unsheathe',this.chest,.35,.8,0,false);}
+  draw(b){scabbardOn(b,false);if(this.sword&&this.sword.def.kind!=='fist')this.dropSword(true);this.sword=b;b.owner=this;b.free=false;b.Hp.copy(b.H);b.Tp.copy(b.T);sfx('unsheathe',this.chest,.7,1,0,false);}
   beltPose(){for(const k of SLOTS)if(this[k])this.beltPose1(this[k],k);}
   beltPose1(s,k){if(!_bF){_bF=new THREE.Vector3();_bR=new THREE.Vector3();}const hb=this.bones.Hips;if(!hb)return;hb.matrixWorld.decompose(_wl1,_qr2,_wl2);const sd=(this.mainArm==='L'?-1:1)*(k==='hip2'?-1:1);
-    _wl2.set(sd,0,0).applyQuaternion(_qr2);_wl3.set(0,1,0).applyQuaternion(_qr2);_t3.set(0,0,1).applyQuaternion(_qr2);   // the hips' left (for a right-hander's belt), up and forward
+    {const F=this.fwd(_bF),Rt=this.right(_bR);_wl2.copy(Rt).multiplyScalar(-sd);_wl3.copy(Y_AXIS);_t3.copy(F);}   // (Build 261) out to the side of the belt, up and forward, in the body's level frame (the hips bone's own axes aren't these)
     const back=k==='back',head=s.def.kind!=='blade';   // (Build 219) a two-hander or a spear is slung across the back, grip low by the off hip, head over the sword shoulder
     if(back){const F=this.fwd(_bF),Rt=this.right(_bR),bs=this.mainArm==='L'?-1:1;s.axis.set(0,.9,0).addScaledVector(Rt,.36*bs).addScaledVector(F,-.07).normalize();s.H.copy(_wl1).addScaledVector(F,-.17).addScaledVector(Rt,-.15*bs).addScaledVector(Y_AXIS,-.04);_t3.copy(Rt);}   /* the flat lies on the back (Build 250: an else here had been commented out since Build 219, so the hip pose overwrote it) */
     else if(s.def.len<.25){s.axis.copy(_wl3).multiplyScalar(-1).addScaledVector(_t3,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.215).addScaledVector(_t3,-.01).addScaledVector(_wl3,-.02);}   // a stone or a skull hangs at the hip as if in a pouch
     else if(head){s.axis.copy(_wl3).addScaledVector(_t3,-.12).addScaledVector(_wl2,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.235).addScaledVector(_t3,.03).addScaledVector(_wl3,-.14).addScaledVector(s.axis,-s.len*.72);}   // a mace, hammer or axe hangs by its head, haft down
-    else{s.axis.copy(_wl3).multiplyScalar(-.9).addScaledVector(_t3,-.42).addScaledVector(_wl2,.16).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.235).addScaledVector(_t3,.08).addScaledVector(_wl3,-.1).addScaledVector(s.axis,-.1);}   // a blade hangs point down and back
+    else if(k==='hip2'){s.axis.copy(_wl3).multiplyScalar(-.55).addScaledVector(_t3,-.8).addScaledVector(_wl2,.08).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.2).addScaledVector(_t3,-.04).addScaledVector(_wl3,-.06).addScaledVector(s.axis,-.08);}   // (Build 261) a dagger at the other hip, lying back along the belt, point down behind
+    else{s.axis.copy(_wl3).multiplyScalar(-.6).addScaledVector(_t3,-.8).addScaledVector(_wl2,.1).normalize();s.H.copy(_wl1).addScaledVector(_wl2,.2).addScaledVector(_t3,.05).addScaledVector(_wl3,-.02).addScaledVector(s.axis,.02);}   // (Build 261) a sword in its scabbard at the off hip: the hilt forward at the waist, the scabbard trailing down and back at about 45 degrees, as swords were worn
     s.edge.copy(_t3).addScaledVector(s.axis,-_t3.dot(s.axis)).normalize();s.T.copy(s.H).addScaledVector(s.axis,s.len);s.Hp.copy(s.H);s.Tp.copy(s.T);if(s.Hv)s.Hv.set(0,0,0);s.sync();}
   throwWeapon(){
     // the weapon leaves the hand with whatever momentum the swing gave it
