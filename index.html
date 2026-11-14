@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=277;
+const BUILD=278;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5315,6 +5315,8 @@ function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?
   af:q()<.65?0:q()<.6?1:2,sc:q()<.8?0:1+((q()*4)|0),pl:q()<.94?0:1+((q()*2)|0),wf:q()<.7?0:q()<.6?1:3,wg:(q()*6)|0,ws:(q()*3)|0};}
 const GAITW=!/[?&]nogaitw/.test(location.search),GAIT_P=Object.assign({wide:.045,sway:.02,dip:.022,yaw:.07,roll:.03},(()=>{try{return JSON.parse(decodeURIComponent((location.search.match(/[?&]gaitp=([^&]+)/)||[])[1]||'{}'));}catch(e){return {};}})());   // (Build 265) the walk's weight: feet apart (m a side), hip sway (m), dip (m), hip turn and roll (rad); ?gaitp={json}, ?nogaitw
 const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams(location.search).get('ls0')||.92),+(new URLSearchParams(location.search).get('ls1')||.985)],STEP_ST=+(new URLSearchParams(location.search).get('stepst')||.15),STEP_SL=+(new URLSearchParams(location.search).get('stepsl')||1);const LOOSE=!/[?&]noloose/.test(location.search),LOOSE_DIP=+((location.search.match(/[?&]ldip=([\d.]+)/)||[])[1]||.1),MEAS=+((location.search.match(/[?&]meas=([\d.]+)/)||[])[1]||.3);
+const FEET_CAP=!/[?&]nofeetcap/.test(location.search),FEET_W=(()=>{const m=location.search.match(/[?&]feetw=([\d.,]+)/);return m?m[1].split(',').map(Number):[.42,.24,.5];})();
+const SW_TW=+((location.search.match(/[?&]swtw=([\d.]+)/)||[])[1]||.6);   /* (Build 278) the shoulders turn into a cut at most ~34 degrees (was 60, with the hips adding 45 more) */
 const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
 const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
@@ -5622,7 +5624,7 @@ const GARB_CLIP={plate:[.3,-9,1.37],   /* (Build 277) under a plate harness the 
 // any skirt vertex closer to a thigh or shin than its girth is pushed out radially; before, a striding or crouching leg went through the cloth
 function garbLegs(m,pad=0){const U={uLegP:{value:Array.from({length:6},()=>new THREE.Vector3(0,-9,0))}};m.userData.legU=U.uLegP;const pre=m.onBeforeCompile,PD=pad.toFixed(4);   /* pad: a belt lies that much further out than the cloth it's on */
   m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uLegP=U.uLegP;
-    sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R0,float R1){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);float R=mix(R0,R1,smoothstep(0.,.5,t))+'+PD+';vec3 c=a+ab*t,d=p-c;float l=length(d);R+=R1>.11?.032*max(0.,d.z/max(l,1e-5))*(1.-t):0.;return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+   /* (Build 201) a thigh is thicker in front of its bone than behind it, most of all near the hip: in a fighting stance the hose showed through the front of every skirt just under the belt */
+    sh.vertexShader='uniform vec3 uLegP[6];\nvec3 legPush(vec3 p,vec3 a,vec3 b,float R0,float R1){vec3 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),1e-6),0.,1.);float R=mix(R0,R1,smoothstep(0.,.5,t))+'+PD+';vec3 c=a+ab*t,d=p-c;float l=length(d);R+=R1>.11?.032*max(0.,d.z/max(l,1e-5))*(1.-t):0.;R*=1.-.3*max(0.,-d.z/max(l,1e-5));return l<R&&l>1e-5?p+d/l*(R-l):p;}\n'+   /* (Build 201) a thigh is thicker in front of its bone than behind it, most of all near the hip: in a fighting stance the hose showed through the front of every skirt just under the belt */
       sh.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\n if(position.y<1.08){transformed=legPush(transformed,uLegP[0],uLegP[1],.095,.115);transformed=legPush(transformed,uLegP[1],uLegP[2],.1,.085);transformed=legPush(transformed,uLegP[3],uLegP[4],.095,.115);transformed=legPush(transformed,uLegP[4],uLegP[5],.1,.085);}');};   /* (Build 130) skirts only (bind height under the hips): the swinging sleeves passed the thighs when running and were shoved out, a flicker on the arms */
   const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|legs3'+(pad?PD:'');return m;}
 const _glM=new THREE.Matrix4(),_glN=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
@@ -9331,7 +9333,7 @@ class Fighter{
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
     if(legs&&onGround){
       const stF=.55+.45*clamp(this.stamina/100,0,1),K=60*stF*(this.crouch?1.4:1)*((this.stanceAmt||0)>.1?1.15:1);
-      if(this.sword&&this.commit&&ts>6){_v.copy(this.sword.tipVel).setY(0);const l=_v.length();if(l>1e-3)this.balV.addScaledVector(_v,(Math.min(ts,30)-6)*w*h/l*(1+REEL*clamp(((WMASS[this.sword.def.id]||1.5)-1.5)*.55,0,1.4)));}   // a committed swing drags the body after it (Build 150: no more than a real 30 m/s swing would: a blade or spear point snagged and let go reads as a huge speed for a step)
+      if(this.sword&&this.commit&&ts>6){_v.copy(this.sword.tipVel).setY(0);const l=_v.length();if(l>1e-3)this.balV.addScaledVector(_v,(Math.min(ts,30)-6)*w*h/l*(this.isPlayer||this.remote?1:1+REEL*clamp(((WMASS[this.sword.def.id]||1.5)-1.5)*.55,0,1.4)));}   /* (Build 278) not for people: a poleaxe's swing dragged the player into stumbles and crouched catches he hadn't asked for */   // a committed swing drags the body after it (Build 150: no more than a real 30 m/s swing would: a blade or spear point snagged and let go reads as a huge speed for a step)
       const sat=Math.min(1,.07/Math.max(1e-4,Math.hypot(this.bal.x,this.bal.z)));   // ankles and hips only correct a small lean; past that you have to step
       const C=2*Math.sqrt(K)*.75*sat;
       this.balV.x+=(-K*sat*this.bal.x-C*this.balV.x)*h;this.balV.z+=(-K*sat*this.bal.z-C*this.balV.z)*h;
@@ -9488,7 +9490,7 @@ class Fighter{
       // reach out ahead of the free shoulder, lower when you look down; a bot reaches for his man's sword hand
       const tg=A&&A.offTg&&!this.isPlayer&&!this.remote?A.offTg:null;
       if(tg&&tg.alive&&!tg.ragdoll)g.copy(tg.sword&&tg.sword.def.kind!=='fist'?tg.sword.H:tg.chest);
-      else g.copy(sh).addScaledVector(f,reach*.82*Math.cos(this.pitch*.8)).addScaledVector(Y_AXIS,Math.sin(this.pitch*.8)*reach*.8-.08);
+      else g.copy(sh).addScaledVector(f,reach*.8).addScaledVector(Y_AXIS,clamp(Math.sin(this.pitch*.8)*reach*.8,-.6,.06)-.14).addScaledVector(_ogR,(side==='R'?-1:1)*.1);   /* (Build 278) out in front at breast height, a little across toward the middle, lower when you look down, never up: with the aim raised the open hand went up beside the helmet like a salute */
       // the hand goes to whatever is nearest that point: a limb or body, a weapon, a body lying on the ground
       let bd=.42*.42,got=false;
       for(const B of fighters){if(B===this)continue;
@@ -9845,7 +9847,7 @@ class Fighter{
     if(thLn){_qr.setFromAxisAngle(X_AXIS,thLn);B.Spine1.quaternion.premultiply(_qr);}
     this._exW=lerp(this._exW||0,this.commit&&!this.thrust&&this.sword&&!this.sword.stuck?1:0,1-Math.exp(-(this.commit?16:5)*dt));
     let swTw=0;if(this.sword&&this.sword.def.kind!=='fist'&&this.alive&&!this.ragdoll&&!this.sword.stuck){this.right(_r);const xr=_v.subVectors(this.sword.H,this.chest).dot(_r);
-      swTw=clamp(xr*2.1+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.035:0),-1.05,1.05)*(this.commit?1:.45+.3*clamp((this.ctrl.y-.1)/.4,0,1))*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
+      swTw=clamp(xr*1.5+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.02:0),-SW_TW,SW_TW)*(this.commit?1:.45+.3*clamp((this.ctrl.y-.1)/.4,0,1))*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
     const tw=thTw||(this.sword?swTw:clamp(-pt*2.6,-.6,.6));this.twist=lerp(this.twist,tw,1-Math.exp(-(thTw?16:this.sword?12:10)*dt));
     this._swTw=this.sword&&!thTw?-this.twist*.5:0;   // an armed body's turn into the cut is put on after cacheBody (below): drawn only, so the shoulders the handling reads don't move with it
     if(!this._swTw){_qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);}
@@ -9941,6 +9943,11 @@ class Fighter{
         for(const s in feet){const f=feet[s],sd=s==='Right'?1:-1;f.addScaledVector(_r,-sd*.075*cw);if(s===fr)f.addScaledVector(_f,.1*Math.abs(ws)).addScaledVector(_r,sd*.025*Math.abs(ws));}
         const sw=B.Spine.matrixWorld.elements;_poA.set(sw[12],sw[13],sw[14]);_poB.setFromMatrixPosition(B.Hips.matrixWorld).addScaledVector(_r,ws*.045);_poB.y-=.025*Math.abs(ws);
         B.Hips.parent.worldToLocal(_poB);B.Hips.position.copy(_poB);skelClean(B);B.Spine.parent.worldToLocal(_poA);B.Spine.position.copy(_poA);this._spMv=1;skelClean(B);}}
+      /* (Build 278) how far apart the feet stand is held to what a man's are: measured, the ankles were 50 cm apart in the idle clip alone, 60-67 in the
+         fighting stance and 30-57 walking (a straddle; walking it read as a waddle). Standing in guard about 42 cm, 24 on the move, wider only for a side-step */
+      if(FEET_CAP&&feet.Left&&feet.Right&&!this.pin&&!this.climb&&kk<=0){const cap=lerp(lerp(FEET_W[0],FEET_W[1],clamp((sp-.3)/1,0,1)),FEET_W[2],clamp(this.sideW||0,0,1))*FSCALE;
+        const dl=(feet.Left.x-this.pos.x)*_r.x+(feet.Left.z-this.pos.z)*_r.z,dr=(feet.Right.x-this.pos.x)*_r.x+(feet.Right.z-this.pos.z)*_r.z,sep=dr-dl;
+        if(sep>cap){const k=cap/sep,m=(dl+dr)/2;feet.Left.addScaledVector(_r,(dl-m)*(k-1));feet.Right.addScaledVector(_r,(dr-m)*(k-1));}}
       if(this.gaitW>.01)this.gaitStep(dt,feet,sp);
       const PL=this.plant||(this.plant={}),pw=this.gaitW>.5?0:this.plantW;
       const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
@@ -9985,7 +9992,7 @@ class Fighter{
     if(this._swTw){_qr.setFromAxisAngle(Y_AXIS,this._swTw);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);B.Spine1.updateMatrixWorld(true);}
     /* (Build 248) a cut is thrown from the hips: in a committed swing the pelvis turns with the shoulders (60% of their turn, eased in and out over
        ~0.1 s), and the thighs are turned back by the same amount so the legs and feet stay where they stood. Drawn only, like the shoulders' turn */
-    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*1.5:0;this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
+    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*.7:0;   /* (Build 278) the hips turn a third as far as the shoulders, not most of the way: with both at full the chest stood square across the feet in every committed cut */this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
       if(Math.abs(this._hpTw)>.005&&B.Hips&&B.LeftUpLeg&&B.RightUpLeg){const H0=_hpQ0.copy(B.Hips.quaternion);_qr.setFromAxisAngle(Y_AXIS,this._hpTw);B.Hips.quaternion.premultiply(_qr);
         _hpQ1.copy(H0).invert().multiply(_qr.invert()).multiply(H0);B.LeftUpLeg.quaternion.premultiply(_hpQ1);B.RightUpLeg.quaternion.premultiply(_hpQ1);B.Hips.updateMatrixWorld(true);}}
     /* Build 212: the weight goes where the body is going. Starting off, the trunk tips forward over the feet; pulling up, it sits back; cutting a corner,
@@ -10007,7 +10014,7 @@ class Fighter{
       L.t+=dt*L.k;const sp=Math.hypot(this.vel.x,this.vel.z),still=clamp(1-sp/1.2,0,1),cw=this.calmW||0,gd=(1-cw)*still,cm=this.commit&&this.sword&&this.sword.def.kind!=='fist'?1:0;
       let y=gd*(.07*Math.sin(L.t*.9+L.ph)+.03*Math.sin(L.t*2.3+L.ph*2))-(this.armSw||0)*.07*(1-cm),p=gd*(.018*Math.sin(L.t*1.4+L.ph)),r=gd*(.03*Math.sin(L.t*.7+L.ph*3));
       {const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12&&!this.knocked&&!(this.stagger>0);if(gr)p+=clamp(sp/1.4,0,1)*.04+clamp((sp-2.6)/1.6,0,1)*.02;}   /* walking, a man leans a little into his going (the clips walk bolt upright) */
-      if(this.sword&&this.sword.Hv&&this.sword.def.kind!=='fist'&&(cm||LOOSE)){this.fwd(_f);this.right(_r);_wl1.copy(this.sword.Hv).sub(this.vel);const lk=LOOSE?(cm?1:.4*(1-cw)):1; /* (Build 268) the trunk goes with the weapon: thrown forward and over into a committed cut, leaning back as the hands are drawn up and back, and a little in guard too */ if(LOOSE){p+=lk*clamp(_wl1.dot(_f)*.05-_wl1.y*.032+(cm?.06:0),-.17,.34);r+=lk*clamp(_wl1.dot(_r)*.038,-.24,.24);}else{p+=clamp(_wl1.dot(_f)*.03-_wl1.y*.022,-.1,.2);r+=clamp(_wl1.dot(_r)*.022,-.14,.14);}}
+      if(this.sword&&this.sword.Hv&&this.sword.def.kind!=='fist'&&(cm||LOOSE)){this.fwd(_f);this.right(_r);_wl1.copy(this.sword.Hv).sub(this.vel);const lk=LOOSE?(cm?1:.4*(1-cw)):1; /* (Build 268) the trunk goes with the weapon: thrown forward and over into a committed cut, leaning back as the hands are drawn up and back, and a little in guard too */ if(LOOSE){p+=lk*clamp(_wl1.dot(_f)*.04-_wl1.y*.025+(cm?.04:0),-.12,.2);r+=lk*clamp(_wl1.dot(_r)*.03,-.14,.14);}else{p+=clamp(_wl1.dot(_f)*.03-_wl1.y*.022,-.1,.2);r+=clamp(_wl1.dot(_r)*.022,-.14,.14);}}
       const e=1-Math.exp(-8*dt);L.y=lerp(L.y,y,e);L.p=lerp(L.p,p,e);L.r=lerp(L.r,r,e);
       if(Math.abs(L.y)+Math.abs(L.p)+Math.abs(L.r)>.003){this.fwd(_f);this.right(_r);B.Spine1.parent.getWorldQuaternion(_qr2).invert();
         _wl2.crossVectors(Y_AXIS,_f).normalize().multiplyScalar(L.p).addScaledVector(_wl3.crossVectors(Y_AXIS,_r).normalize(),L.r).addScaledVector(Y_AXIS,L.y);const ang=_wl2.length();
