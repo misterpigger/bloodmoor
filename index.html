@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=257;
+const BUILD=258;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -7420,7 +7420,7 @@ const ARM_PARTS={R:[6,7],L:[4,5]},ARM_IDX=[4,5,6,7];
 // how each weapon is held: two-handed weapons keep the off hand on the haft; one-handed ones leave it free in a guarding fist
 const THROW_T=.2;   // seconds from letting go of Q to the weapon leaving the hand
 // muscle stiffness of the physical body (per mass), how far each bone may be turned off its pose, and which mass a bone's blow lands on
-const BODY_CARRY=.72,BODY_K={Spine1:210,Spine2:150,Neck:115,Head:95,HeadTop_End:95},BODY_MAXA={Spine:.45,Spine1:.55,Spine2:.6,Neck:.7,Head:.8};   // softer muscles: blows and the deck move the body visibly, and it comes back
+const BODY_CARRY=.72,BODY_K={Spine1:210,Spine2:150,Neck:115,Head:95,HeadTop_End:95},BODY_MAXA={Spine:.45,Spine1:.55,Spine2:.5,Neck:.45,Head:.42};   // softer muscles: blows and the deck move the body visibly, and it comes back
 const BODY_MAP={Hips:'Spine1',Spine:'Spine1',Spine1:'Spine1',Spine2:'Spine2',Neck:'Neck',Head:'Head',HeadTop_End:'HeadTop_End'};
 const _bq=new THREE.Quaternion(),_bq2=new THREE.Quaternion();
 const SLOTS=['belt','hip2','back'];
@@ -9712,7 +9712,7 @@ class Fighter{
       else if(this.throwF>0){const k=this.throwF/.5;thTw=-.55*k*(this.throwSg||1);thLn=.34*k;this.throwF-=dt;}}
     if(thLn){_qr.setFromAxisAngle(X_AXIS,thLn);B.Spine1.quaternion.premultiply(_qr);}
     let swTw=0;if(this.sword&&this.sword.def.kind!=='fist'&&this.alive&&!this.ragdoll&&!this.sword.stuck){this.right(_r);const xr=_v.subVectors(this.sword.H,this.chest).dot(_r);
-      swTw=clamp(xr*2.1+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.035:0),-1.05,1.05)*(this.commit?1:.45)*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
+      swTw=clamp(xr*2.1+(this.commit&&this.sword.Hv?clamp(_v.copy(this.sword.Hv).sub(this.vel).dot(_r),-12,12)*.035:0),-1.05,1.05)*(this.commit?1:.45+.3*clamp((this.ctrl.y-.1)/.4,0,1))*(1-(this.calmW||0))*(this.sword.def.kind==='spear'?.4:1);}   // hand out to the right: right shoulder back (the coil); swept across: the shoulders turn through after it
     const tw=thTw||(this.sword?swTw:clamp(-pt*2.6,-.6,.6));this.twist=lerp(this.twist,tw,1-Math.exp(-(thTw?16:this.sword?12:10)*dt));
     this._swTw=this.sword&&!thTw?-this.twist*.5:0;   // an armed body's turn into the cut is put on after cacheBody (below): drawn only, so the shoulders the handling reads don't move with it
     if(!this._swTw){_qr.setFromAxisAngle(Y_AXIS,-this.twist*.5);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);}
@@ -9835,7 +9835,7 @@ class Fighter{
     if(this._swTw){_qr.setFromAxisAngle(Y_AXIS,this._swTw);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);B.Spine1.updateMatrixWorld(true);}
     /* (Build 248) a cut is thrown from the hips: in a committed swing the pelvis turns with the shoulders (60% of their turn, eased in and out over
        ~0.1 s), and the thighs are turned back by the same amount so the legs and feet stay where they stood. Drawn only, like the shoulders' turn */
-    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*1.2:0;this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
+    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*1.5:0;this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
       if(Math.abs(this._hpTw)>.005&&B.Hips&&B.LeftUpLeg&&B.RightUpLeg){const H0=_hpQ0.copy(B.Hips.quaternion);_qr.setFromAxisAngle(Y_AXIS,this._hpTw);B.Hips.quaternion.premultiply(_qr);
         _hpQ1.copy(H0).invert().multiply(_qr.invert()).multiply(H0);B.LeftUpLeg.quaternion.premultiply(_hpQ1);B.RightUpLeg.quaternion.premultiply(_hpQ1);B.Hips.updateMatrixWorld(true);}}
     /* Build 212: the weight goes where the body is going. Starting off, the trunk tips forward over the feet; pulling up, it sits back; cutting a corner,
@@ -9856,6 +9856,7 @@ class Fighter{
     if(!LIFE_OFF&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&dt>0&&dt<.2&&B.Spine1){const L=this._life||(this._life={t:Math.random()*50,y:0,p:0,r:0,ph:(this.id||0)*1.7,k:.8+((this.id||0)*37%10)/25});
       L.t+=dt*L.k;const sp=Math.hypot(this.vel.x,this.vel.z),still=clamp(1-sp/1.2,0,1),cw=this.calmW||0,gd=(1-cw)*still,cm=this.commit&&this.sword&&this.sword.def.kind!=='fist'?1:0;
       let y=gd*(.07*Math.sin(L.t*.9+L.ph)+.03*Math.sin(L.t*2.3+L.ph*2))-(this.armSw||0)*.13*(1-cm),p=gd*(.018*Math.sin(L.t*1.4+L.ph)),r=gd*(.03*Math.sin(L.t*.7+L.ph*3));
+      {const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12&&!this.knocked&&!(this.stagger>0);if(gr)p+=clamp(sp/1.4,0,1)*.07+clamp((sp-2.6)/1.6,0,1)*.05;}   /* walking, a man leans a little into his going (the clips walk bolt upright) */
       if(cm&&this.sword.Hv){this.fwd(_f);this.right(_r);_wl1.copy(this.sword.Hv).sub(this.vel);p+=clamp(_wl1.dot(_f)*.03-_wl1.y*.022,-.1,.2);r+=clamp(_wl1.dot(_r)*.022,-.14,.14);}
       const e=1-Math.exp(-8*dt);L.y=lerp(L.y,y,e);L.p=lerp(L.p,p,e);L.r=lerp(L.r,r,e);
       if(Math.abs(L.y)+Math.abs(L.p)+Math.abs(L.r)>.003){this.fwd(_f);this.right(_r);B.Spine1.parent.getWorldQuaternion(_qr2).invert();
