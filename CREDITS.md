@@ -153,4 +153,4 @@ Scanned and modelled props and scenery from [Poly Haven](https://polyhaven.com),
 - Wooden Chair 01: [WoodenChair_01](https://polyhaven.com/a/WoodenChair_01)
 
 ## The Yard (Build 270)
-Poly Haven (CC0, polyhaven.com): Plaster Stone Wall 01, Dirt Floor, Rocky Trail, Rough Wood, Wood Planks Grey, Roof Tiles 14.
+Poly Haven (CC0, polyhaven.com): Painted Plaster Wall, Dirt Floor, Rocky Trail, Rough Wood, Wood Planks Grey, Roof Tiles 14.
