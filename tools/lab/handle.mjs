@@ -3,7 +3,7 @@
 import {boot} from './harness.mjs';
 const WEPS=(process.env.WEPS||'arming,longsword,greatsword,axe,mace,spear').split(',');const REPS=+(process.env.REPS||4);
 const {browser,page,logs,start}=await boot({W:320,HH:200,render:false,query:'?nohud'+(process.env.Q||'')});
-await start('yard','arena');await new Promise(r=>setTimeout(r,2500));
+await start('yard','arena');await page.evaluate(d=>{window.__dist=d;},+(process.env.DIST||0));await new Promise(r=>setTimeout(r,2500));
 const out=await page.evaluate(async([WEPS,REPS,MVS])=>{const g=window.__game,T=g.THREE,P=g.player,input=g.input,res={};
   const pct=(a,p)=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[Math.min(b.length-1,Math.floor(p*b.length))];};
   for(let k=0;k<120;k++)g.logic(1/60);
@@ -19,7 +19,7 @@ const out=await page.evaluate(async([WEPS,REPS,MVS])=>{const g=window.__game,T=g
         // put everyone back
         for(let q=0;q<400&&!(D=pick());q++){input.locked=false;input.lmb=false;g.logic(1/60);}
         P.pos.copy(home);P.vel.set(0,0,0);P.yaw=yaw;P.stamina=100;P.hp=100;const f=V3(Math.sin(yaw),0,Math.cos(yaw));function V3(x,y,z){return new T.Vector3(x,y,z);}
-        const dist=(reach[w]||1.3)+(M.thr?.25:0)+(mn==='rise'?.3:0);D.pos.set(home.x+f.x*dist,D.pos.y,home.z+f.z*dist);D.vel.set(0,0,0);D.yaw=yaw+Math.PI;D.bal&&D.bal.set&&D.bal.set(0,0,0);D.hp=100;
+        const dist=(window.__dist||reach[w]||1.3)+(M.thr?.25:0)+(mn==='rise'?.3:0);D.pos.set(home.x+f.x*dist,D.pos.y,home.z+f.z*dist);D.vel.set(0,0,0);D.yaw=yaw+Math.PI;D.bal&&D.bal.set&&D.bal.set(0,0,0);D.hp=100;
         window.__ulog=[];let peak=0;const pe=P.sword.edge.clone();
         const step=(mx,my,lmb,z)=>{input.locked=false;P.stamina=100;input.mx=mx;input.my=my;input.lmb=lmb;input.stab=false;P.ctrl.z=z;D.pos.x=home.x+f.x*dist;D.pos.z=home.z+f.z*dist;D.vel.set(0,0,0);g.logic(1/60);
           const s=P.sword;if(!s)return;const v=s.tipVel.length();peak=Math.max(peak,v);
