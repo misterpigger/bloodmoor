@@ -458,7 +458,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=247;
+const BUILD=248;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -8711,6 +8711,7 @@ for(const sd of ['Left','Right']){DESC[sd+'Hand']=[sd+'HandMiddle1'];DESC[sd+'Fo
 DESC.Spine1=['Spine2','Neck','Head','HeadTop_End','LeftArm','LeftForeArm','LeftHand','LeftHandMiddle1','RightArm','RightForeArm','RightHand','RightHandMiddle1'];   // (Build 222) cut in two at the waist
 const LIMB_OF={LeftHand:'armL',RightHand:'armR',LeftFoot:'legL',RightFoot:'legR',LeftArm:'armL',LeftForeArm:'armL',RightArm:'armR',RightForeArm:'armR',LeftUpLeg:'legL',LeftLeg:'legL',RightUpLeg:'legR',RightLeg:'legR',Head:'head'};
 let _spR=null;
+const NOCHAIN=/[?&]nochain/.test(location.search),HIPTW_OFF=/[?&]nohiptw/.test(location.search),_hpQ0=new THREE.Quaternion(),_hpQ1=new THREE.Quaternion();
 const ATTACKS=[
   {n:'fromRight',s:[.53,.4],e:[-.56,.02]},{n:'fromLeft',s:[-.53,.4],e:[.56,.02]},{n:'overhead',s:[.08,.58],e:[0,-.42]},
   {n:'diagR',s:[.52,.56],e:[-.5,-.4]},{n:'diagL',s:[-.52,.56],e:[.5,-.4]},{n:'low',s:[.48,-.05],e:[-.48,-.45]},{n:'thrust',s:[.05,.08],e:[0,.12],thrust:true}];
@@ -9491,7 +9492,14 @@ class Fighter{
           else if(ready){A.phase='strike';A.pt=0;}}
         else if(A.phase==='strike'){const e=A.atk.e;this.ctrlT.x=e[0];this.ctrlT.y=e[1];this.ctrlT.z=A.atk.thrust?.64:.46;this.commit=!A.atk.thrust;this.thrust=!!A.atk.thrust;wish.addScaledVector(_v,.6);
           if(A.pt>(kind==='blunt'||kind==='axe'?.42:.34)){A.phase='recover';A.pt=0;}}
-        else if(A.phase==='recover'){if(A.pt<.05&&!A.backT&&Math.random()<.65)A.backT=rand(.3,.6);if(A.pt>.4){A.phase='guard';A.pt=0;A.cd=rand(.45,1.4)/A.aggr;}}
+        else if(A.phase==='recover'){
+          /* (Build 248) a good fighter doesn't stop after one cut: from where the blow ended he goes straight into the next from that side (a right-to-left
+             cut ends high on the left, and the cut from the left starts there), so exchanges run two or three blows long. Likelier the more skilled and
+             the more aggressive, not when spent, staggered or out of reach, and at most two follow-ups */
+          if(A.pt<h*1.5&&(A.chain||0)<2&&kind!=='fist'&&kind!=='spear'&&A.atk&&A.atk.e&&!A.atk.thrust&&!tg.downed&&this.stagger<=0&&this.stamina>32&&d<reach+.55&&!NOCHAIN&&Math.random()<A.skill*.62*Math.min(1.25,A.aggr)){
+            const e=A.atk.e,sg=Math.sign(e[0]||1),opts=ATTACKS.filter(a=>!a.thrust&&a!==A.atk&&(Math.sign(a.s[0]||1)===sg||a.n==='overhead'&&e[1]>.2));
+            if(opts.length){A.atk=pick(opts);A.phase='windup';A.pt=.42/A.aggr;A.chain=(A.chain||0)+1;A.feint=false;A.backT=0;}}
+          if(A.phase==='recover'){if(A.pt<.05&&!A.backT&&Math.random()<.65)A.backT=rand(.3,.6);if(A.pt>.4){A.phase='guard';A.pt=0;A.chain=0;A.cd=rand(.45,1.4)/A.aggr;}}}
       }
       {const RP=tg.ragdoll&&(tg.ragdoll.P.Spine2||tg.ragdoll.P.Hips);let dd=99;if(RP){_t2.set(RP.x-this.pos.x,0,RP.z-this.pos.z);dd=_t2.length();}
         const rv=kind==='blade'&&low&&!!RP&&dd<2.6;this.rev=rv;   // someone on the ground: turn the grip over, stand over the body and stab down into it
@@ -9716,6 +9724,11 @@ class Fighter{
     if(PW){this.updateCaps();this.physTargets(dt,PART_VIS);if(!this.hs)this.physVisual();this.root.updateMatrixWorld(true);}   /* Build 145: not on top of the jointed body, which already draws the hit (both bent the same limb: rubbery arms) */
     this.cacheBody();
     if(this._swTw){_qr.setFromAxisAngle(Y_AXIS,this._swTw);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);B.Spine1.updateMatrixWorld(true);}
+    /* (Build 248) a cut is thrown from the hips: in a committed swing the pelvis turns with the shoulders (60% of their turn, eased in and out over
+       ~0.1 s), and the thighs are turned back by the same amount so the legs and feet stay where they stood. Drawn only, like the shoulders' turn */
+    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*1.2:0;this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
+      if(Math.abs(this._hpTw)>.005&&B.Hips&&B.LeftUpLeg&&B.RightUpLeg){const H0=_hpQ0.copy(B.Hips.quaternion);_qr.setFromAxisAngle(Y_AXIS,this._hpTw);B.Hips.quaternion.premultiply(_qr);
+        _hpQ1.copy(H0).invert().multiply(_qr.invert()).multiply(H0);B.LeftUpLeg.quaternion.premultiply(_hpQ1);B.RightUpLeg.quaternion.premultiply(_hpQ1);B.Hips.updateMatrixWorld(true);}}
     /* Build 212: the weight goes where the body is going. Starting off, the trunk tips forward over the feet; pulling up, it sits back; cutting a corner,
        it leans into the turn (the physical spine only lagged behind, so a man starting a run leaned back like a sack being pulled). Drawn only (after
        cacheBody, like the turn into the cut), so aim, reach and the camera don't move; not in first person; gone on the ground. */

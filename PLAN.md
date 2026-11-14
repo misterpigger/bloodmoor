@@ -17,12 +17,9 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 
 ## The work, in order
 
-### 1. Check Build 246 as the player will see it (short)
-- Not yet seen in a render: the open floor trap from a clear angle, rotunda versions of the plain, slab and hanged rooms, a domed junction, the candle wheel in an ordinary room, the store start room, the charnel mound after its UV fix.
-- The dome render showed a dark hatched object high on the dome wall: find what it is (a wall candle bracket placed above the springing is the likely cause) and fix it.
-- Undercroft columns show a dark vertical strip where an arch panel passes through them.
-- Ask the player whether the two pits being lethal (with the automatic edge catch) is what he wants. It follows his own call for the Pit map, but he hasn't said so for the crypt.
-- If he still finds a table that won't move, get the room kind from him; every loose table moved in `tbl.mjs`.
+### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
+- Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
+- The test harness now runs from `tools/lab` (it needs `tools/node_modules`: a symlink to a folder with `playwright` and `three` works; it's in `.gitignore`).
 
 ### 2. Combat: "night and day" beside Half Sword (the big one)
 He agreed all four of these are wrong, and added "use real proportions". Work one at a time, each with before/after numbers and a film strip (`strip.mjs`) sent to him.
@@ -32,6 +29,7 @@ He agreed all four of these are wrong, and added "use real proportions". Work on
 4. **Footwork and body.** Feet under a moving fight: stepping into a cut, recovering, not sliding. `lean3.mjs` and `strip.mjs` from the side.
 - "Real proportions": check weapon lengths and masses against real ones (`WEAPONS` `len`, `WMASS`), the fighter's height and limb lengths (`FSCALE` 1.07, about 1.74 m in stance), and reach at which each weapon lands. Ask him what looked wrong if this doesn't find it.
 - `FIRM` (Build 243) and `stabReact` were never looked at in motion. Do that first; they're part of this.
+- Done in Build 248: bots chain two or three blows in a run (`A.chain`), the hips turn with the shoulders in a committed cut (`_hpTw`); weapon and body proportions were checked against real ones and left. Next: look at the player's own swing from his camera (`strip.mjs` with `window.__human`), the moment after a hit lands, and footwork.
 
 ### 3. Rooms, second pass ("in major need of improvement")
 Build 246 added rotundas, undercrofts, candle wheels and flagstone floors. Still to do, from his free-camera recording of a Half Sword level (described in the Build 242 note):
@@ -39,7 +37,7 @@ Build 246 added rotundas, undercrofts, candle wheels and flagstone floors. Still
 - Long rooms and rooms joined at angles, so a floor stops reading as a grid of cells 15.5 m apart (`cryptPlan`).
 - A marked key room: when the gate is locked, the turnkey's room should look like his (a table, his lamp, keys on a board).
 - "Make sure the things that are placed are somewhat intentional": go through each room kind and each helper that scatters (`odd`, `rubble`, `stoolC`, `onTable`, `leanPlanks`, `propLadder`) and make every piece belong to something: against a wall, at a table, in a group. The reach check at the end of `buildCrypt` catches blocked doors but not clutter in the middle of a walkway.
-- Everything movable: chests, coffins, rubble, wall candles, the altar and slab are still fixed.
+- Everything movable: chests, coffins, floor skulls, the outer stones of rubble heaps, leaning planks, the barrow and the propped ladder are loose since Build 247. Still fixed: the stone altar, slab, tomb chest and niche coffins, the ossuary wall, wall sconces, the inner stones of rubble heaps, candle drifts.
 
 ### 4. The character: "close, needs a slight polish" in shape and movement (not the skin)
 - Shape: look at the bare body and the shirt in the crypt's stance from his camera (`look.mjs`); shoulders, neck, waist and how the shirt hangs (its flared hem and bagged body have been on the open list since Build 237).
@@ -47,7 +45,7 @@ Build 246 added rotundas, undercrofts, candle wheels and flagstone floors. Still
 - New hair shapes and draped tunic folds need the offline tools (`tools/mh/garb`, Blender's Python module, not installed in the cloud container).
 
 ### 5. Getting up
-Build 246 shortens it by damage taken. He also asked for "depending on how you fell or stumbled": a stumble caught on hands and knees should skip the push-up stage and the roll altogether. Look at `startRise` (stages P, A, B, C and `roll`).
+(Build 247: face down and already up on the hands or knees skips most of the first two stages.) Build 246 shortens it by damage taken. He also asked for "depending on how you fell or stumbled": a stumble caught on hands and knees should skip the push-up stage and the roll altogether. Look at `startRise` (stages P, A, B, C and `roll`).
 
 ### 6. The six pulled weapons
 Cudgel, hayfork, billhook, rusted sword, knightly sword, gilt mace (Build 243; defs and makers still in the file, out of all loot). Rebuild each from the proper parts (`bladeP`, `crossP`, `hiltP`, `flatBlade`, the lathed hafts) to the standard of the Build 168 swords, render them with `wshow.mjs` (`IDX` 12–17 in `YARD_W`), and **send him pictures before putting any back in play**.
