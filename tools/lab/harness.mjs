@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url';
 const HERE=path.dirname(fileURLToPath(import.meta.url));
 export const ROOT=process.env.BM_ROOT||new URL('../..',import.meta.url).pathname.replace(/\/$/,'');const INDEX=process.env.INDEX||ROOT+'/index.html';
-const NM=path.join(HERE,'node_modules');
+const NM=fs.existsSync(path.join(HERE,'node_modules'))?path.join(HERE,'node_modules'):path.join(HERE,'..','node_modules');
 export async function boot({W=800,HH=450,query='',render=true,manual=true,dsf=1,touch=false,ua=null}={}){
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM||'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--autoplay-policy=no-user-gesture-required','--js-flags=--max-old-space-size=3500','--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,LocalNetworkAccessChecks']});
   const ctx=await browser.newContext({viewport:{width:W,height:HH},deviceScaleFactor:dsf,hasTouch:touch,isMobile:touch,...(ua?{userAgent:ua}:{})});
