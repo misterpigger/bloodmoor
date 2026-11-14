@@ -458,8 +458,9 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=252;
+const BUILD=253;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
+const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:1,B:.75,C:1.2,D:.6};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
@@ -5392,7 +5393,7 @@ function mhPartGeo(P,b){if(P.geo[b])return P.geo[b];const A=P.A,g=new THREE.Buff
   g.setAttribute('skinIndex',new THREE.BufferAttribute(A[b+'si'],4));g.setAttribute('skinWeight',new THREE.BufferAttribute(A[b+'sw'],4,true));g.setIndex(new THREE.BufferAttribute(A[pb+'index'],1));
   if(A[b+'loose'])g.setAttribute('aLoose',new THREE.BufferAttribute(A[b+'loose'],1));
   else if(P.H.kind==='hair'||P.H.kind==='beard'||/^h_|^b_/.test(P.H.id))g.setAttribute('aLoose',new THREE.BufferAttribute(hairLoose(A[b+'pos'],P.H.kind==='beard'||/^b_/.test(P.H.id)),1));
-  g.computeBoundingSphere();return P.geo[b]=g;}
+  brawnGeo(g,BRAWN_K[b]||1);g.computeBoundingSphere();return P.geo[b]=g;}
 // (Build 128) how free each hair vertex is to swing: nothing over the skull, more the further it hangs below the ears (a beard below the chin)
 function hairLoose(pos,beard){const n=pos.length/3,L=new Float32Array(n);let top=-9,lo=9;for(let i=0;i<n;i++){top=Math.max(top,pos[i*3+1]);lo=Math.min(lo,pos[i*3+1]);}
   const y0=beard?lo+(top-lo)*.55:top-.13,span=beard?Math.max(.03,(top-lo)*.55):.26;for(let i=0;i<n;i++)L[i]=clamp((y0-pos[i*3+1])/span,0,1)*(beard?.45:1);return L;}
@@ -10528,7 +10529,7 @@ function bloodWeapon(s){
 // where a blade comes to rest on a body. The hit capsules are a little fuller than the flesh (a blow registers as the edge arrives),
 // but a blade lying on someone should lie on what you see: the skin, or the steel over it. Insets measured against the MakeHuman skin
 // (belly 4 cm inside the capsule, forearm 2.7, chest 1.7); plate sits about on the capsule and a helmet 2-6 cm outside it (Build 116)
-const CAP_IN={Hips:.03,Spine2:.012,Neck:.012,Head:0,LeftArm:.015,RightArm:.015,LeftForeArm:.022,RightForeArm:.022,LeftUpLeg:.01,RightUpLeg:.01,LeftLeg:.02,RightLeg:.02};
+const CAP_IN=BRAWN_ON?{Hips:.018,Spine2:0,Neck:0,Head:0,LeftArm:.007,RightArm:.007,LeftForeArm:.015,RightForeArm:.015,LeftUpLeg:.004,RightUpLeg:.004,LeftLeg:.015,RightLeg:.015}:{Hips:.03,Spine2:.012,Neck:.012,Head:0,LeftArm:.015,RightArm:.015,LeftForeArm:.022,RightForeArm:.022,LeftUpLeg:.01,RightUpLeg:.01,LeftLeg:.02,RightLeg:.02};   /* (Build 253: the thicker bodies fill more of their capsules) */
 function capSurf(B,c){const sk=c.r-(CAP_IN[c.ba]||0);if(c.zone==='head')return B.armor.head?c.r+.025:sk;
   const am=armorAt(B,c.zone);return am?(am.mail?sk+.012:Math.max(sk,c.r+.005)):sk;}
 // gaps in the harness (Build 116): plate stops an edge, but a point finds the armpit, the groin under the fauld, the inside of the elbow,
@@ -13123,8 +13124,25 @@ function loadFighters(onLoad,onErr){
     new GLTFLoader().parse(out.buffer,'',onLoad,onErr);
   }).catch(onErr);
 }
+/* (Build 253, the player beside Half Sword's men: ours are narrow and slight, theirs broad, thick through the chest, neck and arms)
+   BRAWN thickens the bodies once at load: every vertex is pushed out from the axis of each bone it rides on (bind space, blended by its
+   skin weights), more for the chest, neck, trapezius and arms, a little for the waist and legs, none for the head, hands and feet.
+   The skeleton isn't touched, so handling, reach and the camera are unchanged. Clothes and hair parts loaded per build get the same push
+   (mhPartGeo), and everything grown from the body (armour, shells, strand hair) grows from the thickened body. ?nobrawn turns it off */
+const BRAWN_F={Hips:1.05,Spine:1.07,Spine1:1.1,Spine2:1.14,Neck:1.3,LeftShoulder:1.22,RightShoulder:1.22,LeftArm:1.17,RightArm:1.17,LeftForeArm:1.15,RightForeArm:1.15,LeftUpLeg:1.09,RightUpLeg:1.09,LeftLeg:1.07,RightLeg:1.07},BRAWN_LAT={Spine1:.05,Spine2:.1};   // BRAWN_LAT: extra width across the body (bind-space x) for the chest
+const BRAWN_CH={Hips:'Spine',Spine:'Spine1',Spine1:'Spine2',Spine2:'Neck',Neck:'Head',LeftShoulder:'LeftArm',RightShoulder:'RightArm',LeftArm:'LeftForeArm',RightArm:'RightForeArm',LeftForeArm:'LeftHand',RightForeArm:'RightHand',LeftUpLeg:'LeftLeg',RightUpLeg:'RightLeg',LeftLeg:'LeftFoot',RightLeg:'RightFoot'};
+let BRAWN=null;   // per bone index: [jx,jy,jz, ax,ay,az, f-1] in the bodies' bind space
+function brawnInit(g){let body=null;g.scene.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body_/.test(o.name)&&!body)body=o;});if(!body)return;
+  const sk=body.skeleton,bm=body.bindMatrix,bmi=new THREE.Matrix4().copy(bm).invert(),J=sk.bones.map((b,i)=>V().applyMatrix4(new THREE.Matrix4().copy(sk.boneInverses[i]).invert()).applyMatrix4(bmi)),idx={};sk.bones.forEach((b,i)=>idx[b.name]=i);
+  BRAWN=sk.bones.map((b,i)=>{const f=BRAWN_F[b.name],c=idx[BRAWN_CH[b.name]];if(!f||c==null)return null;const a=V().subVectors(J[c],J[i]).normalize();return [J[i].x,J[i].y,J[i].z,a.x,a.y,a.z,f-1,BRAWN_LAT[b.name]||0];});
+  g.scene.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body_([ABCD])$/.test(o.name)){brawnGeo(o.geometry,BRAWN_K[o.name.slice(-1)]);}});}
+function brawnGeo(g,k){if(!BRAWN||!BRAWN_ON||!k||g.userData._brawn)return g;g.userData._brawn=k;const P=g.attributes.position,SI=g.attributes.skinIndex,SW=g.attributes.skinWeight;if(!P||!SI||!SW)return g;
+  for(let v=0;v<P.count;v++){const x=P.getX(v),y=P.getY(v),z=P.getZ(v);let dx=0,dy=0,dz=0;
+    for(let j=0;j<4;j++){const w=SW.getComponent(v,j);if(w<1e-3)continue;const B=BRAWN[SI.getComponent(v,j)];if(!B)continue;const rx=x-B[0],ry=y-B[1],rz=z-B[2],t=rx*B[3]+ry*B[4]+rz*B[5],px=rx-B[3]*t,py=ry-B[4]*t,pz=rz-B[5]*t,s=B[6]*k*w;dx+=px*(s+B[7]*k*w);dy+=py*s;dz+=pz*s;}
+    if(dx||dy||dz)P.setXYZ(v,x+dx,y+dy,z+dz);}
+  P.needsUpdate=true;g.computeBoundingSphere();return g;}
 loadFighters(async g=>{
-  GLTF=g;initGuard();await physReady;setTimeout(dynLoad,window.__dynNow?0:1200);
+  GLTF=g;brawnInit(g);initGuard();await physReady;setTimeout(dynLoad,window.__dynNow?0:1200);
   el('physTag').textContent='';el('buildTag').textContent='Build '+BUILD+' · if a friend\'s build number differs from yours, one of you needs to refresh (Ctrl+F5)';showEngine();initFighterCard();showMode();
   {const q=new URLSearchParams(location.search).get('join');let last='';try{last=localStorage.getItem('bloodmoor-lastjoin')||'';}catch(e){}
    el('joinCode').value=(q||last||'').toUpperCase().slice(0,5);if(q&&/^[A-Za-z0-9]{5}$/.test(q))netJoin(q);}
