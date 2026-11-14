@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=272;
+const BUILD=273;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -956,7 +956,7 @@ const lightBudget={n:0,max:12};
 // the Tavern had a dozen lighting every pixel, and putting one out (a table tipped over) or adding one changed the light count, which
 // makes the renderer rebuild every shader, a stall of up to a second. The pool's size never changes, so that never happens
 const LPOOL=[];for(let i=0;i<(TOUCH?4:8);i++){const L=new THREE.PointLight(0xff8a40,0,1,1.7);L.position.set(0,-80,0);scene.add(L);LPOOL.push(L);}
-const _lpS=[];function lightPool(){const c=camera.position;_lpS.length=0;
+const _lpS=[];function lightPool(){bakeFighters();const c=camera.position;_lpS.length=0;
   for(const L of torchLights){if(!L.visible||!(L.intensity>0))continue;const d=L.position.distanceTo(c);L._r=d-L.distance*.5-(L.pri||0);_lpS.push(L);}   // (Build 218) lanterns first: with candles nearer the camera a lantern lost its slot (or got a dimmed one) and burned without lighting anything, worst on phones with 4 slots
   _lpS.sort((a,b)=>a._r-b._r);
   for(let i=0;i<LPOOL.length;i++){const P=LPOOL[i],L=_lpS[i];if(!L){P.intensity=0;continue;}
@@ -4453,7 +4453,8 @@ MATS.gravel=std({map:TX.gravel,normalMap:TX.graveln,normalScale:new THREE.Vector
 /* (Build 270) the Yard rebuilt from scans: plaster over stone for the walls, packed earth with gravel blended in, weathered timber, boards and old tiles */
 /* ==== baked light (Build 272): a map's indirect light, path traced offline (tools/lab/bake) into a grid of ambient cubes and read here in place of the flat sky fill. The sun and its shadows stay live. */
 const NOBAKE=/[?&]nobake/.test(location.search),BAKE_U={uBk:{value:null},uBkOn:{value:0},uBkMin:{value:new THREE.Vector3()},uBkInv:{value:new THREE.Vector3(1,1,1)},uBkNY:{value:24},uBkGain:{value:+((location.search.match(/[?&]bk=([\d.]+)/)||[])[1]||1)},uBkSC:{value:4},uBkOpen:{value:1}},BAKE_TEX={};
-function bakeMat(mat){if(!mat||mat.userData.bk)return mat;mat.userData.bk=1;const prev=mat.onBeforeCompile,pk=mat.customProgramCacheKey;
+const BAKE_SET=new WeakSet(),BAKE_H=new WeakMap();function bakeHash(fn){if(!fn)return 0;let h=BAKE_H.get(fn);if(h==null){const t=fn.toString();h=t.length;for(let i=0;i<t.length;i+=7)h=(h*31+t.charCodeAt(i))|0;BAKE_H.set(fn,h);}return h;}
+function bakeMat(mat){if(!mat||BAKE_SET.has(mat))return mat;BAKE_SET.add(mat);if(!(mat.isMeshStandardMaterial)||(mat.onBeforeCompile&&mat.onBeforeCompile._bk))return mat;const prev=mat.onBeforeCompile,pk=mat.customProgramCacheKey,ph=bakeHash(prev);
   mat.onBeforeCompile=(sh,r)=>{if(prev)prev.call(mat,sh,r);Object.assign(sh.uniforms,BAKE_U);
     sh.vertexShader='varying vec3 vBkW;\n'+sh.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvBkW=(modelMatrix*vec4(transformed,1.)).xyz;');
     sh.fragmentShader=`precision highp sampler3D;uniform sampler3D uBk;uniform float uBkOn,uBkNY,uBkGain,uBkSC,uBkOpen;uniform vec3 uBkMin,uBkInv;varying vec3 vBkW;
@@ -4464,7 +4465,11 @@ vec3 bkIrr(vec3 P,vec3 n){vec3 q=clamp((P-uBkMin)*uBkInv,0.,1.);vec3 w=n*n;retur
   if(uBkOn>.5){vec3 bn=normalize(inverseTransformDirection(geometryNormal,viewMatrix));vec3 bq=(vBkW-uBkMin)*uBkInv;vec3 be=min(bq,1.-bq);bkW=smoothstep(0.,.03,min(be.x,be.z))*step(bq.y,1.15);
     bkE=bkIrr(vBkW+bn*.28,bn)*uBkGain;irradiance=mix(irradiance,bkE,bkW);}`).replace('#include <lights_fragment_maps>',`#include <lights_fragment_maps>
   iblIrradiance*=1.-bkW;radiance*=mix(1.,clamp(dot(bkE,vec3(.3333))/uBkOpen,0.,1.),bkW);`);};
-  mat.customProgramCacheKey=()=>'bk|'+mat.uuid+'|'+(pk?pk.call(mat):'');mat.needsUpdate=true;return mat;}
+  mat.onBeforeCompile._bk=1;mat.customProgramCacheKey=()=>'bk|'+ph+'|'+(pk?pk.call(mat):'');mat.needsUpdate=true;return mat;}
+/* (Build 273) fighters and their weapons take the baked light too, so a man under the hoarding stands in its shade and the ground's light comes up under him. Their materials arrive over time (clothes, hair, armour put on), so the living are looked over once a second, only on a map that has a bake */
+let _bkT=0;function bakeFighters(force){if(NOBAKE||!(MAPS[curMap]&&MAPS[curMap].bake))return;const now=performance.now();if(!force&&now-_bkT<1000)return;_bkT=now;
+  const each=o=>{if(!o.isMesh)return;const m=o.material;if(Array.isArray(m))m.forEach(bakeMat);else bakeMat(m);};
+  for(const f of fighters){if(f.model)f.model.traverse(each);if(f.sword&&f.sword.mesh)f.sword.mesh.traverse(each);}}
 function bakeLoad(b){BAKE_U.uBkOn.value=0;if(!b||NOBAKE)return;const key=mapKey,set=t=>{if(key!==mapKey)return;BAKE_U.uBk.value=t;BAKE_U.uBkMin.value.set(...b.min);BAKE_U.uBkInv.value.set(1/b.size[0],1/b.size[1],1/b.size[2]);BAKE_U.uBkNY.value=b.n[1];BAKE_U.uBkSC.value=b.sc;BAKE_U.uBkOpen.value=b.open||1;BAKE_U.uBkOn.value=1;};
   if(BAKE_TEX[b.f])return set(BAKE_TEX[b.f]);const im=new Image();im.onload=()=>{const [NX,NY,NZ]=b.n,cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(im,0,0);
     const src=cx.getImageData(0,0,im.width,im.height).data,D=6*NY,out=new Uint8Array(NX*NZ*D*4),cols=b.cols||12;
@@ -4818,7 +4823,7 @@ LIGHTS.yard={...LIGHTS.day,hs:0xb9c6d2,hg:0xcabfae,hi:.6,sun:0xfff3e2,si:4.9,coo
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
 const MAPS={
   village:{name:'Bloodmoor village',build:()=>buildWorld(),MAP:74,arena:0,zoneR:80,spawn:[6,52],spacing:11,lootR:66,loot:44,fighters:12,light:'dusk'},
-  arena:{shR:26,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:YARD2?'yard':'day',bake:YARD2?{f:'assets/bake/arena.png',min:[-19.2,.1,-19.2],size:[38.4,9.6,38.4],n:[96,24,96],cols:12,sc:4,open:.65}:null},
+  arena:{shR:YARD2?31:26,shC:YARD2?[0,0]:null,entry:{x:0,z:-15.8,dx:0,dz:1},name:'The Yard',build:()=>buildYard(),MAP:17,arena:0,zoneR:YARD2?26.5:24,spawn:[3,11],spacing:4.5,lootR:12,loot:16,fighters:8,light:YARD2?'yard':'day',bake:YARD2?{f:'assets/bake/arena.png',min:[-19.2,.1,-19.2],size:[38.4,9.6,38.4],n:[96,24,96],cols:12,sc:4,open:.65}:null},
   colosseum:{shR:40,entry:{x:0,z:-31,dx:0,dz:1},name:'The Arena',build:()=>buildArena(),MAP:44,arena:33.4,zoneR:37,spawn:[4,28],spacing:7.5,lootR:30,loot:24,fighters:10,light:'day'},
   tavern:{shR:36,entry:{x:0,z:-10.2,dx:0,dz:1},name:'The Tavern',build:()=>buildTavern(),MAP:16,arena:0,zoneR:30,spawn:[1.5,8],spacing:2.8,lootR:11,ceil:5.6,loot:0,fighters:8,light:'tavern',brawl:true},
   ship:{entry:{x:-17,z:0,dx:1,dz:0},name:'Mutiny',build:()=>buildShip(),MAP:50,arena:0,zoneR:30,spawn:[1,8],spacing:3,lootR:17,loot:18,fighters:8,light:'sea',noRing:true,spot:(i,n,k)=>[(-15+30*(shipSlot(i,n)+.5)/n)+(Math.random()-.5)*(k>100?2:.8),(Math.random()-.5)*(k>100?5:3.2)]},
@@ -11431,7 +11436,7 @@ function startCountdown(){CD_END=simTime+3;cdShown=-1;setTimeout(warmShaders,0);
 // (Build 197) shaders a match will want later are built during the countdown, not mid-fight: a weapon's first blood, another hilt
 // pattern picked up, and every material already in the scene, shown or not. Each one built in the middle of a fight was a hitch,
 // 50–200 ms on a phone.
-function warmShaders(){const t0=performance.now();try{const G=new THREE.Group(),seen=new Set();
+function warmShaders(){const t0=performance.now();bakeFighters(true);try{const G=new THREE.Group(),seen=new Set();
   const sws=[...fighters.map(f=>f.sword),...freeSwords,...loot.map(l=>l&&(l.sword||l.s))].filter(s=>s&&s.mesh&&s.def);
   const sts=new Set(fighters.map(f=>((f.look||{}).ws|0)));
   for(const s of sws){if(seen.has(s.def.id))continue;seen.add(s.def.id);
@@ -12111,7 +12116,8 @@ function frame(now){
   sky.position.copy(camera.position);
   moonSprite.position.copy(camera.position).addScaledVector(moonDir,320);
   const fp=player&&!player.ragdoll?player.pos:camera.position;
-  moon.target.position.set(Math.round(fp.x),0,Math.round(fp.z));moon.position.copy(moon.target.position).addScaledVector(moonDir,70);
+  {const sm=MAPS[curMap];if(sm&&sm.shC)moon.target.position.set(sm.shC[0],0,sm.shC[1]);else moon.target.position.set(Math.round(fp.x),0,Math.round(fp.z));}   /* (Build 273) a small walled map keeps its shadow box still over the whole place: following the player, the far walls' shadows dropped out of it and came and went as he moved */
+  moon.position.copy(moon.target.position).addScaledVector(moonDir,70);
   {const on=state!=='attract'&&!zone.off;zoneMesh.visible=scorch.visible=on;
     zoneMesh.position.set(zone.c.x,0,zone.c.z);fireMesh.scale.set(zone.r,1,zone.r);smokeMesh.scale.set(zone.r,1,zone.r);
     const rep=Math.max(14,Math.round(zone.r*6.283/2.4));fireMat.uniforms.uRep.value=rep;smokeMat.uniforms.uRep.value=Math.max(6,rep*.18);
