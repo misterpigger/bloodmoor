@@ -298,7 +298,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>E</kbd></dt><dd>Take weapons and armor, or strip them off the dead. In the Crypt: open chests (a hand on the lid, then the mouse lifts it), take a lantern (crouch and <kbd>E</kbd> sets it down), pick up what you find, drink from a flask, or leave by the oak door. The way down is the stair behind the door in the far hall. Boards across the passage floor are rotten. Boards nailed across a door come off if you get a hand on them (<kbd>G</kbd>) and haul</dd>
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
       <dt><kbd>R</kbd></dt><dd>With a sword or knife: turn the grip over, point down, and click to stab down, into a man on the ground or over a shoulder. Keep the button down and the blade stays in; let go and it comes out. <kbd>G</kbd> lets go of a blade that's in someone and leaves it there; walk up and press <kbd>E</kbd> to take hold of a blade left in a body, then step back to pull it out.</dd>
-      <dt><kbd>Z</kbd></dt><dd>Put away what's in your hand, or draw what you carry. There are three places: the belt on your off hip, a small thing (a knife, a stone, a skull) on the other hip, and something long slung on your back. Pick up another weapon and the one in your hand goes to a free place by itself; when they're full there's no room, and Z swaps what's in your hand for what's carried. In the Crypt, stones, skulls, long bones and iron candle stands can be picked up with <kbd>E</kbd> and fought with.</dd>
+      <dt><kbd>Z</kbd></dt><dd>Put away what's in your hand, or draw what you carry. There are three places: the belt on your off hip, a knife or dagger on the other hip, and something long slung on your back. Pick up another weapon and the one in your hand goes to a free place by itself; when they're full there's no room, and Z swaps what's in your hand for what's carried. In the Crypt, stones, skulls, long bones and iron candle stands can be taken up in the hand (reach for one with <kbd>G</kbd>) and fought with.</dd>
       <dt><kbd>G</kbd></dt><dd>With a one-handed weapon, hold it and your free hand reaches out and takes hold of what's in front of you: his sword arm (he can't swing it freely), his blade or haft (step back hauling and it comes out of his hand; a bare hand on a blade he draws back gets cut), his collar or head (step back and he's towed off balance and down), a body on the floor. Let go of <kbd>G</kbd> to let go; let go while hauling and he's thrown. Bare-handed, tap it to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Going over an edge? Hold <kbd>G</kbd> and your hands catch it; <kbd>W</kbd> climbs up, let go of <kbd>G</kbd> to drop. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <dl class="tcontrols">
@@ -458,7 +458,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=250;
+const BUILD=251;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
@@ -7370,7 +7370,8 @@ const BODY_CARRY=.72,BODY_K={Spine1:210,Spine2:150,Neck:115,Head:95,HeadTop_End:
 const BODY_MAP={Hips:'Spine1',Spine:'Spine1',Spine1:'Spine1',Spine2:'Spine2',Neck:'Neck',Head:'Head',HeadTop_End:'HeadTop_End'};
 const _bq=new THREE.Quaternion(),_bq2=new THREE.Quaternion();
 const SLOTS=['belt','hip2','back'];
-const beltOk=x=>x&&x.def.kind!=='fist'&&!x.debris&&x.def.id!=='chest'&&!x.rb&&!(x.stuck&&!x.stuck.thrown);
+const beltOk=x=>x&&x.def.kind!=='fist'&&!x.debris&&x.def.id!=='chest'&&!(x.def.improv&&!BELT_IMPROV[x.def.id])&&!x.rb&&!(x.stuck&&!x.stuck.thrown);   // (Build 251, the player: no stones or skulls on the belt) what goes on the belt is gear worth something, not things picked up off the floor
+const BELT_IMPROV={knife:1,cleaver:1};
 const slotsFor=d=>(TWO_HANDED[d.id]||d.len>=1.15)?['back']:d.len<=.5?['hip2','belt']:['belt'];
 const slotFree=(f,d)=>slotsFor(d).find(k=>!f[k]);
 const TWO_HANDED={candlestand:1,longsword:1,greatsword:1,axe:1,spear:1,poleaxe:1,glaive:1,legLimb:1,plank:1,chest:1},twoH=d=>!!TWO_HANDED[d.id];
@@ -9326,7 +9327,7 @@ class Fighter{
   beltKey(){if(NET.mode==='client'||!this.alive||this.ragdoll||this.climb||this.ladCarry||this.cartHold||this.roadHold||this.throwHold||this.throwT>=0)return;const s=this.sword&&this.sword.def.kind!=='fist'?this.sword:null;
     /* (Build 250) three places to carry things: the belt on the off hip, a small thing (a knife, a stone, a skull) on the sword-side hip, and a long or two-handed one across the back.
        When they're full there's no room for more: Z with something in hand swaps it for what's in its place, empty-handed it draws the next thing carried */
-    if(s&&!beltOk(s)){if(this.isPlayer)toast('That won\'t go on a belt');return;}
+    if(s&&!beltOk(s)){if(this.isPlayer)toast('Not worth carrying');return;}
     const nm={belt:'belt',hip2:'hip',back:'back'};
     if(s){const k=slotFree(this,s.def);
       if(k){this.stow(s,k);this.giveFists();if(this.isPlayer)toast(`${s.def.name} at your ${nm[k]}`);return;}
@@ -10926,7 +10927,8 @@ function grabTry(A,arm,itemsOnly){
       const bone=B.bones[c.bb]||B.bones[c.ba];if(!bone)continue;bone.updateWorldMatrix(true,false);
       arm.grab={k:'f',B,bone,loc:arm.pos.clone().applyMatrix4(_m4.copy(bone.matrixWorld).invert())};return;}}
   if(!itemsOnly){
-  if(NET.mode!=='client'&&typeof DYN!=='undefined'&&!(!arm.off&&loot.some(it=>it.kind==='weapon'&&it.sword&&distPointSeg2(arm.pos,it.sword.H,_gq2.copy(it.sword.H).addScaledVector(it.sword.axis,it.sword.len))<.0256))){let best=null,bd=.07;for(const d of DYN){if(!d.body||d.gone||d.lad||d.roadCart)continue;const o=d.obj;if(o.position.distanceToSquared(arm.pos)>2.5)continue;const bb=localBox(o);_t3.copy(arm.pos).applyMatrix4(_xdm4);const dd=bb.distanceToPoint(_t3);if(dd<bd){bd=dd;best=d;}}   // anything loose under the hand
+  if(NET.mode!=='client'&&typeof DYN!=='undefined'&&!(!arm.off&&loot.some(it=>it.kind==='weapon'&&it.sword&&distPointSeg2(arm.pos,it.sword.H,_gq2.copy(it.sword.H).addScaledVector(it.sword.axis,it.sword.len))<.0256))){let best=null,bd=.07;for(const d of DYN){if(!d.body||d.gone||d.lad||d.roadCart)continue;const o=d.obj;if(o.position.distanceToSquared(arm.pos)>2.5)continue;const bb=localBox(o);_t3.copy(arm.pos).applyMatrix4(_xdm4);const dd=bb.distanceToPoint(_t3)-(d.wep?.13:0);if(dd<bd){bd=dd;best=d;}}   /* (Build 251) a small thing on the floor is taken from a little further: the hand can't go right down to it */   // anything loose under the hand
+    if(best&&best.wep&&WEAPONS[best.wep]&&!(A.sword&&A.sword.def.id===best.wep&&!arm.off)){if(!arm.off&&A.fists)A.mainArm=arm===A.fists.R?'R':'L';propWepTake(A,best);return;}   /* (Build 251, the player: picked up by the hand, not E) a hand that closes on a stone, a skull, a bone or a candle stand takes it up as a weapon */
     if(best){best.obj.updateMatrixWorld(true);arm.grab={k:'d',d:best,loc:arm.pos.clone().applyMatrix4(_m4.copy(best.obj.matrixWorld).invert())};return;}}
   }
   const side=arm===A.fists.R?'R':'L';
@@ -11368,7 +11370,6 @@ addEventListener('keydown',e=>{
     if(e.code==='KeyE'&&MILL&&player&&!playerLootCandidate()&&Math.hypot(player.pos.x-MILL.lever.x,player.pos.z-MILL.lever.z)<1.5){if(NET.mode==='client')NET.pick='lever';else millLever(player);}
     else if(e.code==='KeyE'&&player&&ladderUse(player,true)){if(NET.mode==='client')NET.pick='lad';else ladderUse(player);}
     else if(e.code==='KeyE'&&ROAD&&player&&(RUN&&RUN.tug||NET.mode==='client'&&NET.mode2==='team')&&roadUse(player,true)){if(NET.mode==='client')NET.pick='road';else roadUse(player);}
-    else if(e.code==='KeyE'&&player&&player.alive&&!player.ragdoll&&!playerLootCandidate()&&!player.lidLift&&!player.coffinLift&&propWepNear(player)){if(NET.mode!=='client')propWepTake(player,propWepNear(player));}
     else if(e.code==='KeyE'&&CRYPT&&player&&!playerLootCandidate()&&cryptUse(player,true)){cryptUse(player);}
     else if(e.code==='KeyE'&&RAID&&player&&raidUse(player,true)){if(NET.mode==='client')NET.pick='use';else raidUse(player);}
     else if(e.code==='KeyE'&&RAID&&player&&player.alive&&player.sword&&player.sword.def.id==='chest'&&!playerLootCandidate()){if(NET.mode==='client')NET.pick='drop';else player.dropSword();}   // the raid: E sets a strongbox down
@@ -11624,7 +11625,7 @@ function updateHUD(dt){
     if(state==='playing'&&player&&LADDERS.length){const lt=ladderUse(player,true);if(lt)it=lt;}
     if(ROAD&&(RUN&&RUN.tug||NET.mode==='client'&&NET.mode2==='team')&&state==='playing'&&player&&typeof it!=='string'){const rt=roadUse(player,true);if(rt)it=rt;}
     if(RAID&&state==='playing'&&player&&typeof it!=='string'){const rt=raidUse(player,true)||(!it&&player.sword&&player.sword.def.id==='chest'?'Set the strongbox down':null);if(rt)it=rt;}
-    if(state==='playing'&&player&&player.alive&&!player.ragdoll&&!it&&!player.lidLift&&!player.coffinLift){const pw=propWepNear(player);if(pw)it='Take the '+WEAPONS[pw.wep].name.toLowerCase();}
+    if(state==='playing'&&player&&player.alive&&!player.ragdoll&&!it&&!player.lidLift&&!player.coffinLift){const pw=propWepNear(player);if(pw)it=(player.sword&&player.sword.def.kind!=='fist'?'Hold G and reach for the ':'G opens your hands · reach for the ')+WEAPONS[pw.wep].name.toLowerCase();}
     if(CRYPT&&state==='playing'&&player&&!it){const ct=cryptUse(player,true);if(ct)it=ct;}
     if(it!==lastPrompt){lastPrompt=it;hud.prompt.classList.toggle('hide',!it);if(TOUCH){const ub=document.getElementById('tb-use');if(ub)ub.classList.toggle('hot',!!it);}   /* (Build 197) on a phone the Use button glows while there is something to use */
       if(typeof it==='string'){hud.ptext.textContent=it;hud.prompt.style.setProperty('--tier',TIER_CSS[1]);}
