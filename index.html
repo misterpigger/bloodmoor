@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=261;
+const BUILD=262;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3090,7 +3090,7 @@ function lampSelf(f){if(_lsF&&_lsF!==f)lampSelfSet(_lsF,false);if(f)lampSelfSet(
 function lampStep(dt){if(!LAMPS.length){lampSelf(null);if(LAMP_SH){LAMP_SH.intensity=0;LAMP_SH.shadow.autoUpdate=false;}return;}dt=Math.min(dt,.05);let mine=null;const t=performance.now()*.001;
   for(const l of LAMPS){if(l.f&&(!l.f.alive||(l.f.ragdoll&&!l.f.isPlayer)||!fighters.includes(l.f)))lampDrop(l);const f=l.f;   // (Build 214: the player keeps his lantern through a fall; it swings from his belt while he's down. Losing it in every fall left him in the dark at the bottom of the pit)
     if(f){const B=f.bones,off=f.mainArm==='L'?'Right':'Left',sg=f.mainArm==='L'?-1:1,ol=f.limbs[f.mainArm==='L'?'armR':'armL'];
-      {const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}   /* (Build 256, as in Half Sword) with the lantern in the other hand, a two-hander rides on the shoulder while nobody is near; it comes down as soon as there's a fight */
+         /* (Build 256, as in Half Sword) with the lantern in the other hand, a two-hander rides on the shoulder while nobody is near; it comes down as soon as there's a fight */
       l.inHand=!f.ragdoll&&!!(f.sword&&f.sword.def.kind!=='fist'&&(!TWO_HANDED[f.sword.def.id]||f._shW>.5)&&!ol.sev&&!ol.dead&&!(f.clutchT>simTime)&&!f.climb&&!(f.throwHold||f.throwT>=0)&&!f.lidLift&&!f.coffinLift&&!(f.offG&&f.offG.w>.05));   // (Build 219) the free hand goes to a lid or a grab: the lantern hangs at the belt meanwhile
       if(f.isPlayer)f.lampUp=l.inHand&&!!input.rmb&&state==='playing';
       if(l.inHand){const hb=B[off+'Hand'],kb=B[off+'HandMiddle1'];hb.getWorldPosition(_la);if(kb){kb.getWorldPosition(_lb);_la.lerp(_lb,.92);}_la.y-=.012;}   /* (Build 218) the ring sits in the closed fist (it hung from a point 8 cm under an open hand) */
@@ -3444,7 +3444,7 @@ function shroudGeo(rnd,full){const NU=64,NT=full?44:26,TH=full?Math.PI*2:Math.PI
 function shroudMat(){if(MATS.shroud)return MATS.shroud;const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');x.fillStyle='#b9ad92';x.fillRect(0,0,256,256);
   for(let i=0;i<256;i+=2){x.fillStyle=`rgba(80,64,40,${.05+Math.random()*.05})`;x.fillRect(0,i,256,1);x.fillRect(i,0,1,256);}
   for(let k=0;k<14;k++){const px=Math.random()*256,py=Math.random()*256,r=8+Math.random()*30,g=x.createRadialGradient(px,py,0,px,py,r);g.addColorStop(0,`rgba(${70+Math.random()*30|0},${48+Math.random()*16|0},28,${.22+Math.random()*.25})`);g.addColorStop(1,'rgba(70,50,30,0)');x.fillStyle=g;x.fillRect(px-r,py-r,2*r,2*r);}
-  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;MATS.shroud=new THREE.MeshStandardMaterial({map:t,roughness:1,color:0xd9cfbc});return MATS.shroud;}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;MATS.shroud=new THREE.MeshStandardMaterial({map:t,roughness:1,color:0x9a8f7c});return MATS.shroud;}
 function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,CW,CS,DW,DS}=CR;
   if(!MATS.cryptRot){MATS.cryptRot=MATS.woodPale.clone();MATS.cryptRot.color.setHex(0x5e5648);}
   const C=CRYPT={depth:D,plan:PL,stairs:[],down:null,arr:null,coffins:[],swings:[],spikes:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null,finds:[],lampsX:[],cult:null,larder:null,blades:[],lootX:[],tomb:null,gate:null,moon:[],sunks:[]};
@@ -3616,7 +3616,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
   const candleStand=(x,z,lit=true)=>{const g=new THREE.Group(),fx=[],put=(geo,mat,px,py,pz)=>{const m=new THREE.Mesh(geo,mat);m.position.set(px,py,pz);m.castShadow=true;g.add(m);return m;};g.position.set(x,0,z);
     put(lathe([[0,0],[.17,0],[.17,.025],[.03,.07],[.018,1.25],[.04,1.3],[0,1.3]],8),MATS.iron,0,0,0);
     for(let i=0;i<3;i++){const a=i*2.094+R(),lx=Math.cos(a)*.17,lz=Math.sin(a)*.17,ey=1.34+(i-1)*.06;{const L=Math.hypot(.17,ey-.05-1.22),r=put(new THREE.CylinderGeometry(.008,.008,L,4),MATS.iron,lx/2,(1.22+ey-.05)/2,lz/2);r.quaternion.setFromUnitVectors(Y_AXIS,V(lx,ey-.05-1.22,lz).normalize());}
-      put(new THREE.CylinderGeometry(.035,.02,.02,8),MATS.iron,lx,ey-.04,lz);const hh=.1+R()*.12;put(new THREE.CylinderGeometry(.016,.019,hh,6),MATS.wax,lx,ey-.03+hh/2,lz);if(lit){addFlame(x+lx,ey+hh+.02,z+lz,.13,i===0,1.5,3.2,.5,0xffc488);fx.push(flames[flames.length-1]);}}
+      put(new THREE.CylinderGeometry(.035,.02,.02,8),MATS.panDim||(MATS.panDim=new THREE.MeshBasicMaterial({color:0x0d0b09})),lx,ey-.04,lz);const hh=.1+R()*.12;put(new THREE.CylinderGeometry(.016,.019,hh,6),MATS.wax,lx,ey-.03+hh/2,lz);if(lit){addFlame(x+lx,ey+hh+.02,z+lz,.13,i===0,1.5,3.2,.5,0xffc488);fx.push(flames[flames.length-1]);}}
     world.add(g);dynAdd(g,{m:9,auto:'cyl',snd:'metal',noOb:true,grp:'m',fx,wep:'candlestand'});};
   const candleField=(x,z,n=14,rr=.7)=>{for(let i=0;i<n;i++){const a=R()*6.283,d=Math.sqrt(R())*rr,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d,hh=.04+R()*.16;addGeo('wax',new THREE.CylinderGeometry(.014+R()*.008,.02+R()*.008,hh,6),T(px,hh/2,pz));if(R()<.5){const g=new THREE.CircleGeometry(.04+R()*.03,7);g.rotateX(-Math.PI/2);addGeo('wax',g,T(px,.003,pz));}if(R()<.75)addFlame(px,hh+.05,pz,.1,i<2,1.6,3,.4,0xffc488);}};
   const moonShaft=(x,z,H,rr=.55)=>{const m=new THREE.Mesh(new THREE.CircleGeometry(rr,18),MATS.cryptSky);m.rotation.x=Math.PI/2;m.position.set(x,H-.014,z);world.add(m);for(let i=-2;i<=2;i++){addGeo('iron',boxUV(2*rr,.03,.03,1),T(x,H-.03,z+i*rr*.4));addGeo('iron',boxUV(.03,.03,2*rr,1),T(x+i*rr*.4,H-.03,z));}{const g=new THREE.TorusGeometry(rr+.03,.05,5,18);g.rotateX(Math.PI/2);addGeo('cryptVault',g,T(x,H-.02,z));}
@@ -4479,11 +4479,11 @@ weather(MATS.meadow,'meadow');
 const PHOTO={ground:{mats:{gravel:{rep:4,ns:1.3,col:0xece6dc}}},
   plaster:{mats:{plaster0:{rep:.75,ns:1.1,col:0xf4ecdc},plaster1:{rep:.75,ns:1.1,col:0xf0d8ae},plaster2:{rep:.75,ns:1.1,col:0xd8d2c6}}},   // village houses (rep: the geometry's UV unit / the scan's real size)
   timber:{mats:{beam:{rep:3,ns:1.2,col:0x6a5644},wood:{rep:2,ns:1.1,col:0xb09a82},woodPale:{rep:2,ns:1.1,col:0xd2c4b0},propWood:{rep:2,ns:1.1,col:0xa88a6c},palisade:{rep:3,ns:1.2,col:0x6e5c4c}}},thatch:{mats:{thatch:{rep:1.5,ns:1.4,col:0xe6c088},cryptStraw:{rep:1,ns:1.6,col:0xf0d088}}},
-  ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
+  ashlar:{mats:{ashlar:{rep:.67,ns:1.3,col:0xf2e6d2},cryptWall:{rep:.62,ns:.8,col:0x8e8578},cryptVault:{rep:.7,ns:.75,col:0x847c70},towerStone:{rep:.67,ns:1.3,col:0xc8bcaa},towerQuoin:{rep:.67,ns:1.3,col:0xf4ece0}}},
   slate:{mats:{slate:{rep:.8,ns:1.3,col:0x8e949c},towerSlate:{rep:.8,ns:1.3,col:0x8e949c}}},
   floor:{mats:{floorPlank:{rep:1,ns:1.3,col:0xf0e0d0}}},boards:{mats:{boards:{rep:1,ns:1.2,col:0xe0c8b0},woodLight:{rep:1,ns:1.2,col:0xf4e2cc}}},
   grass:{mats:{villageGround:{rep:3.5,ns:1,col:0xb4c496}}},meadow:{mats:{meadow:{rep:2.6,ns:1,col:0x7ca65a}}},bark:{mats:{bark:{rep:1,ns:1.4,col:0xb8ac9c}}},
-  rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptVault:{rep:1.9,ns:.85,col:0x9c968c},cryptWall:{rep:1.75,ns:.9,col:0xa29c92},cryptFloor:{rep:1.25,ns:.8,col:0x6f695f},cryptEarth:{rep:1.4,ns:.9,col:0x463e34}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
+  rooftile:{mats:{tile:{rep:.6,ns:1.2,col:0xf0e0d8}}},stone:{mats:{stone:{rep:1.2,ns:1.3,col:0xe8e0d4},cryptFloor:{rep:.62,ns:.75,col:0x6f695f},cryptEarth:{rep:1.4,ns:.9,col:0x463e34}}},cobble:{mats:{cobble:{rep:1.47,ns:1.4,col:0xe4ddd2}}},wall:{mats:{lime:{rep:2.2,ns:1.2},limeDark:{rep:2.2,ns:1.2,col:0x9a907f},stoneLight:{rep:1.4,ns:1.3,col:0xd6c8ae}}},ground2:{mats:{sand:{rep:2.4,ns:1}}}};
 function loadPhotoTex(){if(window.__noPhoto)return;const L=new THREE.TextureLoader();
   for(const [role,o] of Object.entries(PHOTO)){const get=(sfx,srgb)=>new Promise((ok,no)=>L.load(`assets/tex/${role}_${sfx}.jpg`,t=>{if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXANI;ok(t);},undefined,no));
     Promise.all([get('d',true),get('n',false),get('orm',false)]).then(([d,n,m])=>{for(const [mk,c] of Object.entries(o.mats)){const M=MATS[mk];if(!M)continue;
@@ -4745,7 +4745,7 @@ LIGHTS.tavern={fog:0x15120f,dens:.01,top:0x15120f,mid:0x15120f,hor:0x15120f,glow
 LIGHTS.mill={fog:0x2c261e,dens:.008,top:0x3f6fae,mid:0x8fb0cf,hor:0xe2d6bf,glow:0xfff0cc,glowDir:[.3,.55,-.75],stars:0,hs:0xb0a48e,hg:0x5a4a36,hi:1.15,sun:0xffdcae,si:5,dir:[.3,.5,-.8],moon:false,exp:1.3,cool:.7,halo:.25,shR:16,shMap:4096,
   env:[[0,'#3a3a3c'],[.42,'#6a6058'],[.5,'#8a7a64'],[.55,'#4a3c2c'],[1,'#241c14']]};
 // (Build 207) under the church: no sun at all. What you see is what a flame reaches
-LIGHTS.crypt={fog:0x090706,dens:.03,top:0x050404,mid:0x050404,hor:0x050404,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x566482,hg:0x15171c,hi:.055,sun:0x000000,si:0,dir:[.2,.9,.2],moon:false,exp:1.3,cool:.62,halo:.16,shR:10,shMap:1024,
+LIGHTS.crypt={fog:0x1a120b,dens:.042,top:0x050404,mid:0x050404,hor:0x050404,glow:0x000000,glowDir:[0,1,0],stars:0,hs:0x566482,hg:0x15171c,hi:.055,sun:0x000000,si:0,dir:[.2,.9,.2],moon:false,exp:1.3,cool:.62,halo:.16,shR:10,shMap:1024,
   env:[[0,'#060505'],[.5,'#100c0a'],[1,'#050404']]};
 LIGHTS.cryptDeep={...LIGHTS.crypt,fog:0x0a0e16,dens:.036,hs:0x5c6a86,hg:0x12141a,hi:.065,cool:.9,env:[[0,'#06080c'],[.5,'#0c1018'],[1,'#040506']]};
 for(const k in LIGHTS)LIGHTS[k].envTex=makeEnv(LIGHTS[k].env);
@@ -5795,7 +5795,7 @@ function dressMH(model,look,pal,mats){
     const sm=new THREE.SkinnedMesh(gg,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}
   for(let i=nKids0;i<body.parent.children.length;i++)body.parent.children[i].userData.shellGarb=true;   // (the body-grown garment: the stand-in until the draped one arrives)
   {const hz=(o>=1||!!window.__garb)&&!look.bl;   // joined hose under every garment (Build 126: the shirt had braies)
-    if(!hz)cloth(C.braies,false,.003,0xfffaf0);   /* (Build 237) drawers are plain linen, not the coat's colours */
+    if(!hz)cloth(C.braies,false,.003,0xc4b69c);   /* (Build 237) drawers are plain linen, not the coat's colours */
     else{const W=WOOLT.wool,mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.55,.55),roughness:.94});tintMaterial(mt,0,pal,mats);clothFolds(mt,.0016);mt.customProgramCacheKey=()=>'bm-hose';if((look.o|0)<2){mt.userData.noParty=true;mt.userData.U.uParty.value=0;}   /* (Build 205) parti-coloured hose go with a parti-coloured coat, not with a plain shirt */   /* (Build 202) hose are wool, not the shirt's linen */
       const sm=new THREE.SkinnedMesh((look.ft|0)?C.hoseF:C.hose,mt);sm.bind(body.skeleton,body.bindMatrix);sm.castShadow=true;sm.receiveShadow=true;sm.frustumCulled=false;sm.name='MH_Cloth';body.parent.add(sm);}}
   // head covering: a linen coif snug over the skull and ears, or a dyed hood over head and shoulders (it comes off under a helmet)
@@ -9000,7 +9000,7 @@ class Fighter{
     D.drop=Math.min(.75,D.drop+drop);}
   cacheBody(){const B=this.bones;this._cbPos=(this._cbPos||V()).copy(this.pos);B.Spine2.getWorldPosition(this.chest);B.RightArm.getWorldPosition(this.shR);B.LeftArm.getWorldPosition(this.shL);B.Head.getWorldPosition(this.headPos);}
   frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p),pu=Math.max(p,-.3),cu=Math.cos(pu),su=Math.sin(pu);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cu).addScaledVector(_f,-su);}   // looking down lowers the guard but never tips it back behind the body
-  handTarget(out){this.handTarget0(out);const w=this._shW||0;if(w>.01&&this.lamp){const sm=this.mainArm==='L'?this.shL:this.shR,sg=this.mainArm==='L'?-1:1;this.fwd(_shF);this.right(_shR);_shP.copy(sm).addScaledVector(_shF,.26).addScaledVector(_shR,-.17*sg).addScaledVector(Y_AXIS,-.3);const e=w*w*(3-2*w);out.lerp(_shP,e);}return out;}
+  handTarget(out){this.handTarget0(out);const w=this._shW||0;if(w>.01){const sm=this.mainArm==='L'?this.shL:this.shR,sg=this.mainArm==='L'?-1:1;this.fwd(_shF);this.right(_shR);_shP.copy(sm).addScaledVector(_shF,.32).addScaledVector(_shR,-.14*sg).addScaledVector(Y_AXIS,-.17);const e=w*w*(3-2*w);out.lerp(_shP,e);}return out;}
   handTarget0(out){
     const f=_t2,u=_t3;this.frame(f,u);
     const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
@@ -9073,7 +9073,7 @@ class Fighter{
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
   guideDir_(hand,out){this._ng=1;const r=this.guideDir(hand,out);this._ng=0;return r;}
-  guideDir(hand,out){this.guideDir0(hand,out);const w=this._shW||0;if(w>.01&&this.lamp){this.fwd(_shF);this.right(_shR);const sg=this.mainArm==='L'?-1:1;const sm=this.mainArm==='L'?this.shL:this.shR;if(hand&&sm){_shP.copy(sm).addScaledVector(Y_AXIS,.07).addScaledVector(_shR,.07*sg).addScaledVector(_shF,-.06).sub(hand);if(_shP.lengthSq()<.0025)_shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.6);_shP.normalize();}else _shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.5).addScaledVector(_shR,.2*sg).normalize();   /* along the line from the hand over the sword shoulder, so the blade lies on it and clears the head */const e=w*w*(3-2*w);out.lerp(_shP,e).normalize();}return out;}
+  guideDir(hand,out){this.guideDir0(hand,out);const w=this._shW||0;if(w>.01){this.fwd(_shF);this.right(_shR);const sg=this.mainArm==='L'?-1:1;const sm=this.mainArm==='L'?this.shL:this.shR;if(hand&&sm){_shP.copy(sm).addScaledVector(Y_AXIS,.08).addScaledVector(_shR,.06*sg).addScaledVector(_shF,-.14).sub(hand);if(_shP.lengthSq()<.0025)_shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.6);_shP.normalize();}else _shP.copy(_shF).multiplyScalar(-1).addScaledVector(Y_AXIS,.5).addScaledVector(_shR,.2*sg).normalize();   /* along the line from the hand over the sword shoulder, so the blade lies on it and clears the head */const e=w*w*(3-2*w);out.lerp(_shP,e).normalize();}return out;}
   guideDir0(hand,out){if(!_spR)_spR=V();
     const f=_t2,u=_t3;this.frame(f,u);
     if(this.sword&&(this.throwHold||this.throwT>=0)){
@@ -9722,6 +9722,7 @@ class Fighter{
     if(this.hp<(this._hp0??this.hp))this._hurtAt=simTime;this._hp0=this.hp;
     {const threat=this._foeD<6||simTime-(this._hurtAt??-99)<3||(this.isPlayer&&(input.lmb||input.stab))||simTime-(this._aimAt??-99)<1.2||(this.revW||0)>.05||(this.sword&&this.sword.stuck&&!this.sword.stuck.thrown)||(!!this.sword&&(this.commit||this.thrust))||this.throwHold||this.throwT>=0||!!this.grab;
       this.calmW=lerp(this.calmW??0,threat||!this.alive||this.ragdoll?0:1,1-Math.exp(-(threat?7:1.4)*dt));}
+    {const f=this;{const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.sword.def.improv&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}}   /* (Build 262, from the Half Sword crypt footage) any two-hander rides on the shoulder while you're at ease, lantern or not (Build 256 did it only with a lantern); the off hand lets go and hangs */
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
     const spS=simTime<(this._lgT||0)?0:sp;   /* (Build 149) a lunge keeps the fighting stance: the stance easing off as the body sped up drew the hips back 10 cm just as the thrust went out */
     this.stanceAmt=lerp(this.stanceAmt||0,fight?(spS<.3?.26:spS<1.6?.26*(1-(spS-.3)/1.3)+.04:.04)*ease:0,1-Math.exp(-6*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
