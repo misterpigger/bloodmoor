@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=265;
+const BUILD=266;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5245,7 +5245,7 @@ function cleanLook(l){if(!l||typeof l!=='object')return null;const n=(v,max)=>Nu
 function randomLook(){const r=Math.random(),q=()=>Math.random();return {o:r<.18?0:r<.45?1:r<.72?2:r<.88?3:4,h:[0,1,2,2,3,4,4,5][(q()*8)|0],bd:[0,1,1,2,3,4][(q()*6)|0],hc:q()<.12?4:[0,1,2,3,5,6,7][(q()*7)|0],sk:(q()*6)|0,b:(q()*4)|0,hd:q()<.65?0:q()<.5?1:2,ft:q()<.25?0:q()<.5?1:2,mk:q()<.9?0:1,tr:q()<.7?0:q()<.7?1:3,pt:0,q:q()<.1?1:q()<.85?0:2,
   af:q()<.65?0:q()<.6?1:2,sc:q()<.8?0:1+((q()*4)|0),pl:q()<.94?0:1+((q()*2)|0),wf:q()<.7?0:q()<.6?1:3,wg:(q()*6)|0,ws:(q()*3)|0};}
 const GAITW=!/[?&]nogaitw/.test(location.search),GAIT_P=Object.assign({wide:.065,sway:.02,dip:.022,yaw:.11,roll:.045},(()=>{try{return JSON.parse(decodeURIComponent((location.search.match(/[?&]gaitp=([^&]+)/)||[])[1]||'{}'));}catch(e){return {};}})());   // (Build 265) the walk's weight: feet apart (m a side), hip sway (m), dip (m), hip turn and roll (rad); ?gaitp={json}, ?nogaitw
-const BL_N=10;
+const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams(location.search).get('ls0')||.92),+(new URLSearchParams(location.search).get('ls1')||.985)],STEP_ST=+(new URLSearchParams(location.search).get('stepst')||.15),STEP_SL=+(new URLSearchParams(location.search).get('stepsl')||1);const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
   // blood on the body: every wound wets the skin round it and runs down from it, further the longer it bleeds; cloth soaks dark.
@@ -9733,7 +9733,7 @@ class Fighter{
     {const f=this;{const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.sword.def.improv&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}}   /* (Build 262, from the Half Sword crypt footage) any two-hander rides on the shoulder while you're at ease, lantern or not (Build 256 did it only with a lantern); the off hand lets go and hangs */
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
     const spS=simTime<(this._lgT||0)?0:sp;   /* (Build 149) a lunge keeps the fighting stance: the stance easing off as the body sped up drew the hips back 10 cm just as the thrust went out */
-    this.stanceAmt=lerp(this.stanceAmt||0,fight?(spS<.3?.26:spS<1.6?.26*(1-(spS-.3)/1.3)+.04:.04)*ease:0,1-Math.exp(-6*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
+    this.stanceAmt=lerp(this.stanceAmt||0,fight?Math.max(spS<.3?.26:spS<1.6?.26*(1-(spS-.3)/1.3)+.04:.04,STEP_ST*(this.sideW||0))*ease:0,1-Math.exp(-6*dt));   // (Build 131) shallower, and it eases off from a standstill: stepping about in the deep crouch looked like a man with his hose round his ankles   // (Build 129) on the move a fighter walks tall, knees only a little bent: the half-crouch carried into the walk looked like a squat
     // a hurt leg hitches the gait: the body drops each time weight goes onto it
     const lgL=this.limbF('legL'),lgR=this.limbF('legR'),lg=Math.max(lgL,lgR);let limp=0;
     if(lg>.2&&Math.hypot(this.vel.x,this.vel.z)>.3&&this.acts){const A=this.acts,ph=A.walk.time/A.walk.getClip().duration;limp=lg*.5*Math.pow(Math.max(0,Math.sin((ph+(lgL>lgR?0:.5))*6.283)),2);}
@@ -9853,9 +9853,9 @@ class Fighter{
       const lead=Math.min(.22,sp*.11);   // on the move each step reaches ahead of the body, the way a real step lands where you'll be
       if(this.gaitW<=.5)for(const s in feet){const want=feet[s];if(sp>.3)want.addScaledVector(this.vel,lead/sp*.9);let p=PL[s];
         if(!p||pw<.02){p=PL[s]={at:want.clone(),from:want.clone(),t:1};}
-        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),th=(this.isPlayer?.13:.16)+sp*.06;
+        else{const o=PL[s==='Left'?'Right':'Left'],d=Math.hypot(want.x-p.at.x,want.z-p.at.z),sdw=(this.sideW||0)*STEP_SL,th=(this.isPlayer?.13:.16)+sp*.06+.07*sdw;   /* (Build 266) stepping sideways or back, the steps are longer and take their time (they were a 0.13 s shuffle) */
           if(p.t>=1&&d>th&&(!o||o.t>=1||d>th*2.2)){p.from.copy(p.at);p.t=0;}
-          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02));
+          if(p.t<1){p.t=Math.min(1,p.t+dt/(.13+.05*Math.min(1,d*3)-Math.min(.04,sp*.015)+.07*sdw));const u=p.t,e=u*u*(3-2*u);p.at.lerpVectors(p.from,want,e);p.lift=Math.sin(Math.PI*u)*(.06+Math.min(.04,sp*.02)+.025*sdw);
             if(p.t>=1&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(want,this.isPlayer?.18:.12,false,this);}
           else{p.at.y=want.y;p.lift=0;}
           feet[s]=V().lerpVectors(want,_t2.copy(p.at).setY(p.at.y+(p.lift||0)),pw);}}
@@ -9876,7 +9876,7 @@ class Fighter{
         if(s==='Right'&&kk>0){B.RightUpLeg.getWorldPosition(_t2);_t3.copy(_t2).addScaledVector(_f,.2+.62*kk);_t3.y=Math.max(this.pos.y+.1,_t2.y-.8+.6*kk);/* Build 142: eased in and out from the foot's own place (the leg jumped up to 50 cm in one frame as a kick began and ended) */{const rl=(this.legLen[0]+this.legLen[1])*.94;_kt4.subVectors(_t3,_t2);if(_kt4.length()>rl)_t3.copy(_t2).addScaledVector(_kt4.normalize(),rl);}/* kept short of a locked knee, where the leg IK flips */const kw=clamp(kk*1.4,0,1),ke=kw*kw*(3-2*kw);tgt=_t3.lerp(tgt,1-ke);}
         _pl.copy(tgt).addScaledVector(_f,.9).addScaledVector(Y_AXIS,.4-.7*pnw);if(pnw>0)_pl.addScaledVector(_r,(s==='Right'?1:-1)*.35*pnw);
         const flw=this.footP!=null&&!(s==='Right'&&kk>=.72)?(s==='Right'?1-clamp(kk*1.4,0,1):1)*clamp(1-((PL[s]&&PL[s].lift)||0)/.05,0,1)*(1-(this.gaitW||0))*clamp(1-(tgt.y-groundY(tgt.x,tgt.z,tgt.y+.3)-this.ankY-.03)/.06,0,1):0;   /* only a foot that's down: a walking clip's swinging foot keeps its own angle */if(flw>0){if(tgt!==_t3)tgt=_t3.copy(tgt);tgt.y-=.03*flw;}   // a flat foot puts the ankle lower than the heel-up one did
-        ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1]);
+        ik2(B[s+'UpLeg'],B[s+'Leg'],tgt,_pl,this.legLen[0],this.legLen[1],true);
         // the sole goes flat on the ground: the clip's foot kept its angle to the shin, so the bent-knee stance (shin tipped forward)
         // pointed the toes into the ground and everyone stood on tiptoe (sole tilted heel-up 29-46°, toes 1-7 cm under the ground). The bind pose itself has the heel 20° up (ankle to toe base 39°), so flat is 0.35 rad less
         if(flw>0)footFlat(B[s+'Foot'],B[s+'ToeBase'],this.footP-.35,flw);
@@ -10281,9 +10281,10 @@ function gripBest(f,key,B,side,grip,E,A,pole,lens,curl,wrap,dt){
     tk.t=bt;best=bt;}
   const rate=s0.p>.004?6:2.5;th+=clamp(best-th,-rate*dt,rate*dt);st[key]=th;reset();rot(th);_gripBend=0;const res=gripHand(B,side,grip,E,A,_gbP,lens,curl,wrap);(f._gb||(f._gb={}))[key]=_gripBend;return res;}
 
-function ik2(up,lo,target,pole,a,c){
+function ik2(up,lo,target,pole,a,c,soft){
   up.updateWorldMatrix(true,false);_iS2.setFromMatrixPosition(up.matrixWorld);
-  _iD2.subVectors(target,_iS2);let d=_iD2.length();if(d<1e-5)return;const dd=clamp(d,.08,a+c-.002);_iD2.multiplyScalar(1/d);d=dd;
+  _iD2.subVectors(target,_iS2);let d=_iD2.length();if(d<1e-5)return;let dd=clamp(d,.08,a+c-.002);
+  if(soft&&LEG_SOFT){const L=a+c,d0=L*LEG_SOFT[0],d1=L*LEG_SOFT[1];if(d>d0)dd=d0+(d1-d0)*(1-Math.exp(-(d-d0)/(d1-d0)));}   /* (Build 266) a leg never snaps dead straight: near full reach the knee keeps a little bend and the foot gives instead */_iD2.multiplyScalar(1/d);d=dd;
   _iT2.copy(_iS2).addScaledVector(_iD2,d);
   const cosA=clamp((a*a+d*d-c*c)/(2*a*d),-1,1),sinA=Math.sqrt(1-cosA*cosA);
   _iP2.subVectors(pole,_iS2);_iP2.addScaledVector(_iD2,-_iP2.dot(_iD2));if(_iP2.lengthSq()<1e-8)_iP2.set(0,0,1);_iP2.normalize();
