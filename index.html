@@ -176,6 +176,7 @@ body.sim #minimap,body.sim #feed,body.sim #grip,body.sim #topc,body.sim #cross{d
 @keyframes blink{50%{opacity:.35}}
 #prompt{position:absolute;left:50%;top:72%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:7px 14px 8px;background:rgba(7,8,12,.62);border-left:3px solid var(--tier,#ecdcb8);font-size:16px;color:var(--parch);white-space:nowrap}
 #prompt kbd{font-size:13px}
+#inv{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:none;pointer-events:none;z-index:7;text-align:center;font:13px Georgia,serif;color:#e8dcc0}body.showinv #inv{display:block}#inv .invr{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:460px;padding:18px;border-radius:50%;background:radial-gradient(circle,rgba(40,30,22,.9),rgba(20,14,10,.75) 70%,rgba(0,0,0,0) 72%);min-width:260px;min-height:220px;align-content:center}#inv .invs{width:64px;height:64px;border-radius:50%;background:rgba(90,70,50,.6);border:2px solid #8a6d44;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px}#inv .invs small{font-size:9px;line-height:1}#inv .invc{margin-top:6px;text-shadow:0 1px 2px #000}#inv .inve{opacity:.7}
 #cfade{position:absolute;inset:0;pointer-events:none;opacity:0;background:#000;transition:opacity .5s;z-index:6}#cfade.on{opacity:1}
 #blind{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 45%,rgba(60,0,0,0) 18%,rgba(70,4,2,.75) 55%,rgba(20,0,0,.97) 85%);transition:opacity .3s}
 #lore{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-.6deg);width:min(430px,82vw);padding:26px 30px 18px;background:linear-gradient(160deg,#d8c79c,#c2ad7c 60%,#b39c6c);color:#2a2014;font-family:Georgia,serif;box-shadow:0 12px 40px rgba(0,0,0,.7),inset 0 0 40px rgba(90,60,20,.35);opacity:0;pointer-events:none;transition:opacity .25s;z-index:30}#lore.on{opacity:1}#lore b{display:block;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#5a3a1c;margin-bottom:10px}#lore p{font-size:17px;line-height:1.5;margin:0 0 14px;font-style:italic}#lore i{font-size:12px;color:#6a5030}#lore span{float:right;font-size:12px;color:#6a5030}
@@ -290,7 +291,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>LMB</kbd></dt><dd>Hold while you swing for full power. Big, fast mouse sweeps hit hardest.</dd>
       <dt><kbd>RMB</kbd></dt><dd>Hold to look around freely. Carrying a lantern in your off hand, it also lifts the lantern high</dd>
       <dt><kbd>Wheel</kbd></dt><dd>Swords and spears: scroll to thrust; the point stays on line while you keep scrolling. Axes and maces: scroll changes your reach.</dd>
-      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch · <kbd>Space</kbd> jump and vault</dd>
+      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> tap to crouch, hold to lie flat (C again to get up) · <kbd>Space</kbd> jump and vault · <kbd>I</kbd> hold to see your pack in the Crypt</dd>
       <dt><kbd>F</kbd> <kbd>Q</kbd></dt><dd>Kick · hold Q to wind up over the shoulder, let go to throw from that hand</dd>
       <dt><kbd>Alt</kbd> <kbd>X</kbd></dt><dd>Hold Alt to thrust (the same as scrolling forward, held) · X to change hands with a one-handed weapon</dd>
       <dt><kbd>V</kbd> <kbd>M</kbd> <kbd>Tab</kbd></dt><dd>Close, wide or first-person view · music on/off · hold to look over your wounds</dd>
@@ -401,6 +402,7 @@ body.touch #prompt{top:auto;bottom:24%}
   <div id="toast" role="status" aria-live="polite"></div>
   <div id="blind"></div>
   <div id="cfade"></div>
+  <div id="inv"></div>
   <div id="lore"><b></b><p></p><i></i><span>Move to put it down</span></div>
   <div id="bark"></div>
   <div id="touch"><div id="tjoyhint"></div><div id="tjoy"><i></i></div><div id="tswipe">drag to move your sword<br>swipe fast to swing</div>
@@ -458,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=255;
+const BUILD=256;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:1,B:.75,C:1.2,D:.6};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3088,7 +3090,8 @@ function lampSelf(f){if(_lsF&&_lsF!==f)lampSelfSet(_lsF,false);if(f)lampSelfSet(
 function lampStep(dt){if(!LAMPS.length){lampSelf(null);if(LAMP_SH){LAMP_SH.intensity=0;LAMP_SH.shadow.autoUpdate=false;}return;}dt=Math.min(dt,.05);let mine=null;const t=performance.now()*.001;
   for(const l of LAMPS){if(l.f&&(!l.f.alive||(l.f.ragdoll&&!l.f.isPlayer)||!fighters.includes(l.f)))lampDrop(l);const f=l.f;   // (Build 214: the player keeps his lantern through a fall; it swings from his belt while he's down. Losing it in every fall left him in the dark at the bottom of the pit)
     if(f){const B=f.bones,off=f.mainArm==='L'?'Right':'Left',sg=f.mainArm==='L'?-1:1,ol=f.limbs[f.mainArm==='L'?'armR':'armL'];
-      l.inHand=!f.ragdoll&&!!(f.sword&&f.sword.def.kind!=='fist'&&!TWO_HANDED[f.sword.def.id]&&!ol.sev&&!ol.dead&&!(f.clutchT>simTime)&&!f.climb&&!(f.throwHold||f.throwT>=0)&&!f.lidLift&&!f.coffinLift&&!(f.offG&&f.offG.w>.05));   // (Build 219) the free hand goes to a lid or a grab: the lantern hangs at the belt meanwhile
+      {const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}   /* (Build 256, as in Half Sword) with the lantern in the other hand, a two-hander rides on the shoulder while nobody is near; it comes down as soon as there's a fight */
+      l.inHand=!f.ragdoll&&!!(f.sword&&f.sword.def.kind!=='fist'&&(!TWO_HANDED[f.sword.def.id]||f._shW>.5)&&!ol.sev&&!ol.dead&&!(f.clutchT>simTime)&&!f.climb&&!(f.throwHold||f.throwT>=0)&&!f.lidLift&&!f.coffinLift&&!(f.offG&&f.offG.w>.05));   // (Build 219) the free hand goes to a lid or a grab: the lantern hangs at the belt meanwhile
       if(f.isPlayer)f.lampUp=l.inHand&&!!input.rmb&&state==='playing';
       if(l.inHand){const hb=B[off+'Hand'],kb=B[off+'HandMiddle1'];hb.getWorldPosition(_la);if(kb){kb.getWorldPosition(_lb);_la.lerp(_lb,.92);}_la.y-=.012;}   /* (Build 218) the ring sits in the closed fist (it hung from a point 8 cm under an open hand) */
       else{   /* (Build 230: this else had been swallowed by the comment above since Build 218, so a lantern not in the hand hung from wherever the last one was: with fists out it vanished) */B.Hips.getWorldPosition(_la);f.right(_lb);_la.addScaledVector(_lb,-.21*sg);f.fwd(_lb);_la.addScaledVector(_lb,.07);_la.y-=.02;}
@@ -3207,13 +3210,30 @@ function wearGarb(f,patch){const worn=['head','body','arms','legs'].map(k=>f.arm
   for(const w of f.wounds||[])if(w&&w.removeFromParent)w.removeFromParent();window.__relook(f,look);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.wounds=[];if(f.scratches)f.scratches.length=0;f.ar=null;f._calm=null;f.helmet=-1;
   for(const d of worn)f.equip(d);if(f.entrant)f.entrant.look=look;f.model.updateMatrixWorld(true);}
 function findDrop(kind,x,y,z){const C=CRYPT;if(!C)return;const m=findMesh(kind);m.position.set(x,y,z);m.rotation.y=Math.random()*6.283;if(kind==='key')m.scale.setScalar(1.7);   /* (Build 246) a big brass key you can see on a dark floor (it was a 10 cm black one) */world.add(m);C.finds.push({kind,x,y,z,m});}
+const HIT_DMG=+(new URLSearchParams(location.search).get('hitdmg')||1.3),HIT_REACT=!/[?&]noreact/.test(location.search);
+const _shF=new THREE.Vector3(),_shR=new THREE.Vector3(),_shP=new THREE.Vector3();
+const PULLED_W={cudgel:1,pitchfork:1,billhook:1,rustsword:1,knightsword:1,giltmace:1};
+function offerPack(f){const O=CRYPT&&CRYPT.offer,R=RUN;if(!O||O.st!=='open'||!R||!R.inv||!R.inv.length)return;R.inv.sort((a,b)=>b.v-a.v);const q=R.inv.shift();invUI();
+  O.val=q.v*3.2*rand(.85,1.2);if(Math.random()<.1)O.val=0;O.st='shut';O.t=simTime+rand(9,14);O.out=[];sThud(V(O.x,.75,O.z),.6);toast(`You lay ${FINDS[q.kind][0]} in the box and close the lid`);}
+function offerGive(f){const O=CRYPT&&CRYPT.offer,s=f.sword;if(!O||O.st!=='open'||!s||s.def.kind==='fist')return;const id=s.def.id;
+  let v=Math.max((CAREER_SHOP[id]&&CAREER_SHOP[id][0])||0,s.def.improv?0:25+(s.def.tier||0)*30);if(s.def.improv&&!BELT_IMPROV[id])v=0;v*=rand(.8,1.25);if(Math.random()<.15)v=0;   /* now and then it takes and gives nothing, as in the recording */
+  f.dropSword();const it=loot.find(i=>i.sword===s);if(it)removeLoot(it);const k=freeSwords.indexOf(s);if(k>=0)freeSwords.splice(k,1);s.dispose&&s.dispose();
+  O.val=v;O.st='shut';O.t=simTime+rand(9,14);O.out=[];sThud(V(O.x,.75,O.z),.6);toast('You lay it in the box and close the lid');}
+function offerStep(){const O=CRYPT&&CRYPT.offer;if(!O||O.st!=='shut'||simTime<O.t)return;O.st='open';const v=O.val,y=.74,at=(dx,dz)=>[O.x+Math.cos(O.ry)*dx+Math.sin(O.ry)*dz,O.z-Math.sin(O.ry)*dx+Math.cos(O.ry)*dz];
+  const give=(k,dx)=>{const [px,pz]=at(dx,0);findDrop(k,px,y,pz);O.out.push(CRYPT.finds[CRYPT.finds.length-1]);};sfx('pickup',null,.5,.7,0,false);
+  if(v<=0){toast('The box gives nothing back');return;}
+  if(v<45)give('bread',0);else if(v<95){give('flask',-.15);if(Math.random()<.5)give('bread',.18);}else if(v<170){give('flask',-.2);give('purse',.2);}
+  else{give('flask',-.25);give('reliquary',.05);const ids=Object.keys(CAREER_SHOP).filter(k=>WEAPONS[k]&&!PULLED_W[k]&&CAREER_SHOP[k][0]>v*.7&&CAREER_SHOP[k][0]<v*1.7);if(ids.length){const [px,pz]=at(0,.85);spawnWeaponLoot(WEAPONS[ids[(Math.random()*ids.length)|0]],px,pz);}}
+  toast('The lid lifts');}
 function findTake(q){const R=RUN,F=FINDS[q.kind];if(!R||!F||q.gone)return;
   const F2=F[2];if(F2){if(player.ragdoll||player.climb)return;q.gone=true;if(q.m.parent)q.m.parent.remove(q.m);sfx('pickup',null,.5,.8,0,false);wearGarb(player,F2);toast(`You put on ${F[0].replace(/^a pair of /,'the ').replace(/^a /,'the ')}`);return;}
   if(q.kind==='key'){q.gone=true;if(q.m.parent)q.m.parent.remove(q.m);R.keys=(R.keys||0)+1;sfx('pickup',null,.6,1.5,0,false);toast('A key');return;}
   q.gone=true;if(q.m.parent)q.m.parent.remove(q.m);sfx('pickup',null,.5,q.kind==='purse'?1.3:1,0,false);
-  if(q.kind==='bread'){const P=player;P.hp=Math.min(100,P.hp+10);P.stamina=Math.min(100,P.stamina+30);toast('You eat');}
+  if(q.kind==='bread'){const P=player,ate=(P._ate||0)*Math.exp(-(simTime-(P._ateT||0))/45);P._ate=ate+1;P._ateT=simTime;
+    if(P._ate>3.2){P._ate=1.5;P.stamina=Math.max(0,P.stamina-45);P.stagger=Math.max(P.stagger||0,.9);P.painT=simTime+1.4;sfx('humanRoughAttack',P.headPos,.5,.6,.1);toast('You eat too fast and bring it back up');}
+    else{P.hp=Math.min(100,P.hp+10);P.stamina=Math.min(100,P.stamina+30);toast('You eat');}}
   else if(q.kind==='flask'){R.flasks++;toast('A flask');}
-  else{const v=Math.round(rand(F[1][0],F[1][1])+R.depth*(q.kind==='purse'?1.5:1));R.coin+=v;R.found=(R.found||0)+1;toast(`${F[0][0].toUpperCase()+F[0].slice(1)} · ${v} coin`);if(q.kind==='idol'&&CRYPT.cult&&CRYPT.cult.grp&&!CRYPT.cult.woke)CRYPT.cult.woke=simTime;}
+  else{const v=Math.round(rand(F[1][0],F[1][1])+R.depth*(q.kind==='purse'?1.5:1));R.found=(R.found||0)+1;if(q.kind==='purse'){R.coin+=v;toast(`${F[0][0].toUpperCase()+F[0].slice(1)} · ${v} coin`);}else{(R.inv||(R.inv=[])).push({kind:q.kind,v});invUI();toast(`${F[0][0].toUpperCase()+F[0].slice(1)} · into your pack (I)`);}   /* (Build 256, as in Half Sword) valuables are things you carry: worth their coin when you get out, or laid in an offering box */if(q.kind==='idol'&&CRYPT.cult&&CRYPT.cult.grp&&!CRYPT.cult.woke)CRYPT.cult.woke=simTime;}
   cryptHud();}
 function cryptSconce(x,y,z,nx,nz,n=1){   /* (Build 234) rebuilt after Half Sword's: one fat candle in an iron cup on a wooden shelf with a brace under it, or a wrought-iron bracket of three arms with drip pans. The light is a candle's: warm yellow, a small pool, dark beyond it */
   const ry=Math.atan2(nx,nz),tx=nz,tz=-nx,P=(o,u,v)=>V(x+nx*o+tx*u,y+v,z+nz*o+tz*u),COL=0xffc488;
@@ -3930,6 +3950,30 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
     for(let u=s0+.9;u<s1-.5;u+=2.3){const x=ax?u:m,z=ax?m:u;if(C.lows.some(q=>u>q.a0-.4&&u<q.a1+.4&&Math.abs(q.m-m)<.2))continue;ribArch('cryptWall',x,CS,z,ax?Math.PI/2:0,CW+.02,CW+.02,.11,.3);for(const sg of [-1,1])addGeo('cryptWall',boxUV(ax?.3:.1,CS,ax?.1:.3,2),T(ax?u:m+sg*(CW-.045),CS/2,ax?m+sg*(CW-.045):u));}   // (Build 235) a rib and its piers every couple of metres
     for(let u=s0+1.1;u<s1-1.1;u+=1.55)for(const sg of [-1,1])if(R()<.2){const nx=ax?0:-sg,nz=ax?-sg:0,wx=ax?u:m+sg*CW,wz=ax?m+sg*CW:u;niche(wx,wz,nx,nz);}   // (Build 214) niches in the walls, a skull in some
     if(L>3&&R()<.75){const sg=R()<.5?-1:1;cryptSconce(ax?mid:m+sg*CW,1.25,ax?m+sg*CW:mid,ax?0:-sg,ax?-sg:0,1);}}
+  /* (Build 256, after Half Sword's crypt: "I offer this axe as tribute") an offering box: a stone chest with a heavy oak lid and two candles.
+     Put something in it, the lid comes down, and after a while it gives back what the offering was worth: bread, a flask, coin, now and
+     then something better; junk buys nothing. One on most floors, against a wall of an ordinary room, clear of the doors */
+  {const rooms=PL.cells.filter(c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&['plain','chapel','coffins','fallen','store','slab'].includes(c.kind||'plain'));
+   if(rooms.length&&(R()<.8||/[?&]offer/.test(location.search))){const c=rooms[(R()*rooms.length)|0],sx=R()<.5?-1:1,sz=R()<.5?-1:1,alongX=R()<.5;
+    const x=alongX?c.cx+sx*c.hx*.5:c.cx+sx*(c.hx-1.05),z=alongX?c.cz+sz*(c.hz-1.05):c.cz+sz*c.hz*.5,ry=alongX?(sz>0?Math.PI:0):(sx>0?-Math.PI/2:Math.PI/2);
+    const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;const put=(geo,mat,px,py,pz,par=g)=>{const m=new THREE.Mesh(geo,mat);m.position.set(px,py,pz);m.castShadow=m.receiveShadow=true;par.add(m);return m;};
+    const stone=MATS.stone||MATS.ashlar,W=1.05,Dp=.62;put(new THREE.BoxGeometry(W+.16,.12,Dp+.16),stone,0,.06,0);put(new THREE.BoxGeometry(W,.58,Dp),stone,0,.41,0);put(new THREE.BoxGeometry(W+.06,.05,Dp+.06),stone,0,.72,0);
+    put(new THREE.BoxGeometry(W-.14,.02,Dp-.14),MATS.cryptShade||stone,0,.735,0);
+    for(const i of [-1,1]){put(new THREE.BoxGeometry(.05,.3,.04),stone,i*W*.32,.42,Dp/2+.01);put(new THREE.BoxGeometry(.2,.04,.04),stone,i*W*.32,.42,Dp/2+.01);}   // a cross either side, cut in the front
+    const hinge=new THREE.Group();hinge.position.set(0,.745,-Dp/2-.02);g.add(hinge);const lid=put(new THREE.BoxGeometry(W+.04,.08,Dp+.06),MATS.beam||MATS.wood,0,.04,Dp/2+.02,hinge);
+    for(const i of [-.36,0,.36])put(new THREE.BoxGeometry(.05,.09,Dp+.08),MATS.iron,i*W,.04,Dp/2+.02,hinge);put(new THREE.BoxGeometry(.12,.05,.06),MATS.iron,0,.03,Dp+.06,hinge);
+    world.add(g);const cs=[];for(const i of [-1,1]){const cx=Math.cos(ry)*(i*(W/2+.16))+Math.sin(ry)*(-Dp*.1),cz=-Math.sin(ry)*(i*(W/2+.16))+Math.cos(ry)*(-Dp*.1);
+      const cm=new THREE.Mesh(new THREE.CylinderGeometry(.03,.034,.22,8),MATS.wax||MATS.bone||stone);cm.position.set(x+cx,.11,z+cz);world.add(cm);addFlame(x+cx,.25,z+cz,.5,true,.35,.7,.5,0xffc488);}
+    const hw=Math.abs(Math.cos(ry))*(W+.16)/2+Math.abs(Math.sin(ry))*(Dp+.16)/2,hd=Math.abs(Math.sin(ry))*(W+.16)/2+Math.abs(Math.cos(ry))*(Dp+.16)/2;addBox(x-hw,x+hw,z-hd,z+hd,.75);
+    C.offer={x,z,ry,g,hinge,lid,ang:0,st:'open',t:0,val:0,fx:cs,out:null};}}
+  /* (Build 256) barrels of bread in store rooms and some others: an open barrel with loaves in it to reach in and take. Bread gives back
+     strength; too much in a short time and you're sick */
+  for(const c of PL.cells){if(c.type!=='room'||c.oct||c.sunk||c.stairSide||c.kind==='larder')continue;const pr=c.kind==='store'?.9:c.kind==='plain'||c.kind==='gamblers'?.3:.1;if(R()>pr&&!/[?&]bread/.test(location.search))continue;
+    const sx=R()<.5?-1:1,sz=R()<.5?-1:1,x=c.cx+sx*(c.hx-1.25),z=c.cz+sz*(c.hz-1.25),br=new THREE.Group();br.position.set(x,0,z);
+    const bm=(MATS.propWood||MATS.wood),bmi=bm._dbl||(bm._dbl=bm.clone()),_bs=(bmi.side=THREE.DoubleSide,bmi.map=bm.map,bmi.normalMap=bm.normalMap,bmi),st=new THREE.Mesh(lathe([[.24,0],[.29,.2],[.31,.42],[.29,.64],[.25,.82]],14),_bs);st.castShadow=st.receiveShadow=true;br.add(st);
+    const fl=new THREE.Mesh(new THREE.CircleGeometry(.26,14),MATS.cryptShade||MATS.wood);fl.rotation.x=-Math.PI/2;fl.position.y=.6;br.add(fl);
+    for(const yy of [.12,.7]){const hp=new THREE.Mesh(new THREE.TorusGeometry(yy<.4?.275:.285,.012,4,18),MATS.iron);hp.rotation.x=Math.PI/2;hp.position.y=yy;br.add(hp);}
+    world.add(br);addCircle(x,z,.34,.85);const n=2+((R()*2)|0);for(let i=0;i<n;i++){const a2=i*2.4+R();findDrop('bread',x+Math.cos(a2)*.11,.63,z+Math.sin(a2)*.11);}}
   /* (Build 246) nothing may shut a floor off: walk the floor as built (walls, pillars, props, furniture; before doors and boards, which
      open) from where you wake, and every doorway must be reached on both sides. If one isn't, the floor is thrown away and built again
      from another seed (the map's build loop reads C.bad). A post once stood in a doorway and there was no way on. */
@@ -4121,7 +4165,7 @@ function trapVisual(dt){const C=CRYPT;if(!C)return;for(const b of C.blades){cons
   for(const t of C.traps){if(!t.flags)continue;
     if(!t.open&&t.tr){for(const fm of t.flags){const p0=fm.userData.p0;fm.position.y=p0.y-.004*Math.random()-.01*Math.min(1,(simTime-t.warn)/.5);}if(Math.random()<dt*14){const fm=t.flags[(Math.random()*t.flags.length)|0];spawnDust(fm.position.clone().setY(.03),3,.3,.15);}}
     else if(t.open)for(const fm of t.flags){const U=fm.userData;if(!U.fall)continue;U.vy-=9.8*dt;fm.position.y+=U.vy*dt;fm.rotation.x+=U.av.x*dt;fm.rotation.z+=U.av.z*dt;const du=U.u-t.a0,bot=(du<t.len?-t.dep:-t.dep*(1-(du-t.len)/t.rl))+.035;if(fm.position.y<=bot){fm.position.y=bot;if(U.vy<-3)sThud(fm.position,.35);U.fall=false;fm.rotation.x=(Math.random()-.5)*.5;fm.rotation.z=(Math.random()-.5)*.5;}}}}
-function cryptHazards(h){const C=CRYPT,R=RUN;if(!C||NET.mode==='client')return;
+function cryptHazards(h){const C=CRYPT,R=RUN;if(!C||NET.mode==='client')return;offerStep();
   /* (Build 246) a locked gate always has a key to be had: if nobody alive carries it, none lies on the floor and you have none, one is put
      where the turnkey last stood (he fell somewhere it can't be reached, was taken away with the dead, or never came to be) */
   /* (Build 247) a chest knocked over spills: its lid falls open and what was in it lies on the floor */
@@ -4150,7 +4194,7 @@ function cryptDrop(){const R=RUN,P=player,h0=CRYPT&&CRYPT.down;if(!R||!R.crypt||
     if(P.sword)for(const k of ['H','Hp','T','Tp'])sh(P.sword[k]);for(const k of ['R','L']){const a=P.fists[k];if(a)sh(a.pos);}if(P.offH){sh(P.offH.p);sh(P.offH.tp);}if(P.offG)sh(P.offG.pos);if(P._cbPos)sh(P._cbPos);for(const k of ['chest','headPos','shR','shL'])sh(P[k]);
     if(P.lamp){sh(P.lamp.g.position);P.lamp.fresh=true;}sh(camera.position);camY+=dy;P.root.position.copy(P.pos);P.root.updateMatrixWorld(true);
     cryptPopulate();setTimeout(warmShaders,0);cryptHud();setTimeout(()=>{if(RUN===R)toast(`Depth ${R.depth}`);},2500);},0);}
-function cryptVisual(dt){const C=CRYPT;if(!C)return;trapVisual(dt);
+function cryptVisual(dt){const C=CRYPT;if(!C)return;trapVisual(dt);if(C.offer){const O=C.offer,tg=O.st==='open'?1.7:0;O.ang+=(tg-O.ang)*(1-Math.exp(-(tg>O.ang?2.2:9)*dt));O.hinge.rotation.x=-O.ang;}
   if((C._tbT=(C._tbT||0)-dt)<0){C._tbT=.25;for(const q of C.finds){if(q.y<.5||q.on===0)continue;if(q.on===undefined){q.on=0;for(const d of DYN)if(d.isTable&&!d.gone&&(d.p0.x-q.x)**2+(d.p0.z-q.z)**2<1.3){q.on=d;break;}if(!q.on)continue;}
       const d=q.on,o=d.obj;if(d.gone||(o.position.x-d.p0.x)**2+(o.position.z-d.p0.z)**2>.02||Math.abs(o.quaternion.x)+Math.abs(o.quaternion.z)>.12){q.on=0;q.y=.03;if(q.m)q.m.position.y=.03;}}}for(const d of C.doors)d.g.rotation.y=d.base+d.th;   /* (Build 237: this line was lost in Build 236 and no door was drawn opening) */
   if(C.gate&&!C.gate.locked&&C.gate.up<1){const G=C.gate;G.up=Math.min(1,G.up+dt/1.6);G.g.position.y=2.25*smooth(G.up);if(Math.random()<dt*14)noiseBurstAt(_la.set(G.x,2,G.z),.12,'bandpass',1400,9,.03);}
@@ -4303,9 +4347,11 @@ function cryptDescend(){const R=RUN;if(!R||!R.crypt||R.over||R.busy||!player||!p
     CRYPT_DEPTH=R.depth;loadMap('crypt');physStatic();const S=CRYPT.start;P.pos.set(S.x,0,S.z);P.vel.set(0,0,0);P.yaw=S.yaw;P.bal.set(0,0,0);P.balV.set(0,0,0);P.ar=null;P.offH=null;if(P.lamp)P.lamp.fresh=true;
     if(P.sword&&P.sword.def.kind!=='fist'){const ht=P.handTarget(V());P.sword.reset(ht,P.guideDir(ht,V()));}else P.giveFists();
     cryptPopulate();setTimeout(warmShaders,0);showBanner(R.depth<4?'Deeper':'The catacombs',`Depth ${R.depth}${R.champ&&R.depth%3===0?' · '+R.champ+' keeps the stair':''}`);});}
-function cryptBank(){const R=RUN,C=CAREER,P=player,kept=[];if(P){const ids=[P.sword&&P.sword.def.id,P.belt&&P.belt.def.id,P.hip2&&P.hip2.def.id,P.back&&P.back.def.id,...ARMOR_SLOTS.map(s=>P.armor[s]&&P.armor[s].def.id)];for(const id of ids)if(id&&CAREER_SHOP[id]&&!C.own.includes(id)){C.own.push(id);kept.push(careerName(id));}}C.coin+=R.coin;return kept;}
+function invWorth(){const R=RUN;return R&&R.inv?R.inv.reduce((a,q)=>a+q.v,0):0;}
+function invUI(){const el=document.getElementById('inv');if(!el)return;const R=RUN,L=R&&R.inv||[];el.innerHTML='<div class="invr">'+(L.length?L.map(q=>`<div class="invs" title="${FINDS[q.kind][0]}">${({cup:'🏆',candlestick:'🕯',ring:'💍',reliquary:'⛪',idol:'🗿'})[q.kind]||'•'}<small>${FINDS[q.kind][0].replace(/^an? /,'')}</small></div>`).join(''):'<div class="inve">Nothing in your pack</div>')+`</div><div class="invc">${R?R.coin:0} coin · pack worth ${invWorth()}</div>`;}
+function cryptBank(){const R=RUN,C=CAREER,P=player,kept=[];if(P){const ids=[P.sword&&P.sword.def.id,P.belt&&P.belt.def.id,P.hip2&&P.hip2.def.id,P.back&&P.back.def.id,...ARMOR_SLOTS.map(s=>P.armor[s]&&P.armor[s].def.id)];for(const id of ids)if(id&&CAREER_SHOP[id]&&!C.own.includes(id)){C.own.push(id);kept.push(careerName(id));}}C.coin+=R.coin+invWorth();return kept;}
 function cryptLeave(){const R=RUN;if(!R||!R.crypt||R.over||R.busy||!player||!player.alive)return;const rk0=careerRank(),kept=cryptBank(),C=CAREER;C.wins++;careerSave();const rk1=careerRank();
-  endRun([R.me],'Out',`Out of the dark · depth ${R.depth} · +${R.coin} coin · +${R.ren} renown`,kept.length?`Yours to keep: ${kept.join(', ')}.`:rk1>rk0?`You are made ${CAREER_RANKS[rk1][0]}.`:'What you carried out is banked.');careerUI();}
+  endRun([R.me],'Out',`Out of the dark · depth ${R.depth} · +${R.coin+invWorth()} coin · +${R.ren} renown`,kept.length?`Yours to keep: ${kept.join(', ')}.`:rk1>rk0?`You are made ${CAREER_RANKS[rk1][0]}.`:'What you carried out is banked.');careerUI();}
 function cryptKill(killer,victim){const R=RUN,C=CAREER;if(victim.hasKey&&CRYPT){victim.hasKey=false;const hp=victim.ragdoll&&victim.ragdoll.P.Hips||victim.pos;let kx=hp.x,kz=hp.z;if(!isFree(kx,kz,.1)||cryptGround(kx,kz,1)<-.3){kx=victim.ai&&victim.ai.mind?victim.ai.mind.home[0]:kx;kz=victim.ai&&victim.ai.mind?victim.ai.mind.home[1]:kz;}findDrop('key',kx+.25,.03,kz+.1);if(killer&&killer.isPlayer)toast('He had a key on him');}
   if(victim.isPlayer||victim.entrant===R.me){C.losses++;careerSave();R.next=simTime+2.8;   /* (Build 236) since Build 234 the player's entrant was a copy with bare legs, so this never matched and dying left you lying there with no end screen */R.after=()=>{endRun([],'Slain in the dark',`Depth ${R.depth} · ${R.kills} killed · +${R.ren} renown`,R.coin?`The ${R.coin} coin you carried stays down there with you.`:'What you carried stays down there.');careerUI();};return;}
   if(!(victim.entrant&&victim.entrant.foe))return;if(killer&&!killer.isPlayer)return;   /* what they do to each other is not your kill */R.kills++;const ren=1+R.depth+(victim.entrant.ch?6:0)+(victim.entrant.prize||0);C.renown+=ren;R.ren+=ren;{let c=victim.purse||0;victim.purse=0;if(Math.random()<.5)c+=2+((Math.random()*(3+R.depth*2))|0);if(c){R.coin+=c;toast(`+${c} coin`);}}careerSave();cryptHud();}
@@ -4347,6 +4393,9 @@ function cryptUse(f,probe){const C=CRYPT,R=RUN;if(!C||!R||!R.crypt||R.over||!f||
   if(f.lidLift){if(probe)return TOUCH?'Thumb up to lift the lid':'Mouse up to lift the lid';lidRelease(f);return true;}
 
   if(f.coffinLift){if(probe)return TOUCH?'Thumb up to shove the lid across':'Mouse up to shove the lid across';f.coffinLift.c.held=null;f.coffinLift=null;if(f.reach)f.reach.w=0;return true;}
+  {const O=C.offer;if(O&&(O.x-x)**2+(O.z-z)**2<2.9&&fac(O.x,O.z)){if(O.st==='shut'){if(probe)return 'The lid is shut. Wait';return true;}
+    if(O.st==='open'&&!(O.out||[]).some(q=>!q.gone)&&R.inv&&R.inv.length){const q=R.inv.slice().sort((a,b)=>b.v-a.v)[0];if(probe)return 'Offer '+FINDS[q.kind][0]+(f.sword&&f.sword.def.kind!=='fist'?' (crouch: the '+f.sword.def.name.toLowerCase()+')':'');if(!(f.crouch&&f.sword&&f.sword.def.kind!=='fist')){offerPack(f);return true;}}
+    if(O.st==='open'&&!(O.out||[]).some(q=>!q.gone)&&f.sword&&f.sword.def.kind!=='fist'&&!(f.sword.stuck&&!f.sword.stuck.thrown)){if(probe)return 'Offer the '+f.sword.def.name.toLowerCase();offerGive(f);return true;}}}
   for(const c of C.coffins)if(!c.opened&&Math.abs(c.x-x)<1.05&&Math.abs(c.z-z)<1.3&&!c.held&&fac(c.x,c.z)&&f.isPlayer){if(probe)return 'Put a hand on the lid';const sd=c.sg||Math.sign(c.x-x)||1;c.sg=sd;c.held=f;f.coffinLift={c,auto:1,t:0};f.reach={side:f.sword&&f.sword.def.kind!=='fist'?(f.mainArm==='R'?'L':'R'):'R',pos:V(),w:1};sfx('pickup',c.lid.position,.3,.6,0,false);return true;}   // (Build 219) E puts your hand on it and shoves it across (the player couldn't find the G way with a weapon and lantern in hand); G still works
   if(f.isPlayer&&C.gate&&C.gate.locked&&(C.gate.x-x)**2+(C.gate.z-z)**2<2.6){const R=RUN;if(probe)return R.keys>0?'Unlock the gate':'Locked · someone down here has the key';
     if(R.keys>0){R.keys--;C.gate.locked=false;unStatic(C.gate.box);sfx('unsheathe',_la.set(C.gate.x,1,C.gate.z),.7,.6,0,false);noiseBurstAt(_la,.4,'bandpass',900,6,.25);}else{toast('Locked');sThud(_la.set(C.gate.x,1,C.gate.z),.4);}return true;}
@@ -4358,7 +4407,7 @@ function cryptUse(f,probe){const C=CRYPT,R=RUN;if(!C||!R||!R.crypt||R.over||!f||
     lidGrab(f,k);return true;}   // (Build 235) bare hands or a two-hander: a hand goes straight to the lid's edge; the mouse lifts it
   for(const l of LAMPS)if(!l.f&&l!==f._lampLeft&&(l.g.position.x-x)**2+(l.g.position.z-z)**2<2.6&&Math.abs(l.g.position.y-f.pos.y)<1.6&&(!f.lamp||(f.lamp.K&&f.lamp.K.open&&!(l.K&&l.K.open)))){const nm=l.K&&l.K.open?'candle':'lantern';if(probe)return f.lamp?'Leave the candle, take the lantern':'Take the '+nm;if(f.lamp){const o=f.lamp;lampDrop(o);f._lampLeft=o;}lampTake(f,l);sPickup();return true;}
   for(const n of C.notes)if((n.x-x)**2+(n.z-z)**2<2.2&&Math.abs(n.y-f.pos.y)<1.6&&fac(n.x,n.z)){if(probe)return n.read?'Read it again':'Read the parchment';cryptRead(n);return true;}
-  if(C.up&&(C.up.x-x)**2+(C.up.z-z)**2<1.5){if(probe)return `Leave the crypt and keep what you carry (${R.coin} coin)`;cryptLeave();return true;}
+  if(C.up&&(C.up.x-x)**2+(C.up.z-z)**2<1.5){if(probe)return `Leave the crypt and keep what you carry (${R.coin+invWorth()} coin)`;cryptLeave();return true;}
   if(f.lamp&&f.crouch){if(probe)return 'Set the lantern down';const l=f.lamp;lampDrop(l);f.fwd(_la);l.g.position.addScaledVector(_la,.35);return true;}   // (Build 208) crouch and E: leave it burning on the floor and fight with both hands
   if(R.flasks>0&&f.hp<78){if(probe)return `Drink from a flask (${R.flasks})`;cryptDrink();return true;}
   return null;}
@@ -8920,7 +8969,8 @@ class Fighter{
     D.drop=Math.min(.75,D.drop+drop);}
   cacheBody(){const B=this.bones;this._cbPos=(this._cbPos||V()).copy(this.pos);B.Spine2.getWorldPosition(this.chest);B.RightArm.getWorldPosition(this.shR);B.LeftArm.getWorldPosition(this.shL);B.Head.getWorldPosition(this.headPos);}
   frame(f,u){this.fwd(_f);this.right(_r);const p=this.pitch*.7,cp=Math.cos(p),sp=Math.sin(p),pu=Math.max(p,-.3),cu=Math.cos(pu),su=Math.sin(pu);f.copy(_f).multiplyScalar(cp).addScaledVector(Y_AXIS,sp);u.copy(Y_AXIS).multiplyScalar(cu).addScaledVector(_f,-su);}   // looking down lowers the guard but never tips it back behind the body
-  handTarget(out){
+  handTarget(out){this.handTarget0(out);const w=this._shW||0;if(w>.01&&this.lamp){const sm=this.mainArm==='L'?this.shL:this.shR,sg=this.mainArm==='L'?-1:1;this.fwd(_shF);this.right(_shR);_shP.copy(sm).addScaledVector(_shF,.2).addScaledVector(_shR,-.12*sg).addScaledVector(Y_AXIS,-.16);const e=w*w*(3-2*w);out.lerp(_shP,e);}return out;}
+  handTarget0(out){
     const f=_t2,u=_t3;this.frame(f,u);
     const Hd=this.sword?handling(this.sword.def):HANDLING.fists;
     if(this.sword&&(this.throwHold||this.throwT>=0)){const sg=this.mainArm==='L'?-1:1,sh=this.mainArm==='L'?this.shL:this.shR,k=this.throwT>=0?clamp(this.throwT/THROW_T,0,1):0,e=k*k*(3-2*k);
@@ -8981,7 +9031,7 @@ class Fighter{
     const sh=dOs?_hsSh.copy(this.mainArm==='L'?this.shL:this.shR).add(dOs):this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
     _v.subVectors(out,this.chest);const fd=_v.dot(_f),fmin=.16-.46*ck;if(fd<fmin)out.addScaledVector(_f,fmin-fd);
     // a two-handed weapon stays in both hands: the aim goes no further than the off hand can follow on the grip
-    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
+    if(this.sword&&twoH(this.sword.def)&&this.sword.def.kind!=='spear'&&!this.throwHold&&this.throwT<0&&!((this._shW||0)>.3)){const so=this.mainArm==='L'?this.shR:this.shL,ro=this.armLen[0]+this.armLen[1]-.02;
       _v.copy(out).addScaledVector(this.sword.axis,this.sword.def.grip2).sub(so);const d=_v.length();if(d>ro)out.addScaledVector(_v,-(d-ro)/d);}
     /* Build 169: the sword hand stays at least HAND_MIN of the arm's length from its own shoulder. A swing wound up at the side of the aim box
        could pull the hand to within 12% of the arm's length of the shoulder: an arm can't fold that far, and with the hand on the shoulder
@@ -8992,7 +9042,8 @@ class Fighter{
   }
   throwAim(out){if(this.isPlayer)return aimPoint(out).sub(this.sword.H).normalize();const cp=Math.cos(this.pitch);return out.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch)+.08,Math.cos(this.yaw)*cp).normalize();}
   guideDir_(hand,out){this._ng=1;const r=this.guideDir(hand,out);this._ng=0;return r;}
-  guideDir(hand,out){if(!_spR)_spR=V();
+  guideDir(hand,out){this.guideDir0(hand,out);const w=this._shW||0;if(w>.01&&this.lamp){this.fwd(_shF);this.right(_shR);const sg=this.mainArm==='L'?-1:1;_shP.copy(_shF).multiplyScalar(-.75).addScaledVector(Y_AXIS,.62).addScaledVector(_shR,.12*sg).normalize();const e=w*w*(3-2*w);out.lerp(_shP,e).normalize();}return out;}
+  guideDir0(hand,out){if(!_spR)_spR=V();
     const f=_t2,u=_t3;this.frame(f,u);
     if(this.sword&&(this.throwHold||this.throwT>=0)){
       if(this.sword.def.kind==='spear'){this.throwAim(out);out.y+=.12;this.frame(f,u);return out.normalize();}   // javelin: held overhand, point on the target
@@ -9053,6 +9104,7 @@ class Fighter{
       if(this.alive&&(this.downed||this.bleeds&&this.bleeds.length)){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
       if(this.alive&&this.burn>0){this.burn-=h;this.hp-=7*h;if(this.hp<=0){this.die(this.lastHitBy&&simTime-this.lastHitT<10?this.lastHitBy:null,'burned alive',null);return;}}
       if(this.alive&&(this.rockAD()||(!this.isPlayer&&!this.remote&&(!this.downed||grabbedBy(this).length)&&Math.random()<h*(grabbedBy(this).length?3:1.2))))this.struggle();   /* (Build 135) a bot that's down and dying doesn't keep thrashing to get up */
+      if(this.prone&&this.isPlayer){const k=(input.keys.KeyC?1:0)|(input.keys.KeyW||input.keys.Space?2:0),nw=k&~(this._pnk||0);this._pnk=k;if(nw||!this.alive){this.prone=false;if(this.knocked>.05)this.knocked=.05;this._kdL=1;}else this.knocked=Math.max(this.knocked,1);}   /* (Build 256) lying flat by choice: C, W or Space again gets you up, quickly */
       if(this.alive&&this.knocked>0){this.knocked-=h;if(this.sword){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}if(this.knocked<=0)this.startRise();}
       else if(this.alive&&this.ragdoll.rise){const r=this.ragdoll.rise;if(this.sword&&!this.sword.free){if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,this.limpHand,null,false,1,null);}else this.sword.stepLimp(h,this.limpHand);}   // the weapon comes up with the hand that holds it
         if(r.t>=r.p+r.a+r.b+r.c)this.getUp();}   // risen to a crouch: hand over to the legs
@@ -9105,6 +9157,7 @@ class Fighter{
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
     const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(simTime<(this._kickedT||0)&&(this._kickedF??1)>.3?2.7:STUM_MAX,(bm-.1)*9+bout):0;   /* (Build 151: kicked, the feet scramble back after the body faster) */   /* Build 143: stumble steps at most STUM_MAX (was 3.2 m/s: a shove ran you 1–2 m with no input); each step takes more of the lean out, below, so balance holds as before */
+    if(this.isPlayer){this._cHold=input.keys.KeyC&&!TOUCH?(this._cHold||0)+h:0;if(this._cHold>.45&&onGround&&!this.climb&&!this.hang&&!this.ladCarry&&!this.cartHold&&Math.hypot(this.vel.x,this.vel.z)<2.6){this._cHold=-1e9;this.goProne();return;}}   /* (Build 256, as in Half Sword) tap C to crouch and stay crouched, hold it to lie flat */
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
     const vx0=this.vel.x,vz0=this.vel.z;if(HYBRID&&(stum>0||bm>.11))this.distT=simTime;
@@ -9394,6 +9447,9 @@ class Fighter{
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
     this.makeRagdoll(imp,impP,.25);this.ragdoll.reflex=.75;this.ragdoll.tone=.22;   // conscious: the arms go out to catch the fall
   }
+  goProne(){if(!this.alive||this.ragdoll)return;this._rd=0;this.knocked=1;this.kickT=-1;this.crouch=false;this.prone=true;this._pnk=3;this._kdL=1;
+    if(this.sword)this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);
+    this.fwd(_v);this.makeRagdoll(_v.multiplyScalar(1.1).setY(-.4),this.chest.clone(),.6);this.ragdoll.reflex=1;this.ragdoll.tone=.5;sThud(this.chest,.2);}
   // A and D in turn: each new press of the other key is one heave (holding one, or mashing the same key, does nothing)
   rockAD(){const k=this.isPlayer?(input.keys.KeyA?1:0)|(input.keys.KeyD?2:0):this.remote&&this.rin?((this.rin.k&8)?1:0)|((this.rin.k&4)?2:0):0;const nw=k&~(this.adPrev||0);this.adPrev=k;
     if(!nw)return false;const key=nw&1?1:2;if(key===this.adLast)return false;this.adLast=key;return true;}
@@ -9829,7 +9885,7 @@ class Fighter{
           _t2.copy(this.chest).addScaledVector(_f,.42).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,-.2);const cw=Math.max(this.calmW||0,rvg?1:0);if(cw>.01){_og.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_t2.lerp(_og,cw*cw*(3-2*cw));}
           // (Build 117–124 swung the free arm out as a counterweight in committed swings; it looked wrong and is gone: the free fist stays in guard)
           {const lm=this.lamp&&this.lamp.inHand?1:0,lw=this._lmW=lerp(this._lmW||0,lm,1-Math.exp(-8*dt));if(lw>.01){const lu=this._lmU=lerp(this._lmU||0,this.lampUp?1:0,1-Math.exp(-6*dt));   /* (Build 207) the lantern hand: carried out in front at the waist, lifted beside the head with the right button */
-            _og.copy(this.chest).addScaledVector(_f,.36).addScaledVector(_r,-.3*sgn).addScaledVector(Y_AXIS,-.04);_ogc.copy(this.headPos).addScaledVector(_f,.3).addScaledVector(_r,-.34*sgn).addScaledVector(Y_AXIS,.14);_og.lerp(_ogc,lu*lu*(3-2*lu));_t2.lerp(_og,lw);}}
+            _og.copy(this.chest).addScaledVector(_f,.36).addScaledVector(_r,-.3*sgn).addScaledVector(Y_AXIS,-.04);_ogc.copy(this.headPos).addScaledVector(_f,.3).addScaledVector(_r,-.34*sgn).addScaledVector(Y_AXIS,.14);_og.lerp(_ogc,lu*lu*(3-2*lu));if(this.isPlayer&&camMode==='fp'&&!this.lidLift&&!this.coffinLift){const cp=Math.cos(this.pitch||0),sp=Math.sin(this.pitch||0);_ogc.copy(this.headPos).addScaledVector(_f,.42*cp).addScaledVector(Y_AXIS,.42*sp-.16).addScaledVector(_r,-.2*sgn);_og.lerp(_ogc,1-lu*.6);}   /* (Build 256, as in Half Sword) in first person the lantern is held out where you look, so its light falls on what you're looking at */_t2.lerp(_og,lw);}}
           if((this.catchT||0)>simTime){const u=1-(this.catchT-simTime)/.9,w=Math.sin(Math.PI*Math.min(1,u*1.3))*.95;   // caught off balance: the free hand goes to the ground
             _ogc.set(this.pos.x+_f.x*.4-_r.x*sgn*.25,groundY(this.pos.x,this.pos.z,this.pos.y+.3)+.07,this.pos.z+_f.z*.4-_r.z*sgn*.25);_t2.lerp(_ogc,Math.max(0,w));}
           this.freeHand(_t2,dt);const OG=this.offG,ow=OG&&OG.w>.01?OG.w*OG.w*(3-2*OG.w):0;if(ow>0)_t2.lerp(OG.pos,ow);   /* (Build 211) the free hand reaching for, or holding, what it grabbed */_t1.copy(shO).addScaledVector(Y_AXIS,-.7).addScaledVector(_r,-.55*sgn).addScaledVector(_f,-.2);this.physPole(this.mainArm==='R'?'L':'R',_t1,dt);
@@ -9841,9 +9897,9 @@ class Fighter{
         else{let g2=s.def.grip2;if(s.def.kind==='axe'){this._axS=lerp(this._axS??0,this.commit?(MB&&(this.isPlayer||this.remote)&&this._cmA?this._cmK??1:1):0,1-Math.exp(-9*dt));   /* (Build 167: a player's lower hand slides down only as the swing moves, not on the click) */g2=lerp(-.22,s.def.grip2,this._axS);}_t2.copy(s.H).addScaledVector(s.axis,g2-slid);}   // an axe's lower hand slides up the haft in guard and down to its end for a swing
         if(!one){   // the off hand on the haft. It used to let go the instant the haft passed arm's reach and the arm fell back to the clip's pose (out to the side) for that frame,
           // so a guard hovering at the edge of reach flickered between the two. Now it holds on a little past reach, and when it does let go it eases to a guarding fist by the chest.
-          const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&!((this._gb?.o||0)>(this.offOn===false?1.35:1.75));   /* (Build 152: and lets go rather than fold the wrist back past 100°, retaking it under 77°) */this.offOn=onH;
-          this.offW=clamp((this.offW??1)+(onH?7:-5)*dt,0,1);const w=this.offW*this.offW*(3-2*this.offW);
-          if(w<1){_og.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);if(cwO>.01&&s.def.kind!=='fist'){_pl.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_og.lerp(_pl,cwO*cwO*(3-2*cwO));}_t2.lerpVectors(_og,_t2,w);}
+          const reach=this.armLen[0]+this.armLen[1],dd=_t2.distanceTo(shO),onH=dd<reach+(this.offOn===false?.04:.2)&&!((this._gb?.o||0)>(this.offOn===false?1.35:1.75));   /* (Build 152: and lets go rather than fold the wrist back past 100°, retaking it under 77°) */this.offOn=onH&&!((this._shW||0)>.5);
+          this.offW=clamp((this.offW??1)+(this.offOn?7:-5)*dt,0,1);const w=this.offW*this.offW*(3-2*this.offW);
+          if(w<1){_og.copy(this.chest).addScaledVector(_f,.26).addScaledVector(_r,-.2*sgn).addScaledVector(Y_AXIS,.02);if((this._shW||0)>.01&&this.lamp)_og.lerp(_pl.copy(this.chest).addScaledVector(_f,.36).addScaledVector(_r,-.3*sgn).addScaledVector(Y_AXIS,-.04),this._shW);if(cwO>.01&&s.def.kind!=='fist'){_pl.copy(shO).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07+(this.armSw||0)*sgn*.13).addScaledVector(_r,-.05*sgn);_og.lerp(_pl,cwO*cwO*(3-2*cwO));}_t2.lerpVectors(_og,_t2,w);}
           {const kO=this._kO||0,hHi=this._hHi??1;_t1.copy(shO).addScaledVector(Y_AXIS,-.7+(.15*hHi-.2*(1-hHi))*kO).addScaledVector(_r,-(.55-.45*kO)*sgn).addScaledVector(_f,-.2+(.25+.45*hHi)*kO);const hUo=HAND_FIRST?clamp((s.H.y-shO.y)/.3,0,1)*ELB_UP:0;if(hUo>0){_hv5.copy(shO).addScaledVector(_r,-.6*sgn).addScaledVector(_f,.15).addScaledVector(Y_AXIS,-.05);_t1.lerp(_hv5,hUo);}}this.physPole(this.mainArm==='R'?'L':'R',_t1,dt,w>.5);poleSafe(shO,_t2,_t1,-sgn,_f,_r);poleWall(this,'O',shO,_t2,_t1,dt);
           if(w>.5)gripBest(this,'o',B,offS,_t2,s.edge,_rvA,_t1,this.armLen,1,s.def.kind!=='fist',dt);
           else{_hv.copy(_f).addScaledVector(Y_AXIS,.3).normalize();_ogu.copy(_r).multiplyScalar(sgn).add(Y_AXIS).normalize();gripHand(B,offS,_t2,_hv,_ogu,_t1,this.armLen,1.3);}}}
@@ -9964,10 +10020,11 @@ class Fighter{
     if(this.hp<50)this.hp=Math.min(50,this.hp+2.2*h);   // get away and catch your breath: you come back to about half, no further
     for(const k in this.limbs){const L=this.limbs[k];if(k==='head'||L.sev||L.dead)continue;const mx=LIMB_HP[k];if(L.hp<mx)L.hp=Math.min(mx,L.hp+.9*h);}}
   damage(dmg,by,cause){if(dmg>.5)this.hurtT=simTime;if(simTime-(this._rdT||-9)>2.5)this._rd=0;this._rd=(this._rd||0)+dmg;this._rdT=simTime;
-    if(!this.alive)return;if(this.tough)dmg*=this.tough;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;if(this.undead)undeadCry(this,dmg);else{const nm=this.id%2?'humanRoughHurt':'humanHurt',big=clamp((dmg-10)/25,0,1);sfx(nm,this.headPos,.7+.45*big,(this.voice||1)*(1+.1*big));if(dmg>15)sfx(nm,this.headPos,.3,(this.voice||1)*.8,.55+Math.random()*.3);}}
+    if(!this.alive)return;if(by&&by!==this&&by.alive!==undefined)dmg*=HIT_DMG;if(this.tough)dmg*=this.tough;if(this.dummy||this.noSever)dmg=Math.max(0,Math.min(dmg,this.hp-5));this.hp-=dmg;if(dmg>7&&this.hp>0&&simTime>(this.gruntT||0)){this.gruntT=simTime+.6;if(this.undead)undeadCry(this,dmg);else{const nm=this.id%2?'humanRoughHurt':'humanHurt',big=clamp((dmg-10)/25,0,1);sfx(nm,this.headPos,.7+.45*big,(this.voice||1)*(1+.1*big));if(dmg>15)sfx(nm,this.headPos,.3,(this.voice||1)*.8,.55+Math.random()*.3);}}
     /* Build 230: pain. A hurt man flinches out of what he was doing, gives ground, and his guard sags for a moment (bots; the drawn wince and hunch are in animate, from _pain) */
     if(dmg>4&&this.hp>0&&this.undead!=='zombie'&&this.undead!=='skel'){const k=clamp(dmg/30,.2,1);this.painK=Math.max(this.painT>simTime?this.painK||0:0,k);this.painT=simTime+.3+k*.9;
-      if(!this.isPlayer&&!this.remote&&this.ai){const A=this.ai;A.backT=Math.max(A.backT||0,.25+k*.6);A.cd=Math.max(A.cd||0,k*.6);if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
+      if(!this.isPlayer&&!this.remote&&this.ai){const A=this.ai;A.backT=Math.max(A.backT||0,.45+k*1.1);A.cd=Math.max(A.cd||0,.15+k*.8);   /* (Build 256, the player: they should feel it and make space) a man who's been hit gives ground: he's driven back a step, reels, and backs off before he comes again */
+        if(by&&by!==this&&!this.ragdoll&&HIT_REACT){const dx=this.pos.x-by.pos.x,dz=this.pos.z-by.pos.z,d=Math.hypot(dx,dz)||1,pv=Math.min(2.4,.7+2.4*k);this.vel.x+=dx/d*pv;this.vel.z+=dz/d*pv;this.stagger=Math.max(this.stagger||0,.18+.55*k);this.shove(new THREE.Vector3(dx,0,dz),.4+1.3*k);}if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
@@ -11339,7 +11396,7 @@ function toast(t){const d=el('toast');if(!d)return;d.textContent=t;d.classList.a
 // Every key the game reads is a "logical" code (KeyE, KeyF, …). A binding maps a physical key to one: a capture-phase listener turns a
 // real key press into a synthetic event with the logical code, so every handler below reads it unchanged. A default key whose action
 // has been moved elsewhere does nothing. Touch buttons dispatch logical codes themselves (untrusted events are left alone).
-const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab, let go (tap)'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyZ','Sheathe, draw'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
+const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab, let go (tap)'],['KeyI','Pack (hold, the Crypt)'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyZ','Sheathe, draw'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
 let KEYBIND={};try{KEYBIND=JSON.parse(localStorage.getItem('bloodmoor-keys')||'{}')||{};}catch(e){KEYBIND={};}
 let KEY_MAP=null;function keyMap(){if(KEY_MAP)return KEY_MAP;const m={},cur=new Set(KEY_ACTS.map(([a])=>KEYBIND[a]||a));for(const [a] of KEY_ACTS){const p=KEYBIND[a]||a;if(p!==a)m[p]=a;}for(const [a] of KEY_ACTS)if(!cur.has(a))m[a]='';return KEY_MAP=m;}
 const keyName=c=>c==='Space'?'Space':c.startsWith('Key')?c.slice(3):c.startsWith('Digit')?c.slice(5):c.replace('Left',' L').replace('Right',' R').replace('Arrow','');
@@ -11386,7 +11443,8 @@ function aimSeen(f){const dx=f.ctrl.x-(f._acx??f.ctrl.x),dy=f.ctrl.y-(f._acy??f.
 // ---------------------------------------------------------------- input
 const cvs=renderer.domElement;
 addEventListener('keydown',e=>{
-  if(e.code==='Tab'&&state==='playing'){e.preventDefault();document.body.classList.add('showvit');}   // hold Tab to check your wounds
+  if(e.code==='Tab'&&state==='playing'){e.preventDefault();document.body.classList.add('showvit');}
+  if(e.code==='KeyI'&&state==='playing'&&RUN&&RUN.crypt){invUI();document.body.classList.add('showinv');}   // (Build 256) hold I to see what you carry   // hold Tab to check your wounds
   if(CRYPT&&['KeyW','KeyA','KeyS','KeyD','KeyE','Escape','Space'].includes(e.code)&&cryptReadClose()&&e.code==='KeyE')return;
   input.keys[e.code]=true;
   if(['Space','KeyW','KeyA','KeyS','KeyD','KeyC','KeyF','KeyE','KeyQ','KeyV','KeyX','AltLeft'].includes(e.code))e.preventDefault();
@@ -11417,7 +11475,7 @@ addEventListener('keydown',e=>{
     else if(e.code==='KeyE'){const it=playerLootCandidate();if(it){if(NET.mode==='client')NET.pick=it.nid;else pickUp(player,it);}else if(NET.mode!=='client'&&player&&player.alive&&!player.ragdoll&&player.mainArm){let best=null,bd=1.6;for(const d of debris){if(d.wep||!d.rag)continue;const q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-player.pos.x,q.z-player.pos.z);if(dd<bd){bd=dd;best=d;}}if(best)debrisWeapon(player,best,player.mainArm);}}
   }
 });
-addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='AltLeft'){e.preventDefault();thrustKey(false);}if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
+addEventListener('keyup',e=>{input.keys[e.code]=false;if(e.code==='AltLeft'){e.preventDefault();thrustKey(false);}if(e.code==='Tab')document.body.classList.remove('showvit');if(e.code==='KeyI')document.body.classList.remove('showinv');if(e.code==='KeyQ'&&player&&player.throwHold){player.throwHold=false;player.throwReq=true;}});
 addEventListener('mousedown',e=>{if(state!=='playing'||paused)return;if(e.button===0)input.lmb=true;if(e.button===2)input.rmb=true;});
 addEventListener('mouseup',e=>{if(e.button===0)input.lmb=false;if(e.button===2)input.rmb=false;});
 addEventListener('blur',()=>{for(const k in input.keys)input.keys[k]=false;input.lmb=input.rmb=input.stab=false;if(player)player._altT=false;document.body.classList.remove('showvit');if(player&&player.throwHold){player.throwHold=false;}});   // Alt-Tab: nothing stays held down
