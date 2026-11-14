@@ -299,7 +299,7 @@ body.touch #prompt{top:auto;bottom:24%}
       <dt><kbd>LMB</kbd><kbd>RMB</kbd></dt><dd>Unarmed: hold to take control of that fist and swing it with the mouse. Wheel jabs.</dd>
       <dt><kbd>R</kbd></dt><dd>With a sword or knife: turn the grip over, point down, and click to stab down, into a man on the ground or over a shoulder. Keep the button down and the blade stays in; let go and it comes out. <kbd>G</kbd> lets go of a blade that's in someone and leaves it there; walk up and press <kbd>E</kbd> to take hold of a blade left in a body, then step back to pull it out.</dd>
       <dt><kbd>Z</kbd></dt><dd>Put away what's in your hand, or draw what you carry. There are three places: the belt on your off hip, a knife or dagger on the other hip, and something long slung on your back. Pick up another weapon and the one in your hand goes to a free place by itself; when they're full there's no room, and Z swaps what's in your hand for what's carried. In the Crypt, stones, skulls, long bones and iron candle stands can be taken up in the hand (reach for one with <kbd>G</kbd>) and fought with.</dd>
-      <dt><kbd>G</kbd></dt><dd>With a one-handed weapon, hold it and your free hand reaches out and takes hold of what's in front of you: his sword arm (he can't swing it freely), his blade or haft (step back hauling and it comes out of his hand; a bare hand on a blade he draws back gets cut), his collar or head (step back and he's towed off balance and down), a body on the floor. Let go of <kbd>G</kbd> to let go; let go while hauling and he's thrown. Bare-handed, tap it to switch between fists and open hands. With open hands, a hand you hold out grabs whatever it touches: a collar, an arm, a body on the floor. Haul them off their feet, drag them, throw them. Going over an edge? Hold <kbd>G</kbd> and your hands catch it; <kbd>W</kbd> climbs up, let go of <kbd>G</kbd> to drop. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
+      <dt><kbd>G</kbd></dt><dd>Grab, as in Half Sword: tap to take hold, tap again to let go. With a one-handed weapon, tap it and your free hand reaches out and takes hold of what's in front of you: his sword arm (he can't swing it freely), his blade or haft (step back hauling and it comes out of his hand; a bare hand on a blade he draws back gets cut), his collar or head (step back and he's towed off balance and down), a body on the floor, a rock or a candle stand to fight with. Tap again to let go; let go while hauling and he's thrown. A hand that finds nothing comes back after a few seconds. Bare-handed, tap it to open your hands; hold a mouse button and that hand reaches out and keeps hold of whatever it takes until you tap <kbd>G</kbd> again. Going over an edge? Tap <kbd>G</kbd> and your hands catch it; <kbd>W</kbd> climbs up, <kbd>G</kbd> again drops you. Knocked down or held? Rock <kbd>A</kbd> and <kbd>D</kbd> in turn to struggle free and get up sooner.</dd>
     </dl>
     <dl class="tcontrols">
       <dt>Left thumb</dt><dd>Move. Push to the edge to sprint. Rock it left and right to struggle when you're down.</dd>
@@ -458,7 +458,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=253;
+const BUILD=254;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:1,B:.75,C:1.2,D:.6};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4004,6 +4004,10 @@ function cryptKickDoor(f,fw){const C=CRYPT;if(!C)return false;const ft=f.bones[(
       const J=fd*48*pw;d.om+=J*sl/DOOR_I;   /* (Build 218: a kick is a real shove, ~50 N·s; it was 5.5 and the leaf barely moved) */f.vel.addScaledVector(fw,-.5*pw);f.shove(fw,-.5);   // the leaf swings away, the kicker is pushed back off it
       return true;}}
   return false;}
+/* (Build 254) grabbing is tap to take hold, tap again to let go, as Half Sword's grab keys are: G with a weapon puts the free hand out
+   (f.gTog), G bare-handed opens the hands (grabMode), and the same state decides whether you catch and keep hold of an edge */
+function gOn(f){if(f.isPlayer)return TOUCH?!!input.keys.KeyG||(!f.sword||f.sword.def.kind==='fist')&&!!f.grabMode:(f.sword&&f.sword.def.kind!=='fist'?!!f.gTog:!!f.grabMode);return f.remote&&f.rin?!!(f.rin.k&(f.sword&&f.sword.def.kind!=='fist'?512:128)):false;}
+function gOff(f){f.gTog=false;if(f.isPlayer&&f.grabMode&&(!f.sword||f.sword.def.kind==='fist')){f.grabMode=false;}}
 /* (Build 214) holding on to an edge, as in Half Sword: falling with G held, if an edge is within reach of your hands they close on it and
    you hang: the body is the loose ragdoll, held up only by its two hands pinned to the edge, so it swings and dangles and a blow or a
    kick swings it. Holding on costs stamina; let go of G (or run out) and you drop. W pulls you up: the chest is hauled over the edge, the
@@ -4021,15 +4025,15 @@ function hangStart(f,L){const R=f.ragdoll;if(!R||!R.P.LeftHand||!R.P.RightHand)r
   if(dd<1.1){for(const n of R.names){R.P[n].x+=tx;R.P[n].y+=ty;R.P[n].z+=tz;R.Q[n].x+=tx;R.Q[n].y+=ty*.5;R.Q[n].z+=tz;}}   // the grip takes the fall: the hands go to the edge and the body comes up short under them
   else for(const pn of pins){pn[2]=pn[1].clone();pn[1].copy(R.P[pn[0]]);}   // (Build 216) a lunge for an edge further off: the hands are carried to it over a moment and the body swings in under them
   R.pins=pins;R.reflex=0;R.tone=.45;f.knocked=99;f.hang={L,t:0,climb:-1};hangSolid(R,L);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.55,f.voice);sThud(pins[0][1],.35);return true;}
-function tryHang(f,auto){if(f.stamina<6||f.hang)return false;const L=findLedge(f.pos.x,f.pos.z,f.pos.y-.4,f.pos.y+2.3,true);   /* (Build 249) the catch is the player's own (hold G), with Build 216's reach */if(!L)return false;f.fallT=null;f.knockdown(99,V(0,0,0),f.chest.clone());if(!f.ragdoll)return false;f.ragdoll.reflex=0;if(!hangStart(f,L)){f.knocked=.8;return false;}f.hang.auto=false;f.pitT=null;if(f.isPlayer)toast('Hanging on · W climb up · let go of G to drop');return true;}
+function tryHang(f,auto){if(f.stamina<6||f.hang)return false;const L=findLedge(f.pos.x,f.pos.z,f.pos.y-.4,f.pos.y+2.3,true);   /* (Build 249) the catch is the player's own (hold G), with Build 216's reach */if(!L)return false;f.fallT=null;f.knockdown(99,V(0,0,0),f.chest.clone());if(!f.ragdoll)return false;f.ragdoll.reflex=0;if(!hangStart(f,L)){f.knocked=.8;return false;}f.hang.auto=false;f.pitT=null;if(f.isPlayer)toast('Hanging on · W climb up · G again to drop');return true;}
 function tryHangRag(f,auto){if(f.stamina<6||(f._hangT||0)>simTime)return false;const R=f.ragdoll,h=R.P.Head,c=R.P.Spine2;if(!h||!c)return false;const vy=c.y-R.Q.Spine2.y;if(vy>-.002)return false;   // only while falling
-  const L=findLedge(c.x,c.z,c.y-.2,c.y+1.1,true);if(!L){f._hangT=simTime+.12;return false;}if(!hangStart(f,L))return false;f.hang.auto=false;f.pitT=null;if(f.isPlayer)toast('Hanging on · W climb up · let go of G to drop');return true;}
+  const L=findLedge(c.x,c.z,c.y-.2,c.y+1.1,true);if(!L){f._hangT=simTime+.12;return false;}if(!hangStart(f,L))return false;f.hang.auto=false;f.pitT=null;if(f.isPlayer)toast('Hanging on · W climb up · G again to drop');return true;}
 function hangStep(f,h){const H=f.hang,R=f.ragdoll;if(!R||!f.alive){if(R)R.pins=null;f.hang=null;return false;}H.t+=h;f.knocked=Math.max(f.knocked,1);
-  const g=f.isPlayer?(f.hang.auto?!(input.keys.KeyS||input.keys.KeyC):!!input.keys.KeyG):f.remote&&f.rin?!!(f.rin.k&512):true,w=f.isPlayer?!!input.keys.KeyW:f.remote&&f.rin?!!(f.rin.k&1):false;
+  const g=f.isPlayer||f.remote?(f.hang.auto&&f.isPlayer?!(input.keys.KeyS||input.keys.KeyC):gOn(f)):true,w=f.isPlayer?!!input.keys.KeyW:f.remote&&f.rin?!!(f.rin.k&1):false;
   if(H.climb<0){const L=H.L,k=1-Math.exp(-2.2*h),at=(al,y)=>_hgV.set(L.x+L.dx*al,L.y+y,L.z+L.dz*al);   // hanging: the body settles under the hands, facing what it hangs from, and its swinging dies down
     if(!R.pins||!R.pins[0][2]){for(const [n,al,y,kk] of [['Spine2',-.15,-.44,1],['Hips',-.17,-.96,1],['Head',-.12,-.2,.6],['LeftFoot',-.15,-1.78,.5],['RightFoot',-.15,-1.78,.5]])if(R.P[n]){at(al,y);if(n==='LeftFoot'){_hgV.x+=L.dz*.1;_hgV.z-=L.dx*.1;}else if(n==='RightFoot'){_hgV.x-=L.dz*.1;_hgV.z+=L.dx*.1;}R.P[n].lerp(_hgV,k*kk);}
       for(const n of R.names){const p=R.P[n],q=R.Q[n];q.x+=(p.x-q.x)*.03;q.z+=(p.z-q.z)*.03;}}
-    hangSolid(R,H.L);f.useStamina(3.2*h);if(!g||f.stamina<=0){R.pins=null;f.hang=null;f.knocked=1.1;R.tone=.22;f._hangT=simTime+(f.stamina<=0?1:3);if(PIT&&R.P.Hips&&R.P.Hips.y<-.3&&inPit(R.P.Hips.x,R.P.Hips.z,0))f.pitT=simTime;return false;}if(w&&f.stamina>10){H.climb=0;f.useStamina(10);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.6,f.voice);}return false;}
+    hangSolid(R,H.L);f.useStamina(3.2*h);if(!g||f.stamina<=0){R.pins=null;f.hang=null;if(f.isPlayer)gOff(f);f.knocked=1.1;R.tone=.22;f._hangT=simTime+(f.stamina<=0?1:3);if(PIT&&R.P.Hips&&R.P.Hips.y<-.3&&inPit(R.P.Hips.x,R.P.Hips.z,0))f.pitT=simTime;return false;}if(w&&f.stamina>10&&H.t>.4){H.climb=0;f.useStamina(10);sfx(f.id%2?'humanRoughAttack':'humanAttack',f.headPos,.6,f.voice);}return false;}
   /* (Build 228) the climb is a mantle in four moves, with the hands on the edge until the chest is over it: pull up, chest over onto the deck, a knee and the hips up,
      then crawl clear. It used to float the body up to a crouch in the air and then set it down on the deck, legs and all, through the boards */
   H.climb+=h;const L=H.L,u=H.climb/1.5,k=1-Math.exp(-9*h);
@@ -4042,7 +4046,7 @@ function hangStep(f,h){const H=f.hang,R=f.ragdoll;if(!R||!f.alive){if(R)R.pins=n
   for(const [n,t,kk] of tg)if(R.P[n])R.P[n].lerp(t,k*kk);
   if(u>.72&&R.pins)R.pins=null;   // over the edge: the hands let go and push
   hangSolid(R,L);
-  if(u>=1.3){f.hang=null;f.knocked=.35;R.tone=.4;R.pins=null;   // up: lying on the deck clear of the edge, so it gets up on top and not half over the drop
+  if(u>=1.3){f.hang=null;if(f.isPlayer)gOff(f);f.knocked=.35;R.tone=.4;R.pins=null;   // up: lying on the deck clear of the edge, so it gets up on top and not half over the drop
     for(const n of R.names){const q=R.P[n],o=R.Q[n];const along=(q.x-L.x)*L.dx+(q.z-L.z)*L.dz;if(along<.12){const k=.12-along;q.x+=L.dx*k;q.z+=L.dz*k;}if(q.y<L.y+.04)q.y=L.y+.04;o.copy(q);}
     f.pos.set(L.x+L.dx*.4,L.y,L.z+L.dz*.4);f._hangT=simTime+2;}
   return false;}
@@ -4329,7 +4333,7 @@ function cryptRead(n){const L=CRYPT_LORE[n.i]||CRYPT_LORE[0],d=el('lore');if(!d)
 function cryptReadClose(){const d=el('lore');if(d&&d.classList.contains('on')&&performance.now()-(cryptRead.at||0)>250){d.classList.remove('on');return true;}return false;}
 function cryptDrink(){const R=RUN,P=player;if(!R||!R.crypt||R.flasks<=0||!P||!P.alive)return;R.flasks--;P.hp=Math.min(100,P.hp+32);P.stamina=100;if(P.bleeds)for(const b of P.bleeds)b[0]*=.45;sfx('pickup',null,.6,.7,0,false);toast('You drink');cryptHud();}
 // E: open a casket, take a lantern, go down, leave, drink. probe=true only says what E would do
-const GRAB_HINT=(what,act)=>`Hold G, take ${what} · aim to ${act}`;   // (Build 218)
+const GRAB_HINT=(what,act)=>`Tap G, take ${what} · aim to ${act}`;   // (Build 218)
 /* (Build 239) not everyone down here wants you dead. One who is leaving you alone (or only watching) can be spoken to: he tells you what he knows of this floor, and now and then parts with something */
 function sayLine(f,line,mood){const d=el('bark');if(!d)return;const now=performance.now();barkT=now+3800;f._barkT=now+6000;d.textContent='\u201c'+line+'\u201d';speak(f,line,mood||'mutter');d.classList.add('on');clearTimeout(bark.t);bark.t=setTimeout(()=>d.classList.remove('on'),4200);}
 function cryptHints(C){const L=[];if(C.gate&&C.gate.locked)L.push('The way down is barred. The turnkey has the key. Look for his lantern.');if(C.cult)L.push('You hear the singing? Go round it. Do not touch what is theirs.');if(C.larder)L.push('There is one who lives where no light is. He hears a step before he sees a flame.');if(C.tomb)L.push('The old lord lies on this level. Leave his sword where it is and his men stand quiet.');if(fighters.some(o=>o.alive&&o.undead==='zombie'))L.push('The ones that walk get up twice. Take the head, or strike it.');if(C.traps.length||C.swings.length||C.spikes.length||C.blades.length)L.push(C.blades.length?'A blade swings in one of the passages. Go under it on your knees.':C.spikes.length?'Mind a cord at the ankle in the passages. Cut it or step over.':'Cracked flags in a passage mean nothing under them.');if(C.sunks.length)L.push('There is a hall with its floor dug out. What they buried is at the bottom.');L.push('The stair is always at the far end. Nobody I knew came back up it.');return L;}
@@ -9030,7 +9034,7 @@ class Fighter{
     if(!Number.isFinite(this.pos.x+this.pos.y+this.pos.z+this.vel.x+this.vel.z+this.bal.x+this.bal.z+this.balV.x+this.balV.z)){const g=this._okPos;if(g)this.pos.copy(g);else if(!Number.isFinite(this.pos.x+this.pos.y+this.pos.z))this.pos.set(0,0,0);this.vel.set(0,0,0);this.vy=0;this.bal.set(0,0,0);this.balV.set(0,0,0);this.ar=null;}
     else (this._okPos||(this._okPos=V())).copy(this.pos);
     for(const k in this.fists){const a=this.fists[k];if(a&&a.pos&&!Number.isFinite(a.pos.x+a.pos.y+a.pos.z+(a.vel?a.vel.x+a.vel.y+a.vel.z:0))){a.init=false;if(a.vel)a.vel.set(0,0,0);}}
-    if(this.ragdoll){if(this.hang&&hangStep(this,h))return;else if(this.isPlayer&&!this.hang&&this.alive&&input.keys.KeyG&&!this.ragdoll.rise&&tryHangRag(this,false))return;this.ragdoll.step(h);
+    if(this.ragdoll){if(this.hang&&hangStep(this,h))return;else if(this.isPlayer&&!this.hang&&this.alive&&gOn(this)&&!this.ragdoll.rise&&tryHangRag(this,false))return;this.ragdoll.step(h);
       if(this.alive&&PIT&&this.ragdoll.P.Hips&&this.ragdoll.P.Hips.y<-1&&Math.hypot(this.ragdoll.P.Hips.x-PIT.x,this.ragdoll.P.Hips.z-PIT.z)<PIT.r+.3){const R=this.ragdoll,hy=R.P.Hips.y;
         /* (Build 220) down the shaft. Stakes kill what comes down on them; the floor between them is survivable: the landing hurts by how fast you hit it, and you get up
            down there and can climb out by the ladder. It used to kill whoever reached the bottom (and anyone wedged on the way down for 9 s), so the whole shaft was a death zone */
@@ -9069,7 +9073,7 @@ class Fighter{
     // stepped or shoved off the edge: there's nothing under your feet, so you drop, still on your feet for a moment, arms going,
     // then tumble. Nothing kills you up here; the stakes at the bottom do
     if(PIT&&this.alive&&!this.climb&&this.fallT==null&&inPit(this.pos.x,this.pos.z,.12)&&this.pos.y<.05&&this.pos.y>-.5){this.fallT=simTime;this.vy=Math.min(this.vy,0);this.pitT=simTime;}
-    if(this.fallT!=null&&this.isPlayer&&this.pos.y<-.05&&input.keys.KeyG&&tryHang(this,true))return;   // (Build 216; manual since 249) going over with G held, the hands take the edge
+    if(this.fallT!=null&&this.isPlayer&&this.pos.y<-.05&&gOn(this)&&tryHang(this,true))return;   // (Build 216; manual since 249) going over with G held, the hands take the edge
     if(this.fallT!=null&&this.pos.y<-.05&&Math.hypot(this.pos.x-PIT.x,this.pos.z-PIT.z)>PIT.r-.32){this.fallT=null;this.pitFall();return;}   // the lip catches you: over you go
     if(this.fallT!=null){if(!(this.pos.y<-.02||inPit(this.pos.x,this.pos.z,0))){this.fallT=null;}   // caught yourself on the lip
       else if(simTime-this.fallT>.38){this.fallT=null;this.pitFall();return;}}
@@ -9110,8 +9114,8 @@ class Fighter{
     // forward in a short lunge, so the point arrives with the body's speed behind it instead of only the arm's last 15 cm
     {const z=this.ctrl.z,zp=this._lzp??z;this._lzp=z;if(this.sword&&!this.sword.free&&onGround&&legs&&this.slideT<=0&&(this.revW||0)<.5&&z>.56&&zp<=.56&&simTime>(this._lungeT||0)&&this.stamina>8){this.fwd(_f);const cur=this.vel.x*_f.x+this.vel.z*_f.z,add=Math.max(0,LUNGE_V-Math.max(0,cur));this._lunge={t:.14,a:add/.14};this._lungeT=simTime+.6;this._lgT=Math.hypot(this.vel.x,this.vel.z)<.6?simTime+.45:0;this.useStamina(4);}
       if(this._lunge){const L=this._lunge;this.fwd(_f);const dv=L.a*Math.min(h,L.t);this.vel.x+=_f.x*dv;this.vel.z+=_f.z*dv;L.t-=h;if(L.t<=0)this._lunge=null;}}   /* (pushed off over 0.14 s, not in one step: an instant 2.4 m/s jerked the hips back 9 cm in a frame) */
-    if(this.isPlayer&&!this.climb&&(this.fallT!=null||(!onGround&&this.vy<-1.2))&&input.keys.KeyG&&tryHang(this))return;
-    if(CRYPT&&this.isPlayer&&!this.climb&&!onGround&&this.vy<-1.2&&this.pos.y<-.1&&this.pos.y>-1.5&&groundY(this.pos.x,this.pos.z,this.pos.y)<-3&&input.keys.KeyG&&tryHang(this,true))return;   /* (Build 246) over a shaft that kills, the hands snatch at the edge on their own, as on the Pit's bridge */
+    if(this.isPlayer&&!this.climb&&(this.fallT!=null||(!onGround&&this.vy<-1.2))&&gOn(this)&&tryHang(this))return;
+    if(CRYPT&&this.isPlayer&&!this.climb&&!onGround&&this.vy<-1.2&&this.pos.y<-.1&&this.pos.y>-1.5&&groundY(this.pos.x,this.pos.z,this.pos.y)<-3&&gOn(this)&&tryHang(this,true))return;   /* (Build 246) over a shaft that kills, the hands snatch at the edge on their own, as on the Pit's bridge */
     if(this.climb){}
     else if(this.fallT!=null){this.vy-=9.8*h;this.pos.y+=this.vy*h;pitWall(this.pos,.3);shipWall(this.pos,.3);}
     else if(!onGround||this.vy>0){this.vy-=9.8*h;this.pos.y+=this.vy*h;const fy2=SHIP||MILL||CRYPT||(PIT&&this.pos.y<-.5)||SINK.st==='open'?groundY(this.pos.x,this.pos.z,this.pos.y+.05):FLOORS.length&&!PIT?floorY(this.pos.x,this.pos.z,this.pos.y+.05):0;if(this.pos.y<=fy2){if(this.vy<-6.5&&this.alive&&!this.ragdoll&&NET.mode!=='client'){this.damage((-this.vy-6.5)*6*(CRYPT&&cryptSoft(this.pos)?.3:1),null,'fell');if(this.alive)this.knockdown(1.2,this.vel.clone().setY(0),this.chest);}this.pos.y=fy2;this.vy=0;}}
@@ -9271,8 +9275,9 @@ class Fighter{
     if(this._fba)_a.add(this._fba);arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);
     _v.subVectors(arm.pos,sh);if(_v.length()>reach*1.32){_v.setLength(reach*1.32);arm.pos.copy(sh).add(_v);_v.normalize();const vn=arm.vel.dot(_v);if(vn>0)arm.vel.addScaledVector(_v,-vn);}
     arm.held=held;if(held&&c.y<-.2)this.stoop=true;   // reaching low bends the body down to it
-    const gw=this.isPlayer?!!this.grabMode:this.remote?!!(this.rin&&(this.rin.k&128)):false;arm.open=held&&gw;   // G opens the hand: it grabs instead of punching
-    if(grabStep(this,arm,held&&gw,h,held))return;
+    if(held&&c.y<-.3&&this.isPlayer&&this.grabMode){this._lowReachT=simTime+.2;this.crouchK=Math.max(this.crouchK||0,.9);}   // (Build 254) open hands reaching for the floor bend right down, as the free hand does
+    const gw=this.isPlayer?!!this.grabMode:this.remote?!!(this.rin&&(this.rin.k&128)):false;arm.open=(held||!!arm.grab)&&gw;   // G opens the hand: it grabs instead of punching
+    if(grabStep(this,arm,(held||!!arm.grab)&&gw,h,held))return;   // (Build 254) what a hand has taken it keeps until G is tapped again
     arm.cd-=h;const sp=arm.vel.length();if(gw)return;
     if(sp>5.5&&!arm.wh){arm.wh=true;sSwing(arm.pos,sp+2,'fist');this.useStamina(2+sp*.4);}if(sp<3)arm.wh=false;
     if(sp>3&&arm.cd<=0){arm.power=clamp((sp-2)/5,.2,1);arm.hit=false;arm.phase='punch';fistCheck(this,arm);if(arm.hit){arm.cd=.28;arm.phase='guard';}else arm.phase='guard';}
@@ -9289,7 +9294,8 @@ class Fighter{
     if(!this.isPlayer&&!this.remote&&free&&A&&!(A.offT>simTime)){const tg=A.target;if(tg&&tg.alive&&!tg.ragdoll&&simTime>(A.offCd||0)&&this.stamina>30){const d=tg.pos.distanceTo(this.pos);if(d<1.2&&Math.random()<h*.7*(A.skill||.5)){A.offT=simTime+rand(.7,1.6);A.offCd=simTime+rand(3,8);A.offTg=tg;}}}
     let want=false;
     if(this.offHold){const k=this.offHold.k;if(!free||k.ang>=LID_OPEN-.05||(k.x-this.pos.x)**2+(k.z-this.pos.z)**2>3.2||(simTime-this.offHold.t>2&&!(G.grab&&G.grab.kk===k)))this.offHold=null;}
-    if(free){if(this.isPlayer)want=(!TOUCH&&!!input.keys.KeyG)||!!this.offHold;else if(this.remote)want=!!(this.rin&&(this.rin.k&512));else want=!!(A&&A.offT>simTime);}
+    if(this.isPlayer&&this.gTog&&!G.grab&&!this.hang&&this.fallT==null&&!this.ragdoll&&simTime-(this.gT||0)>3)this.gTog=false;   // (Build 254) a hand put out that found nothing comes back after 3 s
+    if(free){if(this.isPlayer)want=(!TOUCH&&!!this.gTog)||!!this.offHold;else if(this.remote)want=!!(this.rin&&(this.rin.k&512));else want=!!(A&&A.offT>simTime);}
     if(!want){if(G.grab){const g0=G.grab;if(g0.k==='lid'){if(g0.phys){if(g0.kk.held===this)g0.kk.held=null;}else lidRelease(this);}else if(g0.k==='cof'){if(this.coffinLift){this.coffinLift.c.held=null;this.coffinLift=null;}if(this.reach)this.reach.w=0;}else if(g0.k!=='d')grabRelease(this,G);G.grab=null;G.cd=.25;}G.w=Math.max(0,G.w-h*6);if(this.offH)G.pos.copy(this.offH.p);G.vel.copy(this.vel);G.init=false;return;}
     if(!G.init){G.pos.copy(this.offH?this.offH.p:sh);G.vel.copy(this.vel);G.init=true;}
     G.w=Math.min(1,G.w+h*9);G.cd-=h;
@@ -11322,7 +11328,7 @@ function toast(t){const d=el('toast');if(!d)return;d.textContent=t;d.classList.a
 // Every key the game reads is a "logical" code (KeyE, KeyF, …). A binding maps a physical key to one: a capture-phase listener turns a
 // real key press into a synthetic event with the logical code, so every handler below reads it unchanged. A default key whose action
 // has been moved elsewhere does nothing. Touch buttons dispatch logical codes themselves (untrusted events are left alone).
-const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab (hold with a weapon)'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyZ','Sheathe, draw'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
+const KEY_ACTS=[['KeyW','Forward'],['KeyS','Back'],['KeyA','Left'],['KeyD','Right'],['ShiftLeft','Run'],['KeyC','Crouch'],['Space','Jump, struggle'],['KeyF','Kick'],['KeyE','Take, use'],['KeyQ','Throw (hold)'],['KeyG','Grab, let go (tap)'],['KeyR','Turn the grip'],['AltLeft','Thrust (hold)'],['KeyX','Change hands'],['KeyZ','Sheathe, draw'],['KeyV','View'],['Tab','Wounds'],['KeyM','Music'],['KeyP','Pause']];
 let KEYBIND={};try{KEYBIND=JSON.parse(localStorage.getItem('bloodmoor-keys')||'{}')||{};}catch(e){KEYBIND={};}
 let KEY_MAP=null;function keyMap(){if(KEY_MAP)return KEY_MAP;const m={},cur=new Set(KEY_ACTS.map(([a])=>KEYBIND[a]||a));for(const [a] of KEY_ACTS){const p=KEYBIND[a]||a;if(p!==a)m[p]=a;}for(const [a] of KEY_ACTS)if(!cur.has(a))m[a]='';return KEY_MAP=m;}
 const keyName=c=>c==='Space'?'Space':c.startsWith('Key')?c.slice(3):c.startsWith('Digit')?c.slice(5):c.replace('Left',' L').replace('Right',' R').replace('Arrow','');
@@ -11375,11 +11381,12 @@ addEventListener('keydown',e=>{
   if(['Space','KeyW','KeyA','KeyS','KeyD','KeyC','KeyF','KeyE','KeyQ','KeyV','KeyX','AltLeft'].includes(e.code))e.preventDefault();
   if(e.code==='KeyR'&&(state==='dead'||state==='won')&&NET.mode!=='client')startGame();
   if(e.code==='KeyM'&&!e.repeat&&e.target.tagName!=='INPUT'){setMusic(!MUS.on);toast(MUS.on?'Music on':'Music off');}
+  if(e.code==='KeyG'&&!e.repeat&&state==='playing'&&!paused&&player&&player.alive&&player.ragdoll&&!TOUCH){if(player.sword&&player.sword.def.kind!=='fist'){player.gTog=!player.gTog;player.gT=simTime;}else player.grabMode=!player.grabMode;}   // (Build 254) down or hanging, G still takes hold of an edge or lets go of it
   if(state==='playing'&&!paused&&player&&player.alive&&!player.ragdoll&&!e.repeat){
     if(e.code==='KeyC')player.slideReq=true;
     if(e.code==='Space'){player.crouch=false;player.jumpReq=true;}
     if(e.code==='KeyF')player.kickReq=true;
-    if(e.code==='KeyG'&&player.sword&&!TOUCH&&player.sword.def.kind!=='fist'&&!twoH(player.sword.def)&&!(player.sword.stuck&&!player.sword.stuck.thrown)){}   // (Build 211) G with a one-handed weapon: the free hand grabs while it's held (stepOffGrab)
+    if(e.code==='KeyG'&&player.sword&&!TOUCH&&player.sword.def.kind!=='fist'&&!(player.sword.stuck&&!player.sword.stuck.thrown)){if(!e.repeat){player.gTog=!player.gTog;player.gT=simTime;if(player.gTog&&!player.hang)toast(twoH(player.sword.def)?'Ready to catch hold · G again to let go':'Free hand out · G again to let go');}}   // (Build 211) G with a one-handed weapon: the free hand grabs while it's held (stepOffGrab)
     else if(e.code==='KeyG'&&!e.repeat&&!player.sword){player.grabMode=!player.grabMode;toast(player.grabMode?'Open hands: grab':'Fists: punch');}   // tap G: open hands to grab, tap again for fists
     else if(e.code==='KeyG'&&player.sword&&player.sword.stuck&&!player.sword.stuck.thrown){if(NET.mode==='client')NET.lg=1;else letGo(player);}   // G with a blade in someone: let go and leave it there
     else if((e.code==='KeyG'||e.code==='KeyR')&&player.sword&&player.sword.def.kind==='blade'){player.rev=!player.rev;toast(player.rev?'Reverse grip: click to stab down':'Normal grip');}
@@ -11648,7 +11655,7 @@ function updateHUD(dt){
     if(state==='playing'&&player&&LADDERS.length){const lt=ladderUse(player,true);if(lt)it=lt;}
     if(ROAD&&(RUN&&RUN.tug||NET.mode==='client'&&NET.mode2==='team')&&state==='playing'&&player&&typeof it!=='string'){const rt=roadUse(player,true);if(rt)it=rt;}
     if(RAID&&state==='playing'&&player&&typeof it!=='string'){const rt=raidUse(player,true)||(!it&&player.sword&&player.sword.def.id==='chest'?'Set the strongbox down':null);if(rt)it=rt;}
-    if(state==='playing'&&player&&player.alive&&!player.ragdoll&&!it&&!player.lidLift&&!player.coffinLift){const pw=propWepNear(player);if(pw)it=(player.sword&&player.sword.def.kind!=='fist'?'Hold G and reach for the ':'G opens your hands · reach for the ')+WEAPONS[pw.wep].name.toLowerCase();}
+    if(state==='playing'&&player&&player.alive&&!player.ragdoll&&!it&&!player.lidLift&&!player.coffinLift){const pw=propWepNear(player);if(pw)it=(player.sword&&player.sword.def.kind!=='fist'?'Tap G and reach for the ':'G opens your hands · reach for the ')+WEAPONS[pw.wep].name.toLowerCase();}
     if(CRYPT&&state==='playing'&&player&&!it){const ct=cryptUse(player,true);if(ct)it=ct;}
     if(it!==lastPrompt){lastPrompt=it;hud.prompt.classList.toggle('hide',!it);if(TOUCH){const ub=document.getElementById('tb-use');if(ub)ub.classList.toggle('hot',!!it);}   /* (Build 197) on a phone the Use button glows while there is something to use */
       if(typeof it==='string'){hud.ptext.textContent=it;hud.prompt.style.setProperty('--tier',TIER_CSS[1]);}
@@ -12930,7 +12937,7 @@ function netTick(dt){
 setInterval(()=>{if(NET.mode==='client')clientSendInput();},33);
 function clientSendInput(){
   if(NET.host&&NET.host.open&&player&&state!=='attract'){const k=input.keys,p=player;
-    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb||input.stab?32:0)|(input.rmb?64:0)|(p.grabMode?128:0)|(p.rev?256:0)|(p.sword&&!TOUCH&&input.keys.KeyG?512:0),
+    const d={t:'in',k:(k.KeyW?1:0)|(k.KeyS?2:0)|(k.KeyD?4:0)|(k.KeyA?8:0)|(k.ShiftLeft||k.ShiftRight?16:0)|(input.lmb||input.stab?32:0)|(input.rmb?64:0)|(p.grabMode?128:0)|(p.rev?256:0)|(p.sword&&(TOUCH?input.keys.KeyG:p.gTog)?512:0),
       yaw:r3(p.yaw),pitch:r3(p.pitch),cx:r3(p.ctrl.x),cy:r3(p.ctrl.y),cz:r3(p.ctrl.z),fR:p.fists.R.c,fL:p.fists.L.c};
     if(p.slideReq){d.sl=1;p.slideReq=false;}if(p.jumpReq){d.ju=1;p.jumpReq=false;}if(p.kickReq){d.ki=1;p.kickReq=false;}
     if(p.throwHold&&!NET.thrSent){d.th=1;NET.thrSent=true;}if(p.throwReq){d.th=2;p.throwReq=false;NET.thrSent=false;}
