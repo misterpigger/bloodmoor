@@ -23,6 +23,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 289: the lower room, galleries, the turnkey's room. Not done: rooms joined at angles (needs doors off a cell's centre lines), a raised dais, the "intentional placement" pass over `odd`/`rubble`/`stoolC`/`onTable`.
 - 290: a light fall is caught on a hand or knee and got up from in about 1.5 s (`rise290.mjs`).
 - 291: the six pulled weapons rebuilt and **sent to him as pictures; still out of play until he says yes** (`wrow291.mjs`).
+- 292: cudgel (now a studded club) and billhook rebuilt again after his look at the pictures, rust toned down; crypt doorways off the middle of walls, a dais at a gallery's blind end, clutter gathered in a corner. Still not done: passages that bend or meet walls at an angle; the hands ending a cut at the far hip (blocked by the pommel meeting the body: needs more hip turn). The six weapons are **still waiting on his yes**.
 - Never checked this session: multiplayer (`net.mjs` crashes in the cloud container), Build 284's footsteps and music by ear.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them

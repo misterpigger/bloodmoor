@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=291;
+const BUILD=292;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3150,6 +3150,7 @@ function cryptGround(x,z,y){const C=CRYPT;if(!C)return 0;
   const h=C.hole;if(h){const dx=x-h.x,dz=z-h.z;if(dx*dx+dz*dz<h.r*h.r){if(y>-.12&&(dx<-.3||!h.gone&&Math.abs(dz)<.3))return 0;return -30;}}
   for(const q of C.sunks){const lx=x-q.x,lz=z-q.z;if(Math.abs(lx)<q.ix&&Math.abs(lz)<q.iz){   /* (Build 238) a hall with a sunken floor: a walk round it at door level, a plank bridge across, two flights down */
       if(y>-.5&&Math.abs(lz)<q.bw)return 0;for(const st of q.st){const u=(lx-st.x0)*st.dir;if(Math.abs(lz-st.z)<.58&&u>=0&&u<=st.len)return -q.dep*(u/st.len);}return -q.dep;}}
+  if(C.daises)for(const d of C.daises){if(x<d.x0||x>d.x1||z<d.z0||z>d.z1)continue;const u=((d.ax?x:z)-d.e)*d.sg;return u>=0?d.h:u>-d.run?d.h*(1+u/d.run):0;}   /* (Build 292) a dais: its top, or the steps up to it (a ramp underfoot) */
   for(const q of C.pits){const dx=x-q.x,dz=z-q.z,d2=dx*dx+dz*dz;if(d2<q.r*q.r){if(Math.abs(dx)<(q.rw||.6)&&dz>(q.r0||0))return -q.dep*(1-(dz-(q.r0||0))/(q.r-(q.r0||0)));return -q.dep;}}
   for(const t of C.traps){const u=(t.ax?x:z)-t.a0;if(u<0||u>t.len+t.rl||Math.abs((t.ax?z:x)-t.m)>CR.CW+.32)continue;if(!t.open&&y>-.12)return 0;return u<t.len?-t.dep:-t.dep*(1-(u-t.len)/t.rl);}
   return 0;}
@@ -3448,7 +3449,7 @@ function shroudMat(){if(MATS.shroud)return MATS.shroud;const c=document.createEl
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;MATS.shroud=new THREE.MeshStandardMaterial({map:t,roughness:1,color:0x9a8f7c});return MATS.shroud;}
 function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,CW,CS,DW,DS}=CR;
   if(!MATS.cryptRot){MATS.cryptRot=MATS.woodPale.clone();MATS.cryptRot.color.setHex(0x5e5648);}
-  const C=CRYPT={depth:D,plan:PL,stairs:[],down:null,arr:null,coffins:[],swings:[],spikes:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null,finds:[],lampsX:[],cult:null,larder:null,blades:[],lootX:[],tomb:null,gate:null,moon:[],sunks:[]};
+  const C=CRYPT={depth:D,plan:PL,stairs:[],daises:[],down:null,arr:null,coffins:[],swings:[],spikes:[],lows:[],gaps:[],cors:[],ways:[],doors:[],caskets:[],spots:[],kit:[],start:null,stair:null,up:null,lampAt:null,hole:null,pits:[],traps:[],notes:[],lootAt:[],shaftIn:null,soft:null,finds:[],lampsX:[],cult:null,larder:null,blades:[],lootX:[],tomb:null,gate:null,moon:[],sunks:[]};
   const holed=(x0,x1,z0,z1,hx,hz,hr,y,key,up)=>{const sg=up?-1:1,sh=new THREE.Shape();sh.moveTo(x0,sg*z0);sh.lineTo(x1,sg*z0);sh.lineTo(x1,sg*z1);sh.lineTo(x0,sg*z1);sh.lineTo(x0,sg*z0);const hp=new THREE.Path();hp.absarc(hx,sg*hz,hr,0,Math.PI*2,true);sh.holes.push(hp);
     const g=new THREE.ShapeGeometry(sh,28);g.rotateX(up?-Math.PI/2:Math.PI/2);const uv=g.attributes.uv,q=g.attributes.position;for(let i=0;i<uv.count;i++)uv.setXY(i,q.getX(i)/2,q.getZ(i)/2);g.computeVertexNormals();if((g.attributes.normal.getY(0)>0)!==!!up){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}g.computeVertexNormals();}addGeo(key,g,T(0,y,0));};
   const well=(x,z,r,y0,y1,key='cryptWall')=>{const g=inwardGeo(new THREE.CylinderGeometry(r,r,y1-y0,28,1,true));scaleUV(g,6,(y1-y0)/2);addGeo(key,g,T(x,(y0+y1)/2,z));};
@@ -3499,12 +3500,22 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
   const wbox=(x0,x1,z0,z1,H)=>{addGeo('cryptWall',boxUV(x1-x0,H,z1-z0,2),T((x0+x1)/2,H/2,(z0+z1)/2));addBox(x0,x1,z0,z1,9);};
   const inner=(c,dx,dz,u,inset)=>dx?[c.cx+dx*(c.hx-inset),c.cz+u]:[c.cx+u,c.cz+dz*(c.hz-inset)];
   const SIDES=[[1,0],[-1,0],[0,1],[0,-1]],linkOf=(c,dx,dz)=>c.links.find(q=>q.i===c.i+dx&&q.j===c.j+dz);
+  /* (Build 292) doorways off the middle. Every way between two rooms ran from the middle of one wall to the middle of the next, so a floor was a lattice of
+     passages in line with each other and you could see straight through three rooms. Between two ordinary rooms the passage now sits up to 2.2 m to one side
+     (the same for both ends, so it is still straight): doorways come at different places along walls, passages no longer line up across a room, and you turn
+     as you cross it. du(c,dx,dz) is that offset along the wall (0 for halls, junctions, the start and last rooms, rotundas, undercrofts, dug rooms and the
+     short walls of galleries); doorNear() tells things that stand against walls where the doorways are. ?nooff puts them all back in the middle */
+  const DOFF=!/[?&]nooff/.test(location.search),plainRoom=c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&!c.under&&c.kind!=='larder'&&c.kind!=='tomb'&&c.kind!=='pit',
+    du=(c,dx,dz)=>{const q=linkOf(c,dx,dz);if(!q||!DOFF)return 0;const a=c.k<q.k?c:q,b=a===c?q:c,key=dx?'_dux':'_duz',K=a.k+'>'+b.k;a[key]=a[key]||{};if(K in a[key])return a[key][K];let o=0;
+      if(plainRoom(a)&&plainRoom(b)){const mx=Math.min(dx?a.hz:a.hx,dx?b.hz:b.hx)-CW-1.0;if(mx>=.9)o=(R()<.5?-1:1)*(.9+R()*(Math.min(mx,3.3)-.9));}return a[key][K]=+o.toFixed(2);},
+    inD=(c,x,z)=>{const d=c.dais&&c.dais.r;return !!d&&x>d.x0-.35&&x<d.x1+.35&&z>d.z0-.35&&z<d.z1+.35;},
+    doorNear=(c,x,z,r)=>SIDES.some(([dx,dz])=>{if(!linkOf(c,dx,dz))return false;const o=du(c,dx,dz);return Math.hypot(x-(c.cx+dx*c.hx+(dx?0:o)),z-(c.cz+dz*c.hz+(dz?0:o)))<r;});
   const side=(c,dx,dz)=>{const al=dx?c.hz:c.hx,off=(dx?c.hx:c.hz)+WT/2,wx=c.cx+dx*off,wz=c.cz+dz*off,link=linkOf(c,dx,dz);
     const seg=(u0,u1,col=true,mesh=true)=>{if(u1-u0<.04)return;const x0=dx?wx-WT/2:wx+u0,x1=dx?wx+WT/2:wx+u1,z0=dx?wz+u0:wz-WT/2,z1=dx?wz+u1:wz+WT/2;if(mesh){addGeo('cryptWall',boxUV(x1-x0,c.H,z1-z0,2),T((x0+x1)/2,c.H/2,(z0+z1)/2));}if(col)addBox(x0,x1,z0,z1,9);};
     if(!link){const st=c.stairSide&&c.stairSide[0]===dx&&c.stairSide[1]===dz?c.stairU:null;if(st==null){seg(-al-WT,al+WT);return;}
       seg(-al-WT,st-CW);seg(st+CW,al+WT);seg(st-CW,st-DW,true,false);seg(st+DW,st+CW,true,false);addGeo('cryptWall',archPanel(2*CW,c.H,DW,DS,WT),T(wx+(dx?0:st),0,wz+(dx?st:0),dx?Math.PI/2:0));return;}
-    seg(-al-WT,-CW);seg(CW,al+WT);seg(-CW,-DW,true,false);seg(DW,CW,true,false);
-    addGeo('cryptWall',archPanel(2*CW,c.H,DW,DS,WT),T(wx,0,wz,dx?Math.PI/2:0));C.ways.push({x:wx,z:wz,dx,dz,c,to:link});};
+    const o=du(c,dx,dz);seg(-al-WT,o-CW);seg(o+CW,al+WT);seg(o-CW,o-DW,true,false);seg(o+DW,o+CW,true,false);
+    addGeo('cryptWall',archPanel(2*CW,c.H,DW,DS,WT),T(wx+(dx?0:o),0,wz+(dx?o:0),dx?Math.PI/2:0));C.ways.push({x:wx+(dx?0:o),z:wz+(dx?o:0),dx,dz,c,to:link});};
   /* Build 231: the way down is a stair. A doorway in the far wall of the last hall opens on a flight of fourteen steps down between walls to a
      landing and a shut oak door. The next floor's first room has the same landing and door at the foot of the same flight in its near wall,
      so at the door the next floor is built and you are moved by one offset onto its landing (nothing to see change: the door is in front of
@@ -3574,7 +3585,9 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
     if(FL&&!pl.length){const c=PL.cells.find(c=>c.type==='room'&&!c.stairSide);if(c)pl.push(c);}
     if(pl.length&&(R()<.55||FL)){const c=pl.splice((R()*pl.length)|0,1)[0];c.kind='lower';c.hx=Math.max(c.hx,5.7);c.hz=Math.max(c.hz,5.7);const ix=c.hx-1.75,iz=c.hz-1.75;
       c.sunk={x:c.cx,z:c.cz,ix,iz,dep:1.5,bw:0,low:1,st:[{z:-(iz-.6),x0:-ix,dir:1,len:2.6},{z:iz-.6,x0:ix,dir:-1,len:2.6}]};C.sunks.push(c.sunk);}
-    let ng=0;for(const c of gl)if(!c.sunk&&ng<2&&(R()<.4||FG)){const lx=c.links.some(q=>q.j===c.j),lz=c.links.some(q=>q.i===c.i),ax=lx&&!lz?1:lz&&!lx?0:R()<.5?1:0,L=7.7+R()*.8,S=3.3+R()*.5;c.hx=ax?L:S;c.hz=ax?S:L;c.gal=ax?1:2;ng++;}}
+    let ng=0;for(const c of gl)if(!c.sunk&&ng<2&&(R()<.4||FG)){const lx=c.links.some(q=>q.j===c.j),lz=c.links.some(q=>q.i===c.i),ax=lx&&!lz?1:lz&&!lx?0:R()<.5?1:0,L=7.7+R()*.8,S=3.3+R()*.5;c.hx=ax?L:S;c.hz=ax?S:L;c.gal=ax?1:2;ng++;
+      /* (Build 292) a dais: the blind end of a gallery raised three steps the room's whole width, with a stone table on it */
+      {const ends=(ax?[[1,0],[-1,0]]:[[0,1],[0,-1]]).filter(([dx,dz])=>!c.links.some(q=>q.i===c.i+dx&&q.j===c.j+dz));if(ends.length&&(R()<.75||/[?&]dais/.test(location.search))){const [dx,dz]=ends[(R()*ends.length)|0];c.dais={dx,dz,h:.45,dep:2.7,run:.9};}}}}
   for(const c of PL.cells)if(c.type==='room'){const r=R();c.H=+(4.2+R()*1.6).toFixed(2);c.roof=c.kind==='larder'||c.kind==='store'?(r<.75?'timber':'flat'):c.kind==='chapel'||c.kind==='shrine'||c.kind==='ossuary'?(r<.8?'barrel':'flat'):r<.42?'barrel':r<.75?'timber':'flat';if(c.roof==='barrel')c.H=Math.max(c.H,4.6);}
   /* (Build 246, the player: the rooms are weak, every one a square box) rooms that aren't boxes. A rotunda: the corners are walled off into an
      octagon under a dome with a ring at its springing, sometimes with an eye in the crown that lets cold light down. Junctions become small
@@ -3687,13 +3700,22 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       for(const sx of [-1,1])for(const sz of [-1,1]){archBetween(cx+sx*ox,cz+sz*oz,cx+sx*(hx+.05),cz+sz*oz,H);archBetween(cx+sx*ox,cz+sz*oz,cx+sx*ox,cz+sz*(hz+.05),H);}}
     if(c.type==='hall'&&c.sunk){const rc=R()<.55,pp=c.sunk.ix+.45;for(const sx of [-1,1])for(const sz of [-1,1])(rc?column:pillar)(cx+sx*pp,cz+sz*(c.sunk.iz+.45),H);for(const sx of [-1,1]){const x=cx+sx*(hx-.5),z=cz+sx*(hz-1.1);if(isFree(x,z,.3))candleStand(x,z,true);}}
     else if(c.type==='hall'){const rc=R()<.55;for(const sx of [-1,1])for(const sz of [-1,1])(rc?column:pillar)(cx+sx*1.9,cz+sz*1.9,H);if(R()<.6)moonShaft(cx,cz,H,.7);for(const sx of [-1,1])if(R()<.7){const x=cx+sx*(hx-.7),z=cz+(R()-.5)*2*(hz-1.2);if(isFree(x,z,.3))candleStand(x,z,R()<.8);}trestle(cx+(R()-.5)*.6,cz+(R()-.5)*.6,R()*3.14);benchC(cx+1.1,cz+(R()-.5)*.5,R()*3.14,R()<.4?1:0);leanPlanks(cx-1.9+.36,cz+1.9,1,0,2);}
-    const free=SIDES.filter(([dx,dz])=>!linkOf(c,dx,dz)),dark=c.kind==='larder'||c.kind==='shrine'||c.type!=='start'&&R()<Math.min(.6,.12+.09*D);c.dark=dark;
+    if(c.dais){const {dx,dz,h,dep,run}=c.dais,al=dx?hz:hx,hl=dx?hx:hz,e=(dx?cx:cz)+(dx||dz)*(hl-dep),w0=(dx?cx:cz)+(dx||dz)*hl,B=(u0,u1,y1,key='cryptVault')=>{const a=Math.min(u0,u1),b=Math.max(u0,u1),m=(a+b)/2;addGeo(key,boxUV(dx?b-a:2*al,y1,dx?2*al:b-a,2),T(dx?m:cx,y1/2,dx?cz:m));};
+      B(e,w0,h,'cryptFloor');for(let i=0;i<3;i++)B(e-(dx||dz)*run*(3-i)/3,e-(dx||dz)*run*(2-i)/3+(dx||dz)*.02,h*(i+1)/3);B(e-(dx||dz)*.04,e+(dx||dz)*.26,h+.012);   /* the platform, three steps, a nosing along its edge */
+      const D_={ax:dx?1:0,sg:dx||dz,e,h,run,x0:dx?Math.min(e-dx*run,w0):cx-hx,x1:dx?Math.max(e-dx*run,w0):cx+hx,z0:dx?cz-hz:Math.min(e-dz*run,w0),z1:dx?cz+hz:Math.max(e-dz*run,w0)};C.daises.push(D_);c.dais.r=D_;
+      {const a=e+(dx||dz)*.25,lo=Math.min(a,w0),hi=Math.max(a,w0);if(dx)addBox(lo,hi,cz-hz,cz+hz,h-.05);else addBox(cx-hx,cx+hx,lo,hi,h-.05);}   /* solid to what is below its top; whoever comes up the steps is above it by then */
+      /* on it: a stone table on two blocks against the end wall, a cloth, two fat candles, something left on it; a candle drift either side */
+      const tu=(dx||dz)*(hl-.75),P2=(u,v)=>dx?[cx+u,cz+v]:[cx+v,cz+u],ry=dx?Math.PI/2:0;{const [x,z]=P2(tu,0);addGeo('cryptVault',boxUV(2.3,.12,.86,2),T(x,h+.92,z,ry));for(const v of [-.8,.8]){const [bx,bz]=P2(tu,v);addGeo('cryptWall',boxUV(.42,.86,.7,2),T(bx,h+.43,bz,ry));}
+        {const [qx,qz]=P2(tu-(dx||dz)*.02,0);addGeo('shroud',boxUV(1.1,.012,.9,1),T(qx,h+.987,qz,ry));}
+        for(const v of [-.9,.9]){const [ex,ez]=P2(tu,v),hh=.2+R()*.08;addGeo('wax',new THREE.CylinderGeometry(.034,.04,hh,8),T(ex,h+.98+hh/2,ez));addFlame(ex,h+1.02+hh,ez,.16,true,1.6,4.2,.5,0xffc488);}
+        find(R()<.4?'reliquary':R()<.6?'cup':'candlestick',x+(R()-.5)*.3,h+.99,z+(R()-.5)*.3);const hw=dx?.5:1.2,hd=dx?1.2:.5;const b=addBox(x-hw,x+hw,z-hd,z+hd,h+.98);if(b)b.y0=h;}}
+    const free=SIDES.filter(([dx,dz])=>!linkOf(c,dx,dz)&&!(c.dais&&c.dais.dx===dx&&c.dais.dz===dz)),dark=c.kind==='larder'||c.kind==='shrine'||c.type!=='start'&&R()<Math.min(.6,.12+.09*D);c.dark=dark;
     /* (Build 244, the player: the rooms are weak, and that isn't the engine) walls with depth. A blind arcade stands a third of a metre proud of every wall
        with no way through it: low round arches on piers, a ledge along the top, and in each recess something that was left there: a drift of candles,
        skulls, urns you can knock over, a stone coffin, shackles on the wall, fallen stone. A room was four flat walls with a few things on the floor */
     if((c.type==='start'||c.type==='room'&&['plain','fallen','slab','chapel','hanged','gamblers','pit','coffins','torture'].includes(c.kind||'plain'))&&!c.oct&&!/[?&]noarc/.test(location.search)){c._arc=true;const dw=c.type==='start'?(free[1]||free[0]):null;for(const [dx,dz] of free)arcade(c,dx,dz,dw&&dw[0]===dx&&dw[1]===dz?(free[1]?0:-2.6):null);}
     // candles: on the walls with no way through them, or beside a doorway
-    if(c.type!=='node'&&!dark){const n=c.type==='hall'?4:c.type==='start'?3:2+(R()<.5?1:0);for(let i=0;i<n;i++){const [dx,dz]=SIDES[(R()*4)|0],lk=linkOf(c,dx,dz),al=dx?c.hz:c.hx,u=lk?(R()<.5?-1:1)*(1.7+R()*(al-2.1)):(R()-.5)*(al*1.3),[x,z]=inner(c,dx,dz,clamp(u,-al+.5+(c.oct||0),al-.5-(c.oct||0)),c._arc&&!lk?.34:0),n3=R()<.4?3:1;if(c.stairSide&&c.stairSide[0]===dx&&c.stairSide[1]===dz&&Math.abs(clamp(u,-al+.5+(c.oct||0),al-.5-(c.oct||0))-c.stairU)<CW+.4)continue;cryptSconce(x,c._arc&&!lk?2.32:1.72,z,-dx,-dz,n3);}}
+    if(c.type!=='node'&&!dark){const n=c.type==='hall'?4:c.type==='start'?3:2+(R()<.5?1:0);for(let i=0;i<n;i++){const [dx,dz]=SIDES[(R()*4)|0],lk=linkOf(c,dx,dz),al=dx?c.hz:c.hx,u0=lk?(R()<.5?-1:1)*(1.7+R()*(al-2.1)):(R()-.5)*(al*1.3),dO=lk?du(c,dx,dz):0,u=lk&&Math.abs(u0-dO)<CW+.5?-u0:u0,[x,z]=inner(c,dx,dz,clamp(u,-al+.5+(c.oct||0),al-.5-(c.oct||0)),c._arc&&!lk?.34:0),n3=R()<.4?3:1;if(c.stairSide&&c.stairSide[0]===dx&&c.stairSide[1]===dz&&Math.abs(clamp(u,-al+.5+(c.oct||0),al-.5-(c.oct||0))-c.stairU)<CW+.4)continue;cryptSconce(x,c._arc&&!lk?2.32:1.72,z,-dx,-dz,n3);}}
     /* (Build 246) the middle of a room is lit: an iron candle wheel on chains from the roof, so the floor, the furniture and the vault over them are seen
        (rooms were a few candles on the walls round a dark middle) */
     if(c.type==='room'&&!dark&&!c.eye&&!['pit','hanged','larder','shrine','dig'].includes(c.kind)&&R()<.4){const top=cryptCeil(cx,cz),y=Math.min(top-1.1,3.2),rw=c.under?.55:.72;
@@ -3887,18 +3909,18 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
         {const S=shroudGeo(R),m=new THREE.Mesh(S.g,shroudMat());m.position.set(cx,.9,cz);m.castShadow=m.receiveShadow=true;world.add(m);for(const g of S.cords)addGeo('rope',g,T(cx,.9,cz));}   // (Build 214) a body wound in a stained linen shroud and tied at the neck, waist, knees and ankles (was two stretched balls of sacking)
         if(R()<.5)find(R()<.5?'ring':'purse',cx+.62,.03,cz+.3);C.lootAt.push([cx-.9,cz+.2]);if(wl){const [dx,dz]=wl,[x,z]=inner(c,dx,dz,0,.3);addGeo('wood',boxUV(dx?.5:1.4,.06,dx?1.4:.5,1),T(x,.8,z));for(const u of [-.6,.6]){const [lx,lz]=inner(c,dx,dz,u,.3);addGeo('wood',boxUV(.07,.8,.07,1),T(lx,.4,lz));}addBox(x-(dx?.27:.72),x+(dx?.27:.72),z-(dx?.72:.27),z+(dx?.72:.27),.85);}}}
     if(c.type==='room'){   /* (Build 234) every room: rubble at the foot of a wall or two, and in the plainer ones a table, a bench, boards or a ladder left leaning */
-      for(let i=0;i<2;i++){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.8),.3);if(linkOf(c,dx,dz)&&Math.abs((dx?z-cz:x-cx))<CW+.5)continue;if(isFree(x,z,.3))rubble(x,z,6+R()*9|0,.5);}
+      for(let i=0;i<2;i++){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.8),.3);if(linkOf(c,dx,dz)&&Math.abs((dx?z-cz:x-cx)-du(c,dx,dz))<CW+.5)continue;if(isFree(x,z,.3)&&!inD(c,x,z))rubble(x,z,6+R()*9|0,.5);}
       if(R()<.55){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.9),.35+R()*.3);if(isFree(x,z,.15))find(R()<.45?'purse':R()<.4?'flask':R()<.5?'bread':R()<.6?'candlestick':'cup',x,.03,z);}   /* something dropped at the foot of a wall */
       if(R()<.34){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-.9),.4+R()*.4);if(isFree(x,z,.2))find(pick(D>=2?['tunic','tunic','hose','shoes','gambeson','shirt']:['tunic','hose','shoes','shoes','shirt']),x,.03,z);}   /* (Build 236) clothes: you start with none */
-      if(c.kind==='plain'||c.kind==='store'||c.kind==='fallen'||!c.kind){const tx=cx+(R()-.5)*(hx-1.6),tz=cz+(R()-.5)*(hz-1.6),ry=R()*3.14;if(isFree(tx,tz,1.2)){trestle(tx,tz,ry);tableSet(tx,tz,ry);if(R()<.7)onTable(tx+Math.cos(ry)*.55,tz-Math.sin(ry)*.55,(R()*3)|0);if(R()<.6)stoolC(tx-Math.cos(ry)*1.45,tz+Math.sin(ry)*1.45);for(let i=0;i<2;i++)if(R()<.7)odd(cx+(R()<.5?-1:1)*(hx-.5),cz+(R()-.5)*2*(hz-.9),(R()*4)|0);if(R()<.55)find(R()<.4?'bread':R()<.5?'cup':R()<.6?'flask':'purse',tx+(R()-.5)*.3,.81,tz+(R()-.5)*.3);const bx=tx+Math.sin(ry)*.75,bz=tz+Math.cos(ry)*.75;if(isFree(bx,bz,.5))benchC(bx,bz,ry+(R()-.5)*.3,R()<.3?1:0);}
+      if(c.kind==='plain'||c.kind==='store'||c.kind==='fallen'||!c.kind){const tx=cx+(R()-.5)*(hx-1.6),tz=cz+(R()-.5)*(hz-1.6),ry=R()*3.14;if(isFree(tx,tz,1.2)){trestle(tx,tz,ry);tableSet(tx,tz,ry);if(R()<.7)onTable(tx+Math.cos(ry)*.55,tz-Math.sin(ry)*.55,(R()*3)|0);if(R()<.6)stoolC(tx-Math.cos(ry)*1.45,tz+Math.sin(ry)*1.45);{const sx=R()<.5?-1:1,sz=R()<.5?-1:1;for(let i=0;i<2;i++)if(R()<.7){const ox=cx+sx*(hx-.5-i*.55-R()*.2),oz=cz+sz*(hz-.55-R()*.5-(i?0:.5));if(!doorNear(c,ox,oz,CW+.9)&&!inD(c,ox,oz))odd(ox,oz,(R()*4)|0);}}   /* (Build 292) the odds and ends stand together in one corner, clear of the doorways; they were dropped anywhere along the side walls */if(R()<.55)find(R()<.4?'bread':R()<.5?'cup':R()<.6?'flask':'purse',tx+(R()-.5)*.3,.81,tz+(R()-.5)*.3);const bx=tx+Math.sin(ry)*.75,bz=tz+Math.cos(ry)*.75;if(isFree(bx,bz,.5))benchC(bx,bz,ry+(R()-.5)*.3,R()<.3?1:0);}
         const fr=free[(R()*free.length)|0];if(fr){const [dx,dz]=fr,al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-1),0);if(isFree(x-dx*.4,z-dz*.4,.35)){if(R()<.5)leanPlanks(x,z,-dx,-dz,2+(R()<.4?1:0));else propLadder(x,z,-dx,-dz);}}
         if(c.roof!=='timber'&&R()<.28){const x=cx+(R()-.5)*(hx-1.5),z=cz+(R()-.5)*(hz-1.5);if(isFree(x,z,.8))moonShaft(x,z,H,.45);}
         if(R()<.3){const x=cx+(R()-.5)*2*(hx-1.2),z=cz+(R()-.5)*2*(hz-1.2);if(isFree(x,z,.6))barrow(x,z,R()*6.283);}}
       if(!dark&&!['shrine','larder','tomb','chapel'].includes(c.kind)){if(R()<.3){const x=cx+(R()<.5?-1:1)*(hx-.7),z=cz+(R()-.5)*2*(hz-1);if(isFree(x,z,.3))candleStand(x,z,R()<.75);}
-        if(R()<.22){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-1.3),.6);if(isFree(x,z,.5)&&!(linkOf(c,dx,dz)&&Math.abs(dx?z-cz:x-cx)<CW+.8))candleField(x,z,10+(R()*8|0),.55);}}}
+        if(R()<.22){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-1.3),.6);if(isFree(x,z,.5)&&!inD(c,x,z)&&!(linkOf(c,dx,dz)&&Math.abs((dx?z-cz:x-cx)-du(c,dx,dz))<CW+.8))candleField(x,z,10+(R()*8|0),.55);}}}
   }
   // ---- corridors
-  for(const [ei,[a0,b0]] of PL.edges.entries()){const extra=ei>=PL.cells.length-1,a=a0.k<b0.k?a0:b0,b=a===a0?b0:a0,ax=b.i!==a.i,s0=ax?a.cx+a.hx+WT:a.cz+a.hz+WT,s1=ax?b.cx-b.hx-WT:b.cz-b.hz-WT,m=ax?a.cz:a.cx,L=s1-s0,mid=(s0+s1)/2;
+  for(const [ei,[a0,b0]] of PL.edges.entries()){const extra=ei>=PL.cells.length-1,a=a0.k<b0.k?a0:b0,b=a===a0?b0:a0,ax=b.i!==a.i,s0=ax?a.cx+a.hx+WT:a.cz+a.hz+WT,s1=ax?b.cx-b.hx-WT:b.cz-b.hz-WT,m=(ax?a.cz:a.cx)+du(a,ax?1:0,ax?0:1),L=s1-s0,mid=(s0+s1)/2;
     const k={ax,m,x0:ax?s0:m-CW,x1:ax?s1:m+CW,z0:ax?m-CW:s0,z1:ax?m+CW:s1,a,b,L};C.cors.push(k);
     const kr=R(),kd=L>2.6&&extra&&(kr<.8||CRAWL)?(R()<.6&&!CRAWL?'gap':C.lows.length||R()<.2&&!CRAWL?null:'low'):null,lh=Math.min(1.4,L/2-.75);   /* (Build 264, the player: crouch spots too often, weird and out of place) only on a way round, at most one a floor */   // (Build 218) a fallen roof stays clear of the doorways at each end
     if(kd==='low'){   /* (Build 264) a crawlway, built so: as in Half Sword, a low round-headed passage in dressed stone, 1.1 m wide and 1.35 m to the crown, running from a room's wall
@@ -3984,8 +4006,8 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
      Put something in it, the lid comes down, and after a while it gives back what the offering was worth: bread, a flask, coin, now and
      then something better; junk buys nothing. One on most floors, against a wall of an ordinary room, clear of the doors */
   {const rooms=PL.cells.filter(c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&['plain','chapel','coffins','fallen','store','slab'].includes(c.kind||'plain'));
-   if(rooms.length&&(R()<.8||/[?&]offer/.test(location.search))){const c=rooms[(R()*rooms.length)|0],sx=R()<.5?-1:1,sz=R()<.5?-1:1,alongX=R()<.5;
-    const x=alongX?c.cx+sx*c.hx*.5:c.cx+sx*(c.hx-1.05),z=alongX?c.cz+sz*(c.hz-1.05):c.cz+sz*c.hz*.5,ry=alongX?(sz>0?Math.PI:0):(sx>0?-Math.PI/2:Math.PI/2);
+   if(rooms.length&&(R()<.8||/[?&]offer/.test(location.search))){const c=rooms[(R()*rooms.length)|0],alongX=R()<.5;let sx=R()<.5?-1:1,sz=R()<.5?-1:1;const op=()=>[alongX?c.cx+sx*c.hx*.5:c.cx+sx*(c.hx-1.05),alongX?c.cz+sz*(c.hz-1.05):c.cz+sz*c.hz*.5];{const [x0,z0]=op();if(doorNear(c,x0,z0,2.3)){if(alongX)sx=-sx;else sz=-sz;}}
+    const [x,z]=op(),ry=alongX?(sz>0?Math.PI:0):(sx>0?-Math.PI/2:Math.PI/2);
     const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;const put=(geo,mat,px,py,pz,par=g)=>{const m=new THREE.Mesh(geo,mat);m.position.set(px,py,pz);m.castShadow=m.receiveShadow=true;par.add(m);return m;};
     const stone=MATS.stone||MATS.ashlar,W=1.05,Dp=.62;put(new THREE.BoxGeometry(W+.16,.12,Dp+.16),stone,0,.06,0);put(new THREE.BoxGeometry(W,.58,Dp),stone,0,.41,0);put(new THREE.BoxGeometry(W+.06,.05,Dp+.06),stone,0,.72,0);
     put(new THREE.BoxGeometry(W-.14,.02,Dp-.14),MATS.cryptShade||stone,0,.735,0);
@@ -4000,7 +4022,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
      a stool, his cot, a candle stand, and a rack of key rings behind the table; he keeps to it (his home spot) until he knows you are there */
   if(C.gate){const rooms=PL.cells.filter(c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&!c._ud&&['plain','store','fallen','coffins'].includes(c.kind||'plain'));
     if(rooms.length){const c=rooms[(R()*rooms.length)|0];let sx=R()<.5?-1:1,sz=R()<.5?-1:1;const alongX=!(c.gal===2)&&(c.gal===1||R()<.5),al=alongX?c.hx:c.hz,tu=Math.max(2.05,al*.3),pos=()=>[alongX?c.cx+sx*tu:c.cx+sx*(c.hx-1.2),alongX?c.cz+sz*(c.hz-1.2):c.cz+sz*tu];   /* the table clear of the doorway in the middle of the wall, the cot beyond it toward the corner */
-      let [x,z]=pos();if(C.offer&&Math.hypot(C.offer.x-x,C.offer.z-z)<4){sx=-sx;sz=-sz;[x,z]=pos();}const ry=alongX?(sz>0?Math.PI:0):(sx>0?-Math.PI/2:Math.PI/2),c2=Math.cos(ry),s2=Math.sin(ry),at=(lx,lz)=>[x+lx*c2+lz*s2,z-lx*s2+lz*c2];
+      let [x,z]=pos();if(C.offer&&Math.hypot(C.offer.x-x,C.offer.z-z)<4){sx=-sx;sz=-sz;[x,z]=pos();}if(doorNear(c,x,z,2.6)){if(alongX)sx=-sx;else sz=-sz;[x,z]=pos();}const ry=alongX?(sz>0?Math.PI:0):(sx>0?-Math.PI/2:Math.PI/2),c2=Math.cos(ry),s2=Math.sin(ry),at=(lx,lz)=>[x+lx*c2+lz*s2,z-lx*s2+lz*c2];
       trestle(x,z,ry);tableSet(x,z,ry);{const [a,b]=at(.2,.8);stoolC(a,b);}
       for(const e of [-.82,.82]){const [a,b]=at(e,-.56);addGeo('wood',boxUV(.07,1.85,.07,1),T(a,.925,b,ry));}{const [a,b]=at(0,-.56);addGeo('wood',boxUV(1.72,.3,.035,1),T(a,1.52,b,ry));addGeo('wood',boxUV(1.72,.06,.05,1),T(a,.5,b,ry));}
       for(let i=0;i<5;i++){const u=-.6+i*.3,[a,b]=at(u,-.52);{const g=new THREE.CylinderGeometry(.008,.008,.07,5);g.rotateX(Math.PI/2);addGeo('iron',g,T(a,1.58,b,ry));}
@@ -4027,7 +4049,7 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       while(stk.length){const k=stk.pop(),i=k%nx,j=(k/nx)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=nz)continue;const q=b*nx+a;if(seen[q]===3)continue;if(ok(q)){seen[q]=3;stk.push(q);}}}
       if(C.down&&C.down.z0!=null&&!near(C.down.x,C.down.z0-1.1)){C.bad=(C.bad||0)+1;C.badAt=[C.down.x,C.down.z0];}   /* (Build 247) and the head of the stair down */
       for(const w of C.ways){if(!w.to)continue;for(const sg of [-1,1])if(!near(w.x+sg*w.dx*1.1,w.z+sg*w.dz*1.1)){C.bad=(C.bad||0)+1;C.badAt=[w.x,w.z];if(window.__keepBad)(C.badW=C.badW||[]).push([w.x,w.z,w.dx,w.dz,sg,w.c.type,w.c.kind,w.to.type,w.to.kind]);}}if(window.__keepBad)C.badMap=(x,z)=>{let o='';for(let dj=-12;dj<=12;dj++){for(let di=-12;di<=12;di++){const i=Math.round((x-x0)/st)+di,j=Math.round((z-z0)/st)+dj;o+=i<0||j<0||i>=nx||j>=nz?' ':seen[j*nx+i]===3?'.':seen[j*nx+i]===2?'#':seen[j*nx+i]===1?'o':' ';}o+='\n';}return o;};}}
-  for(const w of C.ways){const leaf=w.c.leaf&&!w.force,r=R();if(!w.force&&!(leaf?r<.85:r<.3))continue;if(!w.force&&C.lows.some(q=>Math.abs((q.ax?w.z:w.x)-q.m)<.2&&(q.ax?w.x:w.z)>q.a0-1.3&&(q.ax?w.x:w.z)<q.a1+1.3))continue;   // (Build 218) no full-height door opening onto a passage you have to crawl throughif(C.doors.some(d=>d.w.c===w.to&&d.w.to===w.c))continue;
+  for(const w of C.ways){const leaf=w.c.leaf&&!w.force,r=R();if(!w.force&&!(leaf?r<.85:r<.3))continue;if(!w.force&&C.lows.some(q=>Math.abs((q.ax?w.z:w.x)-q.m)<.2&&(q.ax?w.x:w.z)>q.a0-1.3&&(q.ax?w.x:w.z)<q.a1+1.3))continue;   /* (Build 218) no full-height door opening onto a passage you have to crawl through */if(C.doors.some(d=>d.w.c===w.to&&d.w.to===w.c))continue;   /* (Build 292: this test had sat inside a line comment since Build 218, so a passage could get a door at both ends) */
     const tx=w.dx?0:1,tz=w.dx?1:0,hx=w.x-tx*DW,hz=w.z-tz*DW,base=w.dx?-Math.PI/2:0,g=new THREE.Group();g.position.set(hx,0,hz);g.rotation.y=base;
     const sh=new THREE.Shape();sh.moveTo(.02,.02);sh.lineTo(2*DW-.02,.02);sh.lineTo(2*DW-.02,DS);sh.absarc(DW,DS,DW-.02,0,Math.PI,false);sh.lineTo(.02,.02);
     const dg=new THREE.ExtrudeGeometry(sh,{depth:.07,bevelEnabled:false,curveSegments:8});dg.translate(0,0,-.035);scaleUV(dg,.8,.8);const dm=new THREE.Mesh(dg,MATS.propWood);g.add(dm);
@@ -6514,15 +6536,21 @@ let _w291=null;function w291(){if(_w291)return _w291;const c=(m,f)=>{const x=m.c
     iron:std({color:0x4a4642,metalness:.72,roughness:.56,envMapIntensity:.8}),
     rustBlade:new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:.55,roughness:.78,envMapIntensity:.5,vertexColors:true}),rustHilt:std({color:0x574236,metalness:.42,roughness:.82,envMapIntensity:.4}),
     bareGrip:c(woodMat,x=>{x.color.setHex(0x4e3c2c);x.roughness=.88;}),redGrip:c(gripMat,x=>{x.color.setHex(0x6e1e1a);x.roughness=.62;}),gilt:std({color:0xa5803f,metalness:.92,roughness:.4,envMapIntensity:.9})};}
-function makeCudgel(){const P=[],M=w291();   // a blackthorn cudgel: a grown stick, not a turned one: crooked, thicker toward a root-knob head, the stubs of its side shoots cut off pale, iron nails driven in round the head, a thong through the butt
-  const prof=[[0,-.13]];for(let i=0;i<=44;i++){const t=i/44,y=-.128+t*.9,r=t<.5?.0155+.003*Math.sin(t*9):.016+.03*Math.pow((t-.5)/.5,1.35);prof.push([r*(t>.9?Math.sqrt(Math.max(.012,1-((t-.9)/.1)**2)):1),y]);}prof.push([0,.7725]);
-  const body=woodKnots(lathe(prof,22),.1,2.3,.012);P.push([body,M.thorn,0,0,0]);
-  const at=(y)=>{const t=(y+.128)/.9,r=t<.5?.0165:.016+.03*Math.pow((t-.5)/.5,1.35);return [r,.012*Math.sin(y*3.1+2.3),.0072*Math.sin(y*2.3+3.91)];};
-  for(const [a,y] of [[.5,.36],[2.4,.5],[4.4,.44],[5.5,.6],[1.5,.66],[3.4,.7]]){const [r,bx,bz]=at(y),g=new THREE.CylinderGeometry(.0075,.0095,.014,7);g.rotateZ(-Math.PI/2);g.rotateY(-a);P.push([g,M.thorn,bx+Math.cos(a)*(r+.003),y,bz+Math.sin(a)*(r+.003)]);
-    const f=new THREE.CircleGeometry(.0072,7);f.rotateY(Math.PI/2);f.rotateY(-a);P.push([f,M.cut,bx+Math.cos(a)*(r+.0102),y,bz+Math.sin(a)*(r+.0102)]);}
-  for(let k=0;k<2;k++)for(let i=0;i<5;i++){const a=i/5*6.283+k*.63,y=.63+k*.075,[r,bx,bz]=at(y),g=new THREE.ConeGeometry(.0058,.007,4,1);g.rotateZ(-Math.PI/2);g.rotateY(-a);P.push([g,M.iron,bx+Math.cos(a)*(r+.002),y,bz+Math.sin(a)*(r+.002)]);}
-  {const c=new THREE.CatmullRomCurve3([V(.012,-.112,0),V(.03,-.14,.004),V(.022,-.2,0),V(0,-.225,-.004),V(-.022,-.2,0),V(-.03,-.14,.004),V(-.012,-.112,0)]);P.push([new THREE.TubeGeometry(c,24,.0028,5,false),gripMat,0,0,0]);}
+function makeCudgel(){const P=[],M=w291(),fl=g=>toCreasedNormals(g.toNonIndexed(),.4);   // (Build 292) a studded club, as footmen carry in the period's pictures: a straight ash stave hewn eight-sided and swelling to the head, two iron bands shrunk on, square nail heads in the facets between them, a leather-wrapped handle with a wrist loop. (Build 291's knotted dark stick read as something else entirely.)
+  const R=y=>.0175+.0175*clamp((y-.3)/.44,0,1)**1.25;   /* the head's half-width (to a corner) at a height */
+  {const pr=[[0,.2]];for(let i=0;i<=12;i++){const y=.2+i*.045;pr.push([R(y),y]);}pr.push([R(.74),.755],[R(.74)-.007,.772],[0,.772]);P.push([fl(lathe(pr,8)),M.ash,0,0,0]);}
+  P.push([lathe([[0,-.135],[.012,-.135],[.0175,-.128],[.019,-.115],[.0165,-.1],[.0165,.2],[0,.2]],14),M.ash,0,0,0]);
+  P.push([lathe([[.0165,-.095],[.0188,-.095],[.0196,-.03],[.019,.06],[.0185,.1],[.0165,.1]],14),gripMat,0,0,0]);for(const y of [-.092,.098])P.push([wireP(.0192,.008),M.iron,0,y,0]);
+  for(const y of [.47,.7]){const r=R(y);P.push([fl(lathe([[r-.002,-.011],[r+.0026,-.011],[r+.0026,.011],[r-.002,.011]],8)),M.iron,0,y,0]);}
+  for(let k=0;k<3;k++)for(let i=0;i<8;i++){if((i+k)&1)continue;const y=.525+k*.058,a=(i+.5)*Math.PI/4,r=R(y)*Math.cos(Math.PI/8),g=new THREE.ConeGeometry(.0062,.0075,4,1);g.rotateY(Math.PI/4);g.rotateZ(-Math.PI/2);g.rotateY(-(Math.PI/2-a));P.push([g,M.iron,Math.sin(a)*(r+.0025),y,Math.cos(a)*(r+.0025)]);}
+  {const c=new THREE.CatmullRomCurve3([V(.008,-.118,0),V(.024,-.14,.003),V(.018,-.19,0),V(0,-.21,-.003),V(-.018,-.19,0),V(-.024,-.14,.003),V(-.008,-.118,0)]);P.push([new THREE.TubeGeometry(c,24,.0024,5,false),gripMat,0,0,0]);}
   return wpnGroup(P);}
+function ribbonBlade(back,edge,th,M=10){const N=Math.min(back.length,edge.length),pos=[],col=[],idx=[],W=M+1;   // a single-edged blade between a back line and an edge line: thick along the back, thinning across to a ground bevel and a keen edge; dark forge scale on the body, the bevel bright
+  for(const sg of [1,-1])for(let i=0;i<N;i++)for(let j=0;j<=M;j++){const u=j/M,b=back[i],e=edge[i],x=b[0]+(e[0]-b[0])*u,y=b[1]+(e[1]-b[1])*u,k=Math.min(1,i/3,(N-1-i)/2+.12),h=th/2*k*(u<.68?1-.3*u/.68:.7*Math.max(.05,1-(u-.68)/.32));
+      pos.push(x,y,sg*h);const sc=.46+.1*Math.sin(x*310+y*170)*Math.sin(y*240-x*90+1.3),c=u>.68?1.32:u<.06?.6:sc;col.push(c,c,c);}
+  for(let f=0;f<2;f++)for(let i=0;i<N-1;i++)for(let j=0;j<M;j++){const a=f*N*W+i*W+j,b=a+1,c=a+W,d=c+1;if(f)idx.push(a,c,b,b,c,d);else idx.push(a,b,c,b,d,c);}
+  for(let i=0;i<N-1;i++){const a=i*W,c=a+W,a2=N*W+a,c2=N*W+c;idx.push(a,c,a2,a2,c,c2);}   /* the back's flat */
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);return toCreasedNormals(g.toNonIndexed(),.5);}
 function forgedRod(pts,r0,r1,t0=.3){const c=new THREE.CatmullRomCurve3(pts.map(p=>V(...p))),TS=28,RS=4,g=new THREE.TubeGeometry(c,TS,r0,RS,false),p=g.attributes.position,q=V();   // a square bar drawn out to a point: forged, not turned
   for(let i=0;i<p.count;i++){const ring=Math.floor(i/(RS+1)),t=ring/TS;c.getPointAt(t,q);const k=t<t0?1:lerp(1,r1/r0,Math.pow((t-t0)/(1-t0),.8));p.setXYZ(i,q.x+(p.getX(i)-q.x)*k,q.y+(p.getY(i)-q.y)*k,q.z+(p.getZ(i)-q.z)*k);}
   return toCreasedNormals(g.toNonIndexed(),.5);}
@@ -6533,16 +6561,16 @@ function makePitchfork(){const P=[],M=w291();   // a hayfork: an ash shaft worn 
   for(const sg of [-1,1])P.push([forgedRod([[0,1.415,0],[sg*.012,1.44,0],[sg*.04,1.462,.001],[sg*.058,1.5,.004],[sg*.06,1.57,.012],[sg*.056,1.66,.026],[sg*.05,1.745,.044]],.0072,.0016,.35),M.iron,0,0,0]);
   {const y=new THREE.BoxGeometry(.03,.02,.016);P.push([y,M.iron,0,1.435,0]);}
   return wpnGroup(P);}
-function makeBillhook(){const P=[],M=w291();   // a hedging bill: a broad blade that swells toward the top and hooks forward into a beak, ground on the inside of the hook and down the belly, its tang in an iron ferrule on a short ash handle with a swelling butt
-  const sm=(pts,n)=>new THREE.CatmullRomCurve3(pts.map(([x,y])=>V(x,y,0)),false,'centripetal').getPoints(n).map(q=>[q.x,q.y]);
-  const back=sm([[-.013,.15],[-.0155,.3],[-.017,.47],[-.012,.55],[.004,.605],[.03,.632],[.062,.634],[.09,.612],[.106,.572],[.109,.53],[.1,.5]],40),edge=sm([[.1,.5],[.094,.54],[.08,.566],[.062,.566],[.05,.53],[.046,.44],[.046,.33],[.038,.23],[.02,.15]],36);
-  P.push([flatBlade([...back,...edge.slice(1),[-.013,.15]],edge.slice().reverse(),.0052,.016),headMat,0,0,0]);
-  P.push([toCreasedNormals(lathe([[.0165,-.045],[.0185,-.045],[.0192,-.03],[.0175,.03],[.0135,.05],[0,.05]],8).toNonIndexed(),.5),M.iron,0,.14,0]);{const n=new THREE.CylinderGeometry(.0035,.0035,.042,6);n.rotateX(Math.PI/2);P.push([n,M.iron,0,.125,0]);}
-  P.push([woodKnots(lathe([[0,-.125],[.014,-.125],[.0205,-.11],[.0215,-.09],[.0165,-.06],[.0152,.0],[.0158,.06],[.0168,.1],[0,.1]],14),.02,.4),M.ash,0,0,0]);return wpnGroup(P);}
+function makeBillhook(){const P=[],M=w291();   // (Build 292) a hedging bill forged, not cut from sheet: a broad blade thick along its back, swelling toward the top and hooking forward into a beak, ground to a bright bevel inside the hook and down the belly, dark scale left on the body; a tang in an iron ferrule with a rivet, an ash handle with a swelling butt
+  const sm=(pts,n)=>new THREE.CatmullRomCurve3(pts.map(([x,y])=>V(x,y,0)),false,'centripetal').getSpacedPoints(n).map(q=>[q.x,q.y]);
+  const back=sm([[-.014,.14],[-.016,.3],[-.0175,.46],[-.013,.545],[.003,.603],[.03,.632],[.062,.634],[.09,.612],[.107,.572],[.11,.535],[.104,.5]],56),edge=sm([[.019,.14],[.036,.22],[.044,.33],[.044,.44],[.047,.5],[.054,.535],[.066,.555],[.08,.556],[.091,.54],[.099,.518],[.104,.5]],56);
+  P.push([ribbonBlade(back,edge,.0062,10),headMat,0,0,0]);
+  P.push([toCreasedNormals(lathe([[.0165,-.045],[.0188,-.045],[.0195,-.03],[.018,.03],[.0145,.052],[0,.052]],8).toNonIndexed(),.5),M.iron,0,.135,0]);{const n=new THREE.CylinderGeometry(.0035,.0035,.043,6);n.rotateX(Math.PI/2);P.push([n,M.iron,0,.12,0]);}
+  P.push([woodKnots(lathe([[0,-.125],[.014,-.125],[.0205,-.11],[.0215,-.09],[.0165,-.06],[.0152,.0],[.0158,.06],[.0168,.095],[0,.095]],14),.02,.4),M.ash,0,0,0]);return wpnGroup(P);}
 function rustBlade(b){const p=b.attributes.position,c=b.attributes.color;if(!c)return b;   // an old blade: a dark brown patina all over, heavier toward the hilt and in broad patches, pitted, with grey steel still showing along the edges and where it has been wiped
   for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),sd=p.getZ(i)>0?1.7:0,v=c.getX(i),n=Math.sin(y*71+1.3+sd)*Math.sin(x*58+.7+sd)+.7*Math.sin(y*133+x*41+2.1)*Math.sin(y*29-x*97+.4+sd)+.4*Math.sin(y*211+sd)*Math.sin(x*170+1.1),
-      k=clamp(.7+.42*n+.3*clamp(1-y/.3,0,1)-(v>1.1?.5:0),0,1),pit=Math.sin(y*613+sd)*Math.sin(x*877+2)>.55?.6:1,g=v*.24*pit;
-    c.setXYZ(i,lerp(g,.13*pit,k),lerp(g*.98,.066*pit,k),lerp(g*.96,.036*pit,k));}c.needsUpdate=true;
+      k=clamp(.72+.16*n+.2*clamp(1-y/.3,0,1)-(v>1.1?.42:0),0,1),pit=Math.sin(y*613+sd)*Math.sin(x*877+2)>.55?.6:1,g=v*.24*pit;
+    c.setXYZ(i,lerp(g,.085*pit,k),lerp(g*.98,.052*pit,k),lerp(g*.96,.036*pit,k));}c.needsUpdate=true;
   for(const [y0,d] of [[.31,.0022],[.47,.003],[.58,.0018],[.22,.0016]])for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);if(Math.abs(y-y0)<.006&&Math.abs(x)>.008)p.setX(i,x-Math.sign(x)*d*(1-Math.abs(y-y0)/.006));}   /* a few nicks in the edge */
   return b;}
 function makeRustSword(){const M=w291(),b=rustBlade(bladeP(.78,.0245,{sec:'lens',ful:.6,fw:.28,base:.042,th0:.0036,pt:.17,tw:.78}));   // an old Type XII sword left in the damp: plain straight cross, a small wheel pommel, the leather long gone from its wooden grip

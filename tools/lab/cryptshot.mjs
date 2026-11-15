@@ -50,6 +50,8 @@ const scenes={
   blade:`const t=C.blades[0];if(t){if(t.ax){P.pos.set(t.u0-2.6,0,t.m);P.yaw=Math.PI/2;}else{P.pos.set(t.m,0,t.u0-2.6);P.yaw=0;}}`,
   sunkb:`const q=C.sunks[0];P.pos.set(q.x-q.ix+.8,-q.dep,q.z-.9);P.yaw=Math.PI/2-.5;`,
   sunkw:`const q=C.sunks[0];P.pos.set(q.x+q.ix+.9,0,q.z+q.iz+.9);P.yaw=Math.PI*1.25;`,
+  dais:`const c=C.plan.cells.find(c=>c.dais);if(c){const d=c.dais;P.pos.set(c.cx+d.dx*((d.dx?c.hx:0)-6.4)+(d.dz?.5:0),0,c.cz+d.dz*((d.dz?c.hz:0)-6.4)+(d.dx?.5:0));P.yaw=Math.atan2(d.dx,d.dz);}`,
+  offd:`const c=C.plan.cells.find(c=>c._dux||c._duz);const w=C.ways.find(w=>w.to&&Math.abs(w.dx?w.z-w.c.cz:w.x-w.c.cx)>.8);if(w){P.pos.set(w.c.cx-w.dx*.5,0,w.c.cz-w.dz*.5);P.yaw=Math.atan2(w.x-P.pos.x,w.z-P.pos.z);}`,
   lowr:`const q=C.sunks.find(q=>q.low);if(q){P.pos.set(q.x-q.ix-.9,0,q.z-q.iz-.9);P.yaw=Math.PI/4;}`,
   lowb:`const q=C.sunks.find(q=>q.low);if(q){P.pos.set(q.x-q.ix+.9,-q.dep,q.z+.3);P.yaw=Math.PI/2;}`,
   keyr:`const k=C.keyRoom;if(k){const dx=k.x-k.c.cx,dz=k.z-k.c.cz;for(const f of F.slice())if(f!==P&&!f.hasKey){f.dispose();F.splice(F.indexOf(f),1);}P.pos.set(k.c.cx-dx*.25+dz*.25,0,k.c.cz-dz*.25-dx*.25);P.yaw=Math.atan2(k.x-P.pos.x,k.z-P.pos.z);}`,
