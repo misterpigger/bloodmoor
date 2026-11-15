@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=294;
+const BUILD=295;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3117,7 +3117,7 @@ function lampStep(dt){if(!LAMPS.length){lampSelf(null);if(LAMP_SH){LAMP_SH.inten
 // 2.4 m high, so long weapons strike stone (`Sword.worldClip`). Doors swing when walked into; some are boarded and have to be broken open.
 let CRYPT=null,CRYPT_DEPTH=1,CRYPT_SEED=7;const CRYPT_SEEN=new Set();   /* story rooms already met this run: each is seen once */const CTRAP=new URLSearchParams(location.search).get('ctraps');const CKINDS=(new URLSearchParams(location.search).get('ckinds')||'').split(',').filter(Boolean).length?new URLSearchParams(location.search).get('ckinds').split(','):null;
 const CRAWL=/[?&]crawl/.test(location.search);   // (Build 264) test: put a crawlway on the first way round
-const CR={P:19,WT:.6,CW:1.3,CS:1.5,DW:.8,DS:1.42,HR:2.1,LS:4.5,SL:5.6,SD:2.8,SLD:2.2},CRYPT_KINDS=['ossuary','coffins','chapel','pit','cells','store','fallen','slab','ossuary','coffins','plain'],CRYPT_POOR=['knife','cleaver','rondel','stave','falchion','poker','axe'];
+const CR={P:19,WT:.6,CW:1.3,CS:1.5,DW:.8,DS:1.42,HR:2.1,LS:4.5,SL:5.6,SD:2.8,SLD:2.2},CRYPT_KINDS=['ossuary','coffins','chapel','pit','cells','store','fallen','slab','ossuary','coffins','plain'],CRYPT_POOR=['knife','cleaver','rondel','stave','falchion','poker','axe','cudgel','cudgel','billhook','pitchfork','rustsword','rustsword'];
 function cryptPlan(depth,seed){let s=(seed*9301+depth*49297+11)%233280||7;const R=()=>{s=(s*9301+49297)%233280;return s/233280;};
   const GW=depth>=4?4:3,GH=depth<2?2:3,P=CR.P,cells=[];
   for(let j=0;j<GH;j++)for(let i=0;i<GW;i++)cells.push({i,j,k:j*GW+i,cx:(i-(GW-1)/2)*P,cz:(j-(GH-1)/2)*P,hx:4.4+R()*2.9,hz:4.4+R()*2.9,type:'room',links:[],H:3.8}   /* (Build 245, the player: even the big rooms looked like cramped closets) rooms are 7 to 11.5 m across (were 6 to 8.4) on a 15.5 m grid, and higher */);
@@ -3214,7 +3214,7 @@ function wearGarb(f,patch){const worn=['head','body','arms','legs'].map(k=>f.arm
 function findDrop(kind,x,y,z){const C=CRYPT;if(!C)return;const m=findMesh(kind);m.position.set(x,y,z);m.rotation.y=Math.random()*6.283;if(kind==='key')m.scale.setScalar(1.7);   /* (Build 246) a big brass key you can see on a dark floor (it was a 10 cm black one) */world.add(m);C.finds.push({kind,x,y,z,m});}
 const HIT_DMG=+(new URLSearchParams(location.search).get('hitdmg')||1.3),HIT_REACT=!/[?&]noreact/.test(location.search);
 const _shF=new THREE.Vector3(),_shR=new THREE.Vector3(),_shP=new THREE.Vector3();
-const PULLED_W={cudgel:1,pitchfork:1,billhook:1,rustsword:1,knightsword:1,giltmace:1};
+const PULLED_W={};  /* Build 295: the six rebuilt weapons are back in play */
 function offerPack(f){const O=CRYPT&&CRYPT.offer,R=RUN;if(!O||O.st!=='open'||!R||!R.inv||!R.inv.length)return;R.inv.sort((a,b)=>b.v-a.v);const q=R.inv.shift();invUI();
   O.val=q.v*3.2*rand(.85,1.2);if(Math.random()<.1)O.val=0;O.st='shut';O.t=simTime+rand(9,14);O.out=[];sThud(V(O.x,.75,O.z),.6);toast(`You lay ${FINDS[q.kind][0]} in the box and close the lid`);}
 function offerGive(f){const O=CRYPT&&CRYPT.offer,s=f.sword;if(!O||O.st!=='open'||!s||s.def.kind==='fist')return;const id=s.def.id;
@@ -4399,7 +4399,7 @@ function cryptPopulate(){const C=CRYPT,R=RUN,D=R.depth,rk=careerRank();
      and better the deeper you go */
   const tierL=clamp(Math.floor((D-1)/2),0,CAREER_FOES.length-1);
   for(const [x,z] of C.lootAt)if(Math.random()<.75)spawnWeaponLoot(WEAPONS[D>=3&&Math.random()<.5?pick(CAREER_FOES[tierL])[0]:pick(CRYPT_POOR)],x,z);
-  if(D===1&&C.kit.length)spawnWeaponLoot(WEAPONS[pick(['knife','stave','poker','cleaver'])],...C.kit[(Math.random()*C.kit.length)|0]);
+  if(D===1&&C.kit.length)spawnWeaponLoot(WEAPONS[pick(['knife','stave','poker','cleaver','cudgel','billhook','rustsword'])],...C.kit[(Math.random()*C.kit.length)|0]);
   {const read=CAREER.lore||(CAREER.lore=[]);let nx=0;for(const n of C.notes){while(nx<CRYPT_LORE.length&&read.includes(nx))nx++;n.i=nx<CRYPT_LORE.length?nx++:(Math.random()*CRYPT_LORE.length)|0;}}
   const spots=[...C.spots].filter(s=>isFree(s.x,s.z,.5)&&cryptGround(s.x,s.z,0)>-.1&&cryptGround(s.x+.5,s.z,0)>-.1&&cryptGround(s.x-.5,s.z,0)>-.1).sort(()=>Math.random()-.5),n=Math.min(spots.length,2+Math.round(D*1.1)),names=BOT_NAMES(),tier=clamp(Math.floor((D-2)/2)+(rk>=4&&D>=3?1:0),0,CAREER_FOES.length-1);
   for(let i=0;i<n;i++){const sp=spots[i],sk=clamp(.24+D*.06+rand(-.04,.04),.22,.88),en=botEntrant(names[i],sk);en.foe=true;
@@ -10834,7 +10834,7 @@ function playerLootCandidate(){
     _t3.subVectors(p,camera.position).normalize();const s=d+(1-_t3.dot(_t1))*2;if(s<bs){bs=s;best=it;}}
   return best;
 }
-const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['w','falchion',7],['w','warhammer',6],['w','poleaxe',4],['w','glaive',5],['w','rondel',4],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','sallet',3],['a','gothic',2],['a','gvambraces',4],['a','ggreaves',4],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
+const LOOT_TABLE=[['w','arming',9],['w','longsword',9],['w','axe',8],['w','mace',8],['w','spear',8],['w','greatsword',4],['w','falchion',7],['w','warhammer',6],['w','poleaxe',4],['w','glaive',5],['w','rondel',4],['w','cudgel',6],['w','pitchfork',5],['w','billhook',5],['w','rustsword',5],['w','knightsword',2],['w','giltmace',2],['a','kettle',7],['a','nasal',7],['a','bascinet',5],['a','greathelm',3],['a','sallet',3],['a','gothic',2],['a','gvambraces',4],['a','ggreaves',4],['a','mail',9],['a','brigandine',6],['a','plate',4],['a','vambraces',8],['a','greaves',8]];
 function rollLoot(){const tot=LOOT_TABLE.reduce((s,r)=>s+r[2],0);let x=Math.random()*tot;for(const r of LOOT_TABLE){x-=r[2];if(x<=0)return r;}return LOOT_TABLE[0];}
 function spawnMapLoot(n){
   for(let i=0;i<n;i++){let x=0,z=0,ok=false;for(let k=0;k<80&&!ok;k++){const a=Math.random()*6.283,r=rand(3,MAPS[curMap].lootR);x=Math.cos(a)*r;z=Math.sin(a)*r;ok=isFree(x,z,.8)&&!inPit(x,z,-1.2)&&(!SHIP||shipIn(x,z,.6))&&millOk(x,z);}
@@ -12901,7 +12901,7 @@ function roundSetup(){startCountdown();clearMatch();zone.off=true;zone.r=300;pla
 // money and nothing is taken away by losing but the run. Everything outside the career is as it was
 const CAREER_RANKS=[['Levy',0],['Man-at-arms',60],['Sergeant',170],['Sellsword',340],['Knight',600],['Banneret',950],['Champion',1450]];
 const CAREER_SHOP={   // id: [price in coin, rank needed]
-  arming:[0,0],spear:[0,0],kettle:[0,0],rondel:[25,0],nasal:[25,0],falchion:[35,0],axe:[50,1],mace:[55,1],vambraces:[45,1],greaves:[45,1],longsword:[70,1],mail:[70,1],
+  arming:[0,0],spear:[0,0],kettle:[0,0],rondel:[25,0],nasal:[25,0],cudgel:[10,0],pitchfork:[15,0],rustsword:[15,0],billhook:[20,0],knightsword:[180,3],giltmace:[190,3],falchion:[35,0],axe:[50,1],mace:[55,1],vambraces:[45,1],greaves:[45,1],longsword:[70,1],mail:[70,1],
   warhammer:[90,2],glaive:[90,2],bascinet:[95,2],brigandine:[120,2],greatsword:[150,3],greathelm:[150,3],sallet:[170,3],gvambraces:[140,3],ggreaves:[140,3],poleaxe:[230,4],plate:[300,4],gothic:[420,5]};
 const CAREER_FOES=[
   [['arming',[]],['spear',[]],['falchion',['kettle']],['axe',[]]],
