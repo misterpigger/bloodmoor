@@ -13,6 +13,7 @@ const path=await page.evaluate((bi)=>{const g=window.__game,P=g.player,C=g.CRYPT
   const pc=c(X),p2=B.ax?[pc[0],B.m]:[B.m,pc[1]],p3=B.ax?[B.x1+1.2,B.m]:[B.m,B.z1+1.2];
   // the cross passage centre lies on A's line in one coordinate and B's in the other
   const q1=A.ax?[pc[0],A.m]:[A.m,pc[1]],q2=A.ax?[pc[0],B.m]:[B.m,pc[1]];
+  if(X.slant){const W2=(u,w)=>A.ax?[u,w]:[w,u];return [p0,W2(X.ua,X.ma),W2(X.ub,X.ma+X.sg*(X.ub-X.ua)),p3];}
   return [p0,q1,q2,p3];},+(process.env.BI||0));
 console.log('path',JSON.stringify(path));
 let fi=0;const log=[];
