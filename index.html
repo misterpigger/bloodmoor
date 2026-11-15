@@ -6916,7 +6916,7 @@ function discPlate(R,dome,body,bone,pos,nrm,boss=true){const pts=[[0,dome+(boss?
   const g=lathe(pts.reverse(),32);g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nrm.clone().normalize()));g.translate(pos.x,pos.y,pos.z);const ng=g.toNonIndexed();ng.computeVertexNormals();bindRigid(ng,bone,body);return ng;}
 /* (Build 176) mail sleeves under arm harness (as a voider or a mail shirt's sleeves would be): with the cloth sleeve hidden under the steel,
    the gaps at the armpit, the inside of the elbow and between the lames show mail rather than bare skin */
-function mailSleeve(body,x0,x1=9){return fitShell(body,'msleeve'+x0+'_'+x1,{keep:(v,P,w)=>w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftShoulder','RightShoulder'])>.5&&Math.abs(P.getX(v))>x0&&Math.abs(P.getX(v))<x1&&w(v,['Hands*'])<.3,off:.007,smooth:4,bodySmooth:2,minK:.9,rim:.002,bones:null});}
+function mailSleeve(body,x0,x1=9){return fitShell(body,'msleeve2'+x0+'_'+x1,{keep:(v,P,w)=>w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftShoulder','RightShoulder'])>.3&&Math.abs(P.getX(v))>x0&&Math.abs(P.getX(v))<x1&&w(v,['Hands*'])<.3,off:.007,smooth:4,bodySmooth:2,minK:.9,rim:.002,bones:null});}
 function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='plate|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
   const {W}=bodyBoneW(body),arms=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],legs=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'],out=[];
   const G=!!def.goth,PM=G?gothFitMat:steelFitMat;const S=(g,mat)=>out.push([g,mat]);
@@ -6946,7 +6946,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       S(plateLoft(L,{tb:-.14,tt:G?.5:.36,thc:-.2*xs,span:G?1.7:1.9,clr:.045,ridge:G?[.22,.008]:[.3,.003],roll:{t:1,b:1,s:1,rt:1},NU:14,NV:24,rivets:[[-.1,-.2*xs-.5],[-.1,-.2*xs+.5]],bones:()=>[['Hips',.5],[sd+'UpLeg',.5]]},body),PM);}
     // spaulders: four lames from the top of the shoulder down the arm, the upper overlapping the lower; a besagew over the front of the armpit
     for(const sd of ['Left','Right']){const A=limbMap(body,J[sd+'Arm'],J[sd+'ForeArm'],(v,W)=>W(v,[sd+'Arm',sd+'Shoulder'])>.5,{key:sd+'uarm',ref:V(0,1,0),t0:-.6,t1:1.15,sw:5,st:2});
-      if(sd==='Left')S(mailSleeve(body,.13,.255),mailMat);
+      if(sd==='Left')S(mailSleeve(body,.13,.285),mailMat);   /* (Build 284) laps the arm harness's own sleeve and reaches into the armpit: a ring of skin showed between the two, and a patch behind the shoulder */
       // pauldron (Build 176): one domed plate over the point of the shoulder, its upper edge rising onto the chest and back, and two lames
       // below it lapping down the arm (was four loose lames that splayed like petals)
       S(plateLoft(A,{tb:-.34,tt:th=>.2-.06*Math.cos(th),thc:0,span:u=>lerp(3.0,3.6,u),clr:.024,clrF:(t,th)=>.022*Math.exp(-Math.pow((t+.02)/.16,2))*Math.max(0,Math.cos(th)),ridge:[.35,.004],roll:{t:1,b:1,s:1,rt:1},NU:18,NV:36,rivets:[[.15,0,.0045],[.1,.9,.0038],[.1,-.9,.0038]],bones:blend2(sd+'Shoulder',sd+'Arm',-.25,.05)},body),PM);
