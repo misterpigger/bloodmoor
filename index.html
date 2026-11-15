@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=296;
+const BUILD=297;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -9386,7 +9386,9 @@ class Fighter{
         if(hy>cap)out.y-=(hy-cap)*kx*.9;out.addScaledVector(_r,(lerp(lat,-sgx*.16,kx*.8)-lat)).addScaledVector(f,(lerp(fw,Math.max(fw,.32),kx)-fw));}
       else if(k>0){const lat=out.clone().sub(this.chest).dot(_r),fw=out.clone().sub(this.chest).dot(f);out.addScaledVector(_r,(lerp(lat,sgx*.2+(lat-sgx*.2)*.35,k)-lat)).addScaledVector(f,(lerp(fw,.18,k)-fw));}}
     if(this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&HS_P.xs&&!(REF_G&&!this.thrust)){const sgx=this.mainArm==='L'?-1:1,xc=this.ctrl.x*sgx;
-      if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1);out.addScaledVector(_r,-xc*sgx*HS_P.xs).addScaledVector(u,-HS_P.xd*k*hi).addScaledVector(f,HS_P.xf*k);}}
+      {const dt=Math.min(.05,Math.max(0,simTime-(this._fhT||0)));this._fhT=simTime;this._fhW=lerp(this._fhW||0,FAR_HIP&&this.commit&&!this.thrust&&!(this._hfW>.05)?1:0,1-Math.exp(-7*dt));}
+      if(xc<0){const k=clamp(-xc/.55,0,1),hi=clamp((this.ctrl.y+Hd.guardY)/.6,0,1),lo=(1-hi)*(this._fhW||0);this._fhK=k*lo;   /* (Build 297) a cut carried across and down finishes at the far hip: the far-side pull-back is let go of low down in a committed swing, and the hands go lower and a little back toward that hip (they stopped at the middle of the body) */
+        out.addScaledVector(_r,-xc*sgx*HS_P.xs*(1-FAR_HIP*lo)).addScaledVector(u,-HS_P.xd*k*hi-.1*k*lo).addScaledVector(f,HS_P.xf*k*(1-lo)-.08*k*lo);}}
     if(!this.sword||this.sword.rb||this.sword.free)out.x+=this.vel.x*.062,out.z+=this.vel.z*.062;   // (the classic engine's hand now rides with the body in Sword.step; fists and the rigid-body grip still lead by the body's speed)
     // a thrust drives the weapon forward through the hands: a spear slides a long way, a sword a little
     {const tired=Math.pow(clamp(1-this.stamina/70,0,1),2);if(tired>0&&!this.commit)out.addScaledVector(u,-tired*.16).addScaledVector(f,-tired*.05);}   // tired arms let the guard sink
@@ -9458,7 +9460,7 @@ class Fighter{
     /* Build 158: the point-at-the-face guard fades out as the hands rise instead of switching off at a height: it used to cut out at
        hi .5 and the blade jumped (about 20°) every time the hands crossed that line, so circling the aim up high swung the sword back and forth */
     const pgW=(this.isPlayer||this.remote)&&this.sword&&this.sword.def.kind==='blade'&&!cm?(GUIDE_FIX?clamp((.7-hi)/.4,0,1):(hi<.5?1:0)):0;
-    out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp:lerp(.5,.36,pgW));
+    const fh=cm?Math.min(1,(this._fhK||0)*FH_K):0;out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut*(1-fh):lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp*(1-fh):lerp(.5,.36,pgW));   /* (Build 297) at the far hip the blade lies the way the hands went, down and across, not levelled out ahead again */
     /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
        up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
     if(cm&&this._ft&&this._ft.w>.01){const F=this._ft,rr=this.right(_glR),l=Math.hypot(F.x,F.y)||1,k=FT_K*F.w*(this.sword.def.kind==='axe'?FT_AXE:1);out.addScaledVector(rr,F.x/l*k).addScaledVector(u,F.y/l*k);}   /* (Build 288) the blade follows on through the way the cut was going */
@@ -10298,7 +10300,7 @@ class Fighter{
     if(this._swTw){_qr.setFromAxisAngle(Y_AXIS,this._swTw);B.Spine1.quaternion.premultiply(_qr);B.Spine2.quaternion.premultiply(_qr);B.Spine1.updateMatrixWorld(true);}
     /* (Build 248) a cut is thrown from the hips: in a committed swing the pelvis turns with the shoulders (60% of their turn, eased in and out over
        ~0.1 s), and the thighs are turned back by the same amount so the legs and feet stay where they stood. Drawn only, like the shoulders' turn */
-    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*.7:0;   /* (Build 278) the hips turn a third as far as the shoulders, not most of the way: with both at full the chest stood square across the feet in every committed cut */this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
+    {const want=this._swTw&&this.commit&&!HIPTW_OFF&&this.alive&&!this.ragdoll&&!this.climb?this._swTw*.7+(this.mainArm==='L'?-1:1)*FAR_HIP_T*(this._fhK||0):0;   /* (Build 297) and further as a cut finishes low at the far hip, so the hip on that side turns back out of the blade's way */   /* (Build 278) the hips turn a third as far as the shoulders, not most of the way: with both at full the chest stood square across the feet in every committed cut */this._hpTw=lerp(this._hpTw||0,want,1-Math.exp(-10*dt));
       if(Math.abs(this._hpTw)>.005&&B.Hips&&B.LeftUpLeg&&B.RightUpLeg){const H0=_hpQ0.copy(B.Hips.quaternion);_qr.setFromAxisAngle(Y_AXIS,this._hpTw);B.Hips.quaternion.premultiply(_qr);
         _hpQ1.copy(H0).invert().multiply(_qr.invert()).multiply(H0);B.LeftUpLeg.quaternion.premultiply(_hpQ1);B.RightUpLeg.quaternion.premultiply(_hpQ1);B.Hips.updateMatrixWorld(true);}}
     /* Build 212: the weight goes where the body is going. Starting off, the trunk tips forward over the feet; pulling up, it sits back; cutting a corner,
@@ -11412,7 +11414,7 @@ function mkArm(){return {phase:'guard',t:0,charge:0,pos:V(),vel:V(),tgt:V(),powe
 // ---- bare-handed grabbing: an open hand brought slowly onto a body closes on it. Moving the hand then pulls or shoves a
 // standing fighter off balance, or drags a body (ragdoll) by that limb. Letting go of the button opens the hand.
 const _gp=new THREE.Vector3();
-const HALF_SW=!/[?&]nohalf\b/.test(location.search);const CLOSE_DRAW=/[?&]nodraw\b/.test(location.search)?0:(+(new URLSearchParams(location.search).get('cdraw'))||1);const CLOSE_STAB=!/[?&]nostab1\b/.test(location.search),CLOSE_IN=!/[?&]noclose\b/.test(location.search),HILT_HIT=!/[?&]nohilt\b/.test(location.search);
+const HALF_SW=!/[?&]nohalf\b/.test(location.search);let FH_K=+(new URLSearchParams(location.search).get('fhk')||1.3);let FAR_HIP_T=+(new URLSearchParams(location.search).get('fht')||.4);const FAR_HIP=/[?&]nofarhip\b/.test(location.search)?0:(+(new URLSearchParams(location.search).get('farhip'))||1);const CLOSE_DRAW=/[?&]nodraw\b/.test(location.search)?0:(+(new URLSearchParams(location.search).get('cdraw'))||1);const CLOSE_STAB=!/[?&]nostab1\b/.test(location.search),CLOSE_IN=!/[?&]noclose\b/.test(location.search),HILT_HIT=!/[?&]nohilt\b/.test(location.search);
 const OFF_PUSH=!/[?&]nopush\b/.test(location.search);
 /* (Build 283) a friend's own right button steers his off hand too: his screen keeps the hand's offset and sends it (ox, oy) with his input */
 function cliOff(){const p=player,d=p&&p.sword&&p.sword.def;return NET.mode==='client'&&!!d&&d.kind!=='fist'&&d.kind!=='spear'&&!TWO_HANDED[d.id]&&!lampOf(p);}

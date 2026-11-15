@@ -28,6 +28,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 294: the arcade no longer stands across the door you arrive by on each floor; no roof prop over a dug floor.
 - 295: the six rebuilt weapons are back in play (loot, crypt, armoury). The player then asked for the open list one item a build: close-in cuts, cuts through to the far hip, bot footwork, multiplayer check, sound check, crypt layout, Gothic harness and helmets, hair, house textures. Close camera and gravel are fine as they are.
 - 296: close-in cuts (hands drawn in with a man within 1.25 m; haft blows count): chops at 0.85 m about doubled. Crawlways removed after his clip. Bent passages no longer read as a low roof beside their legs.
+- 297: a cut carried across and low finishes at the far hip with the point down and across and the hips turned (follows the aim; not 288 follow-through).
 - Never checked this session: multiplayer (`net.mjs` crashes in the cloud container), Build 284's footsteps and music by ear.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
