@@ -1,12 +1,12 @@
-// renders the player's body in each build (bare, drawers) from front and side in daylight. env OUT, NAME, BUILDS (look.b list), O (garb)
+// renders the player's body in each build (bare, drawers) from front and side in daylight. env OUT, NAME, BUILDS (look.b list), O (garb), ARM (armour ids to put on)
 import {boot} from './harness.mjs';import fs from 'fs';
 const OUT=process.env.OUT||'bodies';fs.mkdirSync(OUT,{recursive:true});const NAME=process.env.NAME||'b';
 const BL=JSON.parse(process.env.BUILDS||'[3,0,2,1]'),O=+(process.env.O||0);
 const {browser,page,logs,fr,tick,start,shot}=await boot({W:900,HH:1000,query:'?nohud'+(process.env.Q||'')});
-await start(process.env.MODE||'yard',process.env.MAP||'arena');await page.evaluate(l=>{window.__lk=JSON.parse(l);},process.env.LOOK||'{}');await tick(120,1/60);
+await start(process.env.MODE||'yard',process.env.MAP||'arena');await page.evaluate(l=>{window.__lk=JSON.parse(l);},process.env.LOOK||'{}');await page.evaluate(async a=>{window.__arm=a?a.split(','):[];if(a)await window.__game.mdl('w_suit').catch(()=>0);},process.env.ARM||'');await tick(120,1/60);
 const CAMS=JSON.parse(process.env.CAMS||'[[0,1.15,2.7,0,1.0,0],[2.6,1.15,0.3,0,1.0,0]]');
 for(const b of BL){
-  await page.evaluate(([b,O])=>{const g=window.__game,P=g.player;for(const f of g.fighters)if(f!==P&&f.root)f.root.visible=false;const L=Object.assign({},P.look,{b,o:O,bl:O?0:1,ft:0},window.__lk||{});window.__relook(P,L);if(P.sword&&P.sword.mesh)P.sword.mesh.visible=false;},[b,O]);
+  await page.evaluate(([b,O])=>{const g=window.__game,P=g.player;for(const f of g.fighters)if(f!==P&&f.root)f.root.visible=false;const L=Object.assign({},P.look,{b,o:O,bl:O?0:1,ft:0},window.__lk||{});window.__relook(P,L);if(P.sword&&P.sword.mesh)P.sword.mesh.visible=false;for(const id of (window.__arm||[]))P.equip(g.ARMOR[id]);},[b,O]);
   await new Promise(r=>setTimeout(r,2500));await tick(60,1/60);if(process.env.RUN){await page.evaluate(()=>{const g=window.__game;g.input.keys.KeyW=true;g.input.keys.ShiftLeft=true;});await tick(+process.env.RUN,1/60);}await fr(10,1/60);
   for(let i=0;i<CAMS.length;i++){const c=CAMS[i];
     await page.evaluate(c=>{const g=window.__game,P=g.player,T=g.THREE;const s=Math.sin(P.yaw),co=Math.cos(P.yaw);const w=(x,y,z)=>new T.Vector3(P.pos.x+(-co)*x+s*z,P.pos.y+y,P.pos.z+s*x+co*z);
