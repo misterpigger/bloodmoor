@@ -3,7 +3,8 @@ import {boot} from './harness.mjs';import fs from 'fs';
 const OUT=process.env.OUT||'crypt';fs.mkdirSync(OUT,{recursive:true});const TAG=process.env.TAG||'c';
 const SCN=(process.env.SCN||'start,lamp,corr,room').split(','),NOSHOT=new Set((process.env.NOSHOT||'clear,lamp').split(','));
 const {browser,page,logs,fr,tick,shot}=await boot({W:+(process.env.W||1280),HH:+(process.env.H||720),query:'?nohud'+(process.env.Q||'')});
-await page.evaluate(async(seed)=>{const g=window.__game;document.querySelector('.mode[data-mode="career"]').click();await new Promise(r=>setTimeout(r,120));
+if(process.env.FILL)await page.evaluate(v=>{window.__FILLV=v;},+process.env.FILL);
+await page.evaluate(async(seed)=>{const g=window.__game;window.__fill=+(window.__FILLV||0);document.querySelector('.mode[data-mode="career"]').click();await new Promise(r=>setTimeout(r,120));
   if(seed){const mr=Math.random;let a=+seed;Math.random=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
   g.startGame();window.__pause=true;for(let k=0;k<200;k++)g.logic(1/60);if(window.__depth){for(let d=1;d<window.__depth;d++){}}},process.env.SEED2||'');
 if(process.env.DEPTH){for(let d=1;d<+process.env.DEPTH;d++){await page.evaluate(()=>{const g=window.__game,P=g.player,C=g.CRYPT,h=C.hole;P.hp=100;P.pos.set(h.x+1,0,h.z+1.2);P.vel.set(0,0,0);});for(let k=0;k<12;k++){await tick(20);await new Promise(r=>setTimeout(r,30));}await page.evaluate(()=>{const g=window.__game,P=g.player;for(let k=0;k<500&&(P.ragdoll||k<60);k++)g.logic(1/60);P.hp=100;});}}
@@ -65,7 +66,7 @@ const scenes={
 };
 const kinds=await page.evaluate(()=>window.__game.CRYPT.plan.cells.map(c=>c.kind||c.type));console.log('kinds',kinds.join(' '));for(const k of new Set(kinds))scenes['k_'+k]=`const c=C.plan.cells.find(c=>(c.kind||c.type)==='${k}');P.pos.set(c.cx-c.hx*.62,0,c.cz-c.hz*.3);P.yaw=Math.PI/2-.3;`;
 for(const s of SCN){const [name,camo]=s.split(':');if(!scenes[name]&&name.startsWith('k_')){console.log('no',name);continue;}
-  await page.evaluate(async([src,camo])=>{const g=window.__game,P=g.player,F=g.fighters,C=g.CRYPT;P.vel.set(0,0,0);(new Function('g','P','F','C',src))(g,P,F,C);P.pitch=-.05;if(P.alive)P.hp=window.__hurt||100;
+  await page.evaluate(async([src,camo])=>{const g=window.__game,P=g.player,F=g.fighters,C=g.CRYPT;P.vel.set(0,0,0);(new Function('g','P','F','C',src))(g,P,F,C);if(window.__fill){const T=g.THREE;if(!window.__fl){window.__fl=new T.PointLight(0xfff0dd,window.__fill,16,1);g.scene.add(window.__fl);}window.__fl.position.set(P.pos.x,P.pos.y+2.2,P.pos.z);}P.pitch=-.05;if(P.alive)P.hp=window.__hurt||100;
     if(camo==='fp'){for(let i=0;i<3&&g.camMode!=='fp';i++)window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyV'}));}if(camo&&camo[0]==='d'){const a=camo.slice(1).split('_').map(Number),T=g.THREE,sn=Math.sin(P.yaw),co=Math.cos(P.yaw),w=(x,y,z)=>new T.Vector3(P.pos.x+(-co)*x+sn*z,P.pos.y+y,P.pos.z+sn*x+co*z);window.__dbgCam={p:w(a[0],a[1],a[2]),t:w(a[3],a[4],a[5])};}else window.__dbgCam=null;},[scenes[name]||'',camo||'']);
   await tick(40,1/60);await page.evaluate(()=>{const g=window.__game;if(g.player.alive)g.player.hp=window.__hurt||100;});if(!NOSHOT.has(name)){await fr(3,1/30);await shot(`${OUT}/${TAG}_${name}.jpg`,90);}console.log('shot',name);}
 console.log(logs.slice(0,8).join('\n')||'no errors');await browser.close();process.exit(0);
