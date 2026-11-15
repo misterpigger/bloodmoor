@@ -5877,7 +5877,7 @@ function dressMH(model,look,pal,mats){
           c=mix(c,vec3(.1,.07,.08),clamp(sock*.85+lp*.6,0.,1.)*uRot);
           c=mix(c,c*vec3(.55,.5,.45),smoothstep(.62,.72,abs(b.x))*step(1.2,b.y)*.6*uRot);   // filthy hands
           diffuseColor.rgb=c;} }
-      float bld=0.,dryA=0.;`);};   /* (Build 284) this whole block had been dead: the line it hooks onto in the cloth tint had become `float bld=0.,dryA=0.;`, so the replace matched nothing and painted stubble, crease shading, flushed cheeks, scars and war paint, the zombie's rot and the crown hidden under a helmet were all silently missing. Keep the two strings the same */   // (after the cloth tint, which would recolour anything dark and grey as hose)
+      float bld=0.,dryA=0.;`).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n{float yq=vBind.y+.012*smoothstep(-.02,.06,vBind.z),yk=step(uYokeY.x,vBind.y)*(1.-smoothstep(uYokeY.y-.003,uYokeY.y+.001,yq))*step(abs(vBind.x),.2);roughnessFactor=mix(roughnessFactor,.98,yk);}');};   /* (the collar is cloth: matte, not the skin's sheen) */   /* (Build 284) this whole block had been dead: the line it hooks onto in the cloth tint had become `float bld=0.,dryA=0.;`, so the replace matched nothing and painted stubble, crease shading, flushed cheeks, scars and war paint, the zombie's rot and the crown hidden under a helmet were all silently missing. Keep the two strings the same */   // (after the cloth tint, which would recolour anything dark and grey as hose)
   sh_detail(skin);skinScatter(skin);
   skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
   model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
@@ -6046,7 +6046,7 @@ vec2 sfPlane(vec3 p,vec3 n){vec3 a=abs(n);return a.z>a.x&&a.z>a.y?p.xy:a.x>a.y?p
 float mailRing(vec2 p){float h=0.,row=floor(p.y*2.);for(int dy=-1;dy<=1;dy++){float r=row+float(dy),off=mod(r,2.)*.5,cy=(r+.5)*.5,cx0=floor(p.x-off)+.5+off;for(int dx=-1;dx<=1;dx++){vec2 d=(p-vec2(cx0+float(dx),cy))*vec2(1.,1.35);float w=1.-smoothstep(.06,.13,abs(length(d)-.4));float sg=mod(r,2.)<1.?1.:-1.;h=max(h,w*(.55+.45*clamp(sg*d.x/.45,-1.,1.)));}}return h;}
 float sfh3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}float sfn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(sfh3(i),sfh3(i+vec3(1,0,0)),f.x),mix(sfh3(i+vec3(0,1,0)),sfh3(i+vec3(1,1,0)),f.x),f.y),mix(mix(sfh3(i+vec3(0,0,1)),sfh3(i+vec3(1,0,1)),f.x),mix(sfh3(i+vec3(0,1,1)),sfh3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 vec3 sfBump(vec3 nrm,float hgt,vec3 vp){vec3 dpx=dFdx(-vp),dpy=dFdy(-vp);vec3 r1=cross(dpy,nrm),r2=cross(nrm,dpx);float det=dot(dpx,r1);return normalize(abs(det)*nrm-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2));}`;
-const STEEL_GREY=!/[?&]nosteelgrey\b/.test(location.search);
+const STEEL_SCR=!/[?&]noscr\b/.test(location.search);const STEEL_GREY=!/[?&]nosteelgrey\b/.test(location.search);
 function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
   const edge=kind==='plate'||kind==='gothic';   /* (Build 275) lofted plates carry aEdge, a dark band just inside each edge; a geometry without it reads 0 */
   sh.vertexShader=(edge?'attribute float aEdge;varying float vSfE;\n':'')+'varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSfP=position;vSfN=normal;\n'+(edge?'vSfE=aEdge;\n':'')+'#ifdef USE_UV\nvSfU=uv;\n#else\nvSfU=vec2(0.);\n#endif');
@@ -6089,6 +6089,11 @@ function surfDetail(m,kind){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)
       diffuseColor.rgb*=.98*mix(vec3(1.),vec3(.66,.63,.59),wTa*.65)*(1.-.2*wG)*(.97+.05*wS);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.1,.05),wR*.4);   /* (Build 269) brighter: kept bright by its owner, it read as lead beside Half Sword's harness */`;
     rough=`roughnessFactor=clamp(roughnessFactor*(.88+.22*(1.-sfD)*sfF)+(sfW-.5)*.05,.05,1.);roughnessFactor=clamp(roughnessFactor+.06+wTa*.26+wR*.45+wG*.1+(wS-.5)*.05,.05,1.);`;
     nrm=`normal=sfBump(normal,sfD*.00022*sfF,vViewPosition);`;}
+  if(edge&&STEEL_SCR){   /* (Build 284, the player: crisper, more detailed steel) fine scratches from use: thin bright lines in three directions, gathered in patches, that
+       break up the reflection the way a handled, scoured plate does; faded out where they would be finer than a pixel */
+    col+=`\nfloat sSc=0.;{vec3 q=vSfP;float pm=smoothstep(.35,.75,sfn3(q*5.3+1.7));for(int i=0;i<3;i++){vec3 d=i==0?vec3(.82,.5,.28):i==1?vec3(-.45,.8,.4):vec3(.2,-.35,.92);vec3 e=normalize(cross(d,vec3(.3,.9,-.2)));float a=dot(q,d)*1100.,b=dot(q,e)*26.+float(i)*7.3;float fd=clamp(1.-fwidth(a)*.6,0.,1.);sSc+=smoothstep(.86,.97,sfn(vec2(a,b)))*fd;}sSc=clamp(sSc,0.,1.)*(.35+.65*pm);}
+      diffuseColor.rgb*=1.+.14*sSc;`;
+    rough+=`\nroughnessFactor=clamp(roughnessFactor+sSc*.2,.05,1.);`;}
   if(edge){col+='\ndiffuseColor.rgb*=1.-vSfE;';rough+='\nroughnessFactor=clamp(roughnessFactor+vSfE*.5,.05,1.);';}
   sh.fragmentShader=(edge?'varying float vSfE;\n':'')+'varying vec3 vSfP,vSfN;varying vec2 vSfU;\n'+SURF_GLSL+'\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+col).replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+rough).replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+nrm);
    if(edge&&STEEL_GREY)sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>','{float sfL=dot(radiance,vec3(.3,.5,.2));radiance=mix(vec3(sfL),radiance,.4);}\n#include <lights_fragment_end>');};   /* (Build 283) plate mirrors the sky's brightness more than its colour: in shade a helmet was flat saturated blue */
