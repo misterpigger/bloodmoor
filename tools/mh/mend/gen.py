@@ -74,33 +74,40 @@ def flow(style,p,n):
     return d
 def bowl_line(p):   # where a bowl cut ends: across the forehead well above the brows, over the tops of the ears, a little lower round the back
     az=abs(math.atan2(p[0],p[2]-CEN[2]));return float(np.interp(az,[0,.6,1.2,1.7,2.4,3.15],[1.722,1.718,1.700,1.688,1.672,1.668]))
+def fringe_line(p):   # (Build 303) a pageboy: a fringe over the brow, then falling to the jaw at the sides and the nape behind
+    az=abs(math.atan2(p[0],p[2]-CEN[2]));return float(np.interp(az,[0,.45,.8,1.2,1.7,2.4,3.15],[1.728,1.712,1.665,1.615,1.598,1.588,1.585]))
 def grow(style,root,n0,rng):
     x,y,z=root;top=np.clip((y-1.70)/.06,0,1)
     if style=='crop':L=rng.uniform(.032,.044)*(.66+.34*top);seg=4;tip=.0035;grav=.0;bend=.6;sl=L/seg
     elif style=='tousle':L=rng.uniform(.045,.07)*(.6+.4*top);seg=5;tip=rng.uniform(.004,.009);grav=.12;bend=.55;sl=L/seg
     elif style=='bowl':seg=60;tip=.006;grav=.35;bend=.7;sl=.011;L=9
+    elif style=='fringe':seg=70;tip=.006;grav=.45;bend=.7;sl=.011;L=9
+    elif style=='tonsure':L=rng.uniform(.026,.036)*(.75+.25*top);seg=4;tip=.003;grav=.0;bend=.6;sl=L/seg
     else:seg=60;tip=.007;grav=.9;bend=.72;sl=.02;L=9
-    if style in('crop','tousle') and abs(x)>.058 and y<1.722 and .012<z<.088:sl*=.5   # over the ear the hair is cut close, or it rides out over the ear's top
+    if style in('crop','tousle','tonsure') and abs(x)>.058 and y<1.722 and .012<z<.088:sl*=.5   # over the ear the hair is cut close, or it rides out over the ear's top
     d=flow(style,root,n0);j=rng.normal(0,.1 if style!='tousle' else .22);d=tang(d*math.cos(j)+np.cross(n0,d)*math.sin(j),n0)
     # the root stands off the scalp, over the painted cap beneath (4-7 mm), except at the hairline, where the hair starts at the skin
     lift0=min(.0075,.003+.5*edge_dist(root))+rng.uniform(0,.0012);pts=[root+n0*lift0];p=pts[0].copy();ns=[n0]
     cut=None
     if style=='bowl':cut=bowl_line(root)+rng.normal(0,.0012)
+    fj=rng.normal(0,.0015)
+    if style=='fringe':cut=fringe_line(root)+fj
     if style=='long':cut=1.515+rng.normal(0,.012)+.02*abs(sn(x,y,z,25))
     k=0
     while k<seg:
         k+=1;q0,nn=surf(p);f=flow(style,p,nn)
-        free=style in('long','bowl') and ((p-q0)@nn>.02 or p[1]<1.60)
+        free=style in('long','bowl','fringe') and ((p-q0)@nn>.02 or p[1]<1.60)
         g=np.array([0,-1.,0])*(grav*min(1,k/4) if not free else 2.5)
         d=d*bend+f*(1-bend)*(0 if free else 1)+g*(1-bend);d/=np.linalg.norm(d)
-        t=k/(seg if style in('crop','tousle') else max(4,min(seg,12)))
+        t=k/(seg if style in('crop','tousle','tonsure') else max(4,min(seg,12)))
         off=lift0+tip*min(1,t)+(.004 if style=='long' and p[1]<1.66 else 0)
         q,nn=keep_out(p+d*sl,off)
+        if style=='fringe':cut=fringe_line(q)+fj   # where the cut falls goes by where the lock hangs, not where it grows from
         if cut is not None and q[1]<cut:
             a=(p[1]-cut)/max(1e-6,p[1]-q[1]);q=p+(q-p)*a
             if a>.15:pts.append(q.copy());ns.append(nn)
             break
-        if style in('crop','tousle') and k>1 and abs(q[0])>.073 and q[1]<1.697 and .02<q[2]<.08:break   # short hair stops at the ear, it doesn't lie over it
+        if style in('crop','tousle','tonsure') and k>1 and abs(q[0])>.073 and q[1]<1.697 and .02<q[2]<.08:break   # short hair stops at the ear, it doesn't lie over it
         d=(q-p);d/=np.linalg.norm(d)+1e-9;p=q;pts.append(p.copy());ns.append(nn)
     ns=np.array(ns);pts=np.array(pts)
     for i in range(len(pts)):
@@ -120,19 +127,21 @@ def card(pts,ns,w0,col,rng,cols=8,vmax=1.):
     for i in range(k-1):a=2*i;T+=[[a,a+1,a+2],[a+1,a+3,a+2]]
     return np.array(V),np.array(UV),np.array(T),np.array(NR)
 #        style  spacing  width
-STY={'hs_crop':('crop',.0058,.015),'hs_tousle':('tousle',.0068,.019),'hs_bowl':('bowl',.0062,.026),'hs_long':('long',.0080,.027)}
+STY={'hs_tonsure':('tonsure',.0058,.015),'hs_fringe':('fringe',.0064,.026),'hs_crop':('crop',.0058,.015),'hs_tousle':('tousle',.0068,.019),'hs_bowl':('bowl',.0062,.026),'hs_long':('long',.0080,.027)}
 def build(pid):
     style,sp,w0=STY[pid];rng=np.random.default_rng(sum(map(ord,pid))*7919%2**31)
     m=scalp()
     if style=='bowl':m&=np.array([p[1]>bowl_line(p)+.004 for p in DP])
+    if style=='fringe':m&=np.array([p[1]>fringe_line(p)+.004 for p in DP])
+    if style=='tonsure':m&=np.linalg.norm(DP-np.array([0,1.792,.012]),axis=1)>.07   # the crown shaved bare in a round
     roots=poisson(m,sp,rng);Vs=[];UVs=[];Ts=[];NRs=[];off=0;loose=[];nl=0
     order=np.argsort(DP[roots][:,1])          # from the nape up, so higher locks lie over lower ones
     for ri in roots[order]:
         r=DP[ri];nn=DN[ri];pts,ns=grow(style,r,nn,rng)
         if len(pts)<2:continue
         # (a cut end uses the lock short of its point)
-        V,UV,T,NR=card(pts,ns,w0*rng.uniform(.8,1.25),int(rng.integers(0,8)),rng,vmax={'bowl':.55,'long':.86}.get(style,1.));Vs.append(V);NRs.append(NR);UVs.append(UV);Ts.append(T+off);off+=len(V);nl+=1
-        loose.append(np.clip((1.63-V[:,1])/.13,0,1) if style=='long' else np.clip((1.70-V[:,1])/.10,0,1)*.3 if style=='bowl' else np.zeros(len(V)))
+        V,UV,T,NR=card(pts,ns,w0*rng.uniform(.8,1.25),int(rng.integers(0,8)),rng,vmax={'bowl':.55,'fringe':.6,'long':.86}.get(style,1.));Vs.append(V);NRs.append(NR);UVs.append(UV);Ts.append(T+off);off+=len(V);nl+=1
+        loose.append(np.clip((1.63-V[:,1])/.13,0,1) if style=='long' else np.clip((1.70-V[:,1])/.10,0,1)*.3 if style in('bowl','fringe') else np.zeros(len(V)))
     V=np.concatenate(Vs);UV=np.concatenate(UVs);T=np.concatenate(Ts);lo=np.concatenate(loose);NR=np.concatenate(NRs)
     anc=tree.query(V)[1];offv=(V-P[anc]).astype(np.float32)
     arrs=[('anchor',anc.astype(np.uint16)),('off',offv),('uv',np.round(np.clip(UV,0,1)*65535).astype(np.uint16)),('index',T.astype(np.uint32 if len(V)>65535 else np.uint16)),('loose',lo.astype(np.float32)),('nor',np.round(np.clip(NR,-1,1)*127).astype(np.int8))]
