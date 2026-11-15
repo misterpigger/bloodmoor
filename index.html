@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=292;
+const BUILD=293;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3138,7 +3138,7 @@ function cryptPlan(depth,seed){let s=(seed*9301+depth*49297+11)%233280||7;const 
   return {GW,GH,P,cells,edges,exit:ex,R,dist};}
 function cryptCeil(x,z){const C=CRYPT;if(!C)return 0;{const s=cryptStairAt(x,z,.2);if(s&&(z>s.z0+.2&&z<s.zd-.35))return cryptStairY(s,z)+2.45;}for(const s of C.swings){const u=s.ax?x:z,w=(s.ax?z:x)-s.m;if(Math.abs(w)>s.hw+.25)continue;   // (Build 218) the ram: hauled up it's a low beam overhead, hanging at rest it's a log across the passage to duck under
     if(s.armed){const lu=s.u0+s.Lc*Math.sin(s.th);if(Math.abs(u-lu)<s.r+.25)return s.py-s.Lc*Math.cos(s.th)-s.r;}else if(s.rest&&Math.abs(u-s.u0)<s.r+.7)return s.py-s.Lc-s.r-.1;}   /* (Build 231: seen from further off and a little lower, so you are down before your head reaches it) */for(const q of C.lows)if(Math.abs((q.ax?z:x)-q.m)<CR.CW+.3&&(q.ax?x:z)>q.a0-.1&&(q.ax?x:z)<q.a1+.1)return q.y;for(const c of C.plan.cells)if(Math.abs(x-c.cx)<c.hx+.31&&Math.abs(z-c.cz)<c.hz+.31){const v=c.vault;if(v&&v.dome){const d2=((x-c.cx)**2+(z-c.cz)**2)/(v.r*v.r);return d2>=1?v.ys:v.ys+v.rise*Math.sqrt(Math.max(.02,1-d2));}if(v){const o=(v.alongX?z-c.cz:x-c.cx)/v.hs;return v.ys+v.rise*Math.sqrt(Math.max(.04,1-o*o));}return c.H;}
-  for(const k of C.cors){if(x<k.x0-.3||x>k.x1+.3||z<k.z0-.3||z>k.z1+.3)continue;const o=k.ax?z-k.m:x-k.m;return CR.CS+Math.sqrt(Math.max(0,CR.CW*CR.CW-o*o));}return 2.4;}
+  {let best=-1;for(const k of C.cors){if(x<k.x0-.3||x>k.x1+.3||z<k.z0-.3||z>k.z1+.3)continue;const o=k.ax?z-k.m:x-k.m,v=CR.CS+Math.sqrt(Math.max(0,CR.CW*CR.CW-o*o));if(!k.bend)return v;best=Math.max(best,v);}if(best>0)return best;}return 2.4;}   /* (Build 293) where a bent passage's legs cross, the vault over the turn is the higher of the two */
 function ceilAt(x,z){return CRYPT?cryptCeil(x,z):(MAPS[curMap].ceil||0);}
 /* (Build 213) what's underfoot down here: the hole in the great hall (open on one side, an iron grate over the other, two planks laid across), the
    staked pit of a pit room (one side fallen in, which is the way out), and rotten boards over a pit in a corridor (ground until they give) */
@@ -3505,9 +3505,14 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
      (the same for both ends, so it is still straight): doorways come at different places along walls, passages no longer line up across a room, and you turn
      as you cross it. du(c,dx,dz) is that offset along the wall (0 for halls, junctions, the start and last rooms, rotundas, undercrofts, dug rooms and the
      short walls of galleries); doorNear() tells things that stand against walls where the doorways are. ?nooff puts them all back in the middle */
-  const DOFF=!/[?&]nooff/.test(location.search),plainRoom=c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&!c.under&&c.kind!=='larder'&&c.kind!=='tomb'&&c.kind!=='pit',
-    du=(c,dx,dz)=>{const q=linkOf(c,dx,dz);if(!q||!DOFF)return 0;const a=c.k<q.k?c:q,b=a===c?q:c,key=dx?'_dux':'_duz',K=a.k+'>'+b.k;a[key]=a[key]||{};if(K in a[key])return a[key][K];let o=0;
-      if(plainRoom(a)&&plainRoom(b)){const mx=Math.min(dx?a.hz:a.hx,dx?b.hz:b.hx)-CW-1.0;if(mx>=.9)o=(R()<.5?-1:1)*(.9+R()*(Math.min(mx,3.3)-.9));}return a[key][K]=+o.toFixed(2);},
+  const DOFF=!/[?&]nooff/.test(location.search),BEND=!/[?&]nobend/.test(location.search),BENDP=/[?&]bend\b/.test(location.search)?1:null,BENDL=+(new URLSearchParams(location.search).get('bendl')||0)||null,plainRoom=c=>c.type==='room'&&!c.oct&&!c.sunk&&!c.stairSide&&!c.under&&c.kind!=='larder'&&c.kind!=='tomb'&&c.kind!=='pit',
+    du=(c,dx,dz)=>{const q=linkOf(c,dx,dz);if(!q||!DOFF)return 0;const a=c.k<q.k?c:q,b=a===c?q:c,key=dx?'_dux':'_duz',K=a.k+'>'+b.k;a[key]=a[key]||{};if(!(K in a[key])){let oa=0,ob=0;
+        /* (Build 293, the player: fix the passages) a passage may bend: each end has its own doorway along its room's wall, and the passage runs out from one,
+           turns, crosses and turns again into the other. Either end may stand at the middle of its wall (a hall, a junction, the start), the other off to one side */
+        const bendOK=plainRoom,pa=bendOK(a),pb=bendOK(b),mxa=pa?(dx?a.hz:a.hx)-CW-1.0:0,mxb=pb?(dx?b.hz:b.hx)-CW-1.0:0,Lc=(dx?b.cx-b.hx-a.cx-a.hx:b.cz-b.hz-a.cz-a.hz)-2*WT;
+        if(BEND&&Lc>=(BENDL??3.9)&&(mxa>=.9||mxb>=.9)&&R()<(BENDP??.72)){const sep=2*CW+.55+R()*1.3;const sd=R()<.5?-1:1;if(mxb<.9){if(sep<=mxa){oa=+(sd*sep).toFixed(2);ob=0;}}else if(mxa<.9){if(sep<=mxb){ob=+(sd*sep).toFixed(2);oa=0;}}else for(let t=0;t<6&&oa===ob;t++){const x=(R()*2-1)*mxa,y=x+(R()<.5?-1:1)*sep;if(Math.abs(y)<=mxb){oa=+x.toFixed(2);ob=+y.toFixed(2);}}}
+        if(oa===ob&&plainRoom(a)&&plainRoom(b)){const mx=Math.min(mxa,mxb);if(mx>=.9)oa=ob=+((R()<.5?-1:1)*(.9+R()*(Math.min(mx,3.3)-.9))).toFixed(2);}
+        a[key][K]=[oa,ob];}return a[key][K][c===a?0:1];},
     inD=(c,x,z)=>{const d=c.dais&&c.dais.r;return !!d&&x>d.x0-.35&&x<d.x1+.35&&z>d.z0-.35&&z<d.z1+.35;},
     doorNear=(c,x,z,r)=>SIDES.some(([dx,dz])=>{if(!linkOf(c,dx,dz))return false;const o=du(c,dx,dz);return Math.hypot(x-(c.cx+dx*c.hx+(dx?0:o)),z-(c.cz+dz*c.hz+(dz?0:o)))<r;});
   const side=(c,dx,dz)=>{const al=dx?c.hz:c.hx,off=(dx?c.hx:c.hz)+WT/2,wx=c.cx+dx*off,wz=c.cz+dz*off,link=linkOf(c,dx,dz);
@@ -3920,7 +3925,24 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
         if(R()<.22){const [dx,dz]=SIDES[(R()*4)|0],al=dx?hz:hx,[x,z]=inner(c,dx,dz,(R()-.5)*2*(al-1.3),.6);if(isFree(x,z,.5)&&!inD(c,x,z)&&!(linkOf(c,dx,dz)&&Math.abs((dx?z-cz:x-cx)-du(c,dx,dz))<CW+.8))candleField(x,z,10+(R()*8|0),.55);}}}
   }
   // ---- corridors
-  for(const [ei,[a0,b0]] of PL.edges.entries()){const extra=ei>=PL.cells.length-1,a=a0.k<b0.k?a0:b0,b=a===a0?b0:a0,ax=b.i!==a.i,s0=ax?a.cx+a.hx+WT:a.cz+a.hz+WT,s1=ax?b.cx-b.hx-WT:b.cz-b.hz-WT,m=(ax?a.cz:a.cx)+du(a,ax?1:0,ax?0:1),L=s1-s0,mid=(s0+s1)/2;
+  for(const [ei,[a0,b0]] of PL.edges.entries()){const extra=ei>=PL.cells.length-1,a=a0.k<b0.k?a0:b0,b=a===a0?b0:a0,ax=b.i!==a.i,s0=ax?a.cx+a.hx+WT:a.cz+a.hz+WT,s1=ax?b.cx-b.hx-WT:b.cz-b.hz-WT,m=(ax?a.cz:a.cx)+du(a,ax?1:0,ax?0:1),L=s1-s0,mid=(s0+s1)/2,mb=(ax?b.cz:b.cx)+du(b,ax?-1:0,ax?0:-1);
+    if(Math.abs(mb-m)>.05){   /* (Build 293) a bent passage: out from a's doorway on line m, a cross passage at the middle, on into b's doorway on line mb.
+         Walls go round the outline of the three, as tall as the vaults so the open ends of the vaults are closed; the vaults cross in groins at the turns */
+      const ma=m,sg=mb>ma?1:-1,lo=Math.min(ma,mb),hi=Math.max(ma,mb),HT=CS+CW+.12,bx=(u0,u1,w0,w1)=>{if(u1<u0)[u0,u1]=[u1,u0];if(w1<w0)[w0,w1]=[w1,w0];if(ax)wbox(u0,u1,w0,w1,HT);else wbox(w0,w1,u0,u1,HT);},
+        fl=(u0,u1,w0,w1)=>{if(ax)flr(u0,u1,w0,w1);else flr(w0,w1,u0,u1);},
+        vlt=(alongU,line,u0,u1)=>{const l=u1-u0,c=(u0+u1)/2,vg=inwardGeo(new THREE.CylinderGeometry(CW,CW,l,14,1,true,Math.PI/2,Math.PI));scaleUV(vg,1.5,l/2);vg.rotateX(Math.PI/2);const wx=alongU===ax;addGeo('cryptVault',vg,T(wx?c:line,CS,wx?line:c,wx?Math.PI/2:0));},
+        rib=(alongU,line,u)=>{const wx=alongU===ax,x=wx?u:line,z=wx?line:u;ribArch('cryptWall',x,CS,z,wx?Math.PI/2:0,CW+.02,CW+.02,.11,.3);for(const s2 of [-1,1])addGeo('cryptWall',boxUV(wx?.3:.1,CS,wx?.1:.3,2),T(wx?u:line+s2*(CW-.045),CS/2,wx?line+s2*(CW-.045):u));},
+        rect=(alongU,line,u0,u1)=>{const wx=alongU===ax;return {ax:wx,m:line,x0:wx?u0:line-CW,x1:wx?u1:line+CW,z0:wx?line-CW:u0,z1:wx?line+CW:u1,a,b,L:u1-u0,bend:1};};
+      C.cors.push(rect(true,ma,s0,mid+CW),rect(false,mid,lo-CW,hi+CW),rect(true,mb,mid-CW,s1));
+      bx(s0,mid+CW+WT,ma-sg*CW,ma-sg*(CW+WT));bx(s0,mid-CW,ma+sg*CW,ma+sg*(CW+WT));   /* first leg: far wall runs on past the turn, near wall stops at it */
+      bx(mid+CW,mid+CW+WT,ma-sg*(CW+WT),mb-sg*CW);bx(mid-CW-WT,mid-CW,ma+sg*CW,mb+sg*(CW+WT));   /* the cross passage's two walls */
+      bx(mid-CW-WT,s1,mb+sg*CW,mb+sg*(CW+WT));bx(mid+CW,s1,mb-sg*CW,mb-sg*(CW+WT));   /* last leg */
+      fl(s0,mid+CW,ma-CW,ma+CW);fl(mid-CW,s1,mb-CW,mb+CW);fl(mid-CW,mid+CW,lo+CW,hi-CW);
+      vlt(true,ma,s0,mid+CW);vlt(true,mb,mid-CW,s1);vlt(false,mid,lo-CW,hi+CW);
+      for(let u=s0+.9;u<mid-CW-.35;u+=2.3)rib(true,ma,u);for(let u=s1-.9;u>mid+CW+.35;u-=2.3)rib(true,mb,u);if(hi-lo-2*CW>1.1)rib(false,mid,(lo+hi)/2);
+      if(R()<.8){const [x,z]=ax?[mid+CW,(lo+hi)/2]:[(lo+hi)/2,mid+CW];cryptSconce(x,1.25,z,ax?-1:0,ax?0:-1,1);}   /* a candle on the wall facing you as you come round */
+      if(R()<.5){const u=s0+.6+R()*Math.max(0,mid-CW-s0-1.2),[x,z]=ax?[u,ma-sg*CW]:[ma-sg*CW,u];niche(x,z,ax?0:sg,ax?sg:0);}
+      continue;}
     const k={ax,m,x0:ax?s0:m-CW,x1:ax?s1:m+CW,z0:ax?m-CW:s0,z1:ax?m+CW:s1,a,b,L};C.cors.push(k);
     const kr=R(),kd=L>2.6&&extra&&(kr<.8||CRAWL)?(R()<.6&&!CRAWL?'gap':C.lows.length||R()<.2&&!CRAWL?null:'low'):null,lh=Math.min(1.4,L/2-.75);   /* (Build 264, the player: crouch spots too often, weird and out of place) only on a way round, at most one a floor */   // (Build 218) a fallen roof stays clear of the doorways at each end
     if(kd==='low'){   /* (Build 264) a crawlway, built so: as in Half Sword, a low round-headed passage in dressed stone, 1.1 m wide and 1.35 m to the crown, running from a room's wall
@@ -5398,7 +5420,7 @@ const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams
 const FEET_CAP=!/[?&]nofeetcap/.test(location.search),FEET_W=(()=>{const m=location.search.match(/[?&]feetw=([\d.,]+)/);return m?m[1].split(',').map(Number):[.42,.24,.5];})();
 const SW_TW=+((location.search.match(/[?&]swtw=([\d.]+)/)||[])[1]||.6);   /* (Build 278) the shoulders turn into a cut at most ~34 degrees (was 60, with the hips adding 45 more) */
 const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
-const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),FOLLOW=!/[?&]nofollow/.test(location.search),RISE2=!/[?&]norise2/.test(location.search),RISE_TONE=_qn('rtone',.8),FT_K=_qn('ftk',2),FT_H=_qn('fthd',.1),FT_AXE=_qn('ftaxe',.3),FT_V=_qn('ftv',2.2),FT_HOLD=_qn('fth',.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),FOLLOW=/[?&]follow\b/.test(location.search),RISE2=!/[?&]norise2/.test(location.search),RISE_TONE=_qn('rtone',.8),FT_K=_qn('ftk',2),FT_H=_qn('fthd',.1),FT_AXE=_qn('ftaxe',.3),FT_V=_qn('ftv',2.2),FT_HOLD=_qn('fth',.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -9450,7 +9472,7 @@ class Fighter{
   /* Build 230: stamina without cliffs. Wind (stamina) is spent and comes back in seconds as before; everything spent also adds to fatigue, which
      builds over a long fight, lowers how much wind you can hold and how fast it returns, and only goes with real rest. Strength follows wind
      smoothly (stamK) instead of dropping to 60% at one number. Still no bar: you hear it and feel it. */
-  useStamina(x){x*=STAM_COST;this.stamina=Math.max(0,this.stamina-x);this.staminaDelay=Math.max(this.staminaDelay,.15);}   /* (Build 242, the player's call: you ran out too fast and the system was fussy) everything costs half; the slow second tiredness that built up under it (fatigue, Build 230) is gone; wind comes back sooner and faster */
+  useStamina(x){x*=STAM_COST;this.stamina=Math.max(0,this.stamina-x);if(x<.05&&STAM_DRIP)this._drip=.15;else this.staminaDelay=Math.max(this.staminaDelay,.15);}   /* (Build 293) a small cost paid every step (a swing's speed, holding a commit) only slows the wind coming back instead of stopping it, so swinging on and on tires you over a minute, not in 13 s */   /* (Build 242, the player's call: you ran out too fast and the system was fussy) everything costs half; the slow second tiredness that built up under it (fatigue, Build 230) is gone; wind comes back sooner and faster */
   stamK(){return .58+.42*smooth(clamp(this.stamina/45,0,1));}
   // ---------------- sim step
   step(h){
@@ -9481,7 +9503,7 @@ class Fighter{
     if(!this.alive)return;
     if(this.bleeds&&this.bleeds.length){this.hp-=this.bleedStep(h);if(this.hp<=0){this.die(this.lastHitBy,'bled out',null);return;}}
     this.heal(h);
-    this.stagger=Math.max(0,this.stagger-h);this.clashCd-=h;this.kickCd-=h;this.staminaDelay-=h;
+    this.stagger=Math.max(0,this.stagger-h);this.clashCd-=h;this.kickCd-=h;this.staminaDelay-=h;this._drip=(this._drip||0)-h;
     let wish=_t1.set(0,0,0),run=false;
     if(this.isPlayer)run=playerInput(this,wish,h);else if(this.remote)run=remoteInput(this,wish,h);
     else if(this.dummy&&RUN&&RUN.dm===0){this.commit=this.thrust=false;}
@@ -9570,7 +9592,7 @@ class Fighter{
     // as in Half Sword there's no bar: you feel it. Blood loss lowers how much wind you have and how fast it comes back,
     // and you only really get it back standing still
     {const lu=this.lung||0,fat=0,cap=(55+45*clamp(this.hp/100,0,1))*(1-.4*lu),mv=Math.hypot(this.vel.x,this.vel.z);if(fat>0)this.fatigue=Math.max(0,fat-h*(this.staminaDelay<=0&&mv<.8?1/55:1/240));   // a pierced lung: less wind, and it comes back slowly
-      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this.crouch?44:36)*(.7+.3*clamp(this.hp/100,0,1))*(mv>3?.7:mv>.8?.95:1)*(1-.5*lu)*(1-.35*fat)*h);
+      if(this.staminaDelay<=0)this.stamina=Math.min(cap,this.stamina+(this._drip>0?STAM_DRIPK:1)*(this.crouch?44:36)*(.7+.3*clamp(this.hp/100,0,1))*(mv>3?.7:mv>.8?.95:1)*(1-.5*lu)*(1-.35*fat)*h);
       if(lu>0&&Math.random()<h*.35*lu){spawnBlood(this.headPos,this.fwd(_v).multiplyScalar(1.2).setY(.3),4,.6,.6);if(this.isPlayer||Math.random()<.3)sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.35,1.2*this.voice);}   // coughing blood
       if(this.stamina>cap)this.stamina=Math.max(cap,this.stamina-6*h);}
     // balance: the stance pulls the weight back over the feet, weaker when tired, firmer crouched or set in guard
@@ -9967,7 +9989,7 @@ class Fighter{
       const holdOut=A.phase==='guard'&&A.cd>0&&!low&&!(A.rushT>0)&&tg.stagger<=.25,wl=WILDB?(A.wild||0):0;
       if(wl>0&&holdOut&&!cautious&&d<outD+2.4&&d>desired+.3&&this.stamina>45&&kind!=='fist'&&Math.random()<h*(.06+.4*wl)*A.aggr){A.rushT=rand(.5,.9);A.cd=0;}   /* (Build 269) now and then a man just goes in: runs at him swinging */
       if(A.backT>0){A.backT-=h;wish.copy(_v).multiplyScalar(-1).addScaledVector(_r,A.strafe*.35);}
-      else if(A.rushT>0){A.rushT-=h;if(d>.75){wish.copy(_v);run=this.stamina>15;}}
+      else if(A.rushT>0){A.rushT-=h;if(d>(CLOSE_STAB?Math.max(.95,desired-.15):.75)){wish.copy(_v);run=this.stamina>15&&d>desired+.5;}}   /* (Build 293) a rush stops where his blow lands: it ran on to 0.75 m, into the man, and the two stood inside each other */
       else if(holdOut&&d<outD+1.2){wish.copy(_r).multiplyScalar(A.strafe*A.amp);if(d>outD+.15)wish.addScaledVector(_v,.8);else if(d<outD-.2)wish.addScaledVector(_v,-.9);}
       else if(d>desired+1.2){wish.copy(_v);const opening=tg.stagger>0||(tg.sword&&tg.sword.knockT>0);run=d>6||(outreached&&opening&&d<theirs+1.6&&this.stamina>30);}   // don't run onto a longer point unless it has been knocked aside
       else{wish.copy(_r).multiplyScalar(A.strafe*.4);if(d>desired+.15)wish.addScaledVector(_v,.9);else if(d<desired-.2)wish.addScaledVector(_v,-.9);}
@@ -9992,7 +10014,7 @@ class Fighter{
         A.pt+=h;
         if(A.phase==='guard'){if(cautious&&A.cd>0)A.cd+=h*.4;this.ctrlT.x=.1+Math.sin(simTime*1.3+this.id)*.09+Math.sin(simTime*3.1+this.id*2.3)*.04;this.ctrlT.y=.1+Math.cos(simTime*1.1+this.id)*.07+Math.sin(simTime*2.7+this.id*1.7)*.035;   /* (Build 257) a guard that never quite settles, as the fighters in the footage keep their points moving */this.ctrlT.z=kind==='spear'?.34:.42;
           if(d<desired+(outreached?.3:.6)+(A.rushT>0?.6:0)+wl*.3&&A.cd<=0&&this.stamina>28&&this.stagger<=0){
-            let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blade'&&reach<.45)atk=Math.random()<.75?ATTACKS[6]:pick(ATTACKS);   /* (Build 205) a dagger is for stabbing: bots slashed with knives and did 2 damage a hit */else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(HALF_SW&&kind==='blade'&&reach>=.95&&d<1.2&&TWO_HANDED[this.sword.def.id]&&Math.random()<.7)atk=ATTACKS[6];else atk=pick(ATTACKS);
+            let atk;if(low)atk=pick([ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(kind==='spear')atk=Math.random()<.7?ATTACKS[6]:pick(ATTACKS);else if(kind==='fist')atk=Math.random()<.6?ATTACKS[6]:pick([ATTACKS[0],ATTACKS[1]]);else if(kind==='blade'&&reach<.45)atk=Math.random()<.75?ATTACKS[6]:pick(ATTACKS);   /* (Build 205) a dagger is for stabbing: bots slashed with knives and did 2 damage a hit */else if(kind==='blunt'||kind==='axe')atk=pick([ATTACKS[0],ATTACKS[1],ATTACKS[2],ATTACKS[2],ATTACKS[3],ATTACKS[4]]);else if(HALF_SW&&kind==='blade'&&reach>=.95&&d<1.2&&TWO_HANDED[this.sword.def.id]&&Math.random()<.7)atk=ATTACKS[6];else if(CLOSE_STAB&&kind==='blade'&&reach>=.6&&d<1.05&&Math.random()<.55)atk=ATTACKS[6];else atk=pick(ATTACKS);
             if(A.fav&&!low&&Math.random()<.35)atk=ATTACKS.find(a=>a.n===A.fav)||atk;   // a character's favourite swing
             A.atk=atk;A.phase='windup';A.pt=0;A.feint=kind!=='fist'&&!low&&Math.random()<A.skill*.38*(1-.7*wl);}}
         else if(A.phase==='windup'){const s=A.atk.s,ovh=(kind==='axe'||kind==='blunt'||(this.sword&&this.sword.def.weight>=1.4))&&s[1]>.45;if(outreached&&d>desired-.1)wish.addScaledVector(_v,.8);this.ctrlT.x=s[0];this.ctrlT.y=ovh?.62:s[1];this.ctrlT.z=A.atk.thrust?.28:ovh?.3:.4;
@@ -10099,7 +10121,7 @@ class Fighter{
       this.calmW=lerp(this.calmW??0,threat||!this.alive||this.ragdoll?0:1,1-Math.exp(-(threat?7:1.4)*dt));}
     /* (Build 283) half-swording: with a man right on you a long sword's point is past him. Thrusting with a hand-and-a-half or great sword inside ~1.25 m, the
        off hand takes the blade at its middle, the hilt comes back to the hip and the shortened point is driven in between the two hands */
-    {const sd=this.sword&&this.sword.def,ok=HALF_SW&&sd&&sd.kind==='blade'&&!sd.improv&&sd.len>=.95&&TWO_HANDED[sd.id]&&this.thrust&&!this.rev&&!(this.revW>.05)&&!this.ragdoll&&!this.climb&&!(this.sword.stuck&&!this._hfOn)&&((this._foeD||9)<(this._hfOn?1.55:1.25)||window.__hfF);if(ok&&!this._hfOn)this._hfT=0;this._hfT=(this._hfT||0)+dt;this._hfOn=!!ok;this._hfW=clamp((this._hfW||0)+(ok?4.2:-5)*dt,0,1);}
+    {const sd=this.sword&&this.sword.def,ok=HALF_SW&&sd&&sd.kind==='blade'&&!sd.improv&&(TWO_HANDED[sd.id]?sd.len>=.95:CLOSE_STAB&&sd.len>=.6)&&this.thrust&&!this.rev&&!(this.revW>.05)&&!this.ragdoll&&!this.climb&&!(this.sword.stuck&&!this._hfOn)&&((this._foeD||9)<(this._hfOn?1.55:1.25)||window.__hfF);if(ok&&!this._hfOn)this._hfT=0;this._hfT=(this._hfT||0)+dt;this._hfOn=!!ok;this._hfW=clamp((this._hfW||0)+(ok?4.2:-5)*dt,0,1);}
     {const f=this;{const tw=!!(f.sword&&TWO_HANDED[f.sword.def.id]&&f.sword.def.kind!=='spear'&&!f.sword.def.improv&&!f.ragdoll&&!f.climb),cw=f.calmW||0;f._shC=tw&&!f.commit&&!f.thrust&&!f.rev&&!(f.revW>.05)&&(f._shC?cw>.3:cw>.65);f._shW=clamp((f._shW||0)+(f._shC?3.5:-6)*dt,0,1);}}   /* (Build 262, from the Half Sword crypt footage) any two-hander rides on the shoulder while you're at ease, lantern or not (Build 256 did it only with a lantern); the off hand lets go and hangs */
     const fight=this.alive&&!this.ragdoll&&this.mainArm&&!this.crouch&&!airborne,ease=1-(this.calmW||0);this.stillAmt=lerp(this.stillAmt||0,fight&&sp<.8?ease:0,1-Math.exp(-5*dt));
     const spS=simTime<(this._lgT||0)?0:sp;   /* (Build 149) a lunge keeps the fighting stance: the stance easing off as the body sped up drew the hips back 10 cm just as the thrust went out */
@@ -10878,7 +10900,7 @@ function stabReact(A,B,cap,dir,dmg){if(!B.alive||B.ragdoll||B.undead)return;cons
   B.commit=false;B.thrust=false;if(B.ai&&!B.isPlayer){B.ai.backT=Math.max(B.ai.backT||0,.6+.5*k);if(B.ai.phase&&B.ai.phase!=='guard'){B.ai.phase='recover';B.ai.pt=0;}}
   if(B.ctrlT)B.ctrlT.y=Math.min(B.ctrlT.y,-.35);}
 const _srv=V(),FIRM=+(new URLSearchParams(location.search).get('firm')??1.4);
-const BIND=!/[?&]nobind/.test(location.search),STAM_COST=+(new URLSearchParams(location.search).get('stam')??.5);
+const BIND=!/[?&]nobind/.test(location.search),STAM_COST=+(new URLSearchParams(location.search).get('stam')??.5);const STAM_DRIP=!/[?&]nodrip/.test(location.search),STAM_DRIPK=+(new URLSearchParams(location.search).get('dripk')??.2);
 const HIT_OLD=/[?&]oldhit/.test(location.search),HIT_PAD=+(new URLSearchParams(location.search).get('hitpad')??.012),_hq0=V(),_hq1=V(),_hqa=V();
 function clash(A,B){
   const s=A.sword,s2=B.sword;if(s)s._px=1;if(s2)s2._px=1;if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
@@ -11388,7 +11410,7 @@ function mkArm(){return {phase:'guard',t:0,charge:0,pos:V(),vel:V(),tgt:V(),powe
 // ---- bare-handed grabbing: an open hand brought slowly onto a body closes on it. Moving the hand then pulls or shoves a
 // standing fighter off balance, or drags a body (ragdoll) by that limb. Letting go of the button opens the hand.
 const _gp=new THREE.Vector3();
-const HALF_SW=!/[?&]nohalf\b/.test(location.search);const CLOSE_IN=!/[?&]noclose\b/.test(location.search),HILT_HIT=!/[?&]nohilt\b/.test(location.search);
+const HALF_SW=!/[?&]nohalf\b/.test(location.search);const CLOSE_STAB=!/[?&]nostab1\b/.test(location.search),CLOSE_IN=!/[?&]noclose\b/.test(location.search),HILT_HIT=!/[?&]nohilt\b/.test(location.search);
 const OFF_PUSH=!/[?&]nopush\b/.test(location.search);
 /* (Build 283) a friend's own right button steers his off hand too: his screen keeps the hand's offset and sends it (ox, oy) with his input */
 function cliOff(){const p=player,d=p&&p.sword&&p.sword.def;return NET.mode==='client'&&!!d&&d.kind!=='fist'&&d.kind!=='spear'&&!TWO_HANDED[d.id]&&!lampOf(p);}
