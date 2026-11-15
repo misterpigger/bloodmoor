@@ -38,6 +38,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 304: great helm rebuilt as a riveted helm (lapped plates, ridge, sight only in front, latten cross); bots heave chest lids open as a player does; garb extract.py fixed. Draped folds tried, not shipped (needs a belted, posed drape).
 - 305: draped folds: every garment re-draped with cloth that buckles (low compression) and spare cloth (grown rest size round the belt, in the skirt, down the forearms); belts fitted to the finished garment.
 - 306: skirts are cloth: a lattice of verlet nodes sprung to the garment, kept out of the legs, driving the skirt in the shader
+- 307: skirt cloth (306) off by default, the player found it wrong; ?cloth turns it on
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
