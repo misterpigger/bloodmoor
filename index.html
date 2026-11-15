@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=286;
+const BUILD=287;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5339,7 +5339,7 @@ const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams
 const FEET_CAP=!/[?&]nofeetcap/.test(location.search),FEET_W=(()=>{const m=location.search.match(/[?&]feetw=([\d.,]+)/);return m?m[1].split(',').map(Number):[.42,.24,.5];})();
 const SW_TW=+((location.search.match(/[?&]swtw=([\d.]+)/)||[])[1]||.6);   /* (Build 278) the shoulders turn into a cut at most ~34 degrees (was 60, with the hips adding 45 more) */
 const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
-const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -9424,12 +9424,12 @@ class Fighter{
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
-    const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(simTime<(this._kickedT||0)&&(this._kickedF??1)>.3?2.7:STUM_MAX,(bm-.1)*9+bout):0;   /* (Build 151: kicked, the feet scramble back after the body faster) */   /* Build 143: stumble steps at most STUM_MAX (was 3.2 m/s: a shove ran you 1–2 m with no input); each step takes more of the lean out, below, so balance holds as before */
+    const bm=Math.hypot(this.bal.x,this.bal.z),bout=bm>1e-4?Math.max(0,(this.balV.x*this.bal.x+this.balV.z*this.bal.z)/bm):0,stum=onGround&&legs&&this.slideT<=0&&bm>.13?Math.min(simTime<(this._kickedT||0)&&(this._kickedF??1)>.3?2.7:simTime<(this._reelT||0)?2.1:STUM_MAX,(bm-.1)*9+bout):0;   /* (Build 151: kicked, the feet scramble back after the body faster) */   /* Build 143: stumble steps at most STUM_MAX (was 3.2 m/s: a shove ran you 1–2 m with no input); each step takes more of the lean out, below, so balance holds as before */
     if(this.isPlayer){this._cHold=input.keys.KeyC&&!TOUCH?(this._cHold||0)+h:0;if(this._cHold>.45&&onGround&&!this.climb&&!this.hang&&!this.ladCarry&&!this.cartHold&&Math.hypot(this.vel.x,this.vel.z)<2.6){this._cHold=-1e9;this.goProne();return;}}   /* (Build 256, as in Half Sword) tap C to crouch and stay crouched, hold it to lie flat */
     if(this.slideReq){this.slideReq=false;const cs=Math.hypot(this.vel.x,this.vel.z);if(false){this.slideT=.8;this.fwd(_f);const ss=Math.max(cs,5.4)+1.6;this.vel.set(_f.x*ss,0,_f.z*ss);this.useStamina(8);}else this.crouch=!this.crouch;}
     if(this.slideT>0){this.slideT-=h;this.crouch=true;const k=Math.exp(-1.5*h);this.vel.x*=k;this.vel.z*=k;if(this.slideT<=0)this.crouch=false;}
     const vx0=this.vel.x,vz0=this.vel.z;if(HYBRID&&(stum>0||bm>.11))this.distT=simTime;
-    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=(onGround?(simTime<(this._kickedT||0)?2.4:stum>0?20:run?4.5:7):1.6)/(HYBRID&&stum<=0?1+armN*.09:1);   // (hybrid: armour is weight to get moving and to stop)   // a body takes a moment to get going and to stop
+    if(this.slideT<=0){_v.copy(wish).multiplyScalar(spd*(stum>0?.35:1)*(REEL2&&!this.isPlayer&&!this.remote&&(this.catchT||0)>simTime?.12:1));if(stum>0){_v.x+=this.bal.x/bm*stum;_v.z+=this.bal.z/bm*stum;}const ac=(onGround?(simTime<(this._kickedT||0)?2.4:stum>0?20:run?4.5:7):1.6)/(HYBRID&&stum<=0?1+armN*.09:1);   // (hybrid: armour is weight to get moving and to stop)   // a body takes a moment to get going and to stop
     this.vel.x=lerp(this.vel.x,_v.x,1-Math.exp(-ac*h));this.vel.z=lerp(this.vel.z,_v.z,1-Math.exp(-ac*h));}
     if(stum>0){this.balV.x-=(this.vel.x-vx0)*STUM_RELIEF;this.balV.z-=(this.vel.z-vz0)*STUM_RELIEF;}
     if(PIN_ON&&NET.mode!=='client')pinStep(this,wish,h,onGround);   /* (Build 259) astride a man on the ground */   // the feet catching up with the falling body is what stops the fall
@@ -9486,7 +9486,7 @@ class Fighter{
       // past the ankles' limit: a lean that isn't too far is caught (Build 120): the fighter drops low onto bent knees, a hand goes down
       // toward the ground, and they come back up out of it, instead of every lean past .42 ending flat on the ground. Too far, or caught
       // again within a second and a half, and they go down as before
-      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=1;this.vel.multiplyScalar(.4);
+      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=1;this.vel.multiplyScalar(REEL2&&!this.isPlayer&&!this.remote?.15:.4);   /* (Build 287) a bot caught on bent knees is planted there: it used to slide on back in the squat, pushed by the blow and then walking off */
         if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6){_v.normalize();this.fwd(_f);if(_v.x*_f.x+_v.z*_f.z<-.3)_v.copy(_f);this.bodyHit('Spine2',_v,2.5,.15);}}   /* (caught going backwards, the chest is thrown forward over the knees, not further back) */if(this.isPlayer)tell(this,'You catch yourself','red');}
       else if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
@@ -10363,7 +10363,10 @@ class Fighter{
     /* Build 230: pain. A hurt man flinches out of what he was doing, gives ground, and his guard sags for a moment (bots; the drawn wince and hunch are in animate, from _pain) */
     if(dmg>4&&this.hp>0&&this.undead!=='zombie'&&this.undead!=='skel'){const k=clamp(dmg/30,.2,1);this.painK=Math.max(this.painT>simTime?this.painK||0:0,k);this.painT=simTime+.3+k*.9;
       if(!this.isPlayer&&!this.remote&&this.ai){const A=this.ai;A.backT=Math.max(A.backT||0,.45+k*1.1);A.cd=Math.max(A.cd||0,.15+k*.8);   /* (Build 256, the player: they should feel it and make space) a man who's been hit gives ground: he's driven back a step, reels, and backs off before he comes again */
-        if(by&&by!==this&&!this.ragdoll&&HIT_REACT){const dx=this.pos.x-by.pos.x,dz=this.pos.z-by.pos.z,d=Math.hypot(dx,dz)||1,pv=Math.min(2.4+.9*REEL,.7+(2.4+.9*REEL)*k);this.vel.x+=dx/d*pv;this.vel.z+=dz/d*pv;this.stagger=Math.max(this.stagger||0,.18+(.55+.25*REEL)*k);this.shove(new THREE.Vector3(dx,0,dz),.4+(1.3+.9*REEL)*k);if(REEL>0&&k>.45){this.crouchK=Math.min(1,Math.max(this.crouchK||0,(.25+.35*k)*REEL));if(this.pbd)this.pbd.buckle=Math.min(1,(this.pbd.buckle||0)+.2*k*REEL);}}if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
+        if(by&&by!==this&&!this.ragdoll&&HIT_REACT){let dx=this.pos.x-by.pos.x,dz=this.pos.z-by.pos.z;const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;const ax=dx,az=dz;
+          /* (Build 287) he goes the way the blow went, not always straight back from the man who struck it: a cut across him sends him sideways and a little away; and he goes on his feet (the reel's own lean and knee-give are smaller, so a hard blow is a few staggering steps and not every one ends squatting on his heels) */
+          if(REEL2&&this._blowT===simTime&&this._blowD){const bx=this._blowD.x,bz=this._blowD.z,bl=Math.hypot(bx,bz);if(bl>.3){let x=ax*.45+bx/bl*.75,z=az*.45+bz/bl*.75;const dt=x*ax+z*az;if(dt<.25){x+=ax*(.25-dt);z+=az*(.25-dt);}const l=Math.hypot(x,z)||1;dx=x/l;dz=z/l;}}
+          const pv=Math.min(2.4+.9*REEL,.7+(2.4+.9*REEL)*k)*(REEL2?.6:1);this.vel.x+=dx*pv;this.vel.z+=dz*pv;this.stagger=Math.max(this.stagger||0,.18+(.55+.25*REEL)*k);this.shove(new THREE.Vector3(dx,0,dz),REEL2?.3+.6*k:.4+(1.3+.9*REEL)*k);if(REEL2)this._reelT=simTime+.35+.5*k;if(REEL>0&&k>.45){this.crouchK=Math.min(1,Math.max(this.crouchK||0,(REEL2?.08+.2*k:.25+.35*k)*REEL));if(this.pbd)this.pbd.buckle=Math.min(1,(this.pbd.buckle||0)+(REEL2?.1:.2)*k*REEL);}}if(A.phase==='windup'&&dmg>11&&Math.random()>(A.skill||.5)*.5){A.phase='guard';A.pt=0;}}}if(by){this.lastHitBy=by;this.lastHitT=simTime;}
     if(this.isPlayer){hudHurt(dmg);shake(Math.min(.9,dmg/40));}else if(this.remote)netEv(['u',this.id,r3(dmg)]);if(by&&by.remote&&dmg>3)netEv(['m',by.id,0]);
     if(this.hp<=0)this.die(by,cause,null);
   }
@@ -11133,10 +11136,10 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     B.sever(sev,dir.clone().multiplyScalar(speed*.45),sevT);
     if(B.undead!=='skel')spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.3).setY(1.5),30,2.5,1.4);
     if(sev==='Head'){B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'beheaded',imp,P);tell(A,'Beheaded','red');}
-    else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive)B.damage(body,A,'dismembered');}
+    else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive){(B._blowD||(B._blowD=new THREE.Vector3())).copy(dir);B._blowT=simTime;B.damage(body,A,'dismembered');}}
   } else {
     if(!glance&&dmg>4&&B.undead!=='skel'){addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');if(mode!=='flat'&&mode!=='haft'&&B.prot(cap.zone)<.5)s.bloody(Math.min(.5,dmg/55));}
-    B.damage(organ?dmg:body,A,organ&&organ.cause?organ.cause:W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
+    (B._blowD||(B._blowD=new THREE.Vector3())).copy(dir);B._blowT=simTime;B.damage(organ?dmg:body,A,organ&&organ.cause?organ.cause:W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
     if(organ&&B.alive)organHurt(A,B,organ,dmg,dir,P);
     if(B.alive&&!glance&&dmg>4){   // where it landed decides what it does: the wound bleeds, a limb loses its use, a hand goes to the hurt
       if(B.limbs[cap.zone]&&cap.zone!=='head')B.injureLimb(cap.zone,A);
