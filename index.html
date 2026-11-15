@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=287;
+const BUILD=288;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5339,7 +5339,7 @@ const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams
 const FEET_CAP=!/[?&]nofeetcap/.test(location.search),FEET_W=(()=>{const m=location.search.match(/[?&]feetw=([\d.,]+)/);return m?m[1].split(',').map(Number):[.42,.24,.5];})();
 const SW_TW=+((location.search.match(/[?&]swtw=([\d.]+)/)||[])[1]||.6);   /* (Build 278) the shoulders turn into a cut at most ~34 degrees (was 60, with the hips adding 45 more) */
 const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
-const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),FOLLOW=!/[?&]nofollow/.test(location.search),FT_K=_qn('ftk',2),FT_H=_qn('fthd',.1),FT_AXE=_qn('ftaxe',.3),FT_V=_qn('ftv',2.2),FT_HOLD=_qn('fth',.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -9293,7 +9293,7 @@ class Fighter{
     if(this.sword&&this.sword.def.kind!=='spear'&&rw<.5&&this.bones.Head){const hd=this.bones.Head.getWorldPosition(_hv5);_wl2.subVectors(out,hd);const fz=_wl2.dot(_f),yy=_wl2.y,lx=_wl2.dot(_r);
       const near=clamp(1-Math.abs(yy+.02)/.26,0,1)*clamp(1-Math.abs(lx)/.32,0,1);const need=.42*near;if(fz<need)out.addScaledVector(_f,need-fz);}
     /* (Build 269) a cut is made with the arms going out to their length: in a committed swing the hand is carried out from its shoulder toward 93% of the arm (it stayed at ~57%, elbows bent in by the ribs) */
-    if(REACH_K>0&&(this._exW||0)>.01&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&rw<.5&&!this.thrust){const cl=CLOSE_IN?clamp(((this._foeD||9)-.95)/.65,0,1):1,sm=this.mainArm==='L'?this.shL:this.shR,al=(this.armLen[0]+this.armLen[1])*(.66+.27*cl);_v.subVectors(out,sm);const d=_v.length();if(d>1e-3&&d<al)out.addScaledVector(_v,(al-d)/d*REACH_K*this._exW*cl/(1+Math.max(0,(WMASS[this.sword.def.id]||1.5)-1.6)*.7));else if(d>al&&cl<1)out.addScaledVector(_v,(al-d)/d*this._exW*(1-cl));}   /* (Build 279) with a man right on you the cut is shortened: the elbow stays bent and the hand in, so the blade (not the fist and hilt) meets him */   /* less for heavy heads: an axe's hand fell 50 cm behind a target that far out */
+    if(REACH_K>0&&(this._exW||0)>.01&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&rw<.5&&!this.thrust){const cl=CLOSE_IN?clamp(((this._foeD||9)-.95)/.65,0,1):1,sm=this.mainArm==='L'?this.shL:this.shR,al=(this.armLen[0]+this.armLen[1])*(.66+.27*cl);_v.subVectors(out,sm);const d=_v.length();if(d>1e-3&&d<al)out.addScaledVector(_v,(al-d)/d*REACH_K*this._exW*cl/(1+Math.max(0,(WMASS[this.sword.def.id]||1.5)-1.6)*.7));else if(d>al&&cl<1)out.addScaledVector(_v,(al-d)/d*this._exW*(1-cl));}if(FOLLOW&&this.commit&&this._ft&&this._ft.w>.01&&!this.thrust){const F=this._ft,l=Math.hypot(F.x,F.y)||1;this.right(_ftR);out.addScaledVector(_ftR,F.x/l*FT_H*F.w).addScaledVector(Y_AXIS,F.y/l*FT_H*F.w);}   /* (Build 288) the hands carry on a hand's breadth the way the cut went */   /* (Build 279) with a man right on you the cut is shortened: the elbow stays bent and the hand in, so the blade (not the fist and hilt) meets him */   /* less for heavy heads: an axe's hand fell 50 cm behind a target that far out */
     const hf=this.sword?this._hfW||0:0,hfe=hf*hf*(3-2*hf);if(hf>.01){const sg=this.mainArm==='L'?-1:1;_wl3.copy(this.chest).addScaledVector(_r,sg*.27+this.ctrl.x*.25).addScaledVector(Y_AXIS,-.36+this.ctrl.y*.3).addScaledVector(_f,-.24-Math.max(0,this.sword.len-1)*.5+clamp(((this._hfT||0)-.34)/.09,0,1)*.5);out.lerp(_wl3,hfe);}   /* drawn back first (a third of a second), then driven half a metre: one stab each time the thrust is asked for */   /* (Build 283) half-sword: the hilt at the hip on its own side, driven forward from there */
     const dOs=this.hs&&this.hs.dO&&(this.hs.dO[this.mainArm==='L'?'LeftArm':'RightArm']||this.hs.dO.Spine2);if(dOs)out.add(dOs);   /* Build 145: a blow that knocks the body back (as drawn) takes the arms and weapon with it, so the hand stays on the grip and the guard is knocked aside for real */
     const sh=dOs?_hsSh.copy(this.mainArm==='L'?this.shL:this.shR).add(dOs):this.mainArm==='L'?this.shL:this.shR;_v.subVectors(out,sh);const reach=this.armLen[0]+this.armLen[1]-.03+slide;if(_v.length()>reach){_v.setLength(reach);out.copy(sh).add(_v);}
@@ -9337,6 +9337,7 @@ class Fighter{
     out.copy(hand).sub(this.chest).addScaledVector(f,cm?Hd.swingOut:lerp(.26-hi*(heavyW?.95:.45),.36,pgW)).addScaledVector(u,cm?Hd.swingUp:lerp(.5,.36,pgW));
     /* Build 158: raised high, the blade stands up over the hands instead of pointing out from the chest through them: with the hands
        up, the hand's sideways offset from the chest swung the blade 40-50° side to side as the aim moved about up there */
+    if(cm&&this._ft&&this._ft.w>.01){const F=this._ft,rr=this.right(_glR),l=Math.hypot(F.x,F.y)||1,k=FT_K*F.w*(this.sword.def.kind==='axe'?FT_AXE:1);out.addScaledVector(rr,F.x/l*k).addScaledVector(u,F.y/l*k);}   /* (Build 288) the blade follows on through the way the cut was going */
     if(REF_G&&!cm&&this.sword&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'){refGuard(this,null,out);return out;}
     if(HAND_FIRST&&!cm&&this.sword&&this.sword.def.kind!=='spear'){const rk=clamp((this.ctrl.y-.2)/.35,0,1)*ROOF_K;if(rk>0)out.addScaledVector(f,-ROOF_BACK*rk);}   // Build 160 (?hf): raised, the point goes up and back over the shoulder (vom Tag), not just up
     if(GUIDE_FIX&&!cm){const hk=clamp((this.ctrl.y-.15)/.4,0,1)*(HAND_FIRST?HF_LAT:GUIDE_LAT);if(hk>0){const rr=this.right(_glR);const l=out.dot(rr);out.addScaledVector(rr,-l*hk);}}
@@ -9506,6 +9507,15 @@ class Fighter{
       /* Build 167: a player's click alone doesn't move the blade: in a committed swing its line goes from the guard's toward the swing's only as
          the aim moves (full after 0.3 of the aim box), so clicking held still no longer drops the blade level and rolls both hands ~70° over */
       const mbS=MB&&(this.isPlayer||this.remote)&&!this.thrust&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist';let mbK=1;
+      /* (Build 288) follow-through. A committed cut's blade pointed out from the chest through the hand the whole way, so when the aim stopped the
+         blade stopped with it, pointing straight ahead: a spoke turned by a spring, not a cut. Now the way the aim was travelling is remembered
+         (_ft.x/.y, in the aim box), and as the aim slows at the end of a real sweep the blade is led on that way (guideDir0), past the line, to
+         finish low or wide on the far side; held there it comes back to the line after a moment. The first, hitting part of the cut is unchanged */
+      if(FOLLOW){const F=this._ft||(this._ft={x:0,y:0,px:this.ctrl.x,py:this.ctrl.y,w:0,pk:0,hold:0}),vx=(this.ctrl.x-F.px)/h,vy=(this.ctrl.y-F.py)/h,si=Math.hypot(vx,vy);F.px=this.ctrl.x;F.py=this.ctrl.y;F.sp=lerp(F.sp||0,si,1-Math.exp(-28*h));const sp=F.sp;   /* (the aim moves once a frame, not once a step: smoothed) */
+        if(this.commit&&this.sword&&!this.sword.stuck&&!this.thrust&&(this.revW||0)<.3&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'){
+          if(si>FT_V*.5){const k=1-Math.exp(-50*h);F.x=lerp(F.x,vx/si,k);F.y=lerp(F.y,vy/si,k);}if(sp>FT_V*.5){F.pk=Math.max(F.pk,sp);F.hold=0;}
+          const want=F.pk>FT_V?clamp(1-sp/FT_V,0,1):0;F.hold+=h*want;F.w=lerp(F.w,want*clamp(1-(F.hold-FT_HOLD)/.45,0,1),1-Math.exp(-18*h));}
+        else{F.w=lerp(F.w,0,1-Math.exp(-9*h));F.pk=0;F.hold=0;}}
       if(mbS){if(this.commit){const A=this._cmA||(this._cmA={x:this.ctrl.x,y:this.ctrl.y,m:0});A.m=Math.max(A.m,clamp(Math.hypot(this.ctrl.x-A.x,this.ctrl.y-A.y)/.3,0,1));mbK=A.m*A.m*(3-2*A.m);this._cmK=mbK;}else{this._cmA=null;mbK=this._cmK??1;}}
       if((HAND_FIRST||MB)&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);const cmW=this._cmB*(mbS?mbK:1);if(this._cmB>0&&cmW<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;const cw=mbS?this._cmB*this._cmB*(3-2*this._cmB)*mbK:this._cmB*this._cmB*(3-2*this._cmB);guide.copy(gA).lerp(gB,cw).normalize();}}
       if(HAND_FIRST&&!(REF_G&&!this.commit&&!this.thrust)&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
@@ -10980,7 +10990,7 @@ function armourGap(B,cap,P,mode){
   return null;}
 // what a landed blow does to the weapon's motion (classic engine): n points into the body; of the tip's motion into it kn is taken
 // (1 stops it, more bounces it back), along the surface kt is kept; the hand the same with hn and ht
-const _hcn=V(),_hco=V(),_hcv=V();
+const _hcn=V(),_hco=V(),_hcv=V();const _ftR=V();
 const BITE_V=9;   // m/s: a cut slower than this into flesh is caught in the wound (Build 120)
 function hitCarry(s,n,kn,kt,hn,ht){
   _hcv.subVectors(s.T,s.Tp);let vn=_hcv.dot(n);if(vn>0){_hcv.addScaledVector(n,-vn*kn);vn=_hcv.dot(n);}_hcv.addScaledVector(n,-vn).multiplyScalar(kt).addScaledVector(n,vn);s.Tp.copy(s.T).sub(_hcv);

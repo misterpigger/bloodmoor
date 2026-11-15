@@ -8,7 +8,7 @@ await page.evaluate(([w])=>{const g=window.__game;const st=document.createElemen
 await page.evaluate(()=>{const g=window.__game;for(let k=0;k<240;k++)g.logic(1/60);});await fr(3,1/60);
 for(let i=0;i<NF;i++){
   for(let k=0;k<STEP;k++){await page.evaluate(([s,i,k,STEP])=>{const g=window.__game,P=g.player,input=g.input;const t=(i*STEP+k)/60;if(s)eval(s);if(k<STEP-1)g.logic(1/60);},[SCRIPT,i,k,STEP]);}
-  await page.evaluate(([ANG,D])=>{const g=window.__game,P=g.player;const a=P.yaw+ANG*Math.PI/180;const T=g.THREE;window.__dbgCam={p:new T.Vector3(P.pos.x+Math.sin(a)*D,P.pos.y+1.3,P.pos.z+Math.cos(a)*D),t:new T.Vector3(P.pos.x,P.pos.y+1.0,P.pos.z)};},[ANG,D]);
+  if(!process.env.OWN)await page.evaluate(([ANG,D])=>{const g=window.__game,P=g.player;const a=P.yaw+ANG*Math.PI/180;const T=g.THREE;window.__dbgCam={p:new T.Vector3(P.pos.x+Math.sin(a)*D,P.pos.y+1.3,P.pos.z+Math.cos(a)*D),t:new T.Vector3(P.pos.x,P.pos.y+1.0,P.pos.z)};},[ANG,D]);
   await fr(1,1/60);await shot(`${OUT}/f${String(i).padStart(3,'0')}.jpg`,82);}
 console.log(logs.slice(0,10).join('\n')||'no errors');await browser.close();
 const cols=+(process.env.COLS||4);
