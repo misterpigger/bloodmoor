@@ -5112,8 +5112,13 @@ function loadMusic(){if(MUS.loading||!AC)return;MUS.loading=true;MUS.gain=AC.cre
     out.connect(air);const sd=AC.createGain();sd.gain.value=MUS_SEND[L];out.connect(sd);sd.connect(verb);MUS.lay[L]=g;}
   const get=(name)=>fetch('music/'+name+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{MUS.buf[name]=buf;}).catch(()=>{});
   for(const inst in MUS_INST)for(const k of MUS_INST[inst])get(inst+'-'+k);for(const n of MUS_HITS)get(n);}
+const MUS_VAR=!/[?&]nomusvar\b/.test(location.search);
 function mNote(inst,note,t,vol,dur,layer){const keys=MUS_INST[inst];let k=keys[0];for(const q of keys)if(Math.abs(q-note)<Math.abs(k-note))k=q;const b=MUS.buf[inst+'-'+k];if(!b)return;
   if(layer==='lead'&&MUS.theme!=='menu'&&(MUS.bar>>3)%4===3)return;   // every fourth phrase the tune rests and the band carries it, so it doesn't loop in your ear
+  /* (Build 284) the tune isn't played the same way four times running: the first phrase is the recorder (or whatever leads) alone, the second has a harp under it an
+     octave down, the third is the harp alone, low and quiet, the fourth rests (above); and every tune swells and falls over each four bars instead of sitting at one level */
+  if(layer==='lead'&&MUS_VAR&&MUS.theme!=='menu'&&MUS.theme!=='crypt'&&!MUS._var){const c=(MUS.bar>>3)%4,T=THEMES[MUS.theme],NS=T.steps||16,ph=((MUS.bar%4)*NS+(MUS.step%NS))/(4*NS);vol*=.82+.36*Math.sin(Math.PI*ph);
+    if(c===1||c===2){MUS._var=1;let n=note-12;while(n<46)n+=12;while(n>78)n-=12;mNote('harp',n,t+.004,vol*(c===2?.95:.6),Math.max(dur,.5),'lead');MUS._var=0;if(c===2)return;}}
   if(layer!=='pad'&&layer!=='sting'){t+=Math.random()*.012;vol*=.86+Math.random()*.24;}   // played, not sequenced: a little late or early, a little harder or softer
   const s=AC.createBufferSource();s.buffer=b;s.playbackRate.value=Math.pow(2,(note-k)/12);const g=AC.createGain(),env=MUS_ENV[inst]||[.012,.12];
   g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+env[0]);if(dur)g.gain.setTargetAtTime(0,t+dur,env[1]);
@@ -11007,7 +11012,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
   if(arm&&prot>.2&&W.kind!=='fist'){s.worn((arm.mail?.006:.014)*speed/6);   // steel on steel scars the edge
     if(arm.mail){if(!glance)sfx('hitMail',P,.55*clamp(speed/8,.4,1.2),.85);}   // mail swallows a blow with a dull jingle
     else{if(!glance){spawnSparks(P,(3+speed*.8)|0,dir);sClank(P,speed/11);}dentArmor(B,arm.slot,P,dir,mode==='blunt'?clamp(speed*W.weight*.0036,.004,.04):clamp(speed*W.weight*.002,.003,.026),mode==='cut'||mode==='thrust'?(glance?_scr.copy(dir).multiplyScalar(clamp(.05+speed*.008,.06,.15)):_scr.copy(s.axis).multiplyScalar(mode==='thrust'?.018:clamp(.02+speed*.003,.025,.06))):null);}}
-  if(glance){spawnSparks(P,10,dir);sClank(P,speed/9);if(!phys){s.Tp.copy(s.T).addScaledVector(s.tipVel,.4*H);s.Hv.multiplyScalar(.4);}}   // the blade skids and bounces off
+  if(glance){spawnSparks(P,10,dir);sClank(P,speed/9,arm&&arm.mail);if(!phys){s.Tp.copy(s.T).addScaledVector(s.tipVel,.4*H);s.Hv.multiplyScalar(.4);}}   // the blade skids and bounces off
   else if(B.undead==='skel'){sBones(P,speed/8);spawnBoneChips(P,dir,mode==='blunt'?6:3);}
   else if(mode==='blunt'||mode==='flat'||mode==='haft'){if(prot<.3&&mode==='blunt')sHit(P,speed/9,false,2,dmg>22&&cap.zone!=='torso'?1:dmg>30?.6:0);else sThud(P,speed/9);if(dmg>8)spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.15).setY(.6),(4+dmg*.4)|0,1.2,1);if(prot>.3&&mode==='blunt')sClank(P,.6);}
   else{spawnBlood(P,_v.copy(dir).multiplyScalar(speed*.25).setY(.8),Math.min(60,(10+dmg*.9)|0),1.8,1+dmg/60);if(dmg>16&&A&&A.chest&&A.chest.distanceToSquared(P)<3.2)spatterOn(A,1);sHit(P,speed/9,!!sev,mode==='thrust'||mode==='poke'?1:0,dmg>34&&cap.zone!=='torso'?.6:0);}
@@ -11431,7 +11436,7 @@ function applyKick(dir,amt){if(!player)return;player.right(_kr);player.fwd(_kf);
 function camKick(f,dir,amt){if(!f)return;if(f.isPlayer)applyKick(dir,amt);else if(f.remote&&NET.mode==='host')netEv(['ck',f.id,r3v(dir),r3(amt)]);}
 function kickStep(dt){const k=240,c=2*Math.sqrt(k)*.42;for(const a of ['p','y','r']){const v='v'+a;KICK[v]+=(-k*KICK[a]-c*KICK[v])*dt;KICK[a]+=KICK[v]*dt;KICK[a]=clamp(KICK[a],-.3,.3);}}
 function sThud(p,power=1){netEv(['t',r3v(p),power]);if(sfx(power>.8?'crush':power>.45?'strike':'punch',p,.9*clamp(power+.2,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.8;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,.1,'lowpass',500,.7,v);const o=AC.createOscillator();o.frequency.setValueAtTime(90,t);o.frequency.exponentialRampToValueAtTime(32,t+.14);const g=AC.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.16);o.connect(g);g.connect(master);o.start(t);o.stop(t+.18);}
-function sClank(p,power=1){netEv(['n',r3v(p),power]);if(sfx(Math.random()<.5?'hitPlate':'hitMail',p,.8*clamp(power+.3,.4,1.2),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1)*.35;if(v<.01)return;const t=AC.currentTime,base=380+Math.random()*200;[1,2.7,4.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=base*r;const g=AC.createGain();g.gain.setValueAtTime(v/(1+i),t);g.gain.exponentialRampToValueAtTime(.0005,t+.18/(1+i*.3));o.connect(g);g.connect(master);o.start(t);o.stop(t+.25);});noiseBurst(t,.05,'bandpass',2200,1,v*.6);}
+function sClank(p,power=1,mail=0){netEv(['n',r3v(p),power,mail?1:0]);if(sfx(mail?'hitMail':'hitPlate',p,.8*clamp(power+.3,.4,1.2),mail?.9:clamp(1.1-power*.15,.85,1.1),0,false))return;   /* (Build 284) plate rings as plate (it was a coin toss between the plate and mail recordings), deeper for a heavier blow */if(!AC)return;const v=distVol(p)*clamp(power,.2,1)*.35;if(v<.01)return;const t=AC.currentTime,base=380+Math.random()*200;[1,2.7,4.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=base*r;const g=AC.createGain();g.gain.setValueAtTime(v/(1+i),t);g.gain.exponentialRampToValueAtTime(.0005,t+.18/(1+i*.3));o.connect(g);g.connect(master);o.start(t);o.stop(t+.25);});noiseBurst(t,.05,'bandpass',2200,1,v*.6);}
 function sStep(p,vol,run,f){if(f&&stepFx(f,p,vol,run))return;if(sfx(curMap==='arena'||curMap==='colosseum'?'stepSand':'stepStone',p,vol*1.5,run?1.06:1,0,false))return;if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime;noiseBurst(t,run?.07:.05,'lowpass',run?650:480,.9,v);noiseBurst(t+.01,.03,'bandpass',2600,2,v*.18);}
 function sCheer(x){if(!AC)return;if(AMB.crowd)return crowdBurst(x,.35,2.6,1.05,350);const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.7;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=900;f.Q.value=.4;const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.32*x,t+.35);g.gain.exponentialRampToValueAtTime(.001,t+2.4);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+2.5);}
 function sPickup(){if(sfx('pickup',null,.6,1,0,false))return;if(!AC)return;const t=AC.currentTime;noiseBurst(t,.06,'bandpass',1800,3,.15);noiseBurst(t+.05,.05,'bandpass',900,3,.1);}
@@ -12325,13 +12330,20 @@ function sGasp(x){if(!AC)return;if(AMB.crowd){crowdBurst(x*.8,.08,1.1,.92,0,1800
   setTimeout(()=>sCheer(x*.6),700);}   // the crowd gasps, then roars
 function clatter(s,p,v){sfx('dropWeapon',p,clamp(v/5,.2,.9),1.05+(Math.random()-.5)*.25);if(v>2.5&&SAND())spawnDust(p,2,.3,.2);}
 // steps: the boards of the pit bridge knock hollow; mail jingles and plate clanks with every step; feet leave prints in the sand
+/* (Build 284) what is under a foot: the Pit's bridge and anything raised (decks, the scaffold, tables) sound hollow, plank floors on the ground (Tavern, Mill, Mutiny's deck)
+   knock, the Arena is sand, yards, fields and streets are earth, the crypt and everything else stone, the Mill's race splashes. It was sand in two arenas and stone everywhere else */
+const STEP_DIRT={arena:1,pit:1,village:1,road:1,raid:1,breach:1};
+function stepSurf(f){if(f._wade)return 'water';if(PIT&&onBridge(f.pos.x,f.pos.z)&&f.pos.y>-.1)return 'wood';if(curMap==='tavern'||curMap==='mill'||curMap==='ship')return f.pos.y>.3&&curMap!=='ship'?'wood':'deck';
+  if(curMap==='colosseum')return 'sand';if(STEP_DIRT[curMap])return f.pos.y>.5&&curMap!=='pit'?(curMap==='village'?'wood':'stone'):'dirt';return 'stone';}
 function stepFx(f,p,vol,run){const a=f.armor;
   if(a.body){if(a.body.def.id==='mail')sfx('equipMail',p,vol*(run?.5:.32),1.35+Math.random()*.25,0,false);else sfx('equipPlate',p,vol*(run?.3:.18),1.3+Math.random()*.2,.02,false);}
   else if(a.legs&&Math.random()<.5)sfx('equipPlate',p,vol*.13,1.55,0,false);
-  const wood=!!PIT&&onBridge(f.pos.x,f.pos.z)&&f.pos.y>-.1;
+  const surf=stepSurf(f),wood=surf==='wood'||surf==='deck',hollow=surf==='wood';
   const lf=f.bones.LeftFoot,rf=f.bones.RightFoot;
   if(lf&&rf&&!wood&&SAND()){lf.getWorldPosition(_fd);rf.getWorldPosition(_fd2);const left=_fd.y<_fd2.y,ft=left?_fd:_fd2;spawnDust(ft,run?5:2,run?.45:.25,.25);}
-  if(wood){if(AC){const v=distVol(p)*vol;if(v>.01){const t=AC.currentTime;noiseBurst(t,.06,'bandpass',180+Math.random()*60,3,v*1.7);noiseBurst(t,.035,'bandpass',950,2,v*.3);noiseBurst(t+.004,.09,'lowpass',130,.7,v);}}return true;}
+  if(surf==='water'){if(AC){const v=distVol(p)*vol;if(v>.01){const t=AC.currentTime;noiseBurst(t,.16,'bandpass',700+Math.random()*500,1.2,v*1.3);noiseBurst(t+.05,.22,'highpass',2400,.7,v*.5);noiseBurst(t,.1,'lowpass',260,.7,v*.8);}}return true;}
+  if(wood){if(AC){const v=distVol(p)*vol*(hollow?1:.75);if(v>.01){const t=AC.currentTime,f0=(hollow?180:240)+Math.random()*70;noiseBurst(t,.06,'bandpass',f0,hollow?3:2.2,v*1.7);noiseBurst(t,.035,'bandpass',950+Math.random()*250,2,v*.3);noiseBurst(t+.004,hollow?.09:.05,'lowpass',hollow?130:170,.7,v*(hollow?1:.6));if(run)noiseBurst(t+.012,.03,'bandpass',1700,2.5,v*.16);}}return true;}
+  if(surf==='dirt'||surf==='sand'){if(sfx(surf==='sand'?'stepSand':'stepDirt',p,vol*1.5,run?1.06:1,0,false))return true;}
   return false;}
 // ---- armour: which piece takes a blow, dents hammered into plate, helmets knocked flying
 function armorAt(B,zone){const a=B.armor,mail=!!a.body&&a.body.def.id==='mail';
@@ -13465,7 +13477,7 @@ function clientEvents(ev){
   for(const e of ev){try{switch(e[0]){
     case 'b':spawnBlood(P(e[1]),P(e[2]),e[3],e[4],e[5]);break;
     case 'k':spawnSparks(P(e[1]),e[2],e[3]?P(e[3]):null);break;
-    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'sc':sScrape(P(e[1]),e[2],false);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
+    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'sc':sScrape(P(e[1]),e[2],false);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2],e[3]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
     case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5],e[6]?P(e[6]).clone():null);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
