@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=301;
+const BUILD=302;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -674,9 +674,9 @@ const MATS={
   wood:std({map:TX.wood,bumpMap:TX.woodb,bumpScale:1.5,roughness:.9}),
   beam:std({color:0x2a1f17,map:TX.wood,roughness:.9}),
   iron:std({color:0x2b2b2d,metalness:.85,roughness:.45}),
-  winLit:std({color:0x140b05,emissive:0xff9a3a,emissiveIntensity:2.4,roughness:.4}),
+  winLit:std({color:0x140b05,emissive:0xff9a3a,emissiveIntensity:2.4,roughness:.4,emissiveMap:winLitTex()}),
   winDark:std({color:0x07090d,metalness:.5,roughness:.2}),
-  glassLit:std({color:0x101018,emissive:0xb06a40,emissiveIntensity:1.6,roughness:.3}),
+  glassLit:std({color:0x101018,emissive:0xb06a40,emissiveIntensity:1.6,roughness:.3,emissiveMap:winLitTex()}),
   leaf:std({color:0x24331a,roughness:1}),
   leaf2:std({color:0x26331a,roughness:1}),
   bark:std({color:0x4a3f33,roughness:1}),
@@ -789,6 +789,13 @@ const _m4=new THREE.Matrix4(),_qq=new THREE.Quaternion(),_eu=new THREE.Euler();
 function T(x,y,z,ry=0,rx=0,rz=0,sx=1,sy=1,sz=1){_eu.set(rx,ry,rz,'YXZ');_qq.setFromEuler(_eu);return new THREE.Matrix4().compose(V(x,y,z),_qq,V(sx,sy,sz));}
 let GEO_TARGET=null;   // when set, addGeo collects into this object instead (a house that can burn down gets its own meshes)
 function addGeo(key,geo,m){const g=geo.index?geo.toNonIndexed():geo.clone();g.applyMatrix4(m);for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);((GEO_TARGET||batch)[key]??=[]).push(g);}
+/* (Build 302) a lit window is firelight behind leaded panes: warm uneven glass, brighter low in the middle where the room's light is, in a diamond lattice of lead, with a mullion and transom (it was a flat orange slab) */
+function winLitTex(){const W=128,H=160,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');let sd=71;const r=()=>{sd=(sd*16807)%2147483647;return (sd-1)/2147483646;};
+  const gr=g.createRadialGradient(W*.5,H*.62,8,W*.5,H*.6,H*.75);gr.addColorStop(0,'#fff0c8');gr.addColorStop(.45,'#d88a3c');gr.addColorStop(1,'#5a2c10');g.fillStyle=gr;g.fillRect(0,0,W,H);
+  for(let i=0;i<90;i++){g.fillStyle=`rgba(${r()<.5?255:60},${r()<.5?200:40},${r()<.5?120:20},${.04+r()*.08})`;g.beginPath();g.ellipse(r()*W,r()*H,4+r()*9,4+r()*9,0,0,6.283);g.fill();}
+  g.strokeStyle='#120a05';g.lineWidth=2;for(let c0=-H;c0<W+H;c0+=18){g.beginPath();g.moveTo(c0,0);g.lineTo(c0+H*.62,H);g.stroke();g.beginPath();g.moveTo(c0,0);g.lineTo(c0-H*.62,H);g.stroke();}
+  g.fillStyle='#0d0703';g.fillRect(W/2-4,0,8,H);g.fillRect(0,H*.38-4,W,8);g.lineWidth=7;g.strokeRect(2,2,W-4,H-4);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
 function batchGroup(B){const grp=new THREE.Group();for(const k in B){const m=new THREE.Mesh(mergeGeometries(B[k],false),MATS[k]);m.castShadow=!['winLit','glassLit','leaded'].includes(k);m.receiveShadow=true;grp.add(m);}return grp;}
 function flushBatch(){for(const k in batch){const merged=mergeGeometries(batch[k],false);const m=new THREE.Mesh(merged,MATS[k]);m.castShadow=!['winLit','glassLit','leaded'].includes(k);m.receiveShadow=true;world.add(m);}for(const k in batch)delete batch[k];}
 function wallPlane(w,h,tw=3,th=3){const g=new THREE.PlaneGeometry(w,h);const uv=g.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*w/tw,uv.getY(i)*h/th);return g;}
