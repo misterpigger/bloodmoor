@@ -7050,16 +7050,22 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
   else if(def.id==='sallet'){
     // (Build 205) a sallet: a rounded skull with a keel, its rim just over the brows in front, dropping behind the temples and drawn out into
     // a tail over the nape; a bevor (chin and throat plate) below it, the eyes and nose in the gap between
-    const rim=th=>{const c=Math.cos(th);return c>.3?ey+.012:c>-.45?lerp(ey-.055,ey+.012,(c+.45)/.75):ey-.055;};
-    S(helmLoft(M,{kind:'round',clr:.026,yC:ey+.02,yT:top+.04,rimY:rim,ridge:[.22,.007],rivets:12}),steelFitMat);
-    {const r0x=M.rx+.027,r0z=M.rz+.027,NV=48,NU=7,pos=[],idx=[];   // the tail: the back half of the rim swept down and out
-      for(let i=0;i<=NU;i++){const u=i/NU;for(let j=0;j<=NV;j++){const th=Math.PI*.5+j/NV*Math.PI,k=Math.pow(Math.max(0,-Math.cos(th)),1.3),w=.085*u*k,dy=-(.035*Math.pow(u,1.2))*k,bead=u>.9?.003*Math.sin((u-.9)/.1*Math.PI):0;
+    /* (Build 284, after surviving German sallets of c. 1480 and Half Sword's) the sallet comes down over the face to the tip of the nose with a sight cut
+       across it at the eyes, and its edge laps over the top of the bevor, so the head is closed: it was an open cap above the brows with the face
+       bare between it and a chin plate, which read as a mask. The skull above the sight and the face below it are one surface; the dark is a liner */
+    const SC=.034,ys=ey+.004,sg=.0115,yL=ey-.062,c0=Math.cos(1.2),c1=Math.cos(1.42);
+    const rim=th=>{const c=Math.cos(th);return c>c0?ys+sg/2:c>c1?lerp(yL,ys+sg/2,sstep(c1,c0,c)):yL;};
+    S(helmLoft(M,{kind:'round',clr:SC,yC:ey+.035,yT:top+.05,rimY:rim,ridge:[.2,.008],rivets:14}),steelFitMat);
+    S(helmBand(M,{y0:yL,y1:ys-sg/2,clr:SC,th0:-1.2,th1:1.2}),steelFitMat);
+    S(helmBand(M,{y0:yL+.006,y1:ey+.05,clr:SC-.007,th0:-1.5,th1:1.5}),slitMat);
+    {const r0x=M.rx+SC+.001,r0z=M.rz+SC+.001,NV=48,NU=8,pos=[],idx=[];   // the tail: the back half of the rim swept down and out over the nape
+      for(let i=0;i<=NU;i++){const u=i/NU;for(let j=0;j<=NV;j++){const th=Math.PI*.5+j/NV*Math.PI,k=Math.pow(Math.max(0,-Math.cos(th)),1.15),w=.115*Math.pow(u,1.25)*k+.012*u*(1-k),dy=-(.05*Math.pow(u,1.1))*k-.006*u*(1-k),bead=u>.9?.003*Math.sin((u-.9)/.1*Math.PI):0;
         pos.push(cx+Math.sin(th)*(r0x+w),rim(th)+.004+dy+bead,cz+Math.cos(th)*(r0z+w));}}
       for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
       const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();S(bg.toNonIndexed(),steelFitMat);}
     {const NU=16,NV=40,pos=[],idx=[],y0=ey-.215,y1=ey-.046;   // the bevor: a lip under the nose, a cup over the chin, drawn in at the throat, and gorget plates flaring out onto the breast (Build 283: it was one straight tube from nose to chest, like a bucket)
       for(let i=0;i<=NU;i++){const u=i/NU,y=lerp(y0,y1,u),ch=Math.exp(-Math.pow((u-.6)/.17,2)),wa=Math.exp(-Math.pow((u-.33)/.13,2)),fl=Math.pow(Math.max(0,1-u/.3),1.6),lip=u>.9?(u-.9)/.1:0,st=(u>.27&&u<.31?.004:0),rx=M.rx-.012+.05*fl+.003*ch-.02*wa+.005*lip+st,rz=M.rz-.004+.055*fl+.014*ch-.03*wa+.006*lip+st+(i===NU?.004:0);
-        for(let j=0;j<=NV;j++){const th=-1.62+3.24*j/NV,e=1-.25*Math.pow(Math.abs(th)/1.62,3)*u;pos.push(cx+Math.sin(th)*rx,y*e+(1-e)*(y+.02),cz+Math.cos(th)*(rz+.005*Math.exp(-th*th/.02)*(1-fl)));}}
+        for(let j=0;j<=NV;j++){const th=-1.62+3.24*j/NV,e=1-.25*Math.pow(Math.abs(th)/1.62,3)*u;pos.push(cx+Math.sin(th)*rx,y*e+(1-e)*(y+.02)-.04*fl*Math.exp(-th*th/.35),cz+Math.cos(th)*(rz+.005*Math.exp(-th*th/.02)*(1-fl)));}}   /* the gorget plate comes down to a point over the breastbone */
       for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
       const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);bg.computeVertexNormals();
       {const N=bg.attributes.normal,m=(NU>>1)*(NV+1)+(NV>>1);if(N.getZ(m)<0){const I=bg.index.array;for(let k=0;k<I.length;k+=3){const t=I[k+1];I[k+1]=I[k+2];I[k+2]=t;}bg.computeVertexNormals();}}
