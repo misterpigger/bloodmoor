@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=285;
+const BUILD=286;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5472,7 +5472,7 @@ function garmentDetail(m,kind,M){const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs
         Charles de Blois (c. 1364); tr 2 braided: a woven braid in the trim colour at the collar and cuffs.
    pt 1 rayed: cloth woven in stripes of the coat and trim colours running down the body and along the sleeves (the 'ray' of the London and
         Ghent drapers); pt 2 barred: the same stripes laid across. Drawn in the garment's bind space, so nothing swims when it moves */
-const FRONT_BTN=!/[?&]nobtn\b/.test(location.search),COLLAR=!/[?&]nocollar\b/.test(location.search);
+const FRONT_BTN=!/[?&]nobtn\b/.test(location.search),COLLAR=/[?&]collar\b/.test(location.search);   /* (Build 286) off: the player read the cloth painted inside the neckline as an undershirt and asked twice for it to go; ?collar brings it back */
 function clothTrim(m,look,M,o){const Q=look.q|0;let tr=Q===1&&look.tr===3?0:look.tr|0;if(!tr&&(o===4||o===2)&&FRONT_BTN)tr=1;   /* (Build 284) a doublet and an aketon close down the front: buttoned unless another fastening is chosen (they were pullovers with nothing down the breast) */const pt=o===1?0:look.pt|0;if(!pt&&!tr&&!Q)return;const J=M.J,ny=J.Neck.y,hy=J.Hips.y,sx=Math.abs(J.LeftArm.x),ex=Math.abs(J.LeftForeArm.x),wx=Math.abs(J.LeftHand.x),ay=J.LeftForeArm.y,az=J.LeftForeArm.z,zc=J.Spine1.z,btn=tr===1&&o!==1,f=v=>v.toFixed(4),PW=Q===2?'vec3(.78,.6,.22)':'vec3(.56,.55,.5)';
   const pre=m.onBeforeCompile;m.onBeforeCompile=sh=>{pre(sh);sh.fragmentShader=sh.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
     { vec3 b=vBind;float ax=abs(b.x);vec3 swap=uTrim/max(uTint,vec3(.03));
@@ -6949,7 +6949,7 @@ const BUCKLES=!/[?&]nobuckle\b/.test(location.search);
    carries each piece onto this body's own bind pose (a T-pose): limb pieces by the limb they ride (along the bone scaled to its length, round it
    scaled to the limb's girth, turned from the model's arm or leg line to ours), the trunk's pieces by a box fitted to the trunk, the helmet to the
    head. Plates are bound whole to one bone (or a fixed share of two at elbow and knee), so they stay rigid and slide over each other. */
-const SUIT={on:!/[?&]nosuit/.test(location.search),fail:0,mat:null,cache:new Map(),y0:-1057.1017,cz:4.0607,s:.001022627,
+const SUIT={on:!/[?&]nosuit/.test(location.search),body:/[?&]suit\b/.test(location.search),   /* (Build 286) the player didn't like the modelled body, arm and leg plates in game: only its sallet is worn; ?suit brings the rest back */fail:0,mat:null,cache:new Map(),y0:-1057.1017,cz:4.0607,s:.001022627,
   K:{clrT:.03,clrL:.014,helm:.02,fwd:.004,flare:.14},
   R:{Cuirass_front:'torso',Cuirass_Back:'torso',Cylinder006:'torso',Cylinder011:'torso',Cylinder:'torso',Plane007:'torso',Cube001:'torso',Cylinder007:'torso',Cylinder008:'torso',Cube:'torso',Plane:'torso',Cube003:'torso',Plane002:'torso',Cylinder003:'torso',Cylinder001:'torso',Cylinder004:'torso',Cube004:'torso',Plane003:'torso',NeckArmor_1:'gorget',
     HipsArmor:'tasset',Cylinder005:'tasset',Cube005:'tasset',Plane004:'tasset',ArmArmor_0:'pauld',ArmFasteners:'pauld',Plane005:'pauld',ArmArmor_1:'pauld2',
@@ -7012,7 +7012,7 @@ function suitParts(body){if(SUIT.cache.has(body.name))return SUIT.cache.get(body
   SUIT.cache.set(body.name,out);return out;}
 function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='plate|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
   const {W}=bodyBoneW(body),arms=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],legs=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'],out=[];
-  const G=!!def.goth,PM=G?gothFitMat:steelFitMat;const SU=SUIT.on&&!G&&MDL_SCN.w_suit?suitParts(body):null;   /* (Build 285) the modelled harness takes the place of every lofted plate, strap and buckle; the mail and gloves under them stay */
+  const G=!!def.goth,PM=G?gothFitMat:steelFitMat;const SU=SUIT.on&&SUIT.body&&!G&&MDL_SCN.w_suit?suitParts(body):null;   /* (Build 285) the modelled harness takes the place of every lofted plate, strap and buckle; the mail and gloves under them stay */
   const S=(g,mat)=>{if(SU&&mat!==mailMat&&mat!==gloveMat)return;out.push([g,mat]);};
   /* (Build 284, the player: real straps and buckles) a latten buckle lying on a strap where it crosses the plate: a square frame with a bar and a tongue, and the
      strap's free end tucked through and lying on past it; rigid on the bone the strap rides */
@@ -7092,7 +7092,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     S(fitShell(body,'sabaton3',{keep:(v,P,w)=>w(v,['LeftFoot','RightFoot','LeftToeBase','RightToeBase'])>.4&&P.getY(v)<.1,off:.0165,smooth:14,minK:.95,rim:.003,shape:footShape(.13,J.LeftToeBase.z-.03),bones:['LeftFoot','RightFoot','LeftToeBase','RightToeBase','LeftLeg','RightLeg'],fallback:'LeftFoot'}),PM);   /* and the foot itself is closed in steel, the shoe's own shape a little larger (toe cap and sides), so no leather pokes out between or beyond the lames */
   }
   if(SU)for(const p of SU[def.cls]||[])out.push(p);
-  if(SU||!SUIT.on||G||SUIT.fail)FIT_CACHE.set(ck,out);return out;}
+  if(SU||!SUIT.on||!SUIT.body||G||SUIT.fail)FIT_CACHE.set(ck,out);return out;}
 
 /* ---- Build 172: helmets raised from one sheet, as they were, instead of grown from the scalp. A helmet is a closed loft round the head's
    centre (bodyMarks: hx, hz, rx, rz, ey): a rim that can rise over the brow and drop at the nape (`rimY(θ)`), a skull whose section
