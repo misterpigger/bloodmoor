@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=305;
+const BUILD=306;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5737,6 +5737,7 @@ function addMHPart(body,id,col,kind,tag,mat){const b=(body.name.match(/MH_Body_(
     m.bind(body.skeleton,body.bindMatrix);m.castShadow=kind==='hair'||kind==='beard';   // (draped cloth is one double-sided layer: shadowing itself it drew dark acne slashes down the skirts)
    m.receiveShadow=!P.H.strands;m.frustumCulled=false;   /* (strand hair shadowing itself drew black streaks) */m.name='MH_Part_'+kind;if(tag)m.userData.hair=true;if(kind==='beard')m.userData.beard=true;
     if(kind==='cloth')for(const c of root.children)if(c.userData.shellGarb)c.visible=false;
+    if(m.material.userData.clU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.clMeshes||(mo.userData.clMeshes=[])).push(m);}
     if(m.material.userData.legU){let mo=root;while(mo.parent&&!mo.userData.mh)mo=mo.parent;(mo.userData.legMeshes||(mo.userData.legMeshes=[])).push(m);}
     if(m.material.userData.clipA&&!m.material.userData.isBelt){for(let o=root;o;o=o.parent)if(o.userData.armClip){m.material.userData.clipA.value.copy(o.userData.armClip);break;}}   // (Build 176) a garment that arrives after the harness was put on
     if(m.material.userData.clipU){let cl=null;for(let o=root;o;o=o.parent)if(o.userData.garbClip){cl=o.userData.garbClip;break;}if(cl){m.material.userData.clipU.value.copy(cl);if(cl.x<5&&m.material.userData.isBelt)m.material.userData.clipU.value.set(9,-9,9);}}   // (a belt goes under body armour altogether)
@@ -5930,6 +5931,63 @@ function swayStep(f,dt){const sw=f.model&&f.model.userData.sway;if(!sw||!f.bones
         else{const pu=(r-d)/d;_sw4.subVectors(P,_sw4).multiplyScalar(pu);s.add(_sw4);P.add(_sw4);}}
       const mx=S.max[l];if(s.length()>mx){s.setLength(mx);A.sv[i].multiplyScalar(.6);}
       sw[k].value[i].copy(s).applyMatrix3(_swM);}}}
+/* (Build 306) skirts are cloth: a lattice of 16 columns round the body by 6 rows from the hips to the hem, each node a point with its own
+   momentum (verlet, world space) sprung to where the garment's skinned vertex under it is, held to its neighbours' spacing, and kept out of
+   both legs' thighs and shins (capsules measured from the body's own skin). What it moved by goes to the garment's vertex shader, which
+   blends it onto every skirt vertex by its place round and down (then the old leg push cleans up between nodes). Before, the skirt was the
+   skin's pose plus a ring of pendulums that didn't know where the legs were, so a striding leg went straight through the cloth. Cosmetic,
+   on every machine, within 22 m of the camera. `?nocloth` turns it off. */
+const CLOTH=!/[?&]nocloth/.test(location.search),CL_NA=16,CL_NR=6,CL_GEO=new WeakMap(),CL_LEG=new WeakMap();
+function clothMat(m){if(!CLOTH)return m;const U={uClO:{value:Array.from({length:CL_NA*CL_NR},()=>new THREE.Vector3())},uClP:{value:new THREE.Vector4(0,0,1,0)}};m.userData.clU=U;const pre=m.onBeforeCompile;
+  m.onBeforeCompile=(sh,r)=>{if(pre)pre.call(m,sh,r);sh.uniforms.uClO=U.uClO;sh.uniforms.uClP=U.uClP;
+    sh.vertexShader='uniform vec3 uClO['+(CL_NA*CL_NR)+'];uniform vec4 uClP;\n'+sh.vertexShader.replace('#include <skinning_vertex>',`#include <skinning_vertex>
+    if(uClP.z>uClP.w){float an=atan(position.z-uClP.y,position.x-uClP.x),u=(an/6.2831853+.5)*${CL_NA}.,u0=floor(u),uf=u-u0,v=clamp((uClP.z-position.y)/(uClP.z-uClP.w),0.,1.)*${CL_NR-1}.,v0=min(floor(v),${CL_NR-2}.),vf=v-v0;
+      int a0=int(mod(u0,${CL_NA}.)),a1=int(mod(u0+1.,${CL_NA}.)),r0=int(v0),r1=r0+1;
+      transformed+=mix(mix(uClO[r0*${CL_NA}+a0],uClO[r0*${CL_NA}+a1],uf),mix(uClO[r1*${CL_NA}+a0],uClO[r1*${CL_NA}+a1],uf),vf);}`);};
+  const ck=m.customProgramCacheKey;m.customProgramCacheKey=()=>(ck?ck.call(m):'')+'|cl1';return m;}
+// where the nodes sit on this garment (once per geometry): the hips' place in bind space, the hem's height, and for each node the vertex nearest it
+function clothGeo(m){const g=m.geometry;let G=CL_GEO.get(g);if(G)return G;const sk=m.skeleton,hi=sk.bones.findIndex(b=>/Hips$/.test(b.name));if(hi<0)return null;
+  const bi=new THREE.Matrix4().copy(m.bindMatrix).invert(),hp=V().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[hi]).invert().premultiply(bi));
+  const P=g.attributes.position,n=P.count,top=hp.y;let lo=9;for(let i=0;i<n;i++){const y=P.getY(i);if(y<top&&Math.abs(P.getX(i)-hp.x)<.35)lo=Math.min(lo,y);}
+  if(top-lo<.08){CL_GEO.set(g,G={none:1});return G;}
+  const idx=new Int32Array(CL_NA*CL_NR).fill(-1),best=new Float32Array(CL_NA*CL_NR).fill(1e9),dy=(top-lo)/(CL_NR-1);
+  for(let i=0;i<n;i++){const y=P.getY(i);if(y>top+.03||y<lo-.01)continue;const x=P.getX(i)-hp.x,z=P.getZ(i)-hp.z,an=Math.atan2(z,x),rad=Math.hypot(x,z);if(rad>.45)continue;
+    const fv=(top-y)/dy,fu=(an/(Math.PI*2)+.5)*CL_NA;
+    for(let r=Math.max(0,Math.floor(fv)-1);r<=Math.min(CL_NR-1,Math.ceil(fv)+1);r++)for(let k=Math.floor(fu)-1;k<=Math.floor(fu)+2;k++){const a=((k%CL_NA)+CL_NA)%CL_NA;let da=fu-k;
+      const s=(r-fv)*(r-fv)*dy*dy+da*da*Math.pow(rad*Math.PI*2/CL_NA,2)-rad*.002,j=r*CL_NA+a;if(s<best[j]){best[j]=s;idx[j]=i;}}}
+  for(let j=0;j<idx.length;j++)if(idx[j]<0){G={none:1};CL_GEO.set(g,G);return G;}
+  G={idx,c:hp,top,lo};CL_GEO.set(g,G);return G;}
+// the legs' girth from the body's own skin (once per body geometry): radius near each end of thigh and shin, 85th percentile
+function clothLegs(body){const g=body.geometry;let L=CL_LEG.get(g);if(L)return L;const sk=body.skeleton,bi=new THREE.Matrix4().copy(body.bindMatrix).invert(),bp=n=>{const i=sk.bones.findIndex(b=>b.name.endsWith(n)&&!b.name.endsWith('Up'+n));return i<0?null:V().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[i]).invert().premultiply(bi));};
+  L=[];const P=g.attributes.position,SI=g.attributes.skinIndex,SW=g.attributes.skinWeight;
+  for(const [a,b] of [['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot']]){const A=bp(a),B=bp(b),ia=sk.bones.findIndex(x=>x.name.endsWith(a)&&!x.name.endsWith('Up'+a));if(!A||!B){L.push([.09,.07]);continue;}const ab=V().subVectors(B,A),l2=ab.lengthSq(),r0=[],r1=[],q=V();
+    for(let i=0;i<P.count;i++){let w=0;for(let c=0;c<4;c++)if(SI.getComponent(i,c)===ia)w+=SW.getComponent(i,c);if(w<.6)continue;q.set(P.getX(i),P.getY(i),P.getZ(i));const t=clamp(q.clone().sub(A).dot(ab)/l2,0,1),d=q.distanceTo(V().copy(A).addScaledVector(ab,t));if(t<.35)r0.push(d);else if(t>.65)r1.push(d);}
+    const pc=a=>{a.sort((x,y)=>x-y);return a.length?a[Math.floor(a.length*.7)]:.08;};L.push([pc(r0),pc(r1)]);}
+  CL_LEG.set(g,L);return L;}
+const _clA=V(),_clB=V(),_clQ=V(),_clM3=new THREE.Matrix3(),CL_LEGN=[['LeftUpLeg','LeftLeg',0],['LeftLeg','LeftFoot',1],['RightUpLeg','RightLeg',0],['RightLeg','RightFoot',1]];
+function clothStep(f,dt){if(!CLOTH)return;const ms=f.model&&f.model.userData.clMeshes;if(!ms||!ms.length||!f.bones||dt<=0)return;
+  const near=camera.position.distanceToSquared(f.pos)<22*22;
+  for(const m of ms){const U=m.material.userData.clU;if(!U||!m.parent)continue;const G=clothGeo(m);if(!G||G.none){U.uClP.value.set(0,0,0,1);continue;}
+    if(!near||!m.visible){if(m._cl){m._cl=null;for(const o of U.uClO.value)o.set(0,0,0);}continue;}
+    U.uClP.value.set(G.c.x,G.c.z,G.top,G.lo);
+    let S=m._cl;const N=CL_NA*CL_NR;
+    const rest=(S&&S.rest)||Array.from({length:N},()=>V());for(let j=0;j<N;j++){m.applyBoneTransform(G.idx[j],rest[j].fromBufferAttribute(m.geometry.attributes.position,G.idx[j]));rest[j].applyMatrix4(m.matrixWorld);}
+    if(!S||S.rest!==rest){S=m._cl={rest,x:rest.map(p=>p.clone()),xp:rest.map(p=>p.clone())};}
+    let jump=0;for(let j=0;j<N;j++)jump=Math.max(jump,S.x[j].distanceToSquared(rest[j]));if(jump>.5*.5){for(let j=0;j<N;j++){S.x[j].copy(rest[j]);S.xp[j].copy(rest[j]);}}
+    // legs as capsules in the world
+    const sc=m.matrixWorld.getMaxScaleOnAxis?new THREE.Vector3().setFromMatrixScale(m.matrixWorld).x:1,LR=clothLegs(f._swBody||(f._swBody=(()=>{let b=null;f.model.traverse(o=>{if(o.isSkinnedMesh&&/^MH_Body/.test(o.name))b=o;});return b;})())||m),caps=[];
+    for(const [a,b,k] of CL_LEGN){const A=f.bones[a],B=f.bones[b];if(!A||!B)continue;const r=LR[k];caps.push([A.getWorldPosition(V()),B.getWorldPosition(V()),(r[0]+.013)*sc,(r[1]+.013)*sc]);}
+    const n=Math.min(4,Math.ceil(dt/(1/120))),h=dt/n,dead=f.ragdoll?.5:1;
+    for(let it=0;it<n;it++){
+      for(let r=0;r<CL_NR;r++){const t=r/(CL_NR-1),k=lerp(700,55,Math.sqrt(t))*(f.ragdoll?2:1),damp=Math.exp(-(3.2+2*(1-t))*h);
+        for(let a=0;a<CL_NA;a++){const j=r*CL_NA+a,x=S.x[j],xp=S.xp[j];if(r===0){x.copy(rest[j]);xp.copy(rest[j]);continue;}
+          _clQ.subVectors(x,xp).multiplyScalar(damp);xp.copy(x);x.add(_clQ);_clA.subVectors(rest[j],x).multiplyScalar(k*h*h);x.add(_clA);x.y-=9.8*h*h*.15*t;}}
+      for(let pass=0;pass<2;pass++){
+        for(let r=1;r<CL_NR;r++)for(let a=0;a<CL_NA;a++){const j=r*CL_NA+a,up=j-CL_NA,x=S.x[j],L0=rest[j].distanceTo(rest[up]);_clA.subVectors(x,S.x[up]);const l=_clA.length();if(l>1e-6&&(l>L0*1.04||l<L0*.8)){const L=l>L0?L0*1.04:L0*.8;x.addScaledVector(_clA,(L-l)/l*(r===1?1:.65));if(r>1)S.x[up].addScaledVector(_clA,-(L-l)/l*.35);}
+          const nb=r*CL_NA+(a+1)%CL_NA,y=S.x[nb],H0=rest[j].distanceTo(rest[nb]);_clA.subVectors(y,x);const lh=_clA.length();if(lh>1e-6&&(lh>H0*1.12||lh<H0*.65)){const L=lh>H0?H0*1.12:H0*.65,d=(lh-L)/lh*.5;x.addScaledVector(_clA,d);y.addScaledVector(_clA,-d);}}
+        for(let j=CL_NA;j<N;j++){const x=S.x[j];for(const [A,B,r0,r1] of caps){_clB.subVectors(B,A);const t=clamp(_clQ.subVectors(x,A).dot(_clB)/(_clB.lengthSq()||1e-6),0,1),R=lerp(r0,r1,t);_clQ.copy(A).addScaledVector(_clB,t);_clA.subVectors(x,_clQ);const d=_clA.length();if(d<R&&d>1e-5)x.addScaledVector(_clA,(R-d)/d);}
+          const mx=.16*(j/N+.2);_clA.subVectors(x,rest[j]);if(_clA.lengthSq()>mx*mx)x.copy(rest[j]).addScaledVector(_clA.normalize(),mx);}}}
+    _clM3.setFromMatrix4(m.matrixWorld).invert();for(let j=0;j<N;j++)U.uClO.value[j].subVectors(S.x[j],rest[j]).multiplyScalar(dead).applyMatrix3(_clM3);}}
 // skin is not plastic: light soaks in and comes back out reddened past the edge of the lit side (a wrapped, red-shifted diffuse term),
 // and the face and hands are a little oilier than the body
 function skinScatter(m){const pre=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);
@@ -6029,7 +6087,7 @@ function dressMH(model,look,pal,mats){
     const gm=G.mat==='quilt'?(()=>{const mt=std({map:LINEN.m,normalMap:LINEN.n,normalScale:new THREE.Vector2(.9,.9),roughness:.96});tintMaterial(mt,0,pal,mats);quilt(mt);mt.customProgramCacheKey=()=>'bm-quilt';return mt;})()
       :G.mat==='linen'?(()=>{const mt=dyedCloth(false,.002);mt.userData.U.uTint.value.set(0xbdb29a);mt.userData.U.uTrim.value.set(0xbdb29a);return mt;})():   // (unbleached linen: the shell's colour read as glowing white on the draped shirt)
       (()=>{const W=WOOLT[G.mat==='twill'?'twill':'wool'],mt=std({map:W.m,normalMap:W.n,normalScale:new THREE.Vector2(.7,.7),roughness:.93});tintMaterial(mt,0,pal,mats);clothFolds(mt,.002);mt.customProgramCacheKey=()=>'bm-wool';return mt;})();
-    clothTrim(gm,look,M,look.o);gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm,0,GARB_TUCK[look.o]||0);addMHPart(body,G.id,null,'cloth',false,gm);
+    clothTrim(gm,look,M,look.o);gm.userData.U.uNoHose.value=1;gm.side=THREE.DoubleSide;if(!CLOTH)looseMat(gm,SWU,'h');garbClip(gm);garbLegs(gm,0,GARB_TUCK[look.o]||0);clothMat(gm);addMHPart(body,G.id,null,'cloth',false,gm);
     /* (Build 284, after surviving garments: the Charles de Blois pourpoint, aketons and cotes in period art, and Half Sword's) every draped garment came out of
        the simulation with a wide ragged scoop for a neck, open to the collarbones, which no medieval garment has. A collar piece in the garment's own cloth closes
        it, drawn on the skin itself so it can never gape (a separate shell was tried first and either sank under the skin at the neck or sat on top like a bib): standing round the neck on a doublet or aketon, a low neckband on a shirt or cote */
@@ -12594,7 +12652,7 @@ function frame(now){
 let attractRestart=0;
 const FX_BONES=['Spine2','Hips','LeftForeArm','RightForeArm','LeftLeg','RightLeg','Head','Spine'];
 function updateBurnFx(f,now,dt){
-  bodyBlood(f);fighterDetail(f,dt);if(!window.__noSway)swayStep(f,dt);garbLegStep(f);if(f.belt||f.hip2||f.back)f.beltPose();
+  bodyBlood(f);fighterDetail(f,dt);if(!window.__noSway)swayStep(f,dt);garbLegStep(f);clothStep(f,dt);if(f.belt||f.hip2||f.back)f.beltPose();
   if(!f.alive&&f.burn>0)f.burn-=dt;
   if(f.burn>0){
     if(!f.fireFx)f.fireFx=FX_BONES.map(()=>{const s=new THREE.Sprite(flameMat);s.renderOrder=7;scene.add(s);return s;});
@@ -13888,6 +13946,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get torchLights(){return torchLights;},takeUp,bloodWeapon,get world(){return world;},get moonDir(){return moonDir;},makePool,addDecal,WH,wheelOpen,wheelClose,wheelSel,aimMove:(a,b)=>aimMove(a,b),cryptBuild:(d,sd)=>{CRYPT_DEPTH=d;CRYPT_SEED=sd;loadMap('crypt');return CRYPT;},heldLid:f=>heldLid(f),get AMBX(){return AMBX},get RAIN(){return RAIN},dentArmor:(...a)=>dentArmor(...a),get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,spawnBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={clothGeo,CL_GEO,clothStep,get torchLights(){return torchLights;},takeUp,bloodWeapon,get world(){return world;},get moonDir(){return moonDir;},makePool,addDecal,WH,wheelOpen,wheelClose,wheelSel,aimMove:(a,b)=>aimMove(a,b),cryptBuild:(d,sd)=>{CRYPT_DEPTH=d;CRYPT_SEED=sd;loadMap('crypt');return CRYPT;},heldLid:f=>heldLid(f),get AMBX(){return AMBX},get RAIN(){return RAIN},dentArmor:(...a)=>dentArmor(...a),get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,spawnBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
