@@ -5,7 +5,7 @@ import os
 import json,os,sys,struct,numpy as np
 from PIL import Image
 from scipy.spatial import cKDTree
-SC=os.environ.get('MH_SRC','src')+'/';OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../../')+'assets/mhparts/'
+SC=os.environ.get('MH_SRC','src')+'/';OUT=os.environ.get('GARB_OUT') or os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../../')+'assets/mhparts/'
 G1=os.environ.get('MH_SRC','src')+'/makehuman_system_assets_cc0/';G2=os.environ.get('MH_SRC','src')+'/'
 sys.path.insert(0,SC+'garb');from mhmap import load_obj
 FULL={b:np.load(SC+'garb/full_%s.npy'%b) for b in 'ABCD'};BODY={b:np.load(SC+'garb/body_%s.npz'%b) for b in 'ABCD'}

@@ -56,12 +56,24 @@ def hull_ring(Q,y,off,step=.022,r=.026):
     e=mb.elements.new();e.type='ELLIPSOID';e.co=toB(np.array([c[0],y,c[1]]))[0];e.radius=1;e.size_x=np.ptp(pts[:,0])/2*.8;e.size_y=np.ptp(pts[:,1])/2*.8;e.size_z=.03;e.stiffness=2.
 # the garment's volume: the body itself, smoothed (no nipples, ribs or navel) and blown up by the ease, joined with solid
 # ellipsoids that bridge the legs for a skirt; the voxel remesh unions them into one closed outer surface (no inner layer)
+def gpos(v):c=v.co;return np.array([c.x,c.z,-c.y])
 bpy.ops.object.select_all(action='DESELECT')
 inf=body.copy();inf.data=body.data.copy();inf.name='inflated';link(inf);inf.modifiers.clear()
 sm0=inf.modifiers.new('s','SMOOTH');sm0.factor=1.;sm0.iterations=S.get('bodysmooth',12)
 dp=inf.modifiers.new('d','DISPLACE');dp.direction='NORMAL';dp.strength=ease;dp.mid_level=0.
 bpy.context.view_layer.objects.active=inf;inf.select_set(True)
 for m_ in ['s','d']:bpy.ops.object.modifier_apply(modifier=m_)
+# (Build 305) spare girth for the belt to gather: the torso is blown out further in a band round the belt line (most just above it,
+# fading by the chest and the hips), so when the belt draws the cloth in, the spare width falls into gathered folds above and below it
+if S.get('blouse') and S.get('belt'):
+    by_=S['belt'];ax_=JP['Spine'][0];az_=JP['Spine'][2]
+    for i_,v_ in enumerate(inf.data.vertices):
+        if i_>=len(P) or armw[i_]>.3 or abs(P[i_,0])>.3:continue
+        c_=gpos(v_);dy_=c_[1]-by_
+        k_=(1-min(1,dy_/S.get('blouseup',.24)))**1.5 if dy_>=0 else (1-min(1,-dy_/S.get('blousedn',.14)))**1.5
+        if k_<=0:continue
+        rx_,rz_=c_[0]-ax_,c_[2]-az_;rl_=math.hypot(rx_,rz_)+1e-6;e_=S['blouse']*k_
+        v_.co=toB(np.array([c_[0]+rx_/rl_*e_,c_[1],c_[2]+rz_/rl_*e_*.8]))[0]
 bm2=bmesh.new();bm2.from_mesh(inf.data);bmesh.ops.holes_fill(bm2,edges=bm2.edges[:],sides=0);bmesh.ops.recalc_face_normals(bm2,faces=bm2.faces[:]);bm2.to_mesh(inf.data);bm2.free()   # (eye sockets and mouth: closed, so the volume is watertight)
 print('inflated',len(inf.data.vertices))
 sl=S.get('sleeve','long')
@@ -156,9 +168,27 @@ for v in g.data.vertices:
     if c[1]>JP['LeftArm'][1]+.03 and abs(c[0])<JP['LeftArm'][0]:pin.append(v.index)
     elif S.get('belt') and abs(c[1]-S['belt'])<.012:pin.append(v.index)
 vg.add(pin,1.0,'REPLACE')
+# (Build 305) cloth with more of itself than the body needs: a weighted group grows the cloth's rest size (a negative shrink) round the
+# belt (the body bags over it), in the skirt (fuller, so it falls in deeper flutes) and down the forearms (sleeves bunch toward the cuff);
+# pinned at the shoulders and the belt, the spare length can only buckle, and gravity lays it in folds
+if S.get('grow'):
+    vg2=g.vertex_groups.new(name='grow');gb=S.get('belt',hy-.03);gw=S['grow']
+    for v in g.data.vertices:
+        c=gpos(v);w=0.
+        if abs(c[0])<.32:
+            dy=c[1]-gb
+            if 0<dy<.3:w=max(w,gw.get('body',0)*min(1,dy/.04)*max(0,1-max(0,dy-.12)/.18))
+            if c[1]<gb-.04:w=max(w,gw.get('skirt',0)*min(1,(gb-.04-c[1])/.12))
+        else:
+            ex=JP['LeftForeArm'][0];hx=JP['LeftHand'][0];t=(abs(c[0])-ex)/max(hx-ex,.01)
+            if t>0:w=max(w,gw.get('sleeve',0)*min(1,t*1.5))
+        vg2.add([v.index],float(1-min(1,w)),'REPLACE')   # Blender blends shrink_min (weight 0) to shrink_max (weight 1) and keeps max >= min, so the growth sits at weight 0
 cl=g.modifiers.new('cloth','CLOTH');cs=cl.settings;cs.vertex_group_mass='pin';cs.quality=S.get('q',6);cs.mass=S.get('mass',.25)
-cs.tension_stiffness=S.get('tens',15);cs.compression_stiffness=S.get('tens',15);cs.shear_stiffness=5;cs.bending_stiffness=S.get('bend',.3)
-cs.air_damping=1.5;cs.use_pressure=False;cs.shrink_min=S.get('shrink',0.)
+cs.tension_stiffness=S.get('tens',15);cs.compression_stiffness=S.get('comp',S.get('tens',15))   # (Build 305) cloth that can buckle instead of squeezing in its own plane: the folds;cs.shear_stiffness=5;cs.bending_stiffness=S.get('bend',.3)
+cs.air_damping=1.5;
+if S.get('grow'):cs.vertex_group_shrink='grow';cs.shrink_min=-S.get('growk',.1);cs.shrink_max=0.
+cs.use_pressure=False
+if not S.get('grow'):cs.shrink_min=S.get('shrink',0.)
 cl.collision_settings.collision_quality=3;cl.collision_settings.distance_min=.004
 cl.collision_settings.use_self_collision=S.get('self',True);cl.collision_settings.self_distance_min=.004
 sc=bpy.context.scene;NF=S.get('frames',45);sc.frame_start=1;sc.frame_end=NF;cl.point_cache.frame_end=NF

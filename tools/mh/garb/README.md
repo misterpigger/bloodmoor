@@ -16,3 +16,21 @@ Offline steps that make `assets/mhparts/*` (none of this runs in the game).
    uv, sway weights) and `belt.py` (a leather belt laid on the cloth at its belt line, buckle and hanging end).
 
 `loops.py <npz>` lists a garment's open edges (neck, cuffs, hem) to check a cut.
+
+## Folds (Build 305)
+
+The drape used to have the same stiffness against squeezing as against stretching (`tens` for both) and only as much cloth as the
+body needed, so the spare cloth squeezed in its own plane and the folds came out as long shallow flutes. `garments.json` now sets
+`comp` (compression stiffness, low so the cloth buckles) and `grow` / `growk`: a weighted group that grows the cloth's rest size by up
+to `growk` round the belt (`body`: it bags over the belt), in the skirt (`skirt`: fuller, deeper flutes) and down the forearms
+(`sleeve`: the sleeves bunch toward the cuff). Blender keeps `shrink_max >= shrink_min` and blends min (weight 0) to max (weight 1),
+so the growth is `shrink_min = -growk` at weight 0 and every vertex gets weight `1 - growth`. Spare girth pushed out round the belt
+(`blouse`) was tried too and tears the cloth at the armpits: don't use it. The whole chain, in order:
+
+    pip install bpy scipy                                  # Blender 5.3's Python module, ~430 MB
+    GARB_WORK=work python3 extract.py                      # body_A-D.npz
+    GARB_WORK=work python3 bl_garment.py cote A            # x4 garments x4 builds, ~2 min each
+    MH_SRC=src GARB_WORK=work GARB_OUT=out/ python3 gar2bin.py cote ABCD    # (MH_SRC only needs garb/body_*.npz and dummy full_*.npy)
+    SRC=out/ DST=out/ python3 ../mend/gwrap.py aketon D A C                  # A's and C's own aketon drapes tear under the arms
+    SRC=out/ DST=final/ python3 ../mend/gfix.py cote shirt doublet aketon
+    GARB_WORK=work GARB_OUT=final/ python3 belt.py cote .97 ABCD   # and shirt .97, doublet .93

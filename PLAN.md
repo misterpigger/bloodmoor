@@ -36,6 +36,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 302: lit house windows are leaded panes with firelight behind, not flat orange slabs.
 - 303: two new heads of hair, a tonsure and a pageboy with a fringe.
 - 304: great helm rebuilt as a riveted helm (lapped plates, ridge, sight only in front, latten cross); bots heave chest lids open as a player does; garb extract.py fixed. Draped folds tried, not shipped (needs a belted, posed drape).
+- 305: draped folds: every garment re-draped with cloth that buckles (low compression) and spare cloth (grown rest size round the belt, in the skirt, down the forearms); belts fitted to the finished garment.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.

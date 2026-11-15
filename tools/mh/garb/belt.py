@@ -2,19 +2,24 @@
 # the strap's end hanging from it, as a part like the others (assets/mhparts/belt_<g>.bin)
 import os
 import sys,json,numpy as np
-sys.path.insert(0,'$(dirname $0)')
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import gar2bin
 SC=gar2bin.SC
 def belt(g,by,builds='ABCD',w=.042,n=96):
     for b in builds:
-        d=np.load(SC+'gar_%s_%s.npz'%(g,b));V=d['V'];m=np.abs(V[:,1]-by)<.03;Q=V[m];c=np.array([Q[:,0].mean(),Q[:,2].mean()])
+        if os.environ.get('BELT_BIN'):   # (Build 305) fit the belt to the finished garment (after gar2bin and gfix push the cloth out), not the raw drape
+            sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'../mend'));from parts import read as _rd
+            _H,_A=_rd(os.environ['BELT_BIN']);V=_A[b+'pos'].astype(np.float64)
+        else:V=np.load(SC+'gar_%s_%s.npz'%(g,b))['V']
+        m=(V[:,1]>by-.012)&(V[:,1]<by+.09);   # (Build 305) the belt goes round the cloth bagging over it, or the bag hides it
+        Q=V[m];c=np.array([Q[:,0].mean(),Q[:,2].mean()])
         ang=np.arctan2(Q[:,2]-c[1],Q[:,0]-c[0]);rad=np.hypot(Q[:,2]-c[1],Q[:,0]-c[0]);bins=np.linspace(-np.pi,np.pi,n+1);R=np.zeros(n)
         for i in range(n):
             s=(ang>=bins[i])&(ang<bins[i+1]);R[i]=rad[s].max() if s.any() else np.nan
         ok=~np.isnan(R);A=(bins[:-1]+bins[1:])/2;R=np.interp(A,A[ok],R[ok],period=2*np.pi)
         for _ in range(3):R=(np.roll(R,1)+R*2+np.roll(R,-1))/4
         R+=.007;P=[];F=[]
-        tilt=lambda a:.012*np.cos(a-np.pi/2)   # sits a little lower at the front, as a belt does over the belly
+        tilt=lambda a:-.006*np.cos(a-np.pi/2)   # (Build 305) a touch higher at the front: the cloth bagging over the belt there hid a belt set lower (it used to sit 1.2 cm lower, as over a belly)
         for k,(a,r) in enumerate(zip(A,R)):
             x,z=c[0]+r*np.cos(a),c[1]+r*np.sin(a);yy=by-tilt(a)
             P+= [[x,yy+w/2,z],[x,yy-w/2,z]]
