@@ -320,6 +320,9 @@ body.touch #prompt{top:auto;bottom:24%}
       <button class="map" id="hsBtn" role="switch" aria-checked="false"><b>Jointed body</b><span>Half Sword-style: the fighters nearest you are jointed rigid parts with weight, posed by muscles at each joint, so blows shove and rock the whole body</span></button>
     </div>
     <p class="small" id="physTag"></p>
+    <div class="ctlopt"><div class="eyebrow">Sound</div>
+      <label class="frow">Music <input type="range" id="mvol" min="0" max="100" step="1" aria-label="Music volume"> <span id="mvolv"></span></label>
+      <label class="frow">Effects <input type="range" id="svol" min="0" max="100" step="1" aria-label="Effects volume"> <span id="svolv"></span></label></div>
     <div class="ctlopt notouch"><div class="eyebrow">Graphics</div>
       <div class="seg" id="gfxSeg" role="radiogroup" aria-label="Graphics quality"><button data-v="auto" role="radio">Auto</button><button data-v="low" role="radio">Low</button><button data-v="medium" role="radio">Medium</button><button data-v="high" role="radio">High</button></div>
       <p class="small" id="gfxTag"></p>
@@ -460,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=298;
+const BUILD=299;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4233,7 +4236,7 @@ function trapStep(h){const C=CRYPT,CW=CR.CW;bladeStep(h);
       if(f.ragdoll){for(const n in f.ragdoll.P){const p=f.ragdoll.P[n];if(inShaft(U(p.x,p.z),p.y,W(p.x,p.z),.05)>=0){const nw=tipW-sp.sg*.07;if(sp.ax)p.z=sp.m+nw;else p.x=sp.m+nw;}}continue;}
       const pts=[f.headPos,f.chest,_tc.set(f.pos.x,f.pos.y+.95,f.pos.z),_tb.set(f.pos.x,f.pos.y+.45,f.pos.z)];let n=0;for(const p of pts){if(p&&inShaft(U(p.x,p.z),p.y,W(p.x,p.z),.12)>=0)n++;}
       if(!n)continue;
-      if(!sp.hit.has(f)&&sp.ext>.35){sp.hit.add(f);const at=f.chest.clone(),dir=V(sp.ax?0:-sp.sg,0,sp.ax?-sp.sg:0);f.damage(Math.min(42,14+9*n),null,'run through by the spike wall');f.addBleed(1.1+.4*n,12);spawnBlood(at,dir.clone().multiplyScalar(1.5),10,1,.9);sfx('stab',at,.8,1,0,false);
+      if(!sp.hit.has(f)&&sp.ext>.35){sp.hit.add(f);const at=f.chest.clone(),dir=V(sp.ax?0:-sp.sg,0,sp.ax?-sp.sg:0);f.damage(Math.min(42,14+9*n),null,'run through by the spike wall');f.addBleed(1.1+.4*n,12);spawnBlood(at,dir.clone().multiplyScalar(1.5),10,1,.9);sfx('pierce',at,.8,1,0,false);
         if(f.alive){if(n>=2)f.knockdown(1.6,dir.clone().multiplyScalar(2).setY(.4),at);else{f.shove(dir,2);f.stagger=Math.max(f.stagger,.7);}}}
       if(!f.ragdoll){const w=W(f.pos.x,f.pos.z),nw=tipW-sp.sg*.36;if(sp.sg*(w-nw)>0){if(sp.ax)f.pos.z=sp.m+nw;else f.pos.x=sp.m+nw;}}}}}   // and nobody stands inside the shafts: they're shoved off them toward the open side
 function bladeStep(h){const C=CRYPT;if(!C||!C.blades.length)return;
@@ -4244,7 +4247,7 @@ function bladeStep(h){const C=CRYPT;if(!C||!C.blades.length)return;
       if(f.ragdoll){const P=f.ragdoll.P,Q=f.ragdoll.Q;for(const n in P){const p=P[n];if(Math.abs(U(p.x,p.z))<.1&&Math.abs(W(p.x,p.z)-w)<.3&&Math.abs(p.y-(y-.25))<.32){const k=dirW*spd*h*.5;if(b.ax){p.z+=k;Q[n].z-=k*.4;}else{p.x+=k;Q[n].x-=k*.4;}f.ragdoll.age=0;}}continue;}
       if(trapDweller(f))continue;const fu=U(f.pos.x,f.pos.z),fw=W(f.pos.x,f.pos.z);if(Math.abs(fu)>.26||Math.abs(fw-w)>.34)continue;const top=f.pos.y+(f.crouch?1.0:1.72)-(f.duck||0)*.35,bot=y-.18;if(bot>top)continue;   // it goes over a man on his knees
       if(simTime-(b.hitT.get(f)??-9)<.7)continue;b.hitT.set(f,simTime);const at=V(f.pos.x,Math.min(top-.1,Math.max(f.pos.y+.6,y-.4)),f.pos.z),dir=V(b.ax?0:dirW,0,b.ax?dirW:0),dmg=Math.min(46,10+9*spd);
-      f.damage(dmg,null,'cut down by the swinging blade');f.addBleed(1.6,12);spawnBlood(at,dir.clone().multiplyScalar(2),14,1,.9);sfx('cut',at,.9,.9,0,false);sThud(at,.6);if(f.alive){if(spd>2)f.knockdown(1.4,dir.clone().multiplyScalar(spd*.8).setY(.4),at);else{f.shove(dir,2.2);f.stagger=Math.max(f.stagger,.6);}}}}}
+      f.damage(dmg,null,'cut down by the swinging blade');f.addBleed(1.6,12);spawnBlood(at,dir.clone().multiplyScalar(2),14,1,.9);sfx('slash',at,.9,.9,0,false);sThud(at,.6);if(f.alive){if(spd>2)f.knockdown(1.4,dir.clone().multiplyScalar(spd*.8).setY(.4),at);else{f.shove(dir,2.2);f.stagger=Math.max(f.stagger,.6);}}}}}
 function trapVisual(dt){const C=CRYPT;if(!C)return;for(const b of C.blades){const a=b.w*simTime+b.ph;b.g.rotation.z=(b.ax?-1:1)*b.A*Math.sin(a);}
   for(const s of C.swings){if(s.ax)s.arm.rotation.z=s.th;else s.arm.rotation.x=-s.th;
     if(s.rope){if(s.armed){swingEnds(s,_ta,_tb);_tc.addVectors(_ta,_tb).multiplyScalar(.5);_tc.y+=s.r;_tw.subVectors(s.hook,_tc);const l=_tw.length();s.rope.position.copy(_tc);s.rope.quaternion.setFromUnitVectors(Y_AXIS,_tw.normalize());s.rope.scale.set(1,l,1);}else if(s.rope.parent){world.remove(s.rope);s.rope=null;}}
@@ -5000,7 +5003,7 @@ let AC=null,master=null,noiseBuf=null,swooshGain=null,swooshFilt=null,fireGain=n
 function initAudio(){
   if(AC){AC.resume();loadSfx();loadMusic();return;}
   try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
-  master=AC.createGain();master.gain.value=.8;master.connect(AC.destination);
+  master=AC.createGain();master.gain.value=.8*SFX_V/100;master.connect(AC.destination);
   {roomVerb=AC.createGain();roomVerb.gain.value=0;const cv=AC.createConvolver();cv.buffer=hallIR(1.7,.012);const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=3400;master.connect(cv);cv.connect(lp);lp.connect(roomVerb);roomVerb.connect(AC.destination);}   // (Build 207) stone rooms answer: the Crypt most, the Mill and the Tavern a little
   noiseBuf=AC.createBuffer(1,AC.sampleRate*6,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;   // long enough that a looped hiss never audibly repeats
   // wind: soft brown noise, slowly swelling (a short white-noise loop used to repeat and pulse)
@@ -5040,7 +5043,8 @@ const MUS_INST={organ:[38,42,46,50,54,58,62,66,70],harp:[46,50,54,58,62,66,70,74
   psaltery:[70,74,78,82,86,90],pluck:[70,74,78,82,86,90],bell:[72,76,79,83,86,89]};   // bowed and plucked psaltery, tubular bells
 const MUS_HITS=['drum-low','drum-high','tambourine-hit','wardrum','darbuka-doum','darbuka-tek','darbuka-ka'];
 const MUS_ENV={organ:[.25,.35],psaltery:[.16,.45],bell:[.004,.9]};   // [attack, release] in seconds; others [.012, .12]
-const MUS={buf:{},on:true,vol:.34,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{},st:''};
+let MUS_V=60,SFX_V=100;try{const a=localStorage.getItem('bloodmoor-mvol'),b=localStorage.getItem('bloodmoor-svol');if(a!=null)MUS_V=clamp(+a,0,100);if(b!=null)SFX_V=clamp(+b,0,100);}catch(e){}   /* (Build 299) volume sliders; the music's default is 60% of what it was: measured in matches it sat ~13 dB over the fight's own sounds (median rms -27 against -40 dBFS) */
+const MUS={buf:{},on:true,vol:.34*MUS_V/100,gain:null,theme:'',step:0,next:0,bar:0,int:1,tgtInt:1,loading:false,lay:{},st:''};
 try{if(localStorage.getItem('bloodmoor-music')==='off')MUS.on=false;}catch(e){}
 const CH={D:[50,53,57],Bb:[46,50,53],C:[48,52,55],G:[43,46,50],A:[45,49,52],F:[41,45,48],Gm:[43,46,50],E:[40,44,47],
   Am:[45,48,52],GM:[43,47,50],Em:[40,43,47],DM:[50,54,57],Eb:[51,55,58],Cm:[48,51,55]};   // (D, G mean D minor and G minor; GM and DM are the major chords)
@@ -11936,6 +11940,9 @@ for(const ty of ['keydown','keyup'])window.addEventListener(ty,e=>{if(!e.isTrust
 function keyUI(){const L=document.getElementById('keyList');if(!L)return;L.innerHTML='';for(const [a,name] of KEY_ACTS){const d=document.createElement('div');d.className='kb';const b=document.createElement('button');b.textContent=keyWait===a?'press a key':keyName(KEYBIND[a]||a);if(keyWait===a)b.classList.add('wait');b.onclick=ev=>{ev.preventDefault();keyWait=keyWait===a?null:a;keyUI();};d.append(name,b);L.append(d);}}
 let MOUSE_SENS=1,MOUSE_INV=false;try{MOUSE_SENS=clamp(+localStorage.getItem('bloodmoor-msens')||1,.3,2.5);MOUSE_INV=localStorage.getItem('bloodmoor-minv')==='1';}catch(e){}
 const GFX_TXT={auto:'Starts at full detail and turns things down if frames get slow.',low:'For older or smaller computers: lower resolution, no ambient shading, glow or edge smoothing, coarser shadows, thinner grass.',medium:'Most of the look at less cost: no ambient shading, finer shadows than Low.',high:'Everything on: ambient shading, the finest shadows, full grass. Needs a strong graphics card.'};
+function sndOptInit(){const m=document.getElementById('mvol'),mv=document.getElementById('mvolv'),e=document.getElementById('svol'),ev=document.getElementById('svolv');if(!m)return;m.value=MUS_V;mv.textContent=MUS_V+'%';e.value=SFX_V;ev.textContent=SFX_V+'%';
+  m.oninput=()=>{MUS_V=+m.value;mv.textContent=MUS_V+'%';MUS.vol=.34*MUS_V/100;if(MUS.gain&&MUS.on&&AC)MUS.gain.gain.setTargetAtTime(MUS.vol,AC.currentTime,.05);try{localStorage.setItem('bloodmoor-mvol',MUS_V);}catch(_){}};
+  e.oninput=()=>{SFX_V=+e.value;ev.textContent=SFX_V+'%';if(master&&AC)master.gain.setTargetAtTime(.8*SFX_V/100,AC.currentTime,.05);try{localStorage.setItem('bloodmoor-svol',SFX_V);}catch(_){}};}
 function ctlOptInit(){{const seg=document.getElementById('gfxSeg'),tg=document.getElementById('gfxTag');if(seg){const upd=()=>{for(const b of seg.children)b.setAttribute('aria-checked',b.dataset.v===GFX);tg.textContent=GFX_TXT[GFX]+(GFX==='low'||MSAA_N===0&&GFX!=='low'?' (Antialiasing changes when you reload the page.)':'');};for(const b of seg.children)b.onclick=ev=>{ev.preventDefault();GFX=b.dataset.v;try{localStorage.setItem('bloodmoor-gfx',GFX);}catch(e){}if(typeof gfxApply==='function')gfxApply();upd();};upd();}}const s=document.getElementById('msens'),v=document.getElementById('msensv'),iv=document.getElementById('minv'),r=document.getElementById('keyReset');if(!s)return;s.value=MOUSE_SENS;v.textContent=MOUSE_SENS.toFixed(2)+'×';
   s.oninput=()=>{MOUSE_SENS=+s.value;v.textContent=MOUSE_SENS.toFixed(2)+'×';try{localStorage.setItem('bloodmoor-msens',MOUSE_SENS);}catch(e){}};
   iv.checked=MOUSE_INV;iv.onchange=()=>{MOUSE_INV=iv.checked;try{localStorage.setItem('bloodmoor-minv',MOUSE_INV?'1':'0');}catch(e){}};
@@ -12072,7 +12079,7 @@ document.getElementById('startBtn').addEventListener('click',startGame);
 // input to the host stay exactly as on a keyboard.
 let TOUCH_SENS=3.2;const TOUCH_SWING=650;   // hand-box gain for a thumb (the player sets it: Touch sensitivity, stored as bloodmoor-tsens), and the swipe speed (px/s) that counts as a committed swing
 try{const v=parseFloat(localStorage.getItem('bloodmoor-tsens'));if(v>=1&&v<=8)TOUCH_SENS=v;}catch(e){}
-ctlOptInit();
+ctlOptInit();sndOptInit();
 if(TOUCH){const gid=id=>document.getElementById(id);
   const tl=gid('touch'),joy=gid('tjoy'),knob=joy.querySelector('i'),sw=gid('tswipe'),J={id:null,x:0,y:0},A={id:null,x:0,y:0,t:0,v:0};
   const setKeys=(dx,dy)=>{const r=Math.hypot(dx,dy),R=58,k=input.keys;k.KeyW=k.KeyS=k.KeyA=k.KeyD=k.ShiftLeft=false;

@@ -6,7 +6,7 @@ const HERE=path.dirname(fileURLToPath(import.meta.url));
 export const ROOT=path.resolve(HERE,'..');
 const NM=path.join(HERE,'node_modules');
 export async function boot({W=800,HH=450,query='',render=true}={}){
-  const browser=await chromium.launch({executablePath:process.env.CHROMIUM||undefined,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,LocalNetworkAccessChecks']});
+  const browser=await chromium.launch({executablePath:process.env.CHROMIUM||['/opt/pw-browsers/chromium-1243/chrome-linux64/chrome'].find(p=>fs.existsSync(p))||undefined,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,LocalNetworkAccessChecks']});
   const page=await browser.newPage({viewport:{width:W,height:HH}});
   const logs=[];page.on('console',m=>{if(['error','warning'].includes(m.type())&&!m.text().includes('deprecated'))logs.push(m.type()+': '+m.text());});page.on('pageerror',e=>logs.push('PAGEERROR: '+e.message));
   await page.route('**/*',async route=>{const u=new URL(route.request().url());
