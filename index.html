@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=289;
+const BUILD=290;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5376,7 +5376,7 @@ const LEG_SOFT=/[?&]nolegsoft/.test(location.search)?null:[+(new URLSearchParams
 const FEET_CAP=!/[?&]nofeetcap/.test(location.search),FEET_W=(()=>{const m=location.search.match(/[?&]feetw=([\d.,]+)/);return m?m[1].split(',').map(Number):[.42,.24,.5];})();
 const SW_TW=+((location.search.match(/[?&]swtw=([\d.]+)/)||[])[1]||.6);   /* (Build 278) the shoulders turn into a cut at most ~34 degrees (was 60, with the hips adding 45 more) */
 const BODY_GAP=/[?&]bgap=([\d.]+)/.test(location.search)?+RegExp.$1:.8;   /* (Build 276) two standing men's centres come no nearer than this (was .6 m: leaning in with fists they stood inside each other) */
-const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),FOLLOW=!/[?&]nofollow/.test(location.search),FT_K=_qn('ftk',2),FT_H=_qn('fthd',.1),FT_AXE=_qn('ftaxe',.3),FT_V=_qn('ftv',2.2),FT_HOLD=_qn('fth',.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
+const _qn=(k,d)=>{const m=location.search.match(new RegExp('[?&]'+k+'=([\\d.]+)'));return m?+m[1]:d;},STEP_IN=_qn('stepin',.5),REACH_K=_qn('reachk',.85),ST_DEEP=_qn('stdeep',.25),ST_WIDE=_qn('stwide',.95),REEL2=!/[?&]noreel2/.test(location.search),FOLLOW=!/[?&]nofollow/.test(location.search),RISE2=!/[?&]norise2/.test(location.search),RISE_TONE=_qn('rtone',.8),FT_K=_qn('ftk',2),FT_H=_qn('fthd',.1),FT_AXE=_qn('ftaxe',.3),FT_V=_qn('ftv',2.2),FT_HOLD=_qn('fth',.3),REEL=_qn('reel',1),WILDB=!/[?&]nowild/.test(location.search);
 const BL_N=10;
 function tintMaterial(m,mode,pal,mats){
   const U={uTint:{value:new THREE.Color(pal[0])},uTrim:{value:new THREE.Color(pal[1])},uHose:{value:new THREE.Color(pal[2])},uParty:{value:pal[3]},uMode:{value:mode},uNoHose:{value:0},uBodyMail:{value:0},uMailD:GEAR.uMailD,uMailO:GEAR.uMailO};
@@ -9788,7 +9788,7 @@ class Fighter{
     {const rd=simTime-(this._rdT||-9)<2.5?(this._rd||0):0,L=clamp(1-rd/22,0,1)*clamp((this.hp-25)/45,0,1);this._kdL=L;if(t<20)t*=1-.55*L;}
     this.knocked=t;sfx(this.armor.body?'fallArmoured':'fall',this.chest,.75,1,.2);this.kickT=-1;this.crouch=false;
     if(this.sword){this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);}
-    this.makeRagdoll(imp,impP,.25);this.ragdoll.reflex=.75;this.ragdoll.tone=.22;   // conscious: the arms go out to catch the fall
+    this.makeRagdoll(imp,impP,.25);{const L=RISE2?this._kdL||0:0;this.ragdoll.reflex=.75+.25*L;this.ragdoll.tone=.22+RISE_TONE*L;}   // conscious: the arms go out to catch the fall (Build 290: a man who only lost his footing keeps more of his strength on the way down)
   }
   goProne(){if(!this.alive||this.ragdoll)return;this._rd=0;this.knocked=1;this.kickT=-1;this.crouch=false;this.prone=true;this._pnk=3;this._kdL=1;
     if(this.sword)this.bones[(this.mainArm==='L'?'Left':'Right')+'Hand'].getWorldPosition(this.limpHand);
@@ -9817,7 +9817,9 @@ class Fighter{
       if(ax.lengthSq()>1e-4){ax.normalize();fr.addScaledVector(ax,-fr.dot(ax));if(fr.lengthSq()>1e-4){fr.normalize();const th=Math.atan2(ax.dot(V().crossVectors(fr,V(0,-1,0))),-fr.y);if(Math.abs(th)>.6){rollTh=th;roll=Math.max(.4,(1.05+hurt*.5)*kq*Math.abs(th)/Math.PI);}}}}
     /* (Build 247) how he lies counts too: face down he needs no roll, and if his chest is already off the ground (he went down on his hands, a stumble)
        or his hips are up (on his knees), the push-up and hands-and-knees stages are mostly done; a light fall face down skips most of the push-up */
-    let skP=1,skA=1;if(!roll&&P.Spine2&&!window.__noSkip){const gy0=groundY(P.Hips.x,P.Hips.z,P.Hips.y),ch=P.Spine2.y-gy0,hh=P.Hips.y-gy0;if(ch>.3)skP=.2;else if((this._kdL||0)>.6)skP=.45;if(ch>.3&&hh>.38)skA=.45;}
+    /* (Build 290) a stumble he caught: lightly fallen and already up off the ground on his hands or his seat (chest and hips both well clear of it), he doesn't lie down to roll over first; he turns as he gets his knees under him */
+    if(RISE2&&roll&&(this._kdL||0)>.5&&P.Spine2&&!window.__noSkip){const gy0=groundY(P.Hips.x,P.Hips.z,P.Hips.y);if(P.Spine2.y-gy0>.3&&P.Hips.y-gy0>.3){roll=0;rollTh=0;}}
+    let skP=1,skA=1;if(!roll&&P.Spine2&&!window.__noSkip){const gy0=groundY(P.Hips.x,P.Hips.z,P.Hips.y),ch=P.Spine2.y-gy0,hh=P.Hips.y-gy0;const lt=RISE2&&(this._kdL||0)>.5;if(ch>.3)skP=lt?.05:.2;else if(ch>.22&&lt)skP=.25;else if((this._kdL||0)>.6)skP=.45;if(ch>.3&&hh>.38)skA=lt?.2:.45;else if(lt&&hh>.3)skA=.6;}
     Rg.rise={t:0,rollT:roll,rollTh,p:Math.max(.08,(.42+hurt*.8)*kq*skP),a:Math.max(.1,(.42+hurt*1.0)*kq*skA),b:(.62+hurt*.9)*kq,c:(.5+hurt*.5)*kq,S:clamp((this.legLen[0]+this.legLen[1])/.87,.8,1.15),f,base:V(P.Hips.x,0,P.Hips.z),gy:groundY(P.Hips.x,P.Hips.z,P.Hips.y),str:clamp(1.05-hurt*.4,.45,1),hurt,fail:hurt>.75&&Math.random()<(hurt-.7)*.8,kneel:legF>0&&this.limbF('legL')>this.limbF('legR')?1:-1};
     Rg.sleep=false;if(hurt>.6&&simTime>(this.gruntT||0)){this.gruntT=simTime+1;sfx(this.id%2?'humanRoughHurt':'humanHurt',this.headPos,.5,this.voice);}}
   getUp(){
