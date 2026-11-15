@@ -17,6 +17,14 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 
 ## The work, in order
 
+### State after Build 291 (one night's run through this list; the player had not yet played any of it)
+- 287: a struck bot reels the way the blow went, on his feet; no more sliding in a squat (`hit287.mjs`). Still open under "hits connect": what the *striker's* blade and body do in the frames after contact, and sound, were looked at and left.
+- 288: a committed cut follows through instead of springing back to point ahead (`swing288.mjs`). Found and not changed: from the close camera a right-to-left cut ends hidden behind the player's own body; the hands end a cut at the middle of the body, not at the far hip (`FT_H` is only 10 cm). Both need his call.
+- 289: the lower room, galleries, the turnkey's room. Not done: rooms joined at angles (needs doors off a cell's centre lines), a raised dais, the "intentional placement" pass over `odd`/`rubble`/`stoolC`/`onTable`.
+- 290: a light fall is caught on a hand or knee and got up from in about 1.5 s (`rise290.mjs`).
+- 291: the six pulled weapons rebuilt and **sent to him as pictures; still out of play until he says yes** (`wrow291.mjs`).
+- Never checked this session: multiplayer (`net.mjs` crashes in the cloud container), Build 284's footsteps and music by ear.
+
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
 - The test harness now runs from `tools/lab` (it needs `tools/node_modules`: a symlink to a folder with `playwright` and `three` works; it's in `.gitignore`).
@@ -44,10 +52,10 @@ Build 246 added rotundas, undercrofts, candle wheels and flagstone floors. Still
 - Movement: the idle and walk as seen from behind in the crypt, the stance (Build 200), arms when carrying the lantern.
 - New hair shapes and draped tunic folds need the offline tools (`tools/mh/garb`, Blender's Python module, not installed in the cloud container).
 
-### 5. Getting up
+### 5. Getting up (done in Builds 247 and 290)
 (Build 247: face down and already up on the hands or knees skips most of the first two stages.) Build 246 shortens it by damage taken. He also asked for "depending on how you fell or stumbled": a stumble caught on hands and knees should skip the push-up stage and the roll altogether. Look at `startRise` (stages P, A, B, C and `roll`).
 
-### 6. The six pulled weapons
+### 6. The six pulled weapons (rebuilt in Build 291; waiting on his yes)
 Cudgel, hayfork, billhook, rusted sword, knightly sword, gilt mace (Build 243; defs and makers still in the file, out of all loot). Rebuild each from the proper parts (`bladeP`, `crossP`, `hiltP`, `flatBlade`, the lathed hafts) to the standard of the Build 168 swords, render them with `wshow.mjs` (`IDX` 12–17 in `YARD_W`), and **send him pictures before putting any back in play**.
 
 ### 7. Smaller things carried over

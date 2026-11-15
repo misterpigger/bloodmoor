@@ -460,7 +460,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=290;
+const BUILD=291;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -6505,19 +6505,54 @@ const _hs=()=>.9;
 // a war hammer: a square hammer face with four prongs, a beak behind, a top spike, langets down the haft
 /* (Build 243) poor men's weapons and rich men's. Poor: what a labourer or a levy had to hand, the cudgel, the hayfork and the hedging bill,
    and blades gone to rust. Rich: the same arms a knight carried, with the hilt gilded (looks; the stats are the plain weapon's). */
-function makeCudgel(){const P=[];   // a blackthorn club: a thin handle swelling to a knotted head, the bark left on, a thong through the butt
-  P.push([lathe([[0,-.13],[.014,-.13],[.016,-.11],[.0135,-.06],[.0135,.1],[.017,.3],[.024,.48],[.036,.6],[.043,.68],[.041,.74],[.03,.79],[0,.8]],10),MATS.bark||woodMat,0,0,0]);
-  for(const [a,y,r] of [[.4,.62,.016],[2.2,.69,.019],[4.1,.6,.015],[5.3,.72,.016],[1.2,.75,.013],[3.3,.52,.012]]){const k=new THREE.SphereGeometry(r,7,5);k.scale(1,.8,1);P.push([k,MATS.bark||woodMat,Math.cos(a)*.034,y,Math.sin(a)*.034]);}
-  P.push([new THREE.TorusGeometry(.03,.004,5,12),gripMat,0,-.145,0,Math.PI/2,0,0]);return wpnGroup(P);}
-function makePitchfork(){const P=[];   // a hayfork: an ash shaft, a forged socket, two long tines drawn out and bent up a little
-  P.push([lathe([[0,-.46],[.017,-.46],[.018,-.2],[.0185,.6],[.0165,1.34],[0,1.34]],10),woodMat,0,0,0]);
-  P.push([toCreasedNormals(lathe([[.0185,-.07],[.021,-.07],[.019,.05],[.012,.09],[0,.09]],8).toNonIndexed(),.4),steelDark,0,1.33,0]);
-  for(const sg of [-1,1]){const c=new THREE.CatmullRomCurve3([V(0,1.4,0),V(sg*.03,1.44,0),V(sg*.05,1.5,0),V(sg*.052,1.6,.006),V(sg*.048,1.7,.016)]),t=new THREE.TubeGeometry(c,14,.0062,6,false),p=t.attributes.position;
-    for(let i=0;i<p.count;i++){const y=p.getY(i);if(y>1.62){const k=1-(y-1.62)/.085;const cx=sg*.049,cz=.012;p.setX(i,cx+(p.getX(i)-cx)*Math.max(.12,k));p.setZ(i,cz+(p.getZ(i)-cz)*Math.max(.12,k));}}t.computeVertexNormals();P.push([t,steelDark,0,0,0]);}
+/* (Build 291) the six pulled weapons, rebuilt (still out of play: PULLED_W). Poor ones are made of what a poor man has: a grown stick, a smith's
+   plain forging, an old blade gone to rust; rich ones are a good sword and mace with latten (gilt bronze) fittings and dyed leather, not steel painted gold */
+function woodKnots(g,amp,seed,bend=0){const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,z);const bx=bend*Math.sin(y*3.1+seed),bz=bend*.6*Math.sin(y*2.3+seed*1.7);if(r<1e-5){p.setX(i,x+bx);p.setZ(i,z+bz);continue;}
+    const a=Math.atan2(z,x),k=1+amp*(Math.sin(a*2+y*9+seed)*.5+Math.sin(a*3-y*17+seed*2.1)*.35+Math.sin(y*31+seed*.7)*.25);p.setX(i,x*k+bx);p.setZ(i,z*k+bz);}g.computeVertexNormals();return g;}
+let _w291=null;function w291(){if(_w291)return _w291;const c=(m,f)=>{const x=m.clone();f(x);return x;};
+  return _w291={thorn:c(woodMat,x=>{x.color.setHex(0x5c4632);x.roughness=.8;}),ash:c(woodMat,x=>{x.color.setHex(0xa88e68);}),cut:c(woodMat,x=>{x.color.setHex(0xc4a67c);x.roughness=.85;}),
+    iron:std({color:0x4a4642,metalness:.72,roughness:.56,envMapIntensity:.8}),
+    rustBlade:new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:.55,roughness:.78,envMapIntensity:.5,vertexColors:true}),rustHilt:std({color:0x574236,metalness:.42,roughness:.82,envMapIntensity:.4}),
+    bareGrip:c(woodMat,x=>{x.color.setHex(0x4e3c2c);x.roughness=.88;}),redGrip:c(gripMat,x=>{x.color.setHex(0x6e1e1a);x.roughness=.62;}),gilt:std({color:0xa5803f,metalness:.92,roughness:.4,envMapIntensity:.9})};}
+function makeCudgel(){const P=[],M=w291();   // a blackthorn cudgel: a grown stick, not a turned one: crooked, thicker toward a root-knob head, the stubs of its side shoots cut off pale, iron nails driven in round the head, a thong through the butt
+  const prof=[[0,-.13]];for(let i=0;i<=44;i++){const t=i/44,y=-.128+t*.9,r=t<.5?.0155+.003*Math.sin(t*9):.016+.03*Math.pow((t-.5)/.5,1.35);prof.push([r*(t>.9?Math.sqrt(Math.max(.012,1-((t-.9)/.1)**2)):1),y]);}prof.push([0,.7725]);
+  const body=woodKnots(lathe(prof,22),.1,2.3,.012);P.push([body,M.thorn,0,0,0]);
+  const at=(y)=>{const t=(y+.128)/.9,r=t<.5?.0165:.016+.03*Math.pow((t-.5)/.5,1.35);return [r,.012*Math.sin(y*3.1+2.3),.0072*Math.sin(y*2.3+3.91)];};
+  for(const [a,y] of [[.5,.36],[2.4,.5],[4.4,.44],[5.5,.6],[1.5,.66],[3.4,.7]]){const [r,bx,bz]=at(y),g=new THREE.CylinderGeometry(.0075,.0095,.014,7);g.rotateZ(-Math.PI/2);g.rotateY(-a);P.push([g,M.thorn,bx+Math.cos(a)*(r+.003),y,bz+Math.sin(a)*(r+.003)]);
+    const f=new THREE.CircleGeometry(.0072,7);f.rotateY(Math.PI/2);f.rotateY(-a);P.push([f,M.cut,bx+Math.cos(a)*(r+.0102),y,bz+Math.sin(a)*(r+.0102)]);}
+  for(let k=0;k<2;k++)for(let i=0;i<5;i++){const a=i/5*6.283+k*.63,y=.63+k*.075,[r,bx,bz]=at(y),g=new THREE.ConeGeometry(.0058,.007,4,1);g.rotateZ(-Math.PI/2);g.rotateY(-a);P.push([g,M.iron,bx+Math.cos(a)*(r+.002),y,bz+Math.sin(a)*(r+.002)]);}
+  {const c=new THREE.CatmullRomCurve3([V(.012,-.112,0),V(.03,-.14,.004),V(.022,-.2,0),V(0,-.225,-.004),V(-.022,-.2,0),V(-.03,-.14,.004),V(-.012,-.112,0)]);P.push([new THREE.TubeGeometry(c,24,.0028,5,false),gripMat,0,0,0]);}
   return wpnGroup(P);}
-function makeBillhook(){const P=[];   // a hedging bill: a broad single-edged blade whose point hooks forward, on a short ash handle with an iron ferrule
-  P.push([flatBlade([[-.012,.14],[.03,.14],[.05,.2],[.056,.36],[.06,.46],[.085,.52],[.1,.5],[.105,.56],[.07,.62],[.02,.62],[-.012,.56],[-.014,.3],[-.012,.14]],[[.03,.14],[.05,.2],[.056,.36],[.06,.46],[.085,.52],[.1,.5]],.005,.014),kitchenSteel,0,0,0]);
-  P.push([lathe([[0,-.12],[.015,-.12],[.017,-.1],[.014,-.04],[.0145,.1],[.016,.14],[0,.14]],10),woodMat,0,0,0]);P.push([new THREE.CylinderGeometry(.0165,.0165,.03,8),steelDark,0,.135,0]);return wpnGroup(P);}
+function forgedRod(pts,r0,r1,t0=.3){const c=new THREE.CatmullRomCurve3(pts.map(p=>V(...p))),TS=28,RS=4,g=new THREE.TubeGeometry(c,TS,r0,RS,false),p=g.attributes.position,q=V();   // a square bar drawn out to a point: forged, not turned
+  for(let i=0;i<p.count;i++){const ring=Math.floor(i/(RS+1)),t=ring/TS;c.getPointAt(t,q);const k=t<t0?1:lerp(1,r1/r0,Math.pow((t-t0)/(1-t0),.8));p.setXYZ(i,q.x+(p.getX(i)-q.x)*k,q.y+(p.getY(i)-q.y)*k,q.z+(p.getZ(i)-q.z)*k);}
+  return toCreasedNormals(g.toNonIndexed(),.5);}
+function makePitchfork(){const P=[],M=w291();   // a hayfork: an ash shaft worn smooth, a forged socket nailed on, and two square tines drawn out from one bar, bent into a U and swept forward to their points
+  P.push([woodKnots(lathe([[0,-.46],[.0165,-.46],[.018,-.42],[.0178,-.1],[.0185,.5],[.0172,1.0],[.0165,1.34],[0,1.34]],14),.02,1.1,.004),M.ash,0,0,0]);
+  P.push([toCreasedNormals(lathe([[.0178,-.09],[.0215,-.09],[.0222,-.07],[.0205,.02],[.014,.08],[.0105,.1],[0,.1]],8).toNonIndexed(),.5),M.iron,0,1.33,0]);P.push([bandGeo(.0228,.012),M.iron,0,1.25,0]);
+  {const n=new THREE.CylinderGeometry(.0042,.0042,.05,6);n.rotateX(Math.PI/2);P.push([n,M.iron,0,1.285,0]);}
+  for(const sg of [-1,1])P.push([forgedRod([[0,1.415,0],[sg*.012,1.44,0],[sg*.04,1.462,.001],[sg*.058,1.5,.004],[sg*.06,1.57,.012],[sg*.056,1.66,.026],[sg*.05,1.745,.044]],.0072,.0016,.35),M.iron,0,0,0]);
+  {const y=new THREE.BoxGeometry(.03,.02,.016);P.push([y,M.iron,0,1.435,0]);}
+  return wpnGroup(P);}
+function makeBillhook(){const P=[],M=w291();   // a hedging bill: a broad blade that swells toward the top and hooks forward into a beak, ground on the inside of the hook and down the belly, its tang in an iron ferrule on a short ash handle with a swelling butt
+  const sm=(pts,n)=>new THREE.CatmullRomCurve3(pts.map(([x,y])=>V(x,y,0)),false,'centripetal').getPoints(n).map(q=>[q.x,q.y]);
+  const back=sm([[-.013,.15],[-.0155,.3],[-.017,.47],[-.012,.55],[.004,.605],[.03,.632],[.062,.634],[.09,.612],[.106,.572],[.109,.53],[.1,.5]],40),edge=sm([[.1,.5],[.094,.54],[.08,.566],[.062,.566],[.05,.53],[.046,.44],[.046,.33],[.038,.23],[.02,.15]],36);
+  P.push([flatBlade([...back,...edge.slice(1),[-.013,.15]],edge.slice().reverse(),.0052,.016),headMat,0,0,0]);
+  P.push([toCreasedNormals(lathe([[.0165,-.045],[.0185,-.045],[.0192,-.03],[.0175,.03],[.0135,.05],[0,.05]],8).toNonIndexed(),.5),M.iron,0,.14,0]);{const n=new THREE.CylinderGeometry(.0035,.0035,.042,6);n.rotateX(Math.PI/2);P.push([n,M.iron,0,.125,0]);}
+  P.push([woodKnots(lathe([[0,-.125],[.014,-.125],[.0205,-.11],[.0215,-.09],[.0165,-.06],[.0152,.0],[.0158,.06],[.0168,.1],[0,.1]],14),.02,.4),M.ash,0,0,0]);return wpnGroup(P);}
+function rustBlade(b){const p=b.attributes.position,c=b.attributes.color;if(!c)return b;   // an old blade: a dark brown patina all over, heavier toward the hilt and in broad patches, pitted, with grey steel still showing along the edges and where it has been wiped
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),sd=p.getZ(i)>0?1.7:0,v=c.getX(i),n=Math.sin(y*71+1.3+sd)*Math.sin(x*58+.7+sd)+.7*Math.sin(y*133+x*41+2.1)*Math.sin(y*29-x*97+.4+sd)+.4*Math.sin(y*211+sd)*Math.sin(x*170+1.1),
+      k=clamp(.7+.42*n+.3*clamp(1-y/.3,0,1)-(v>1.1?.5:0),0,1),pit=Math.sin(y*613+sd)*Math.sin(x*877+2)>.55?.6:1,g=v*.24*pit;
+    c.setXYZ(i,lerp(g,.13*pit,k),lerp(g*.98,.066*pit,k),lerp(g*.96,.036*pit,k));}c.needsUpdate=true;
+  for(const [y0,d] of [[.31,.0022],[.47,.003],[.58,.0018],[.22,.0016]])for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);if(Math.abs(y-y0)<.006&&Math.abs(x)>.008)p.setX(i,x-Math.sign(x)*d*(1-Math.abs(y-y0)/.006));}   /* a few nicks in the edge */
+  return b;}
+function makeRustSword(){const M=w291(),b=rustBlade(bladeP(.78,.0245,{sec:'lens',ful:.6,fw:.28,base:.042,th0:.0036,pt:.17,tw:.78}));   // an old Type XII sword left in the damp: plain straight cross, a small wheel pommel, the leather long gone from its wooden grip
+  const H=hiltP({cross:[.165,.015,.017,{term:'flare',bw:.02}],grip:[.105,.0142,{swell:.05,ris:[]}],pom:'wheel',pR:.024,pT:.017,wh:{},wire:false},b);
+  for(const q of H)q[1]=q[1]===gripMat?M.bareGrip:q[1]===steelHilt?M.rustHilt:q[1];return wpnGroup([[b,M.rustBlade,0,0,0],...H]);}
+function makeKnightSword(){const M=w291(),b=bladeP(.78,.024,{sec:'diamond',ful:.34,fw:.22,ric:.03,base:.042,th0:.0038,pt:.26,tw:.62});   // a knight's sword: a bright Type XVIIIa blade with a latten mark, the cross and wheel pommel of gilt latten, the grip in red leather bound with latten wire, a red chappe
+  const H=hiltP({cross:[.235,.017,.021,{term:'knob',bend:.014,bw:.022,ec:.017}],grip:[.15,.0155,{swell:.05,ris:[.33,.66]}],pom:'wheel',pR:.029,pT:.022,disc:false,wh:{boss:.08},brass:true,chappe:[.0205,.024]},b);
+  for(const q of H)q[1]=q[1]===gripMat||q[1]===chappeMat?M.redGrip:q[1]===steelHilt||q[1]===latten?M.gilt:q[1];return wpnGroup([[b,bladeMat,0,0,0],[markOn(b,.1,.012,1),M.gilt,0,0,0],...H]);}
+function makeGiltMace(){const M=w291(),g=makeMace(0),ch=g.children;   // a lord's mace: the flanged steel head left bright, its collars, bands and pommel gilt, the grip in red leather
+  ch.forEach((m,i)=>{if(i===1)m.material=M.redGrip;else if(i>=2&&i<=6)m.material=M.gilt;});return g;}
 function makeWarhammer(st=0){const P=[],hy=.6;
   P.push([lathe([[0,-.15],[.0165,-.15],[.018,-.13],[.0155,-.1],[.015,.1],[.0165,.5],[.0175,.64],[0,.64]],12),woodMat,0,0,0]);
   P.push([gripP(.2,.0168,{swell:.04,ris:[.5]}),gripMat,0,-.035,0],[wireP(.0175,.01),steelDark,0,.066,0],[wireP(.0175,.01),steelDark,0,-.136,0]);
@@ -6563,9 +6598,9 @@ const WEAPONS={
   cudgel:{id:'cudgel',name:'Cudgel',kind:'blunt',poor:1,len:.8,grip2:-.11,weight:.8,cut:.68,thrust:.2,sever:0,pen:.3,hitFrom:.45,tier:0,make:makeCudgel,parts:[['cap',[.34,.016],[0,.2,0],.4],['cap',[.1,.038],[0,.66,0],.6]]},
   pitchfork:{id:'pitchfork',name:'Hayfork',kind:'spear',poor:1,len:1.7,grip2:.46,weight:.95,cut:.25,thrust:1.1,sever:0,pen:.3,hitFrom:.25,tier:0,make:makePitchfork},
   billhook:{id:'billhook',name:'Billhook',kind:'blade',poor:1,len:.62,grip2:-.08,weight:.8,cut:1.1,thrust:.25,sever:1.05,pen:.15,hitFrom:.24,tier:0,make:makeBillhook},
-  rustsword:{id:'rustsword',name:'Rusted sword',kind:'blade',poor:1,wf:4,len:.82,grip2:-.1,weight:.85,cut:.82,thrust:.85,sever:.8,pen:.14,hitFrom:.22,tier:0,make:st=>makeBlade(.78,.024,.15,st),styles:3},
-  knightsword:{id:'knightsword',name:'Knightly sword',kind:'blade',rich:1,wf:2,st:1,len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:3,make:st=>makeBlade(.78,.024,.15,st),styles:3},
-  giltmace:{id:'giltmace',name:'Gilt mace',kind:'blunt',rich:1,wf:2,len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:3,make:makeMace,styles:3},
+  rustsword:{id:'rustsword',name:'Rusted sword',kind:'blade',poor:1,len:.82,grip2:-.1,weight:.85,cut:.82,thrust:.85,sever:.8,pen:.14,hitFrom:.22,tier:0,make:makeRustSword},
+  knightsword:{id:'knightsword',name:'Knightly sword',kind:'blade',rich:1,len:.82,grip2:-.1,weight:.85,cut:1.0,thrust:1.0,sever:1.0,pen:.2,hitFrom:.22,tier:3,make:makeKnightSword},
+  giltmace:{id:'giltmace',name:'Gilt mace',kind:'blunt',rich:1,len:.74,grip2:-.13,weight:1.3,cut:1.3,thrust:.3,sever:0,pen:.75,hitFrom:.55,tier:3,make:makeGiltMace},
   warhammer:{id:'warhammer',name:'War hammer',kind:'blunt',len:.7,grip2:-.12,weight:1.2,cut:1.35,thrust:.3,sever:0,pen:.92,hitFrom:.6,tier:2,make:makeWarhammer,parts:[['cap',[.36,.017],[0,.2,0],.55],['box',[.07,.03,.022],[.01,.6,0],.8]]},
   poleaxe:{id:'poleaxe',name:'Poleaxe',kind:'axe',len:1.46,grip2:-.5,weight:1.85,cut:1.3,thrust:.9,sever:1.5,pen:.7,hitFrom:.72,tier:3,make:makePoleaxe,parts:[['cap',[.93,.019],[0,.38,0],1.1],['box',[.09,.1,.016],[.03,1.26,0],1.5]]},
   glaive:{id:'glaive',name:'Glaive',kind:'spear',len:1.96,grip2:.48,weight:1.35,cut:1.7,thrust:1.15,sever:1.2,pen:.4,hitFrom:.25,bladeFrom:.76,tier:2,make:makeGlaive,parts:[['cap',[.93,.019],[0,.56,0],1.5],['box',[.03,.23,.006],[.01,1.73,0],.6]]},
