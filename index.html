@@ -5347,7 +5347,7 @@ function tintMaterial(m,mode,pal,mats){
   // One set of wound positions per fighter, shared by all their materials (fed each frame by bodyBlood)
   if(!mats.bloodU)mats.bloodU={uWd:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,-99,0,0))},uWa:{value:new Array(BL_N).fill(0)},uWg:{value:Array.from({length:BL_N},()=>new THREE.Vector4(1,0,0,0))},uWh:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,1,0,0))},uWb:{value:Array.from({length:BL_N},()=>new THREE.Vector4(0,0,0,0))},uSweat:{value:0},uDirt:{value:0},uDirtCol:DIRT_U};Object.assign(U,mats.bloodU);
   m.userData.U=U;mats.push(m);
-  const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.5)*(1.-step(.36,abs(vBind.x)))';
+  const mail='uBodyMail*step(.9,vBind.y)*step(vBind.y,1.575)*(1.-step(.36,abs(vBind.x)))';   /* (Build 284: up to the neck; the tops of the shoulders showed as skin between the plates) */
   m.onBeforeCompile=s=>{Object.assign(s.uniforms,U);
     s.vertexShader='varying vec3 vBind;varying vec3 vWPb;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBind=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPb=(modelMatrix*vec4(transformed,1.0)).xyz;');
     s.fragmentShader='varying vec3 vBind;varying vec3 vWPb;uniform vec3 uTint,uTrim,uHose;uniform sampler2D uMailD,uMailO;uniform float uParty,uMode,uNoHose,uBodyMail,uSweat,uDirt;uniform vec3 uDirtCol;uniform vec4 uWd['+BL_N+'];uniform float uWa['+BL_N+'];uniform vec4 uWg['+BL_N+'],uWh['+BL_N+'],uWb['+BL_N+'];\nfloat tnh3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}float tn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(tnh3(i),tnh3(i+vec3(1,0,0)),f.x),mix(tnh3(i+vec3(0,1,0)),tnh3(i+vec3(1,1,0)),f.x),f.y),mix(mix(tnh3(i+vec3(0,0,1)),tnh3(i+vec3(1,0,1)),f.x),mix(tnh3(i+vec3(0,1,1)),tnh3(i+vec3(1,1,1)),f.x),f.y),f.z);}\n'+s.fragmentShader
@@ -5848,7 +5848,7 @@ function dressMH(model,look,pal,mats){
     // skin under a draped garment is left out (aCov: a bit per garment on the body's vertices, uCov: the garments this fighter wears)
     sh.vertexShader='attribute float aCov;flat varying float vCov;uniform vec4 uHH;varying float vHd;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCov=aCov;vHd=uHH.x<0.?0.:dot(vec4(equal(skinIndex,vec4(uHH.x)))+vec4(equal(skinIndex,vec4(uHH.y)))+vec4(equal(skinIndex,vec4(uHH.z)))+vec4(equal(skinIndex,vec4(uHH.w))),skinWeight);');
     sh.fragmentShader='flat varying float vCov;uniform float uCov;varying float vHd;\n'+sh.fragmentShader.replace('void main() {','void main() {\n if((int(vCov+.5)&int(uCov+.5))!=0){bool nw=false;for(int i=0;i<'+BL_N+';i++){vec4 w=uWd[i];if(w.w>0.){vec3 d=vWPb-w.xyz;float g=uWg[i].w;if(dot(d,d)<.007+g*g*1.5)nw=true;}}if(!nw)discard;}\n if(vHd>.5)discard;'   /* (Build 224: but it is drawn round a wound, where the cloth is torn or slashed open) */);   /* your own head in first person: not drawn, but the shadow pass (its own depth material) still has it */
-    sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol,uEyeB;uniform float uHairAmt,uBeardAmt,uMark,uHelmY,uRot;uniform vec3 uYoke;uniform vec2 uYokeY;\n'+sh.fragmentShader.replace('float bld=0.;',`
+    sh.fragmentShader='uniform sampler2D uMHMask;uniform vec3 uHairCol,uEyeB;uniform float uHairAmt,uBeardAmt,uMark,uHelmY,uRot;uniform vec3 uYoke;uniform vec2 uYokeY;\n'+sh.fragmentShader.replace('float bld=0.,dryA=0.;',`
       { /* (Build 284) the collar: where skin would show inside a garment's wide neck (from the collarbones up to a line round the neck) it is drawn as the garment's own cloth */
         float yq=vBind.y+.012*smoothstep(-.02,.06,vBind.z),yk=step(uYokeY.x,vBind.y)*(1.-smoothstep(uYokeY.y-.003,uYokeY.y+.001,yq))*step(abs(vBind.x),.2);
         if(yk>0.){float wv=.88+.12*sin(vBind.x*1400.+vBind.z*700.)*sin(vBind.y*1400.);float hem=smoothstep(uYokeY.y-.012,uYokeY.y-.006,yq);diffuseColor.rgb=mix(diffuseColor.rgb,uYoke*wv*(1.-.28*hem),yk);} }
@@ -5877,7 +5877,7 @@ function dressMH(model,look,pal,mats){
           c=mix(c,vec3(.1,.07,.08),clamp(sock*.85+lp*.6,0.,1.)*uRot);
           c=mix(c,c*vec3(.55,.5,.45),smoothstep(.62,.72,abs(b.x))*step(1.2,b.y)*.6*uRot);   // filthy hands
           diffuseColor.rgb=c;} }
-      float bld=0.;`);};   // (after the cloth tint, which would recolour anything dark and grey as hose)
+      float bld=0.,dryA=0.;`);};   /* (Build 284) this whole block had been dead: the line it hooks onto in the cloth tint had become `float bld=0.,dryA=0.;`, so the replace matched nothing and painted stubble, crease shading, flushed cheeks, scars and war paint, the zombie's rot and the crown hidden under a helmet were all silently missing. Keep the two strings the same */   // (after the cloth tint, which would recolour anything dark and grey as hose)
   sh_detail(skin);skinScatter(skin);
   skin.customProgramCacheKey=()=>'bm-mhskin';skin.userData.HU=HU;
   model.traverse(m=>{if(!m.isMesh)return;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
@@ -6887,7 +6887,7 @@ function limbMap(body,A,B,keep,o={}){A=V(A.x,A.y,A.z);B=V(B.x,B.y,B.z);const key
   const out={A,d,e1,e2,L,r};LIMB_CACHE.set(key,out);return out;}
 // a plate lofted over a limbMap: u along the axis (t from tb to tt(θ)), v round it (θ over span(u) about θc), outward clearance plus shape
 //  o: {tb,tt (number or θ=>t),thc,span (number or u=>rad),clr,clrF(t,θ), ridge:[w,h], roll:{t:1,b:1,s:1}, NU,NV, bones:(t)=>[[name,w],..], rivets:[[t,θ]..]}
-const PLATE_EDGE=!/[?&]noedge/.test(location.search);
+const PLATE_EDGE=!/[?&]noedge/.test(location.search),PLATE_LIP=!/[?&]nolip/.test(location.search);
 function plateLoft(M,o,body){const NU=o.NU||28,NV=o.NV||40,tb=o.tb,ttF=typeof o.tt==='function'?o.tt:()=>o.tt,spF=typeof o.span==='function'?o.span:()=>o.span,thc=o.thc||0,roll=o.roll||{t:1,b:1,s:1},rw=.008,rr=o.rr??.0045;
   // rows bunched toward the edges so the rolls are smooth
   const bunch=n=>{const a=[];for(let i=0;i<=n;i++){const x=i/n;a.push(x<.12?.12*Math.pow(x/.12,1.6)*.5+x*.5:x>.88?1-(.12*Math.pow((1-x)/.12,1.6)*.5+(1-x)*.5):x);}return a;};
@@ -6902,10 +6902,23 @@ function plateLoft(M,o,body){const NU=o.NU||28,NV=o.NV||40,tb=o.tb,ttF=typeof o.
     rad+=bead;
     q.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th)).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);if(o.warp)o.warp(q,t,th);
     pos.push(q.x,q.y,q.z);uv.push(v,u);tt.push(t);
-    {let e=9;if(roll.t!==undefined||1){e=Math.min(sT,sB);if(sp<Math.PI*1.95)e=Math.min(e,sS);}const hh=sT+sB,bw=Math.min(.03,hh*.16),k=PLATE_EDGE&&e>=rw*.8?.7*clamp(hh/.16,.35,1)*(1-sstep(rw,rw+bw,e)):0;col.push(k);}}}   /* (Build 282) the band is a sixth of the plate's height at most and fainter on small plates: at a fixed 3 cm every narrow lame (fauld, upper arm) was dark all over and read as rubber hoops */   /* (Build 275) a dark band just inside each edge, behind the bright rolled bead: the line that makes plates read as separate pieces */
+    {let e=9;if(roll.t!==undefined||1){e=Math.min(sT,sB);if(sp<Math.PI*1.95)e=Math.min(e,sS);}const hh=sT+sB,bw=Math.min(.03,hh*.16),k=PLATE_EDGE&&e>=rw*.8?.7*clamp(hh/.16,.35,1)*(1-sstep(rw,rw+bw,e)):PLATE_EDGE&&PLATE_LIP?-.32*(1-e/(rw*.8)):0;col.push(k);}}}   /* (Build 284) and the turned edge itself is worn bright: handled, rubbed steel polishes at its edges (a negative value brightens and smooths in the plate shader) */   /* (Build 282) the band is a sixth of the plate's height at most and fainter on small plates: at a fixed 3 cm every narrow lame (fauld, upper arm) was dark all over and read as rubber hoops */   /* (Build 275) a dark band just inside each edge, behind the bright rolled bead: the line that makes plates read as separate pieces */
   for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}   // wound so the normals face out
   let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('aEdge',new THREE.Float32BufferAttribute(col,1));g.setIndex(idx);g.computeVertexNormals();
   const parts=[g];
+  /* (Build 284, the player: crisp forged edges) a plate has thickness: along every open edge the sheet turns in over a 3 mm face and runs back a centimetre underneath,
+     with its own hard normals, so an edge catches the light as a line of metal instead of ending like paper */
+  if(PLATE_LIP){const TH=.003,BK=.011,a3=V(),b3=V(),c3=V(),d3=V();
+    const P3=(u,v,dr,out)=>{u=clamp(u,0,1);v=clamp(v,0,1);const sp=spF(u),th=thc+(v-.5)*sp,tT=ttF(th),t=tb+u*(tT-tb);let rad=radius(t,th);if(o.ridge){const [w,h]=o.ridge;const dth=Math.atan2(Math.sin(th-thc),Math.cos(th-thc));rad+=h*Math.max(0,1-Math.abs(dth)/w)**2*(o.ridgeT?o.ridgeT(t):1);}
+      rad-=dr;out.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th)).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);if(o.warp)o.warp(out,t,th);return t;};
+    const lip=(N,at,inw,rl)=>{const lp=[],lt=[],li=[];for(let j=0;j<=N;j++){const [u,v]=at(j),[iu,iv]=inw(u,v);const t0=P3(u,v,rl?-rr:0,a3),t1=P3(u,v,TH,b3),t2=P3(iu,iv,TH,c3);lp.push(a3.x,a3.y,a3.z,b3.x,b3.y,b3.z,c3.x,c3.y,c3.z);lt.push(t0,t1,t2);}
+      for(let j=0;j<N;j++){const a=j*3,b=a+3;li.push(a,b,a+1,b,b+1,a+1,a+1,b+1,a+2,b+1,b+2,a+2);}
+      const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3));lg.setIndex(li);lg.computeVertexNormals();
+      {const m=(N>>1)*3,[u,v]=at(N>>1),[iu,iv]=inw(u,v);P3(u,v,0,a3);P3(iu,iv,0,d3);a3.sub(d3);const nn=lg.attributes.normal;if(a3.x*nn.getX(m)+a3.y*nn.getY(m)+a3.z*nn.getZ(m)<0){const I=lg.index.array;for(let k=0;k<I.length;k+=3){const t=I[k+1];I[k+1]=I[k+2];I[k+2]=t;}lg.computeVertexNormals();}}
+      const ng=lg.toNonIndexed(),n=ng.attributes.position.count,ta=new Float32Array(n),ea=new Float32Array(n).fill(-.3),src=lg.index.array;for(let k=0;k<n;k++)ta[k]=lt[src[k]];ng.setAttribute('aT',new THREE.BufferAttribute(ta,1));ng.setAttribute('aEdge',new THREE.BufferAttribute(ea,1));parts.push(ng);};
+    const du=BK/Math.max(.02,Math.abs(ttF(thc)-tb)*M.L),closed=spF(.5)>=Math.PI*1.95,dv=BK/Math.max(.02,radius((tb+ttF(thc))/2,thc)*spF(.5));
+    lip(NV,j=>[1,VS[j]],(u,v)=>[1-du,v],roll.t);lip(NV,j=>[0,VS[j]],(u,v)=>[du,v],roll.b);
+    if(!closed){lip(NU,j=>[US[j],0],(u,v)=>[u,dv],roll.s);lip(NU,j=>[US[j],1],(u,v)=>[u,1-dv],roll.s);}}
   // rivets: low domes standing on the plate along its normal
   if(o.rivets){const nn=V();for(const [t,th,s] of o.rivets){const rad=radius(t,th)+(o.ridge?0:0)+.0004;nn.copy(M.e1).multiplyScalar(Math.cos(th)).addScaledVector(M.e2,Math.sin(th));q.copy(nn).multiplyScalar(rad).add(M.A).addScaledVector(M.d,t*M.L);
     const dm=new THREE.SphereGeometry(s||.0042,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.55,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nn));dm.translate(q.x,q.y,q.z);
@@ -6925,9 +6938,16 @@ function discPlate(R,dome,body,bone,pos,nrm,boss=true){const pts=[[0,dome+(boss?
 /* (Build 176) mail sleeves under arm harness (as a voider or a mail shirt's sleeves would be): with the cloth sleeve hidden under the steel,
    the gaps at the armpit, the inside of the elbow and between the lames show mail rather than bare skin */
 function mailSleeve(body,x0,x1=9){return fitShell(body,'msleeve2'+x0+'_'+x1,{keep:(v,P,w)=>w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftShoulder','RightShoulder'])>.3&&Math.abs(P.getX(v))>x0&&Math.abs(P.getX(v))<x1&&w(v,['Hands*'])<.3,off:.007,smooth:4,bodySmooth:2,minK:.9,rim:.002,bones:null});}
+const BUCKLES=!/[?&]nobuckle\b/.test(location.search);
 function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='plate|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
   const {W}=bodyBoneW(body),arms=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],legs=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'],out=[];
   const G=!!def.goth,PM=G?gothFitMat:steelFitMat;const S=(g,mat)=>out.push([g,mat]);
+  /* (Build 284, the player: real straps and buckles) a latten buckle lying on a strap where it crosses the plate: a square frame with a bar and a tongue, and the
+     strap's free end tucked through and lying on past it; rigid on the bone the strap rides */
+  const buckle=(Mm,t,th,clr,bone,sz=.016,dir=1)=>{if(!BUCKLES)return;const nn=V().copy(Mm.e1).multiplyScalar(Math.cos(th)).addScaledVector(Mm.e2,Math.sin(th)),tg=V().copy(Mm.e1).multiplyScalar(-Math.sin(th)).addScaledVector(Mm.e2,Math.cos(th)).multiplyScalar(dir),ax=V().copy(Mm.d).multiplyScalar(dir),p=nn.clone().multiplyScalar(Mm.r(t,th)+clr).add(Mm.A).addScaledVector(Mm.d,t*Mm.L);
+    const fr=new THREE.TorusGeometry(sz*.74,sz*.13,5,4);fr.rotateZ(Math.PI/4);fr.scale(.92,1.22,1);const bar=new THREE.BoxGeometry(sz*.16,sz*1.5,sz*.16);bar.translate(-sz*.5,0,0);const tn=new THREE.BoxGeometry(sz*1.2,sz*.15,sz*.13);tn.translate(sz*.08,0,sz*.09);tn.rotateY(-.12);
+    const m4=new THREE.Matrix4().makeBasis(tg,ax,nn).setPosition(p),gs=[fr,bar,tn].map(q=>{const n=q.toNonIndexed();n.deleteAttribute('uv');return n;}),bg=mergeGeometries(gs);bg.applyMatrix4(m4);bg.computeVertexNormals();bindRigid(bg,bone,body);S(bg,brassFitMat);
+    const end=new THREE.BoxGeometry(sz*2.4,sz*.95,sz*.1);end.translate(sz*1.75,0,sz*.02);{const q=end.attributes.position;for(let i=0;i<q.count;i++)if(q.getX(i)>sz*2.5)q.setY(i,q.getY(i)*.35);}const eg=end.toNonIndexed();eg.deleteAttribute('uv');eg.applyMatrix4(m4);eg.computeVertexNormals();bindRigid(eg,bone,body);S(eg,strapMat);};
   if(def.cls==='plate'){
     const sx=Math.abs(J.LeftArm.x-J.Hips.x)*.78;const T=limbMap(body,J.Hips,J.Neck,(v,W,P)=>W(v,arms)<.15&&W(v,legs)<.35&&W(v,['Neck','Head'])<.4&&Math.abs(P.getX(v)-J.Hips.x)<sx,{key:'torso2',t0:-.45,t1:1.15,sw:4,st:3});
     const ts=y=>(y-J.Hips.y)/T.L,tN=ts(J.Neck.y-.035),tW=ts(J.Spine1.y-.015);
@@ -6942,9 +6962,10 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     // backplate, one piece from the waist to the neck, wide enough to meet the breastplate under the arms
     S(plateLoft(T,{tb:tP,tt:th=>tN-.03-.06*Math.exp(-Math.pow(Math.atan2(Math.sin(th-Math.PI),Math.cos(th-Math.PI))/.42,2)),thc:Math.PI,span:u=>lerp(3.3,1.45,Math.pow(sstep(.5,1,u),.85)),clr:.036,clrF:(t,th)=>.012*sstep(tW-.02,tW+.22,t),ridge:[.25,.004],ridgeT:t=>sstep(tW,tW+.1,t),roll:{t:1,b:1,s:1,rt:1},NU:36,NV:44,
       rivets:[[tP+.015,Math.PI-.9],[tP+.015,Math.PI+.9]],bones:t=>t<tW+.06?blend2('Spine','Spine1',tP,tW+.05)(t):blend2('Spine1','Spine2',tW+.06,tW+.3)(t)},body),PM);
+    for(const sg of [-1,1]){const th=sg*Math.PI/2;for(const t0 of [tW+.02,tW+.16]){S(plateLoft(T,{tb:t0,tt:t0+.035,thc:th,span:.95,clr:.056,roll:{t:0,b:0,s:0},NU:3,NV:16,bones:blend2('Spine','Spine1',tP,tW+.05)},body),strapMat);buckle(T,t0+.0175,th-sg*.2,.0595,'Spine1',.017,sg);}}   /* (Build 284) breast and back are strapped to each other under each arm, two straps a side: the join the player saw as a gap */
     // fauld: three lames, the first tucked up under the breastplate
     const tF0=tP+.035;for(let k=0;k<3;k++){const a=tF0-k*.085,b=a-.105;S(plateLoft(T,{tb:b,tt:a,thc:0,span:3.0+k*.08,clr:.05-k*.003,roll:{t:0,b:1,s:1},NU:8,NV:44,rivets:[[(a+b)/2,-1.35-k*.05],[(a+b)/2,1.35+k*.05]],bones:()=>[['Hips',.75],['Spine',.25]]},body),PM);}
-    for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.105;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:2.4,clr:.046-k*.003,roll:{t:0,b:1,s:1},NU:6,NV:30,bones:()=>[['Hips',1]]},body),PM);}
+    for(let k=0;k<2;k++){const a=tF0-k*.085,b=a-.105;S(plateLoft(T,{tb:b,tt:a,thc:Math.PI,span:3.36-k*.06,clr:k?.04:.031,clrF:t=>k?0:.008*sstep(a,b,t),roll:{t:0,b:1,s:1},NU:8,NV:40,rivets:[[(a+b)/2,Math.PI-1.5],[(a+b)/2,Math.PI+1.5]],bones:()=>[['Hips',.75],['Spine',.25]]},body),PM);}   /* (Build 284, the player: a weird gap on the back) the culet's first lame goes up under the backplate's edge and both reach round to meet the fauld at the hips: they stood a finger proud of the backplate as a separate hoop, with an open slot at each side */
     // (Build 176) a mail shirt's body under the plates, so a gap at the side between breast- and backplate shows mail, not skin
     {const hy=J.Hips.y;S(fitShell(body,'mailbody2',{keep:(v,P,w)=>{const y=P.getY(v),ax=Math.abs(P.getX(v));return y>hy-.02&&y<J.Neck.y-.04&&(ax<.16||ax<.3&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.5)&&w(v,['Neck','Head'])<.3&&w(v,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg'])<.3;},off:.014,smooth:5,bodySmooth:3,minK:.88,rim:.002,bones:null}),mailMat);}
     // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
@@ -6971,7 +6992,8 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       {const xs=sd==='Left'?1:-1,ep=J[sd+'ForeArm'].clone();ep.z-=.05;ep.y+=.01;S(discPlate(.045,.012,body,sd+'Arm',ep.add(V(0,0,-.012)),V(0,.2,-1),false),PM);}
       // lower cannon: two halves closed by a hinge and a strap, rolled at both ends
       S(plateLoft(F,{tb:.06,tt:.9,thc:0,span:Math.PI*2,clr:.012,roll:{t:1,b:1,s:0,rb:1},NU:18,NV:40,rivets:[[.2,Math.PI/2],[.7,Math.PI/2]],bones:one(sd+'ForeArm')},body),PM);
-      S(plateLoft(F,{tb:.45,tt:.52,thc:Math.PI*1.5,span:2.2,clr:.019,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'ForeArm')},body),strapMat);
+      S(plateLoft(F,{tb:.45,tt:.52,thc:Math.PI*1.5,span:2.2,clr:.019,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'ForeArm')},body),strapMat);buckle(F,.485,Math.PI*1.5,.0225,sd+'ForeArm',.013);
+      S(plateLoft(F,{tb:.2,tt:.26,thc:Math.PI*1.5,span:2.2,clr:.019,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'ForeArm')},body),strapMat);buckle(F,.23,Math.PI*1.5,.0225,sd+'ForeArm',.013);
       // gauntlet: a flared cuff and a plate over the back of the hand
       const H=limbMap(body,J[sd+'Hand'],J[sd+'HandMiddle1']||J[sd+'Hand'].clone().add(V(sd==='Left'?.09:-.09,0,0)),(v,W)=>W(v,[sd+'Hand'])>.4,{key:sd+'hand',ref:V(0,1,0),t0:-.6,t1:1.2,sw:4,st:2});
       S(plateLoft(F,{tb:.8,tt:1.02,thc:0,span:Math.PI*2,clr:.0165,clrF:(t)=>.009*sstep(.97,.8,t),roll:{t:1,b:1,s:0,rb:1},NU:10,NV:36,bones:one(sd+'ForeArm')},body),PM);   /* (Build 225) the cuff is the wrist's own round with a little flare toward the elbow; measured round the hand (flat and 10 cm wide) it stood off the wrist as a great hollow ring */
@@ -6983,7 +7005,9 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
       const xs=sd==='Left'?1:-1;
       // cuisse: the front of the thigh, with a medial ridge, strapped round the back
       S(plateLoft(U,{tb:.2,tt:.9,thc:0,span:3.6,clr:.012,ridge:[.34,.0065],roll:{t:1,b:1,s:1,rt:1},NU:16,NV:34,bones:one(sd+'UpLeg')},body),PM);
-      S(plateLoft(U,{tb:.42,tt:.47,thc:Math.PI,span:2.8,clr:.01,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'UpLeg')},body),strapMat);
+      S(plateLoft(U,{tb:.42,tt:.47,thc:Math.PI,span:2.8,clr:.01,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'UpLeg')},body),strapMat);buckle(U,.445,Math.PI-xs*.75,.0135,sd+'UpLeg',.015);
+      S(plateLoft(U,{tb:.68,tt:.73,thc:Math.PI,span:2.8,clr:.01,roll:{t:0,b:0,s:0},NU:3,NV:20,bones:one(sd+'UpLeg')},body),strapMat);buckle(U,.705,Math.PI-xs*.75,.0135,sd+'UpLeg',.015);
+      for(const tg of [.3,.62]){S(plateLoft(L,{tb:tg,tt:tg+.045,thc:Math.PI,span:1.5,clr:.0125,roll:{t:0,b:0,s:0},NU:3,NV:14,bones:one(sd+'Leg')},body),strapMat);buckle(L,tg+.022,Math.PI+xs*.35,.016,sd+'Leg',.013);}   /* the greave's two halves strapped shut down the back of the calf */
       // poleyn: a cup over the knee with a heart-shaped wing on the outside
       S(plateLoft(U,{tb:.86,tt:1.12,thc:0,span:3.2,clr:.03,clrF:(t,th)=>.02*Math.exp(-Math.pow((t-.98)/.08,2))*Math.max(0,Math.cos(th)),roll:{t:1,b:1,s:1,rt:1,rb:1},NU:14,NV:30,bones:blend2(sd+'UpLeg',sd+'Leg',.95,1.05)},body),PM);
       {const kp=J[sd+'Leg'].clone();kp.x+=xs*.068;kp.z+=.02;S(discPlate(.045,.01,body,sd+'UpLeg',kp,V(xs,0,.35),false),PM);}
