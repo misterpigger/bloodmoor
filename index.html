@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=303;
+const BUILD=304;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -4323,11 +4323,11 @@ function lidRelease(f){const L=f.lidLift;if(!L)return;L.k.held=null;f.lidLift=nu
 function lidStep(h){const C=CRYPT;if(!C)return;
   for(const f of fighters){const L=f.lidLift;if(!L)continue;const k=L.k;lidEdge(k,k.ang,_la);const d=Math.hypot(_la.x-f.pos.x,_la.z-f.pos.z);
     if(!f.alive||f.ragdoll||d>1.35){lidRelease(f);continue;}L.t+=h;
-    const aim=f.remote?clamp((f.ctrl.y+.25)/.75,0,1):Math.min(1,L.t/1.4),want=f.isPlayer?(k.aim==null?(k.aim=k.ang):k.aim):aim*LID_OPEN*1.02,rate=f.isPlayer?3.2:1.3,a0=k.ang;   // an arm raises an oak lid at most ~90 degrees a second
+    if(L.dur==null){L.dur=rand(1.1,1.9);L.st=rand(.25,.5);}const ub=Math.max(0,L.t-L.st)/L.dur,aim=f.remote?clamp((f.ctrl.y+.25)/.75,0,1):(L.t<L.st?.04*Math.sin(L.t*40):ub*ub*(3-2*ub)*1.45/LID_OPEN+.02),want=f.isPlayer?(k.aim==null?(k.aim=k.ang):k.aim):aim*LID_OPEN*1.02,rate=f.isPlayer?3.2:1.3,a0=k.ang;   // an arm raises an oak lid at most ~90 degrees a second
     k.ang=clamp(k.ang+clamp((want-k.ang)*.2,-rate*1.6*h,rate*h),0,LID_OPEN);k.av=(k.ang-a0)/h;f.crouchK=Math.max(f.crouchK||0,.75);if(f.reach){f.reach.w=1;lidEdge(k,k.ang,f.reach.pos);}
     _v.set(k.x-f.pos.x,0,k.z-f.pos.z);if(_v.lengthSq()>1e-4){_v.normalize();if(!f.isPlayer)f.faceDir(_v,h,4);}
     if(!k.opened&&k.ang>.9)cryptOpen(k,f.isPlayer?null:f);
-    if(f.isPlayer?k.ang>1.42:(!f.remote&&k.ang>=LID_OPEN-.02))lidRelease(f);}
+    if(f.isPlayer||!f.remote?k.ang>1.42:false)lidRelease(f);}   /* (Build 304) bots heave a lid as a player does: a strained start, up with the arm, and let go past the balance so it falls open by itself */
   for(const k of C.caskets){if(k.ang==null||k.held)continue;k.aim=null;const g=k.ang>1.25?1:-1;if(k.ang<=0&&k.av<=0||k.ang>=LID_OPEN&&k.av>=0){k.av=0;continue;}
     k.av+=g*9*Math.cos(Math.min(k.ang,1.5))*h*1.6+g*1.5*h;k.ang+=k.av*h;
     if(k.ang<=0){k.ang=0;const v=-k.av;k.av=0;if(v>.6){lidEdge(k,0,_la);sThud(_la,Math.min(1,v/5));noiseBurstAt(_la,.4,'lowpass',160,1,.2);}}
@@ -4409,7 +4409,7 @@ function cryptMind(f,h,wish){const A=f.ai,M=A.mind,P=player;if(!M)return;navRead
   if(M.job){const k=M.job.k;if(k.opened||!CRYPT.caskets.includes(k))M.job=null;else{const fx=k.x+Math.sin(k.ry)*.78,fz=k.z+Math.cos(k.ry)*.78,gx=fx-f.pos.x,gz=fz-f.pos.z,gd=Math.hypot(gx,gz);M.job.left-=h;
       if(M.job.left<=0){M.job=null;M.t=4;}
       else if(gd>.5){wish.set(gx/gd,0,gz/gd).multiplyScalar(.55);navGoal(A,fx,fz,0);f.faceDir(wish,h,3.5);}
-      else{_v.set(k.x-f.pos.x,0,k.z-f.pos.z).normalize();f.faceDir(_v,h,4);f.crouch=true;f.ctrlT.y=-.85;M.job.t-=h;if(!f.lidLift&&!k.held&&!(k.ang>1.3))lidGrab(f,k);if(M.job.t<=0){if(f.lidLift)lidRelease(f);if(!k.opened)cryptOpen(k,f);M.job=null;M.t=rand(3,6);}}
+      else{_v.set(k.x-f.pos.x,0,k.z-f.pos.z).normalize();f.faceDir(_v,h,4);f.crouch=true;f.ctrlT.y=-.85;M.job.t-=h;if(!f.lidLift&&!k.held&&!(k.ang>1.3))lidGrab(f,k);if(M.job.t<=0&&(k.opened||M.job.t<-4||!(k.ang>=0))){if(f.lidLift)lidRelease(f);if(!k.opened)cryptOpen(k,f);M.job=null;M.t=rand(3,6);}}
       return false;}}
   if(M.rum&&!M.goal&&M.t<=0){let best=null,bd=100;for(const k of CRYPT.caskets){if(k.opened||k.claim&&k.claim!==f&&k.claim.alive)continue;const d=(k.x-f.pos.x)**2+(k.z-f.pos.z)**2;if(d<bd){bd=d;best=k;}}if(best){best.claim=f;M.job={k:best,t:rand(2.5,5),left:25};return false;}M.rum=false;}
   if(M.goal){const gx=M.goal[0]-f.pos.x,gz=M.goal[1]-f.pos.z,gd=Math.hypot(gx,gz);if(gd<.7||M.t<=0){M.goal=null;M.t=rand(2.5,8);}else{wish.set(gx/gd,0,gz/gd).multiplyScalar(.5);navGoal(A,M.goal[0],M.goal[1],0);f.faceDir(wish,h,3.5);}}
@@ -6955,6 +6955,8 @@ const cuirassMat=steelFitMat.clone();{const pre=steelFitMat.onBeforeCompile;cuir
       normal=normalize(abs(det)*normal-sign(det)*(dFdx(hgt)*r1+dFdy(hgt)*r2)); }`);};
   cuirassMat.customProgramCacheKey=()=>'steel-cuirass';}
 const brassFitMat=brassMat.clone();brassFitMat.side=THREE.DoubleSide;
+const GH_LATTEN=brassFitMat.clone();GH_LATTEN.color.setHex(0x7a5f30);GH_LATTEN.roughness=Math.max(.42,GH_LATTEN.roughness||0);   // (Build 304) the great helm's cross: latten gone dull, not new brass
+const GH2=!/[?&]oldgh/.test(location.search);
 const faulMat=steelDark.clone();{const pre=faulMat.onBeforeCompile;steelDetail(faulMat,'faul');const pre2=faulMat.onBeforeCompile;faulMat.onBeforeCompile=(sh,r)=>{pre2.call(faulMat,sh,r);
   sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat lame=fract(vSP.y/.045);diffuseColor.rgb*=.55+.45*smoothstep(.0,.12,lame)*smoothstep(1.,.9,lame);if(!gl_FrontFacing)diffuseColor.rgb*=.3;');};faulMat.customProgramCacheKey=()=>'faul';faulMat.side=THREE.DoubleSide;}   // overlapping lames
 // a brigandine: small steel plates riveted inside a dyed cloth coat, the rows of brass rivet heads showing on the outside
@@ -7331,6 +7333,55 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
       {const N=bg.attributes.normal,m=(NU>>1)*(NV+1)+(NV>>1);if(N.getZ(m)<0){const I=bg.index.array;for(let k=0;k<I.length;k+=3){const t=I[k+1];I[k+1]=I[k+2];I[k+2]=t;}bg.computeVertexNormals();}}
       S(bg.toNonIndexed(),steelFitMat);}
     aventail(ey-.06);}
+  else if(def.id==='greathelm'&&GH2){
+    /* (Build 304) a great helm of c. 1300 after the Dargen and Bernes helms: an upper plate lapped over the lower and riveted all round,
+       tapering to a low domed crown; the face drawn to a ridge down the middle; a sight cut only in front, two slits either side of the
+       ridge under a turned lip; the lower plates flaring a little over the shoulders with a turned edge; breaths on the right; a latten
+       cross riveted below the sight. Every piece is placed by gh(th,y,d), a point on the drum's outer surface pushed out by d. */
+    const RX0=M.rx+.04,RZ0=M.rz+.035,yb=ey-.175,ys=ey+.008,g=.011,yc=top+.012,yd=yc+.034,LAP=.0032,FR=1.22;
+    const sc=y=>y<ys?1+.055*Math.pow((ys-y)/(ys-yb),1.6):1-.085*Math.pow(Math.min(1,(y-ys)/(yc-ys)),1.25);
+    const rid=(th,y)=>{const c=Math.cos(th);if(c<=0)return 0;const k=Math.max(0,1-Math.abs(Math.sin(th))/.46);return k*k*(y<ys?.024:.024-.008*Math.min(1,(y-ys)/(yc-ys)));};
+    const gh=(th,y,d,o)=>{let s0=sc(Math.min(y,yc)),ky=1;if(y>yc){const t=Math.min(1,(y-yc)/(yd-yc));ky=Math.sqrt(Math.max(0,1-t*t));}
+      const rx=(RX0*s0+d)*ky,rz=(RZ0*s0+d)*ky+rid(th,Math.min(y,yc))*ky;return (o||V()).set(cx+Math.sin(th)*rx,y,cz+Math.cos(th)*rz);};
+    const grid=(NU,NV,f)=>{const pos=[],idx=[];const q=V();for(let i=0;i<=NU;i++)for(let j=0;j<=NV;j++){f(i/NU,j/NV,q);pos.push(q.x,q.y,q.z);}
+      for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+1,c=a+NV+1,d=c+1;idx.push(a,b,c,b,d,c);}
+      const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));bg.setIndex(idx);return bg;};
+    const outward=(bg,hint)=>{bg.computeVertexNormals();const P=bg.attributes.position,N=bg.attributes.normal,m=hint??Math.floor(P.count/2);
+      const dx=P.getX(m)-cx,dz=P.getZ(m)-cz,dy=P.getY(m)-ey;if(N.getX(m)*dx+N.getZ(m)*dz+N.getY(m)*dy*.3<0){const I=bg.index.array;for(let k=0;k<I.length;k+=3){const t=I[k+1];I[k+1]=I[k+2];I[k+2]=t;}bg.computeVertexNormals();}
+      return bg.toNonIndexed();};
+    const fr=th=>sstep(FR+.12,FR-.05,Math.abs(wrapA(th)));   // 1 in front, where the sight is cut
+    const NV=96;
+    // the lower plates: from a turned bottom edge up to the sight in front, up under the upper plate behind
+    const low=grid(16,NV,(u,v,q)=>{const th=v*Math.PI*2,yt=lerp(ys+g/2+.012,ys-g/2,fr(th)),y=lerp(yb,yt,u);const e=u*(yt-yb);
+      const bead=e<.008?.0032*Math.sqrt(Math.max(0,1-Math.pow(e/.008,2))):0;const lipB=fr(th)*(yt-y<.006?.0018*(1-(yt-y)/.006):0);gh(th,y,bead+lipB,q);});
+    S(outward(low),steelFitMat);
+    // the upper plate, lapped over the lower: from the lip over the sight (behind, from a seam a little lower) up and over the crown
+    const up=grid(22,NV,(u,v,q)=>{const th=v*Math.PI*2,f=fr(th),y0=lerp(ys+g/2+.0015,ys+g/2,f),uu=u*1.0;const y=uu<.82?lerp(y0,yc,uu/.82):lerp(yc,yd,(uu-.82)/.18);
+      const e=y-y0;const lip=e<.012?(f*.0085+(1-f)*.0018)*Math.pow(1-e/.012,1.4):0;gh(th,y,LAP+lip,q);});
+    S(outward(up,40),steelFitMat);
+    // the crown plate's riveted joint: a narrow band where the side meets the dome
+    S(outward(grid(3,NV,(u,v,q)=>{const th=v*Math.PI*2,y=yc-.012+u*.012,e=Math.sin(u*Math.PI)*.0018;gh(th,y,LAP+.002+e,q);})),steelFitMat);
+    // the dark inside, seen through the sight and the breaths
+    S(helmBand(M,{y0:yb+.012,y1:ys+.03,clr:.03,th0:0,th1:Math.PI*2,flatF:0}),slitMat);
+    // the bar that carries the ridge across the sight
+    S(outward(grid(2,6,(u,v,q)=>{const th=lerp(-.075,.075,v),y=lerp(ys-g/2-.002,ys+g/2+.002,u);gh(th,y,.0016+.0012*Math.cos(v*Math.PI-Math.PI/2),q);}),9),steelFitMat);
+    // breaths on the right, in a cross of holes as many helms have them
+    {const holes=[];const pts=[[0,0],[0,1],[0,2],[0,3],[-1,1],[1,1],[0,-1]];for(const side of [1])for(const [cxi,ri] of pts){const th=side*(-.62)+cxi*.085,y=ey-.065-ri*.022;const P0=gh(th,y,.0006),P1=gh(th,y,.02),n=P1.sub(P0).normalize();
+        const h=new THREE.CircleGeometry(.0044,10);h.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0,0,1),n));h.translate(P0.x,P0.y,P0.z);holes.push(h.toNonIndexed());}
+      S(mergeGeometries(holes.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),slitMat);}
+    // rivets: round the lap of the upper plate, round the crown joint, along the bottom edge's turn, on the cross
+    const riv=[];const rivet=(th,y,d,r)=>{const P0=gh(th,y,d),n=gh(th,y,d+.01).sub(P0).normalize();const dm=new THREE.SphereGeometry(r||.0036,8,4,0,Math.PI*2,0,Math.PI/2);dm.scale(1,.5,1);dm.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,n));dm.translate(P0.x,P0.y,P0.z);riv.push(dm.toNonIndexed());};
+    for(let k=0;k<30;k++){const th=k/30*Math.PI*2;const f=fr(th);if(f>.02&&f<.98)continue;rivet(th,lerp(ys+g/2+.02,ys+g/2+.011,f),LAP+(f>.5?.0085*.2:0));}
+    for(let k=0;k<24;k++)rivet(k/24*Math.PI*2+.13,yc-.006,LAP+.0035,.0032);
+    for(let k=0;k<22;k++)rivet(k/22*Math.PI*2,yb+.022,.0005,.0031);
+    // the latten cross below the sight: a strap down the ridge and an arm across the face, each a thin raised strip with its rivets
+    const strap=(th0,th1,y0,y1,nu,nv)=>{const T=.0028,parts=[];const top=grid(nu,nv,(u,v,q)=>gh(lerp(th0,th1,v),lerp(y0,y1,u),T,q));parts.push(outward(top));
+      const wall=(fa)=>{const g2=grid(1,fa.n,(u,v,q)=>{const [th,y]=fa.p(v);gh(th,y,u*T,q);});parts.push(outward(g2,1));};
+      wall({n:nv,p:v=>[lerp(th0,th1,v),y0]});wall({n:nv,p:v=>[lerp(th0,th1,v),y1]});wall({n:nu,p:v=>[th0,lerp(y0,y1,v)]});wall({n:nu,p:v=>[th1,lerp(y0,y1,v)]});return parts;};
+    const xs=[...strap(-.045,.045,yb+.03,ys-g/2-.004,10,4),...strap(-.5,.5,ey-.082,ey-.064,2,20)];
+    S(mergeGeometries(xs.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),GH_LATTEN);
+    for(const y of [ey-.03,ey-.12,yb+.042])rivet(0,y,.0028,.003);for(const th of [-.42,-.21,.21,.42])rivet(th,ey-.073,.0028,.003);
+    S(mergeGeometries(riv.map(p=>{if(p.attributes.uv)p.deleteAttribute('uv');return p;})),steelFitMat);}
   else if(def.id==='greathelm'){
     // a great helm: a deep drum round the whole head on a slightly domed top, the face plate flatter with a ridge down it, a sight in two
     // slits under a flange, breaths on the right, a brass cross riveted over the face

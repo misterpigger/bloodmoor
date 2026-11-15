@@ -29,5 +29,5 @@ for name,mi,si in [('A',0,0),('B',2,2),('C',4,4),('D',6,6)]:
     P=acc(A['POSITION']);N=acc(A['NORMAL']);UV=acc(A['TEXCOORD_0']);J=acc(A['JOINTS_0']);W=acc(A['WEIGHTS_0']).astype(np.float32);I=acc(pr['indices']).reshape(-1,3)
     IBM=acc(sk['inverseBindMatrices']).reshape(-1,4,4).transpose(0,2,1);names=[g['nodes'][j]['name'].replace('mixamorig:','').replace('mixamorig','') for j in sk['joints']]
     node=[i for i,n in enumerate(g['nodes']) if n.get('mesh')==mi][0];MW=world(node)
-    np.savez('$(dirname $0)/body_'+name+'.npz',P=P,N=N,UV=UV,J=J.astype(np.int32),W=W,I=I.astype(np.int32),IBM=IBM,names=np.array(names),MW=MW,COL=acc(A['COLOR_0']) if 'COLOR_0' in A else 0)
+    np.savez(os.environ.get('GARB_WORK','work')+'/body_'+name+'.npz',P=P,N=N,UV=UV,J=J.astype(np.int32),W=W,I=I.astype(np.int32),IBM=IBM,names=np.array(names),MW=MW,COL=acc(A['COLOR_0']) if 'COLOR_0' in A else 0)
     BW=np.linalg.inv(IBM);print(name,P.shape,I.shape,'bbox',P.min(0).round(3),P.max(0).round(3),'hips',BW[names.index('Hips')][:3,3].round(3),'mesh node world scale',np.linalg.norm(MW[:3,0]).round(3))
