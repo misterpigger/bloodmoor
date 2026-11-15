@@ -32,6 +32,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 298: bots step in with the blow and back out after (strikes moving in ~10% → 35–55%).
 - 299: multiplayer test runs again (every mode ok, no errors); two trap sounds that never played fixed; Music and Effects volume sliders, music default 4 dB quieter (it sat 13 dB over the fight).
 - 300: about half of the bent crypt passages run across at 45° between short stubs (rooms joined at odd angles).
+- 301: Gothic harness and helmets reviewed: no skin at the jaw under the sallet or between the pauldron lames, closer mail skirt.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.

@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=300;
+const BUILD=301;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -7083,7 +7083,7 @@ function discPlate(R,dome,body,bone,pos,nrm,boss=true){const pts=[[0,dome+(boss?
   const g=lathe(pts.reverse(),32);g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS,nrm.clone().normalize()));g.translate(pos.x,pos.y,pos.z);const ng=g.toNonIndexed();ng.computeVertexNormals();bindRigid(ng,bone,body);return ng;}
 /* (Build 176) mail sleeves under arm harness (as a voider or a mail shirt's sleeves would be): with the cloth sleeve hidden under the steel,
    the gaps at the armpit, the inside of the elbow and between the lames show mail rather than bare skin */
-function mailSleeve(body,x0,x1=9){return fitShell(body,'msleeve2'+x0+'_'+x1,{keep:(v,P,w)=>w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftShoulder','RightShoulder'])>.3&&Math.abs(P.getX(v))>x0&&Math.abs(P.getX(v))<x1&&w(v,['Hands*'])<.3,off:.007,smooth:4,bodySmooth:2,minK:.9,rim:.002,bones:null});}
+function mailSleeve(body,x0,x1=9){return fitShell(body,'msleeve3'+x0+'_'+x1,{keep:(v,P,w)=>w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftShoulder','RightShoulder'])>.3&&Math.abs(P.getX(v))>x0&&Math.abs(P.getX(v))<x1&&w(v,['Hands*'])<.3,off:.013,smooth:4,bodySmooth:2,minK:.9,rim:.002,bones:null});}
 const BUCKLES=!/[?&]nobuckle\b/.test(location.search);
 /* ---- Build 285: the plate harness is a modelled one (Mitro123's "Medieval Armor", CC BY 4.0, `assets/models/w_suit.glb`): sculpted plates with
    thickness, bevels, rivets, straps and buckles, where ours were sheets lofted in code. The model stands in an A-pose in 44 pieces; `suitParts`
@@ -7149,8 +7149,9 @@ function suitParts(body){if(SUIT.cache.has(body.name))return SUIT.cache.get(body
     if(window.__suitDbg)console.log('suit',sd,{kU,kF,kT,kS,sx,szF,szB,ky});}
   // helmet (a sallet) and its bevor: scaled to the head's width, crown just over the scalp
   {const u=Math.max((M.rx+K.helm)/.095,(M.rz+K.helm)/.116),hf=(v,n)=>{v.set(M.hx+v.x*u,M.ey+(v.y-1.6)*u,M.hz+K.fwd+(v.z-.004)*u);};   /* its sight at the eyes */
-    add('sallet',make('helm',hf,()=>[['Head',1]]));add('sallet',make('bevor',hf,()=>[['Head',1]]));}
+    add('sallet',make('helm',hf,()=>[['Head',1]]));add('sallet',make('bevor',(v,n)=>{hf(v,n);v.x=M.hx+(v.x-M.hx)*BEV_K[0];v.z=M.hz+K.fwd+(v.z-M.hz-K.fwd)*BEV_K[1];v.y+=BEV_K[2];},()=>[['Head',1]]));}   /* (Build 301) the bevor a little wider and deeper and a centimetre higher: the cheeks and jaw showed between it and the sallet's edge */
   SUIT.cache.set(body.name,out);return out;}
+let BEV_K=(new URLSearchParams(location.search).get('bevk')||'1.1,1.08,.008').split(',').map(Number);
 function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[k]=V(M.J[k].x,M.J[k].y,M.J[k].z);const ck='plate|'+body.name+'|'+def.id;if(FIT_CACHE.has(ck))return FIT_CACHE.get(ck);
   const {W}=bodyBoneW(body),arms=['LeftArm','RightArm','LeftForeArm','RightForeArm','LeftHand','RightHand'],legs=['LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'],out=[];
   const G=!!def.goth,PM=G?gothFitMat:steelFitMat;const SU=SUIT.on&&SUIT.body&&!G&&MDL_SCN.w_suit?suitParts(body):null;   /* (Build 285) the modelled harness takes the place of every lofted plate, strap and buckle; the mail and gloves under them stay */
@@ -7182,7 +7183,7 @@ function platePieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J
     // (Build 176) a mail shirt's body under the plates, so a gap at the side between breast- and backplate shows mail, not skin
     {const hy=J.Hips.y;S(fitShell(body,'mailbody2'+(SU?'s':''),{keep:(v,P,w)=>{const y=P.getY(v),ax=Math.abs(P.getX(v));if(SU&&ax<.1&&y<J.Spine2.y+.07)return false;   /* under the modelled cuirass only at the sides, armpits and neck: over the belly it stood through the plate */return y>hy-.02&&y<J.Neck.y-.04&&(ax<.16||ax<.3&&w(v,['LeftArm','RightArm','LeftForeArm','RightForeArm'])<.5)&&w(v,['Neck','Head'])<.3&&w(v,['LeftLeg','RightLeg','LeftUpLeg','RightUpLeg'])<.3;},off:.014,smooth:5,bodySmooth:3,minK:.88,rim:.002,bones:null}),mailMat);}
     // a mail skirt under the fauld (the arming doublet's mail), so the gap between the fauld and the thighs isn't bare cloth
-    {const hy=J.Hips.y;S(fitShell(body,'mailskirt'+(SU?'s':''),{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.215&&y<hy+(SU?-.06:.04)&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.034,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy+(SU?-.075:.02),flare:SU?.16:.25,hold:1,hem:true},bones:null}),mailMat);}   /* under the modelled cuirass the skirt starts below its lower edge and flares less: its top stood through the plate */
+    {const hy=J.Hips.y;S(fitShell(body,'mailskirt'+(SU?'s':''),{keep:(v,P,w)=>{const y=P.getY(v);return y>hy-.215&&y<hy+(SU?-.06:.04)&&w(v,['LeftLeg','RightLeg','LeftFoot','RightFoot'])<.05&&w(v,['Hands*','LeftForeArm','RightForeArm','LeftArm','RightArm'])<.2;},off:.034,smooth:6,bodySmooth:4,minK:.85,rim:.003,skirt:{y0:hy+(SU?-.075:.02),flare:SU?.16:.13,hold:1,hem:true},bones:null}),mailMat);}   /* (Build 301) the drawn harness's mail skirt hangs closer to the hips: flared .25 it stood out under the fauld as a stiff square apron */   /* under the modelled cuirass the skirt starts below its lower edge and flares less: its top stood through the plate */
     // tassets: a plate hanging from the fauld over each thigh, on two straps
     for(const sd of ['Left','Right']){const L=limbMap(body,J[sd+'UpLeg'],J[sd+'Leg'],(v,W)=>W(v,[sd+'UpLeg'])>.5,{key:sd+'thigh',t0:-.3,t1:1.1,sw:5,st:2}),xs=sd==='Left'?1:-1;
       S(plateLoft(L,{tb:-.14,tt:G?.5:.36,thc:-.2*xs,span:G?1.7:1.9,clr:.045,ridge:G?[.22,.008]:[.3,.003],roll:{t:1,b:1,s:1,rt:1},NU:14,NV:24,rivets:[[-.1,-.2*xs-.5],[-.1,-.2*xs+.5]],bones:()=>[['Hips',.5],[sd+'UpLeg',.5]]},body),PM);}
@@ -7298,7 +7299,7 @@ function helmPieces(body,def){const M=bodyMarks(body),J={};for(const k in M.J)J[
     // a bascinet: a tall skull drawn to a point set back over the crown, coming down round the sides and the nape, the face open for the visor
     S(helmLoft(M,{kind:'point',pw:.65,clr:.022,yC:ey+.02,yT:top+.09,rimY:th=>{const c=Math.cos(th);return c>.35?ey+.034:c>-.2?lerp(ey-.1,ey+.034,(c+.2)/.55):ey-.115;},apexBack:-.03,rivets:16}),steelFitMat);
     for(const p of visorParts(body,M))out.push(p);aventail(ey-.105);}
-  else if(def.id==='sallet'&&SUIT.on&&MDL_SCN.w_suit){for(const p of suitParts(body).sallet)out.push(p);}
+  else if(def.id==='sallet'&&SUIT.on&&MDL_SCN.w_suit){for(const p of suitParts(body).sallet)out.push(p);aventail(ey-.06);}   /* (Build 301) mail under it at the jaw and neck, as the drawn sallet has: the cheeks and neck showed as skin between the modelled sallet and its bevor */
   else if(def.id==='sallet'){
     // (Build 205) a sallet: a rounded skull with a keel, its rim just over the brows in front, dropping behind the temples and drawn out into
     // a tail over the nape; a bevor (chin and throat plate) below it, the eyes and nose in the gap between
