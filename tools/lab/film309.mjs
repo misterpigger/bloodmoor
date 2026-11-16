@@ -10,6 +10,7 @@ await page.evaluate(([w,DIST])=>{const g=window.__game,P=g.player,T=g.THREE,inpu
   const D=g.fighters.filter(f=>f.dummy&&f.alive).sort((a,b)=>a.pos.distanceTo(P.pos)-b.pos.distanceTo(P.pos))[0];for(const f of g.fighters)if(f!==P&&f!==D&&f.root)f.root.visible=false;
   const fw=new T.Vector3(Math.sin(P.yaw),0,Math.cos(P.yaw));window.__F={D,home:P.pos.clone(),fw,DIST};D.pos.copy(P.pos).addScaledVector(fw,DIST);D.yaw=P.yaw+Math.PI;
   for(let k=0;k<60;k++){input.locked=false;input.mx=.5;input.my=.45;input.lmb=false;P.ctrl.z=.46;P.stamina=100;g.logic(1/60);}},[W,DIST]);
+if(process.env.BLOOD)await page.evaluate(b=>{const g=window.__game,s=g.player.sword;g.bloodWeapon(s);s.bloody(b,.75);},+process.env.BLOOD);
 const MOVES={cutR:{pre:[.86,.14],to:[.18,.72],t:.2},cutL:{pre:[.14,.14],to:[.82,.72],t:.2},chop:{pre:[.5,.03],to:[.5,.92],t:.18}};const M=MOVES[MV];
 const seq=[];for(let i=0;i<30;i++)seq.push([M.pre[0],M.pre[1],0]);const n=Math.round(M.t*60);for(let i=0;i<n;i++){const u=(i+1)/n;seq.push([M.pre[0]+(M.to[0]-M.pre[0])*u,M.pre[1]+(M.to[1]-M.pre[1])*u,1]);}for(let i=0;i<20;i++)seq.push([M.to[0],M.to[1],1]);for(let i=0;i<16;i++)seq.push([.5,.45,0]);
 const log=[];let fi=0;

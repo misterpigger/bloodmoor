@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=314;
+const BUILD=315;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -3949,13 +3949,22 @@ function buildCrypt(){const D=CRYPT_DEPTH,PL=cryptPlan(D,CRYPT_SEED),R=PL.R,{WT,
       if(SLANT&&L>=hi-lo+1.3&&(SLANTP||R()<.55)){   /* (Build 300) a slanted passage: short stubs out of each doorway and a leg running across at 45 degrees between them, as in Half Sword's crypt where rooms join at odd angles (it turned two right angles) */
         const ad=hi-lo,ua=mid-ad/2,ub=mid+ad/2,R2=Math.SQRT2,W2=(u,w)=>ax?[u,w]:[w,u],dl=ad*R2;
         const seg=(p,q,ou,ow,diag)=>{const [px,pz]=W2(p[0],p[1]),[qx,qz]=W2(q[0],q[1]),[ox,oz]=W2(ou,ow),dx=qx-px,dz=qz-pz,ln=Math.hypot(dx,dz);if(ln<.02)return;const cx=(px+qx)/2+ox*WT/2,cz=(pz+qz)/2+oz*WT/2;
-          addGeo('cryptWall',boxUV(ln+.02,HT,WT,2),T(cx,HT/2,cz,Math.atan2(-dz,dx)));
+          addGeo('cryptWall',boxUV(ln+.02,HT,WT,2),T(cx,HT/2,cz,Math.atan2(-dz,dx)));addGeo('cryptVault',boxUV(ln+(diag?.08:.02),.09,WT+.1,2),T(cx-ox*.05,CS-.03,cz-oz*.05,Math.atan2(-dz,dx)));   /* (Build 315) a string course at the springing, where the wall meets the vault */
           if(!diag){addBox(Math.min(px,qx,px+ox*WT,qx+ox*WT),Math.max(px,qx,px+ox*WT,qx+ox*WT),Math.min(pz,qz,pz+oz*WT,qz+oz*WT),Math.max(pz,qz,pz+oz*WT,qz+oz*WT),9);return;}
           const A=.36,n=Math.ceil(ln/.12);for(let i=0;i<=n;i++){const t=i/n,x=px+dx*t+ox*A/2*R2,z=pz+dz*t+oz*A/2*R2;addBox(x-A/2,x+A/2,z-A/2,z+A/2,9);}};   /* a wall at 45 degrees is drawn as one turned slab and kept solid by a row of small square blocks whose corners touch its face */
         for(const sd of [-1,1]){const k1=ua+sg*sd*CW*(1-R2),k2=ub+sg*sd*CW*(1-R2),w0=ma+sd*CW,w1=mb+sd*CW,on=[-sg*sd/R2,sd/R2];
           seg([s0,w0],[k1,w0],0,sd,false);seg([k1,w0],[k2,w1],on[0],on[1],true);seg([k2,w1],[s1,w1],0,sd,false);}
-        fl(s0,s1,lo-CW-WT,hi+CW+WT);vlt(true,ma,s0,ua+.35);vlt(true,mb,ub-.35,s1);
-        {const [ax0,az0]=W2(ua,ma),[bx0,bz0]=W2(ub,mb),dx=bx0-ax0,dz=bz0-az0,e=.4,vg=inwardGeo(new THREE.CylinderGeometry(CW,CW,dl+2*e,14,1,true,Math.PI/2,Math.PI));scaleUV(vg,1.5,(dl+2*e)/2);vg.rotateX(Math.PI/2);addGeo('cryptVault',vg,T((ax0+bx0)/2,CS,(az0+bz0)/2,Math.atan2(dx,dz)));
+        fl(s0,s1,lo-CW-WT,hi+CW+WT);
+        /* (Build 315) the three vaults are cut to the bisector at each turn, so they meet in a clean mitre on the same lines as the walls. They ran on 0.35-0.4 m past
+           each turn and through one another, and the slanted one's open end came out through the room's wall and the stubs' sides as black wedges and domes */
+        const mv=(p,q,b0,b1)=>{const [px,pz]=W2(p[0],p[1]),[qx,qz]=W2(q[0],q[1]),dx=qx-px,dz=qz-pz,ln=Math.hypot(dx,dz),d=[dx/ln,dz/ln],n=[-d[1],d[0]],B=[b0?W2(b0[0],b0[1]):d,b1?W2(b1[0],b1[1]):d],NA=16,pos=[],nor=[],uv=[],idx=[];
+          for(let e=0;e<2;e++){const J=e?[qx,qz]:[px,pz],b=B[e],db=d[0]*b[0]+d[1]*b[1],nb=n[0]*b[0]+n[1]*b[1];for(let i=0;i<=NA;i++){const a=Math.PI*i/NA,l=CW*Math.cos(a),y=CS+CW*Math.sin(a),t=-l*nb/db,x=J[0]+n[0]*l+d[0]*t,z=J[1]+n[1]*l+d[1]*t;pos.push(x,y,z);nor.push(-Math.cos(a)*n[0],-Math.sin(a),-Math.cos(a)*n[1]);uv.push(i/NA*1.5,(e*ln+t)/2);}}
+          for(let i=0;i<NA;i++){const a=i,b=i+1,c=NA+1+i,dd=NA+2+i;idx.push(a,c,b,b,c,dd);}
+          const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);
+          {const P=g.attributes.position,N=g.attributes.normal,v0=new THREE.Vector3().fromBufferAttribute(P,0),v1=new THREE.Vector3().fromBufferAttribute(P,NA+1),v2=new THREE.Vector3().fromBufferAttribute(P,1),fn=v1.sub(v0).cross(v2.sub(v0));if(fn.dot(new THREE.Vector3().fromBufferAttribute(N,0))<0){for(let i=0;i<idx.length;i+=3){const t=idx[i+1];idx[i+1]=idx[i+2];idx[i+2]=t;}g.setIndex(idx);}}
+          addGeo('cryptVault',g,new THREE.Matrix4());};
+        {const r2=1/R2,bA=[1+r2,sg*r2],nA=Math.hypot(bA[0],bA[1]),b=[bA[0]/nA,bA[1]/nA];mv([s0,ma],[ua,ma],null,b);mv([ua,ma],[ub,mb],b,b);mv([ub,mb],[s1,mb],b,null);}
+        {const [ax0,az0]=W2(ua,ma),[bx0,bz0]=W2(ub,mb);
           for(const [u,w] of [[ua,ma],[ub,mb]]){const [x,z]=W2(u,w);addGeo('cryptVault',boxUV(2.4*CW,.08,2.4*CW,2),T(x,CS+CW+.06,z));}   /* a cap over each turn, above the crowns, closing the wedge where two vaults meet */
           const [ox,oz]=W2(-sg/R2,1/R2);cryptSconce((ax0+bx0)/2+ox*CW,1.25,(az0+bz0)/2+oz*CW,-ox,-oz,1);}
         const bb=(u0,u1,w0,w1)=>{const [x0,z0]=W2(u0,w0),[x1,z1]=W2(u1,w1);return {x0:Math.min(x0,x1),x1:Math.max(x0,x1),z0:Math.min(z0,z1),z1:Math.max(z0,z1)};};
@@ -5015,10 +5024,25 @@ function updateBlood(dt){
 function pointsPool(n,color,size){const g=new THREE.BufferGeometry();const pos=new Float32Array(n*3).fill(-999);g.setAttribute('position',new THREE.BufferAttribute(pos,3));
   const m=new THREE.PointsMaterial({color,size,sizeAttenuation:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,map:TX.glow});
   const p=new THREE.Points(g,m);p.frustumCulled=false;scene.add(p);return {p,pos,vel:new Float32Array(n*3),life:new Float32Array(n),n,i:0};}
-const sparks=pointsPool(300,0xffd49a,.03);   // (Build 198: half the size; at 6 cm each a clash threw fairy dust)
+const sparks=pointsPool(300,0xffd49a,.022);sparks.l0=new Float32Array(300).fill(1);sparks.fy=new Float32Array(300);sparks.ls=new Float32Array(1800).fill(-999);sparks.lc=new Float32Array(1800);
+{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(sparks.ls,3));g.setAttribute('color',new THREE.BufferAttribute(sparks.lc,3));const L=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));L.frustumCulled=false;scene.add(L);sparks.line=L;}   // (Build 198: half the size; at 6 cm each a clash threw fairy dust)
 const embers=pointsPool(160,0xff7a30,.035);
-function spawnSparksLocal(p,n){for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;sparks.vel[i*3]=(Math.random()-.5)*1.6;sparks.vel[i*3+1]=Math.random()*1.8;sparks.vel[i*3+2]=(Math.random()-.5)*1.6;sparks.life[i]=.15+Math.random()*.25;}}   // (Build 193) a burning fuse's sparks, drawn on each machine, nothing sent
-function spawnSparks(p,n,dir){netEv(['k',r3v(p),n,dir?r3v(dir):0]);for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;sparks.vel[i*3]=(Math.random()-.5)*5+(dir?dir.x*2:0);sparks.vel[i*3+1]=Math.random()*3.5;sparks.vel[i*3+2]=(Math.random()-.5)*5+(dir?dir.z*2:0);sparks.life[i]=.25+Math.random()*.35;}}
+function spawnSparksLocal(p,n){for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;sparks.vel[i*3]=(Math.random()-.5)*1.6;sparks.vel[i*3+1]=Math.random()*1.8;sparks.vel[i*3+2]=(Math.random()-.5)*1.6;sparks.life[i]=sparks.l0[i]=.15+Math.random()*.25;sparks.fy[i]=0;}}   // (Build 193) a burning fuse's sparks, drawn on each machine, nothing sent
+function spawnSparks(p,n,dir,sp=0){netEv(['k',r3v(p),n,dir?r3v(dir):0,r3(sp)]);   /* (Build 315) sparks are struck off along the steel: hotter and faster from a harder blow (sp, the closing speed), flying out across the
+     contact and streaking as they go (drawn as short lines behind each spark, white-hot to orange as they cool), with a flash where the steel met. They were dots
+     thrown at 2-3 m/s in a puff whatever the blow */
+  const k=sp?clamp(sp/12,.4,1.6):.7,fy=groundY(p.x,p.z,p.y);sparkFlash(p,k);
+  for(let q=0;q<n;q++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;
+    const v=(2+Math.random()*5.5)*k,a=Math.random()*6.283,u=Math.random()*2-1,r=Math.sqrt(1-u*u);let x=r*Math.cos(a),y=Math.abs(u)*.8+.15,z=r*Math.sin(a);if(dir){x+=dir.x*.9;y+=dir.y*.5;z+=dir.z*.9;}const l=Math.hypot(x,y,z)||1;
+    sparks.vel[i*3]=x/l*v;sparks.vel[i*3+1]=y/l*v;sparks.vel[i*3+2]=z/l*v;sparks.life[i]=sparks.l0[i]=(.12+Math.random()*.38)*(.7+.3*k);sparks.fy[i]=fy;}}
+const SPFL=[];for(let i=0;i<4;i++){const m=new THREE.Sprite(new THREE.SpriteMaterial({map:TX.glow,color:0xffe0a8,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0}));m.scale.setScalar(.001);m.renderOrder=3;scene.add(m);SPFL.push({m,t:9,k:0});}let _spfl=0;
+function sparkFlash(p,k){const F=SPFL[_spfl++%SPFL.length];F.m.position.copy(p);F.t=0;F.k=k;}
+function updateSparks(dt){const P=sparks,ps=P.ls,cs=P.lc;for(let i=0;i<P.n;i++){const o=i*6;if(P.life[i]<=0){if(ps[o+1]!==-999){ps[o+1]=ps[o+4]=-999;}continue;}P.life[i]-=dt;if(P.life[i]<=0){P.pos[i*3+1]=-999;ps[o+1]=ps[o+4]=-999;continue;}
+    P.vel[i*3+1]-=9.8*dt;const dr=1-2.2*dt;for(let a=0;a<3;a++){P.vel[i*3+a]*=dr;P.pos[i*3+a]+=P.vel[i*3+a]*dt;}if(P.pos[i*3+1]<P.fy[i]){P.pos[i*3+1]=P.fy[i];P.vel[i*3+1]*=-.3;P.vel[i*3]*=.5;P.vel[i*3+2]*=.5;}
+    const t=P.life[i]/P.l0[i],br=Math.min(1,t*1.8),sl=.028;for(let a=0;a<3;a++){ps[o+a]=P.pos[i*3+a];ps[o+3+a]=P.pos[i*3+a]-P.vel[i*3+a]*sl;}
+    cs[o]=br;cs[o+1]=br*(.55+.4*t);cs[o+2]=br*(.15+.6*t*t);cs[o+3]=br*.6;cs[o+4]=br*.2;cs[o+5]=br*.03;}
+  P.p.geometry.attributes.position.needsUpdate=true;P.line.geometry.attributes.position.needsUpdate=true;P.line.geometry.attributes.color.needsUpdate=true;
+  for(const F of SPFL){if(F.t>.2){if(F.m.material.opacity!==0){F.m.material.opacity=0;F.m.scale.setScalar(.001);}continue;}F.t+=dt;const e=Math.max(0,1-F.t/.09);F.m.material.opacity=e*e*Math.min(1,.5+F.k*.5);F.m.scale.setScalar((.12+.3*F.k)*(1+F.t*4));}}
 function updatePool(P,dt,grav,drag){for(let i=0;i<P.n;i++){if(P.life[i]<=0)continue;P.life[i]-=dt;if(P.life[i]<=0){P.pos[i*3+1]=-999;continue;}P.vel[i*3+1]+=grav*dt;for(let a=0;a<3;a++){P.vel[i*3+a]*=1-drag*dt;P.pos[i*3+a]+=P.vel[i*3+a]*dt;}if(P.pos[i*3+1]<0){P.pos[i*3+1]=0;P.vel[i*3+1]*=-.3;}}P.p.geometry.attributes.position.needsUpdate=true;}
 const spurts=[];
 
@@ -5285,9 +5309,17 @@ function breathStep(dt){if(!AC||!player||!player.alive||state!=='playing')return
 function noiseBurst(t0,dur,type,freq,q,vol){const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8+Math.random()*.4;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const g=AC.createGain();g.gain.setValueAtTime(vol,t0);g.gain.exponentialRampToValueAtTime(.001,t0+dur);s.connect(f);f.connect(g);g.connect(master);s.start(t0,Math.random());s.stop(t0+dur+.05);}
 // steel grating along steel: a short hiss of high noise with a ring in it
 function sScrape(p,power=1,net=true){if(net)netEv(['sc',r3v(p),r3(power)]);if(!AC)return;const v=distVol(p)*clamp(power,.1,1)*.16;if(!(v>=.006))return;const t=AC.currentTime;noiseBurst(t,.07+Math.random()*.05,'bandpass',3800+Math.random()*2600,2.2,v);noiseBurst(t,.05,'highpass',7000,.7,v*.5);}
-function sClang(p,power=1){netEv(['c',r3v(p),power]);if(sfx(power>.55?'clash':'block',p,.75*clamp(power+.3,.4,1.3),1,0,false))return;if(!AC)return;const v=distVol(p)*clamp(power,.2,1.2)*.5;if(v<.01)return;const t=AC.currentTime,base=650+Math.random()*500;
-  [1,2.41,3.93,5.82,8.1].forEach((r,i)=>{const o=AC.createOscillator();o.type='sine';o.frequency.value=base*r*(1+(Math.random()-.5)*.01);const g=AC.createGain();g.gain.setValueAtTime(v/(1+i*.7),t);g.gain.exponentialRampToValueAtTime(.0005,t+.9/(1+i*.35));o.connect(g);g.connect(master);o.start(t);o.stop(t+1);});
-  noiseBurst(t,.06,'highpass',3500,.7,v*.8);}
+function sClang(p,power=1,mat=0,ms=2){netEv(['c',r3v(p),r3(power),mat|0,r3(ms)]);   /* (Build 315) what steel on steel sounds like, in layers: the recorded clash pitched by how heavy the two weapons are, then a short ring of the blades
+     themselves (inharmonic partials, lower and longer for heavier steel, brighter for a harder blow) and a hard tick at the moment they meet. Steel on a wooden haft
+     is a dull chock with a little ring, wood on wood a knock. It was one recording, the same for a knife on a dagger as for a poleaxe on a greatsword */
+  const pw=clamp(power,0,1.4),hv=clamp(ms,.6,6),rt=clamp(1.16-.055*hv,.84,1.14)*(.94+Math.random()*.12);
+  if(mat<2)sfx(pw>.55?'clash':'block',p,.75*clamp(pw+.3,.4,1.3)*(mat?.55:1),rt,0,false);
+  if(!AC)return;const v=distVol(p)*clamp(pw,.15,1.2);if(v<.012)return;const t=AC.currentTime;
+  if(mat===2){noiseBurst(t,.07,'bandpass',700+Math.random()*300,1.6,v*.5);noiseBurst(t,.03,'bandpass',2400,2,v*.22);return;}
+  if(mat===1)noiseBurst(t,.06,'bandpass',900+Math.random()*400,1.4,v*.42);
+  const base=(1250+Math.random()*350)/Math.sqrt(hv)*(.9+pw*.15),dec=(.35+.12*hv)*(mat?.35:1),rv=v*(mat?.07:.15);
+  [1,1.52,2.76,3.91,5.4].forEach((r,k)=>{const o=AC.createOscillator();o.type='sine';o.frequency.value=base*r*(1+(Math.random()-.5)*.012);const g=AC.createGain();const a=rv/(1+k*.55)*(k>2?pw:1);g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(a,t+.002);g.gain.exponentialRampToValueAtTime(.0003,t+dec/(1+k*.4));o.connect(g);g.connect(master);o.start(t);o.stop(t+dec+.05);});
+  noiseBurst(t,.018,'highpass',5200,.8,v*.3*(.5+pw));}
 /* (Build 214) what a blow into a body sounds like, in layers: the recorded cut or stab, the body itself taking it (a low thump that grows with
    the weight behind the blow), a wet tear for an edge or a point going in, and bone giving way under a heavy one. k: 0 cut, 1 stab, 2 blunt */
 function sBody(p,amt,crack){if(!AC)return;const v=distVol(p)*clamp(amt,.15,1.4)*.55;if(!(v>=.01))return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain(),f0=95+Math.random()*25;
@@ -11104,7 +11136,7 @@ function clash(A,B){
   s.Hv.multiplyScalar(.7);s2.Hv.multiplyScalar(.7);
   A.clashCd=B.clashCd=.12;
   _t3.addVectors(_c1,_c2).multiplyScalar(.5);
-  if(rs>3){spawnSparks(_t3,(8+rs*2)|0,_n);sClang(_t3,rs/9);s.worn(rs*.004);s2.worn(rs*.004);}
+  if(rs>3){const wd=(wepWood(s,sa)?1:0)+(wepWood(s2,sb)?1:0);if(wd<2)spawnSparks(_t3,wd?(2+rs*.3)|0:Math.min(30,(4+rs*1.6)|0),_n,rs);sClang(_t3,rs/9,wd,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
   if(attSp<4.5)return;
   if(defSp>5){ // both swinging: a bind, both rock back
@@ -11138,6 +11170,8 @@ function clash(A,B){
   }
 }
 // how much a weapon resists being knocked at the point of contact: its weight, the body behind a committed swing, and leverage (a blow near the point turns it easily)
+const WOODW=new Set(['stool','plank','stave','board','cudgel','pitchfork','legLimb','armLimb','bone']);   /* (Build 315) what a weapon meets steel with at a point t metres from the hand: wood (a haft, a club) or steel */
+function wepWood(s,t){const d=s.def,L=s.len||d.len||1;if(WOODW.has(d.id))return true;if(d.kind==='axe')return t<L-.3;if(d.kind==='blunt')return t<L-.24;if(d.kind==='spear')return t<L*(d.bladeFrom||.84);return false;}
 function bladeMass(f,s,t){const st=f.stagger>0?.6:1,sf=.6+.4*clamp(f.stamina/100,0,1);return s.def.weight*(f.commit?1.8:f.thrust?1.5:1)*st*sf/(.35+.65*t*t);}
 // blades are solid: they rest on bodies and armor instead of passing through
 const _cn=V(),_cq=V();
@@ -11544,7 +11578,7 @@ function clashPhys(s,s2,P,va,vb){
   const A=s.owner,B=s2.owner;_rel.subVectors(va,vb);const rs=_rel.length();
   if(rs<=1.4||(A&&A.clashCd>0)||(B&&B.clashCd>0))return;
   if(A)A.clashCd=.12;if(B)B.clashCd=.12;
-  if(rs>3){spawnSparks(P,(8+rs*2)|0,_n.copy(_rel).normalize());sClang(P,rs/9);s.worn(rs*.004);s2.worn(rs*.004);}
+  if(rs>3){spawnSparks(P,Math.min(30,(4+rs*1.6)|0),_n.copy(_rel).normalize(),rs);sClang(P,rs/9,0,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
   if(!A||!B)return;
   const spA=va.length(),spB=vb.length();EV.clashGame++;
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
@@ -12559,6 +12593,13 @@ function bodyPress(){
       if(A.sleep){const q=A.Q[a];q.x-=dx*k;q.y-=dy*k;q.z-=dz*k;}if(B.sleep){const q=B.Q[b];q.x+=dx*k;q.y+=dy*k;q.z+=dz*k;}if(r-d>.015)hit=true;}}   // (a body at rest is moved without being set in motion; only a real overlap wakes it)
     if(hit){if(A.sleep&&!held.has(A)){A.sleep=false;A.age=Math.min(A.age,3.5);}if(B.sleep&&!held.has(B)){B.sleep=false;B.age=Math.min(B.age,3.5);}}}
 }
+const CASTOFF=!/[?&]nocast/.test(location.search);   /* (Build 315) cast-off: a bloody blade swung hard flings its blood off in a line of drops thrown out along the swing, as in
+   Half Sword. A blade carries only so much: each throw takes a little off (fresh blood only, not dried), so after a few swings it's spent until it bites again */
+function castOffStep(dt){if(!CASTOFF)return;for(const f of fighters){const s=f.sword;if(!s||!s.blood||s.blood<.06||s.def.kind==='fist'||simTime-(s.bloodT||0)>25)continue;const tv=s.tipVel,sp=tv?tv.length():0;if(sp<8.5||simTime<(s._coT||0))continue;
+    s._coT=simTime+.07+Math.random()*.06;const bt=s.bandT!=null?s.bandT:.8,n=Math.min(8,2+((sp-8)*.4+s.blood*5)|0),p=_v.copy(s.H).addScaledVector(s.axis,s.len*Math.min(.98,bt+.08));
+    castOff(p,tv,n,sp);s.blood=Math.max(0,s.blood-.012*n);}}
+function castOff(p,v,n,sp){netEv(['bo',r3v(p),r3v(v),n,r3(sp)]);const k=clamp(.55+Math.random()*.2,0,1);
+  for(let q=0;q<n;q++){const i=bI;bI=(bI+1)%BLOOD_N;const f=k*(.45+q/n*.5),j=.4;bP[i*3]=p.x;bP[i*3+1]=p.y;bP[i*3+2]=p.z;bV[i*3]=v.x*f+(Math.random()-.5)*j;bV[i*3+1]=v.y*f+(Math.random()-.3)*j;bV[i*3+2]=v.z*f+(Math.random()-.5)*j;bL[i]=2.5;const rr=Math.random();bS[i]=.004+rr*rr*.0055;}}
 function logic(dt){FR_TICK++;
   if(NET.mode==='client'){clientFrame(dt);return;}
   if(!(dt>0))return;   // no time has passed (a host's frame right after the background ticker ran): animating over zero time divided by zero and filled bodies with NaN
@@ -12568,7 +12609,7 @@ function logic(dt){FR_TICK++;
   if(HSBODY)hsNear();
   IKF.n++;IKF.dt=dt;IKF.at=performance.now();lodAnimate(dt);
   if(HSW)hsStep(dt);
-  propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
+  castOffStep(dt);propVisual(dt);shardStep(dt);grateVisual();villageVisual(dt);towerVisual(dt);scafVisual(dt);shipVisual(dt);millVisual(dt);breachVisual(dt);raidVisual(dt);roadVisual(dt);
   for(const d of debris){if(!d.rag.sleep||d.fresh!==false){d.rag.apply(d.root);d.hips.parent.updateWorldMatrix(true,false);_v.copy(d.root.position);d.hips.parent.worldToLocal(_v);d.hips.position.copy(_v);if(d.rag.sleep)d.fresh=false;}debrisPool(d,dt);}
 }
 let lastFrameAt=0;
@@ -12606,7 +12647,7 @@ function frame(now){
     // pumped out in beats along the cut's facing, weakening as the blood runs out; a steady dribble between beats
     const age=simTime-sp.born,fade=1-age/sp.dur,hr=1.5+age*.12,beat=Math.pow(Math.max(0,Math.sin(age*hr*6.283)),3);sp.obj.getWorldQuaternion(_qq);_t2.copy(Z_AXIS).applyQuaternion(_qq);
     const spd=(.6+beat*3.2*sp.art)*fade;if(beat>.25||Math.random()<.35){_t3.copy(_t2).multiplyScalar(spd);_t3.y+=.4*fade;spawnBlood(_t1,_t3,beat>.6?2:1,beat>.25?.5:1.4,.7+beat*.4);}}
-  DEC_T.value=performance.now()/1000;updateBlood(dt);updatePool(sparks,dt,-9.8,.5);
+  DEC_T.value=performance.now()/1000;updateBlood(dt);updateSparks(dt);
   for(const fl of flames){const t=now*.001+fl.ph;const fk=.85+Math.sin(t*13)*.07+Math.sin(t*7.3)*.06+Math.random()*.05;fl.f.scale.set(.32*fl.base*fk,.62*fl.base*(.9+fk*.15),1);fl.h.material.opacity=.2;if(fl.L)fl.L.intensity=9*fl.base*fk*fl.lg;
     if(Math.random()<.04*fl.base){const i=embers.i;embers.i=(i+1)%embers.n;embers.pos[i*3]=fl.x+(Math.random()-.5)*.2;embers.pos[i*3+1]=fl.y+.3;embers.pos[i*3+2]=fl.z+(Math.random()-.5)*.2;embers.vel[i*3]=(Math.random()-.5)*.5;embers.vel[i*3+1]=.8+Math.random();embers.vel[i*3+2]=(Math.random()-.5)*.5;embers.life[i]=1.5+Math.random()*2;}}
   updatePool(embers,dt,.2,.3);lampStep(dt);if(CRYPT)cryptVisual(dt);lightPool();
@@ -13892,8 +13933,8 @@ function clientEvents(ev){
   const P=a=>V(a[0],a[1],a[2]);
   for(const e of ev){try{switch(e[0]){
     case 'b':spawnBlood(P(e[1]),P(e[2]),e[3],e[4],e[5]);break;
-    case 'k':spawnSparks(P(e[1]),e[2],e[3]?P(e[3]):null);break;
-    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2]);break;case 'sc':sScrape(P(e[1]),e[2],false);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2],e[3]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
+    case 'bo':castOff(P(e[1]),P(e[2]),e[3],e[4]);break;case 'k':spawnSparks(P(e[1]),e[2],e[3]?P(e[3]):null,e[4]||0);break;
+    case 'S':sfx(e[1],e[2]?P(e[2]):null,e[3],e[4],e[5],false);break;case 'c':sClang(P(e[1]),e[2],e[3]||0,e[4]||2);break;case 'sc':sScrape(P(e[1]),e[2],false);break;case 'h':sHit(P(e[1]),e[2],e[3],e[4]||0,e[5]||0);break;case 't':sThud(P(e[1]),e[2]);break;case 'n':sClank(P(e[1]),e[2],e[3]);break;case 'w':sSwing(P(e[1]),e[2],e[3]||undefined);break;
     case 'C':cheer(e[1],e[2]);break;case 'D':{const f=NET.puppets.get(e[1]);if(f)dentArmor(f,e[2],P(e[3]),P(e[4]),e[5],e[6]?P(e[6]).clone():null);break;}case 'H':helmetFly(e[1],P(e[2]),P(e[3]),null);break;
     case 'W':{let bi=-1,bd=1;for(let i=0;i<debris.length;i++){const d=debris[i],q=d.rag.P[d.rag.names[0]];const dd=Math.hypot(q.x-e[1][0],q.y-e[1][1],q.z-e[1][2]);if(dd<bd){bd=dd;bi=i;}}if(bi>=0){const d=debris.splice(bi,1)[0];scene.remove(d.clone);scene.remove(d.root);}break;}
     case 'B':if(e.length===1)bridgeCollapse(null);else showBanner(e[1],e[2]);break;   // (the bridge coming down and a banner share a code: a banner has text)
@@ -13979,6 +14020,6 @@ window.__clientData=clientData;window.__net={netSnap,clientFrame};window.__grabT
 window.__fdetail=(f,dt)=>fighterDetail(f,dt);window.__addWound=(B,ci,P,ax,d,k)=>addWound(B,ci,P,ax,d,k);Object.defineProperty(window,'__camMode',{get:()=>camMode,configurable:true});Object.defineProperty(window,'__grid',{get:()=>grid,configurable:true});window.__camClear=(a,b)=>{camPull=1;camClear(a,b,1/60);return camPull;};window.__frameFn=t=>{window.__inManual=true;try{frame(t);}finally{window.__inManual=false;}};
 window.__yardArm=(f,i)=>yardArm(f,i);window.__yardCycle=()=>yardCycle();window.__YARD=YARD;window.__YARD_W=YARD_W;Object.defineProperty(window,'__RUN',{get:()=>RUN,configurable:true});
 window.__relook=(f,look)=>{const pal=f.pal;f.model.parent.remove(f.model);f.model=SkeletonUtils.clone(GLTF.scene);f.model.scale.multiplyScalar(FSCALE);f.root.add(f.model);f.mats=[];f.look=look;dressModel(f.model,look,pal,f.mats);f.bones=indexBones(f.model);f.skins=[];f.model.traverse(o=>{if(o.isSkinnedMesh)f.skins.push(o);});f.mixer=new THREE.AnimationMixer(f.model);const clip=n=>GLTF.animations.find(a=>a.name===n);f.acts={idle:f.mixer.clipAction(clip('idle')),walk:f.mixer.clipAction(clip('walk')),run:f.mixer.clipAction(clip('run'))};for(const k in f.acts){const a=f.acts[k];a.play();a.setEffectiveWeight(k==='idle'?1:0);}};
-window.__game={get auG(){const r={};for(const [k,g] of [['fire',fireGain],['crowd',crowdGain],['torch',torchGain],['cricket',cricketGain],['swoosh',swooshGain]])if(g)r[k]=+g.gain.value.toFixed(4);for(const k in AMBX){const b=AMBX[k];if(b&&b.g&&b.g.gain)r[k]=+b.g.gain.value.toFixed(4);}return r;},clothGeo,CL_GEO,clothStep,get torchLights(){return torchLights;},takeUp,bloodWeapon,get world(){return world;},get moonDir(){return moonDir;},makePool,addDecal,WH,wheelOpen,wheelClose,wheelSel,aimMove:(a,b)=>aimMove(a,b),cryptBuild:(d,sd)=>{CRYPT_DEPTH=d;CRYPT_SEED=sd;loadMap('crypt');return CRYPT;},heldLid:f=>heldLid(f),get AMBX(){return AMBX},get RAIN(){return RAIN},dentArmor:(...a)=>dentArmor(...a),get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,spawnBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
+window.__game={spawnSparks,sClang,wepWood,updateSparks,sparks,get auG(){const r={};for(const [k,g] of [['fire',fireGain],['crowd',crowdGain],['torch',torchGain],['cricket',cricketGain],['swoosh',swooshGain]])if(g)r[k]=+g.gain.value.toFixed(4);for(const k in AMBX){const b=AMBX[k];if(b&&b.g&&b.g.gain)r[k]=+b.g.gain.value.toFixed(4);}return r;},clothGeo,CL_GEO,clothStep,get torchLights(){return torchLights;},takeUp,bloodWeapon,get world(){return world;},get moonDir(){return moonDir;},makePool,addDecal,WH,wheelOpen,wheelClose,wheelSel,aimMove:(a,b)=>aimMove(a,b),cryptBuild:(d,sd)=>{CRYPT_DEPTH=d;CRYPT_SEED=sd;loadMap('crypt');return CRYPT;},heldLid:f=>heldLid(f),get AMBX(){return AMBX},get RAIN(){return RAIN},dentArmor:(...a)=>dentArmor(...a),get DYN(){return DYN},get RP(){return RP},hsHit:(...a)=>hsHit(...a),get PF_P(){return PF_P},get HS_P(){return HS_P},ladderClimb:(f,d)=>ladderClimb(f,d),collide:(...a)=>collide(...a),addBox:(...a)=>addBox(...a),testLoot:(id,x,z)=>{const def=WEAPONS[id],s=new Sword(def);s.reset(V(x,.05,z),V(1,0,0));s.edge.set(0,0,1);s.free=true;s.age=0;freeSwords.push(s);const it={kind:"weapon",def,sword:s,halo:null};loot.push(it);return it;},cryptKickDoor:(...a)=>cryptKickDoor(...a),cryptCeil:(...a)=>cryptCeil(...a),findLedge,skelDress,zombieDress,speak,skeletonParts,skullGeo,shroudGeo,shroudMat,get CRYPT(){return CRYPT},cryptTrapOpen,cryptGround,bark,get camMode(){return camMode},LAMPS,lampAdd,lampTake,lampStep,cryptUse,cryptDescend,cryptLeave,cryptOpen,cryptPlan,get LAMP_SH(){return LAMP_SH},get CAREER(){return CAREER},set CAREER(v){CAREER=v},careerUI,careerSave,careerRank,CAREER_RANKS,CAREER_SHOP,NAV,navPath,navClear,navBlocked,navBuild,get mxBad(){return MX_BAD},skinRay,capBones,get warmMs(){return warmShaders.ms},get latheFixed(){return lathe.fixed||0},HANDLING,roadDir,roadX,roadUse,get ROAD(){return ROAD},__road:()=>ROAD&&ROAD.cart,get world(){return world},MATS,raidChests,raidUse,raidCarts,cartPt,ladderUse,LADDERS,ladPt,wallAhead,get RAID(){return RAID},raidScore,setStum(a,b){STUM_MAX=a;STUM_RELIEF=b},setWind(k){WIND_K=k},setRL(a,b){RL1=a;RL2=b},setSW2(a,b){SW2_OUT=a;SW2_UP=b},setThr(a,b,c,d){THR_LEAN=a;THR_EXT=b;if(c!=null)LUNGE_V=c;if(d!=null)THR_K=d},THREE,aimMove,hsBindRel,HS_SEG,get HSW(){return HSW},HS_P,hsFreeAll,setHS(v){HSBODY=v;if(!v)hsFreeAll();},embed,lodge,letGo,garbLegStep,get MILL(){return MILL},groundY,millGround,millSluice,flourBlast,swayStep,dynBreak,SHARDS,sting,get SHIP(){return SHIP},vilProps:{trough,hay,streetTorch,fence,cart,stall},Sword,DYN,dynLoad,dynStep,get PRW(){return PRW},PROX,mdl,placeModel,propBreak,bridgeCollapse,initAudio,musicTick,MUS,THEMES,decals,bloodMesh,updateBlood,spawnBlood,shipWave,get SEA(){return seaMat},TOWER,towerIgnite,towerCollapse,RUBBLE,houseCollapse,get SHIP(){return SHIP},shipIn,TAV,get HOUSES(){return HOUSES},get SCAF(){return SCAF},FLOORS,houseIgnite,houseCollapse,get mapDirty(){return mapDirty},get master(){return master},get AC2(){return AC},AMB,get AC(){return AC},clientEvents,resolveHit,clash,armourGap,PROPS,get PIT(){return PIT},grateKick,MUS,KICK,get MODEHUD(){return MODEHUD},get END(){return END},get RUN(){return RUN},NET,PT,EV,get PW(){return PW},get physOn(){return !!PW},camera,input,loadMap,spawnMatch,V,fighters,debris,loot,scene,renderer,composer,torchLights,sim,logic,WEAPONS,ARMOR,pickUp,spawnWeaponLoot,spawnArmorLoot,get player(){return player},startGame,zone,get state(){return state}};
 Object.defineProperty(window.__game,'simTime',{get:()=>simTime});Object.defineProperty(window.__game,'hitStopT',{get:()=>hitStopT});
 </script>
