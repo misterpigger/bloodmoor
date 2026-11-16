@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=320;
+const BUILD=321;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -9727,7 +9727,7 @@ class Fighter{
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
     let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1)*(this.sword&&this.sword.def.id==='chest'?.9:1)*(this.ladCarry?.92:1)*(this.roadHold?(run?.45:.85):1)*(this.spdK||1);
-    if(DIRCAP&&run&&legs){const wl=Math.hypot(wish.x,wish.z);if(wl>.05){const c=this._wf/wl,cap=c>.55||c<-.6?99:3.6+(c>0?(c/.55)*(c/.55)*.7:0);if(spd>cap)spd=cap;}}   /* (Build 320) a sideways sprint tops out at 3.6 m/s (a man can't gallop sideways as fast as he runs forward); the legs run it with their own gait (DRUN) */
+    if(DIRCAP&&run&&legs){const wl=Math.hypot(wish.x,wish.z);if(wl>.05){const c=this._wf/wl,cap=c>.55||c<-.6?99:2.9+(c>0?(c/.55)*(c/.55)*1.4:0);if(spd>cap)spd=cap;}}   /* (Build 320) a sideways sprint tops out at 3.6 m/s (a man can't gallop sideways as fast as he runs forward); the legs run it with their own gait (DRUN) */
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -10469,13 +10469,13 @@ class Fighter{
         D.w=lerp(D.w,dirOK?clamp((sp-1.7)/.6,0,1):0,1-Math.exp(-10*dt));
         if(D.w>.01&&sp>.3&&feet.Left&&feet.Right){const sideK=clamp((Math.abs(lat)-.55)/.3,0,1);D.lw=lerp(D.lw,sideK,1-Math.exp(-8*dt));const sk=D.lw;
           _drD.set(this.vel.x/sp,0,this.vel.z/sp);const lead=lat>0?'Right':'Left';
-          const cyc=sk*(1.9+.3*sp)+(1-sk)*(1.4+.25*sp),T=1/cyc,Dt=sk*.36+(1-sk)*.42,a=sp*Dt*T/2,h=sk*.1+(1-sk)*(.08+.015*sp);   /* cycles a second, stance share, half a stride, foot lift */
+          const aS=Math.min(.22,.14+.03*sp),DtS=.62,cyc=sk*(DtS*sp/(2*aS))+(1-sk)*(1.4+.25*sp),T=1/cyc,Dt=sk*DtS+(1-sk)*.42,a=sp*Dt*T/2,h=sk*.05+(1-sk)*(.08+.015*sp);   /* (Build 321) sideways: a wide low defensive slide, the lead foot stepping out while the trailing one stands, then the trailing one closing in, always a foot down (Build 320's gallop read as a bunny hop) */   /* cycles a second, stance share, half a stride, foot lift */
           const ph0=D.ph;D.ph=(D.ph+dt*cyc)%1;const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ank=this.ankY||.08;let bob=0;
           const path=(ph)=>{ph=((ph%1)+1)%1;if(ph<Dt){const u=ph/Dt;return [a-2*a*u,0,u];}const u=(ph-Dt)/(1-Dt),e=u*u*(3-2*u);return [-a+2*a*e,h*Math.sin(Math.PI*u),-1];};
           const pos={};for(const sn of ['Left','Right']){const sg=sn==='Right'?1:-1;
             /* backpedal: the feet alternate half a cycle apart, a hand's width either side; gallop: both feet keep the same rhythm, the trailing one a fifth of a cycle behind, lead and trail either side of the hips along the way he goes */
-            const off=sk*(sn===lead?0:-.2)+(1-sk)*(sn==='Left'?0:.5),q=path(D.ph+off),qp=path(ph0+off);
-            const cen=sk*(sn===lead?.13:-.13),alg=q[0]+cen;
+            const off=sk*(sn===lead?0:.5)+(1-sk)*(sn==='Left'?0:.5),q=path(D.ph+off),qp=path(ph0+off);
+            const cen=sk*(sn===lead?1:-1)*(a+.08),alg=q[0]+cen;
             _drP.copy(this.pos).addScaledVector(_drD,alg).addScaledVector(_r,(1-sk)*sg*.11);
             if(sk>0)_drP.addScaledVector(_f,sk*sg*.02);
             _drP.y=groundY(_drP.x,_drP.z,gy+.3)+ank+q[1];pos[sn]={p:_drP.clone(),al:alg,st:q[2]};
@@ -10485,7 +10485,7 @@ class Fighter{
           if(sk>0){const tr=lead==='Right'?'Left':'Right',gap=pos[lead].al-pos[tr].al;if(gap<.17)pos[tr].p.addScaledVector(_drD,(gap-.17)*sk);}
           for(const sn of ['Left','Right'])feet[sn].lerp(pos[sn].p,D.w);
           /* the body rides low and springs: down onto each landing, up through the moment in the air; backpedalling the knees stay bent */
-          B.Hips.position.y-=D.w*(3.5+(1-sk)*2.5+bob*3.2);
+          B.Hips.position.y-=D.w*(3.5+sk*3.5+(1-sk)*2.5+bob*(3.2-2.2*sk));
           skelClean(B);}}
       const pnw=this.pin?this.pin.w:0;   /* (Build 259) kneeling astride: the feet go back and out either side of him, the knees come down to the floor beside his ribs */
       if(pnw>0){this.right(_r);const gy0=groundY(this.pos.x,this.pos.z,this.pos.y+.3);for(const s in feet){const sg=s==='Right'?1:-1;_t2.copy(this.pos).addScaledVector(_f,-.36).addScaledVector(_r,sg*.27);_t2.y=groundY(_t2.x,_t2.z,gy0+.3)+(this.ankY||.08)+.04;feet[s].lerp(_t2,pnw);}}
