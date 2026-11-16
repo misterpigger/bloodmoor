@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=315;
+const BUILD=316;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5031,15 +5031,15 @@ function spawnSparksLocal(p,n){for(let k=0;k<n;k++){const i=sparks.i;sparks.i=(i
 function spawnSparks(p,n,dir,sp=0){netEv(['k',r3v(p),n,dir?r3v(dir):0,r3(sp)]);   /* (Build 315) sparks are struck off along the steel: hotter and faster from a harder blow (sp, the closing speed), flying out across the
      contact and streaking as they go (drawn as short lines behind each spark, white-hot to orange as they cool), with a flash where the steel met. They were dots
      thrown at 2-3 m/s in a puff whatever the blow */
-  const k=sp?clamp(sp/12,.4,1.6):.7,fy=groundY(p.x,p.z,p.y);sparkFlash(p,k);
+  const k=sp?clamp(sp/14,.35,1):.6,fy=groundY(p.x,p.z,p.y);   /* (Build 316) a few small brief sparks, no flash: the player found Build 315's too much */
   for(let q=0;q<n;q++){const i=sparks.i;sparks.i=(i+1)%sparks.n;sparks.pos[i*3]=p.x;sparks.pos[i*3+1]=p.y;sparks.pos[i*3+2]=p.z;
-    const v=(2+Math.random()*5.5)*k,a=Math.random()*6.283,u=Math.random()*2-1,r=Math.sqrt(1-u*u);let x=r*Math.cos(a),y=Math.abs(u)*.8+.15,z=r*Math.sin(a);if(dir){x+=dir.x*.9;y+=dir.y*.5;z+=dir.z*.9;}const l=Math.hypot(x,y,z)||1;
-    sparks.vel[i*3]=x/l*v;sparks.vel[i*3+1]=y/l*v;sparks.vel[i*3+2]=z/l*v;sparks.life[i]=sparks.l0[i]=(.12+Math.random()*.38)*(.7+.3*k);sparks.fy[i]=fy;}}
+    const v=(1.2+Math.random()*3)*k,a=Math.random()*6.283,u=Math.random()*2-1,r=Math.sqrt(1-u*u);let x=r*Math.cos(a),y=Math.abs(u)*.8+.15,z=r*Math.sin(a);if(dir){x+=dir.x*.9;y+=dir.y*.5;z+=dir.z*.9;}const l=Math.hypot(x,y,z)||1;
+    sparks.vel[i*3]=x/l*v;sparks.vel[i*3+1]=y/l*v;sparks.vel[i*3+2]=z/l*v;sparks.life[i]=sparks.l0[i]=.06+Math.random()*.16;sparks.fy[i]=fy;}}
 const SPFL=[];for(let i=0;i<4;i++){const m=new THREE.Sprite(new THREE.SpriteMaterial({map:TX.glow,color:0xffe0a8,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0}));m.scale.setScalar(.001);m.renderOrder=3;scene.add(m);SPFL.push({m,t:9,k:0});}let _spfl=0;
 function sparkFlash(p,k){const F=SPFL[_spfl++%SPFL.length];F.m.position.copy(p);F.t=0;F.k=k;}
 function updateSparks(dt){const P=sparks,ps=P.ls,cs=P.lc;for(let i=0;i<P.n;i++){const o=i*6;if(P.life[i]<=0){if(ps[o+1]!==-999){ps[o+1]=ps[o+4]=-999;}continue;}P.life[i]-=dt;if(P.life[i]<=0){P.pos[i*3+1]=-999;ps[o+1]=ps[o+4]=-999;continue;}
     P.vel[i*3+1]-=9.8*dt;const dr=1-2.2*dt;for(let a=0;a<3;a++){P.vel[i*3+a]*=dr;P.pos[i*3+a]+=P.vel[i*3+a]*dt;}if(P.pos[i*3+1]<P.fy[i]){P.pos[i*3+1]=P.fy[i];P.vel[i*3+1]*=-.3;P.vel[i*3]*=.5;P.vel[i*3+2]*=.5;}
-    const t=P.life[i]/P.l0[i],br=Math.min(1,t*1.8),sl=.028;for(let a=0;a<3;a++){ps[o+a]=P.pos[i*3+a];ps[o+3+a]=P.pos[i*3+a]-P.vel[i*3+a]*sl;}
+    const t=P.life[i]/P.l0[i],br=Math.min(1,t*1.4)*.75,sl=.012;for(let a=0;a<3;a++){ps[o+a]=P.pos[i*3+a];ps[o+3+a]=P.pos[i*3+a]-P.vel[i*3+a]*sl;}
     cs[o]=br;cs[o+1]=br*(.55+.4*t);cs[o+2]=br*(.15+.6*t*t);cs[o+3]=br*.6;cs[o+4]=br*.2;cs[o+5]=br*.03;}
   P.p.geometry.attributes.position.needsUpdate=true;P.line.geometry.attributes.position.needsUpdate=true;P.line.geometry.attributes.color.needsUpdate=true;
   for(const F of SPFL){if(F.t>.2){if(F.m.material.opacity!==0){F.m.material.opacity=0;F.m.scale.setScalar(.001);}continue;}F.t+=dt;const e=Math.max(0,1-F.t/.09);F.m.material.opacity=e*e*Math.min(1,.5+F.k*.5);F.m.scale.setScalar((.12+.3*F.k)*(1+F.t*4));}}
@@ -5071,7 +5071,7 @@ function initAudio(){
   const sw=AC.createBufferSource();sw.buffer=noiseBuf;sw.loop=true;swooshFilt=AC.createBiquadFilter();swooshFilt.type='bandpass';swooshFilt.Q.value=1.4;swooshFilt.frequency.value=600;swooshGain=AC.createGain();swooshGain.gain.value=0;sw.connect(swooshFilt);swooshFilt.connect(swooshGain);swooshGain.connect(master);sw.start();
 }
 // ---- recorded sounds (CC0, see CREDITS.md): played when loaded, the synth below is the fallback
-const SFX_N={"swingSword":5,"swingCleaver":5,"swingHammer":5,"swingPunch":5,"swingKick":5,"slash":5,"hack":5,"strike":5,"crush":4,"pierce":5,"punch":5,"kick":5,"block":5,"clash":5,"hitMail":5,"hitPlate":5,"hitLeather":4,"fall":3,"fallArmoured":3,"dropWeapon":3,"humanAttack":5,"humanHurt":4,"humanDeath":3,"humanRoughAttack":4,"humanRoughHurt":4,"humanRoughDeath":3,"deathThudSmall":3,"deathThudMid":3,"stepStone":5,"stepDirt":5,"stepSand":5,"crackle":5,"pickup":5,"equipMail":2,"equipPlate":3,"unsheathe":3};
+const SFX_N={"splat":8,"gurgle":6,"swingSword":5,"swingCleaver":5,"swingHammer":5,"swingPunch":5,"swingKick":5,"slash":5,"hack":5,"strike":5,"crush":4,"pierce":5,"punch":5,"kick":5,"block":5,"clash":5,"hitMail":5,"hitPlate":5,"hitLeather":4,"fall":3,"fallArmoured":3,"dropWeapon":3,"humanAttack":5,"humanHurt":4,"humanDeath":3,"humanRoughAttack":4,"humanRoughHurt":4,"humanRoughDeath":3,"deathThudSmall":3,"deathThudMid":3,"stepStone":5,"stepDirt":5,"stepSand":5,"crackle":5,"pickup":5,"equipMail":2,"equipPlate":3,"unsheathe":3};
 const SFX={};let sfxLoading=false;
 function loadSfx(){if(sfxLoading||!AC)return;sfxLoading=true;
   for(const k in SFX_N){SFX[k]=[];for(let i=0;i<SFX_N[k];i++)fetch('sfx/'+k+'-'+i+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>AC.decodeAudioData(b)).then(buf=>{SFX[k].push(buf);
@@ -5228,7 +5228,7 @@ function musicTheme(){
   if(curMap==='tavern')return 'tavern';   // a saltarello for a tavern brawl
   if(curMap==='ship')return 'sea';   // a shanty on the longship
   if(curMap==='pit')return 'pit';
-  if(m==='duel'||m==='tourney')return 'duel';
+  /* (Build 316) no 'duel' theme any more (its high psaltery lead grated, as the old Pit theme's did): bouts take the map's own music */
   if(curMap==='colosseum')return 'arena';
   return 'battle';}
 // the music runs through a hall: a synthetic reverb (the dry samples sounded small and plinky), a gentle compressor to glue it,
@@ -5326,7 +5326,8 @@ function sBody(p,amt,crack){if(!AC)return;const v=distVol(p)*clamp(amt,.15,1.4)*
   o.type='sine';o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(38,t+.2);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.006);g.gain.exponentialRampToValueAtTime(.001,t+.22);o.connect(g);g.connect(master);o.start(t);o.stop(t+.24);
   noiseBurst(t,.07,'lowpass',340,.8,v*.7);
   if(crack){noiseBurst(t+.004,.025,'highpass',2600,.7,v*.9*crack);noiseBurst(t+.01,.06,'bandpass',850,3,v*.8*crack);}}
-function sWet(p,amt){if(!AC)return;const v=distVol(p)*clamp(amt,.15,1.2)*.32;if(!(v>=.01))return;const t=AC.currentTime;noiseBurst(t+.01,.11+Math.random()*.06,'bandpass',1300+Math.random()*700,2.2,v);noiseBurst(t+.05,.09,'bandpass',600+Math.random()*300,4,v*.6);}
+function sWet(p,amt){if(!AC)return;if(SFX.splat&&SFX.splat.length){sfx('splat',p,clamp(amt,.2,1.2)*.5,.9+Math.random()*.2,0,false);return;}   /* (Build 316) a recorded wet splat (CC0, freesound) for an edge or point going into flesh; the noise bursts below until it loads */
+  const v=distVol(p)*clamp(amt,.15,1.2)*.32;if(!(v>=.01))return;const t=AC.currentTime;noiseBurst(t+.01,.11+Math.random()*.06,'bandpass',1300+Math.random()*700,2.2,v);noiseBurst(t+.05,.09,'bandpass',600+Math.random()*300,4,v*.6);}
 function sHit(p,power=1,sever=false,k=0,crack=0){netEv(['h',r3v(p),power,sever,k,crack]);sBody(p,power*(k===2?1.25:.85),crack+(sever?.7:0));if(k!==2)sWet(p,power*(k===1?1.1:.8));
   if(k===2){sThud(p,power);return;}
   if(sfx(sever?'hack':k===1?'pierce':(Math.random()<.75?'slash':'hack'),p,.85*clamp(power+.2,.45,1.3),k===1?.9:clamp(1.12-power*.12,.85,1.1),0,false)){if(sever)sfx('crush',p,.6,.8,.04,false);return;}if(!AC)return;const v=distVol(p)*clamp(power,.3,1.3)*.7;if(v<.01)return;const t=AC.currentTime;
@@ -10581,7 +10582,7 @@ class Fighter{
     if(HSBODY&&HS_NEAR.has(this)&&this.alive&&!this.ragdoll&&dt>0&&dt<=.2&&hsWorld())hsTarget(this,dt);   // the active body (drawn after the world steps, in logic)
     else{if(this.hs)hsFree(this);if((this._lodK||1)>1||!this.isPlayer&&camera.position.distanceToSquared(this.pos)>81){this.ar=null;}else{this.fullBody(dt);if(this.ar)this.updateCaps();}}   /* (Build 188) the full body only within 9 m of the camera */   // a blow lands where the body is drawn (far away: no full body, Build 182)
   }
-  startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
+  startClutch(part,sev){if(this.clutchT>simTime+.5&&this.clutchP==='neck'&&part!=='neck')return;if(part==='neck'&&this.alive)this._gurT=simTime+.3+Math.random()*.4;   /* (Build 316) a cut throat gurgles */const d=clamp(1+sev*.06,1.4,4.5);this.clutchP=part;this.clutchT=simTime+d;this.stagger=Math.max(this.stagger,Math.min(.9,.3+sev*.012));
     if(this.ai&&!this.isPlayer)this.ai.cd=Math.max(this.ai.cd||0,d*.6);if(NET.mode==='host')netEv(['q',this.id,part,r3(d)]);if(this.isPlayer)tell(this,part==='neck'?'Your throat is cut':'You clutch the wound','red');}
   /* Build 150: the hand goes to the wound, it doesn't appear there: it travels from wherever it was (it jumped 30 cm in one frame) */
   clutchEase(out,side,dt){this.clutchAt(out);const P=this._clP||(this._clP=V());if(!this._clOn||simTime-this._clOn>.1||this._clS!==side){this.bones[side+'Hand'].getWorldPosition(P);this._clS=side;}this._clOn=simTime;P.lerp(out,1-Math.exp(-11*dt));return out.copy(P);}
@@ -11136,7 +11137,7 @@ function clash(A,B){
   s.Hv.multiplyScalar(.7);s2.Hv.multiplyScalar(.7);
   A.clashCd=B.clashCd=.12;
   _t3.addVectors(_c1,_c2).multiplyScalar(.5);
-  if(rs>3){const wd=(wepWood(s,sa)?1:0)+(wepWood(s2,sb)?1:0);if(wd<2)spawnSparks(_t3,wd?(2+rs*.3)|0:Math.min(30,(4+rs*1.6)|0),_n,rs);sClang(_t3,rs/9,wd,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
+  if(rs>3){const wd=(wepWood(s,sa)?1:0)+(wepWood(s2,sb)?1:0);if(wd===0&&rs>6)spawnSparks(_t3,Math.min(7,(rs*.45-1.5)|0),_n,rs);sClang(_t3,rs/9,wd,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
   if(attSp<4.5)return;
   if(defSp>5){ // both swinging: a bind, both rock back
@@ -11254,7 +11255,7 @@ function ripOut(s,B,A,dmg,ent){
   if(B.alive){if(!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.12);}B.addBleed(.9,8);B.damage(dmg,A,'torn open');}
   if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
 }
-const BLADE_BAND=!/[?&]noband\b/.test(location.search);
+const BLADE_BAND=/[?&]band\b/.test(location.search);   /* (Build 316) off: the player found it did nothing for the game */
 function bloodWeapon(s){
   const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwE:{value:V(1,0,0)},uSwL:{value:s.len},uBlood:{value:0},uDry:{value:0},uWear:{value:0},uReach:{value:s.def.kind==='blade'?.78:s.def.kind==='spear'?.2:.32},uBand:{value:-1}};s.bloodU=U;const cache=new Map();
   s.mesh.traverse(o=>{if(!o.isMesh||!o.material)return;if(!cache.has(o.material)){const m=o.material.clone(),pre=o.material.onBeforeCompile,pk=o.material.customProgramCacheKey();
@@ -11578,7 +11579,7 @@ function clashPhys(s,s2,P,va,vb){
   const A=s.owner,B=s2.owner;_rel.subVectors(va,vb);const rs=_rel.length();
   if(rs<=1.4||(A&&A.clashCd>0)||(B&&B.clashCd>0))return;
   if(A)A.clashCd=.12;if(B)B.clashCd=.12;
-  if(rs>3){spawnSparks(P,Math.min(30,(4+rs*1.6)|0),_n.copy(_rel).normalize(),rs);sClang(P,rs/9,0,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
+  if(rs>3){if(rs>6)spawnSparks(P,Math.min(7,(rs*.45-1.5)|0),_n.copy(_rel).normalize(),rs);sClang(P,rs/9,0,(WMASS[s.def.id]||1.2)+(WMASS[s2.def.id]||1.2));s.worn(rs*.004);s2.worn(rs*.004);}
   if(!A||!B)return;
   const spA=va.length(),spB=vb.length();EV.clashGame++;
   const att=spA>spB?A:B,def=att===A?B:A,attSp=Math.max(spA,spB),defSp=Math.min(spA,spB);
@@ -12077,7 +12078,7 @@ function recShot(kind,vol,pan){if(!RECAMB||!AC)return false;const L=RSHOT[kind];
   if(!buf){if(buf!==null){RSBUF[id]=null;fetch('sfx/shot-'+id+'.mp3').then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(x=>AC.decodeAudioData(x)).then(b=>{RSBUF[id]=b;}).catch(()=>{RSBUF[id]=false;});}
     return L.some(k=>RSBUF[k])?recShot(kind,vol,pan):false;}
   const s=AC.createBufferSource();s.buffer=buf;s.playbackRate.value=.93+Math.random()*.14;const g=AC.createGain();g.gain.value=vol;s.connect(g);ambPan(g,pan==null?Math.random()*1.6-.8:pan);s.start();return true;}
-const AMB_DAY={arena:[.045,.014,1],colosseum:[.04,0,.4],pit:[.04,.008,.6],breach:[.06,.014,.8],road:[.05,.04,1.6],raid:[.06,.026,1.2]};   // wind, leaves, birds
+const AMB_DAY={arena:[.045,.014,1],colosseum:[.04,0,0],pit:[.04,.008,.6],breach:[.06,.014,.8],road:[.05,.04,1.6],raid:[.06,.026,1.2]};   // wind, leaves, birds
 function ambBeds(dt){const X=AMBX,au=!!(AC&&X.wind),on=state!=='loading',t=au?AC.currentTime:performance.now()/1000,S=SHIP,storm=S?S.storm||0:0,day=AMB_DAY[curMap];
   if((X.guT-=dt)<=0){X.guT=2.5+Math.random()*6;X.guW=Math.random()*Math.random()*1.3+(storm>.5?.5:0);}X.gu=lerp(X.gu,X.guW||0,1-Math.exp(-dt*.45));const gu=X.gu;
   const set=(b,v,k=.06)=>{if(au)b.g.gain.value=lerp(b.g.gain.value,on?v:0,k);};
@@ -12593,7 +12594,7 @@ function bodyPress(){
       if(A.sleep){const q=A.Q[a];q.x-=dx*k;q.y-=dy*k;q.z-=dz*k;}if(B.sleep){const q=B.Q[b];q.x+=dx*k;q.y+=dy*k;q.z+=dz*k;}if(r-d>.015)hit=true;}}   // (a body at rest is moved without being set in motion; only a real overlap wakes it)
     if(hit){if(A.sleep&&!held.has(A)){A.sleep=false;A.age=Math.min(A.age,3.5);}if(B.sleep&&!held.has(B)){B.sleep=false;B.age=Math.min(B.age,3.5);}}}
 }
-const CASTOFF=!/[?&]nocast/.test(location.search);   /* (Build 315) cast-off: a bloody blade swung hard flings its blood off in a line of drops thrown out along the swing, as in
+const CASTOFF=/[?&]cast\b/.test(location.search);   /* (Build 316) off by default */   /* (Build 315) cast-off: a bloody blade swung hard flings its blood off in a line of drops thrown out along the swing, as in
    Half Sword. A blade carries only so much: each throw takes a little off (fresh blood only, not dried), so after a few swings it's spent until it bites again */
 function castOffStep(dt){if(!CASTOFF)return;for(const f of fighters){const s=f.sword;if(!s||!s.blood||s.blood<.06||s.def.kind==='fist'||simTime-(s.bloodT||0)>25)continue;const tv=s.tipVel,sp=tv?tv.length():0;if(sp<8.5||simTime<(s._coT||0))continue;
     s._coT=simTime+.07+Math.random()*.06;const bt=s.bandT!=null?s.bandT:.8,n=Math.min(8,2+((sp-8)*.4+s.blood*5)|0),p=_v.copy(s.H).addScaledVector(s.axis,s.len*Math.min(.98,bt+.08));
@@ -12780,7 +12781,8 @@ function makePool(x,z,y){const m=new THREE.Mesh(POOL_GEO,std({color:0x3a0b05,rou
 // ---- blood that falls from a blade or a wound: a drop, nothing sent over the network
 function dripBlood(p){const i=bI;bI=(bI+1)%BLOOD_N;bP[i*3]=p.x;bP[i*3+1]=p.y;bP[i*3+2]=p.z;bV[i*3]=(Math.random()-.5)*.12;bV[i*3+1]=-.2;bV[i*3+2]=(Math.random()-.5)*.12;bL[i]=2.5;bS[i]=.0026+Math.random()*.002;}
 // ---- sounds
-function sGurgle(p,vol=1){if(!AC)return;const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime,n=4+(Math.random()*5|0);
+function sGurgle(p,vol=1){if(!AC)return;if(SFX.gurgle&&SFX.gurgle.length){sfx('gurgle',p,.42*vol,.92+Math.random()*.14,0,false);return;}   /* (Build 316) recorded choking gurgles (CC0, freesound) */
+  const v=distVol(p)*vol;if(v<.01)return;const t=AC.currentTime,n=4+(Math.random()*5|0);
   for(let i=0;i<n;i++)noiseBurst(t+i*(.06+Math.random()*.07),.04+Math.random()*.05,'bandpass',200+Math.random()*420,7,v*.55);noiseBurst(t,n*.1,'lowpass',280,.7,v*.22);}
 function sGasp(x){if(!AC)return;if(AMB.crowd){crowdBurst(x*.8,.08,1.1,.92,0,1800);setTimeout(()=>sCheer(x*.6),700);return;}const t=AC.currentTime;const s=AC.createBufferSource();s.buffer=noiseBuf;s.playbackRate.value=.8;const f=AC.createBiquadFilter();f.type='bandpass';f.Q.value=.7;f.frequency.setValueAtTime(700,t);f.frequency.linearRampToValueAtTime(1500,t+.45);
   const g=AC.createGain();g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.3*x,t+.12);g.gain.exponentialRampToValueAtTime(.001,t+1.3);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+1.4);

@@ -58,8 +58,20 @@ Every recorded sound in `sfx/` is released under **CC0 1.0** (public domain dedi
 
 ### Ambience (`sfx/amb-*.mp3`, CC0 1.0, from OpenGameArt; trimmed into seamless loops, filtered and level-matched)
 - `amb-fire.mp3`: fireplace sound loop by PagDev (CC0) https://opengameart.org/content/fireplace-sound-loop
-- `amb-crowd.mp3`: Crowd Shouting/Speaking Ambience by StarNinjas (CC0) https://opengameart.org/content/crowd-shoutingspeaking-ambience
+- `amb-crowd.mp3` (Build 316): a minute of CRWDReac-SOCCER_Millerntor Stadium Crowd Reaction General Ambience by itmightgetloud (CC0) https://freesound.org/s/829454/ , high-passed and crossfaded into a loop. (It replaced StarNinjas' Crowd Shouting/Speaking Ambience, whose singing read as a second song over the music.)
 - `amb-crickets.mp3`: crickets ambient noise loopable by Wolfgang_ (CC0) https://opengameart.org/content/crickets-ambient-noise-loopable
+
+### Gore sounds, Build 316 (`sfx/splat-*.mp3`, `sfx/gurgle-*.mp3`; CC0 1.0, from freesound.org, each licence checked on its page; trimmed, high-passed, levelled)
+- `splat-0`: death_blood_splatter by minian89 https://freesound.org/s/195954/
+- `splat-1`: Blood Spatter_Squelch_Near_Mono by _stubb https://freesound.org/s/406582/
+- `splat-2`: swing_blood_splatter by minian89 https://freesound.org/s/195952/
+- `splat-3`: Gore Impact - "LOT OF HEART" by magnuswaker https://freesound.org/s/641046/
+- `splat-4`: goreSplat by ThefitzyG https://freesound.org/s/414296/
+- `splat-5` to `splat-7`: gore_gory_blood_smash_flesh_murder by EricsSoundschmiede https://freesound.org/s/513309/
+- `gurgle-0`: Gurgling-Choking by JadeW40 https://freesound.org/s/826999/
+- `gurgle-1`: ThroatCutGurgle by shelbyshark https://freesound.org/s/476437/
+- `gurgle-2`, `gurgle-3`: Gargling Throat Cut by Ben_0815 https://freesound.org/s/868793/
+- `gurgle-4`, `gurgle-5`: gore_blood_flesh_gurgle by EricsSoundschmiede https://freesound.org/s/454622/
 
 ### Recorded ambience, Build 313 (`sfx/amb-*.mp3` beds, `sfx/shot-*.mp3` calls; CC0 1.0, from freesound.org; trimmed, high-passed, level-matched, beds crossfaded into seamless loops, calls cut from the recordings)
 - `amb-day.mp3`: sfx_amb_forest_spring_afternoon-01.wav by bajko (CC0) https://freesound.org/s/385280/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
