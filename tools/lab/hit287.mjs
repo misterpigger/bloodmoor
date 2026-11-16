@@ -1,7 +1,7 @@
 // the moment a hit lands: the player's scripted cut at a live duel bot held in place until the blow, filmed from the player's own camera, with a per-frame trace of blade and body after contact
 import {boot} from './harness.mjs';import fs from 'fs';
 const OUT=process.env.OUT||'hit287';fs.mkdirSync(OUT,{recursive:true});const WEP=process.env.WEP||'longsword',MOVE=process.env.MOVE||'chest',DIST=+(process.env.DIST||1.5),TAG=process.env.TAG||'a',SHOTS=!process.env.NOSHOT;
-const MV={chest:[[.88,.3],[.15,.5]],head:[[.86,.12],[.2,.42]],left:[[.12,.3],[.85,.5]],chop:[[.5,.03],[.5,.9]],leg:[[.88,.5],[.2,.95]]}[MOVE];
+const MV={chest:[[.88,.3],[.15,.5]],head:[[.86,.12],[.2,.42]],left:[[.12,.3],[.85,.5]],chop:[[.5,.03],[.5,.9]],leg:[[.88,.5],[.2,.95]],thrust:[[.5,.42],[.5,.42]]}[MOVE];
 const {browser,page,logs,fr,start,shot}=await boot({W:+(process.env.W||800),HH:+(process.env.H||450),render:SHOTS,query:'?nohud'+(process.env.Q||'')});
 await start('duel','arena',{pause:true});
 await page.evaluate(async([w,DIST,ARM,CAMV])=>{const g=window.__game,T=g.THREE,P=g.player,input=g.input;window.__pause=true;
@@ -12,7 +12,7 @@ await page.evaluate(async([w,DIST,ARM,CAMV])=>{const g=window.__game,T=g.THREE,P
   for(let k=0;k<260;k++)g.logic(1/60);
   const home=P.pos.clone(),yaw=Math.atan2(B.pos.x-P.pos.x,B.pos.z-P.pos.z),f=new T.Vector3(Math.sin(yaw),0,Math.cos(yaw));window.__G={home,yaw,f,DIST,hit:0,tr:[]};
   const v1=new T.Vector3(),v2=new T.Vector3(),v3=new T.Vector3();
-  window.__step=(mx,my,lmb)=>{const G=window.__G;input.locked=false;P.stamina=100;P.hp=100;input.mx=mx;input.my=my;input.lmb=lmb;P.ctrl.z=.46;P.yaw=yaw;
+  window.__step=(mx,my,lmb)=>{const G=window.__G;input.locked=false;P.stamina=100;P.hp=100;input.mx=mx;input.my=my;input.lmb=lmb;P.ctrl.z=window.__Z||.46;P.yaw=yaw;
     if(!G.hit){P.pos.x=home.x;P.pos.z=home.z;P.vel.set(0,0,0);B.pos.x=home.x+f.x*DIST;B.pos.z=home.z+f.z*DIST;B.vel.set(0,0,0);B.yaw=yaw+Math.PI;if(B.ai){B.ai.cd=1;B.ai.phase='wait';}B.stamina=100;}
     const n0=(window.__ulog||[]).length;g.logic(1/60);g.updateBlood&&g.updateBlood(1/60);
     if(!G.hit&&(window.__ulog||[]).length>n0&&window.__ulog[window.__ulog.length-1][1]>4){G.hit=1;G.p0=B.pos.clone();G.h=window.__ulog[window.__ulog.length-1];B.bones.Head.getWorldPosition(v1);B.bones.Spine2.getWorldPosition(v2);B.bones.Hips.getWorldPosition(v3);G.hd=v1.clone().sub(v3);G.cd=v2.clone().sub(v3);G.hp0=B.hp;}
@@ -23,7 +23,7 @@ await page.evaluate(async([w,DIST,ARM,CAMV])=>{const g=window.__game,T=g.THREE,P
 await new Promise(r=>setTimeout(r,2500));
 const run=(n,a)=>page.evaluate(([n,a])=>{for(let i=0;i<n;i++)window.__step(...a);return window.__G.hit;},[n,a]);
 let k=0;const snap=async(tag)=>{if(!SHOTS)return;await fr(1,1/600);await shot(`${OUT}/${TAG}_${String(k++).padStart(2,'0')}_${tag}.jpg`,88);};
-await run(34,[MV[0][0],MV[0][1],false]);await snap('wind');
+await run(34,[MV[0][0],MV[0][1],false]);await snap('wind');if(MOVE==='thrust')await page.evaluate(()=>{window.__Z=.72;});
 const N=12;let hit=0,i=0,after=0;const at=new Set([0,2,4,7,11,16,24,34,48,64]);
 for(i=0;i<N&&!hit;i++){const u=(i+1)/N;hit=await run(1,[MV[0][0]+(MV[1][0]-MV[0][0])*u,MV[0][1]+(MV[1][1]-MV[0][1])*u,true]);if(!hit&&i%3===2)await snap('sw'+i);}
 const iu=Math.min(1,i/N);for(let j=0;j<80;j++){if(hit){if(at.has(after))await snap('h'+String(after).padStart(2,'0'));after++;}const u=Math.min(1,iu+(j+1)/N),hold=j<18;hit=await run(1,hold?[MV[0][0]+(MV[1][0]-MV[0][0])*u,MV[0][1]+(MV[1][1]-MV[0][1])*u,true]:[.5,.45,false])||hit;}
