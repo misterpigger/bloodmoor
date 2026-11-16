@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=313;
+const BUILD=314;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -8499,9 +8499,9 @@ class Sword{
   pointAt(t,out){return out.copy(this.H).addScaledVector(this.axis,this.len*t);}
   velAt(t,out){return out.copy(this.Hv).lerp(this.tipVel,t);}
   sync(){_z.crossVectors(this.edge,this.axis);_sm.makeBasis(this.edge,this.axis,_z);this.mesh.quaternion.setFromRotationMatrix(_sm);this.mesh.position.copy(this.H);
-    if(this.bloodU){const U=this.bloodU;U.uSwO.value.copy(this.H);U.uSwA.value.copy(this.axis);U.uSwE.value.copy(this.edge);U.uBlood.value=this.blood||0;U.uWear.value=this.wear||0;U.uDry.value=clamp((simTime-(this.bloodT??simTime)-12)/50,0,1);}}
+    if(this.bloodU){const U=this.bloodU;U.uSwO.value.copy(this.H);U.uSwA.value.copy(this.axis);U.uSwE.value.copy(this.edge);U.uBlood.value=this.blood||0;U.uBand.value=BLADE_BAND&&this.bandT!=null?this.bandT:-1;U.uWear.value=this.wear||0;U.uDry.value=clamp((simTime-(this.bloodT??simTime)-12)/50,0,1);}}
   // blood builds up on a weapon from its striking end down the blade, wet and dark
-  bloody(amt){if(!this.bloodU)bloodWeapon(this);this.blood=Math.min(1,(this.blood||0)+amt);this.bloodT=simTime;}
+  bloody(amt,t){if(!this.bloodU)bloodWeapon(this);if(t!=null&&t>0){const w=Math.min(1,amt/((this.blood||0)+amt+1e-6));this.bandT=this.bandT==null?t:this.bandT+(t-this.bandT)*w;}else if(this.bandT==null&&this.def.kind==='blade')this.bandT=.85;this.blood=Math.min(1,(this.blood||0)+amt);this.bloodT=simTime;}
   worn(amt){if(this.def.kind==='fist')return;if(!this.bloodU)bloodWeapon(this);this.wear=Math.min(1,(this.wear||0)+amt);}
   dispose(){scene.remove(this.mesh);this.unstick();if(this.rb&&PW){for(const c of this.cols)PHC.delete(c.handle);PW.removeRigidBody(this.rb);this.rb=null;}}
 }
@@ -11220,21 +11220,25 @@ function ripOut(s,B,A,dmg,ent){
   if(B.alive){if(!B.ragdoll){B.stagger=Math.max(B.stagger,.35);B.addFlinch(_v.copy(s.axis).negate(),.12);}B.addBleed(.9,8);B.damage(dmg,A,'torn open');}
   if(A&&A.isPlayer&&noteCd<=0){note('Torn free','red');noteCd=1;}
 }
+const BLADE_BAND=!/[?&]noband\b/.test(location.search);
 function bloodWeapon(s){
-  const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwE:{value:V(1,0,0)},uSwL:{value:s.len},uBlood:{value:0},uDry:{value:0},uWear:{value:0},uReach:{value:s.def.kind==='blade'?.78:s.def.kind==='spear'?.2:.32}};s.bloodU=U;const cache=new Map();
+  const U={uSwO:{value:V()},uSwA:{value:V(0,1,0)},uSwE:{value:V(1,0,0)},uSwL:{value:s.len},uBlood:{value:0},uDry:{value:0},uWear:{value:0},uReach:{value:s.def.kind==='blade'?.78:s.def.kind==='spear'?.2:.32},uBand:{value:-1}};s.bloodU=U;const cache=new Map();
   s.mesh.traverse(o=>{if(!o.isMesh||!o.material)return;if(!cache.has(o.material)){const m=o.material.clone(),pre=o.material.onBeforeCompile,pk=o.material.customProgramCacheKey();
     m.onBeforeCompile=(sh,r)=>{pre.call(m,sh,r);Object.assign(sh.uniforms,U);
       sh.vertexShader='varying vec3 vWPos,vLoc;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvLoc=position;').replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
-      sh.fragmentShader='varying vec3 vWPos,vLoc;uniform vec3 uSwO,uSwA,uSwE;uniform float uSwL,uBlood,uDry,uWear,uReach;\nfloat bvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);float a=fract(sin(dot(i,vec2(127.1,311.7)))*43758.55),b=fract(sin(dot(i+vec2(1,0),vec2(127.1,311.7)))*43758.55),c=fract(sin(dot(i+vec2(0,1),vec2(127.1,311.7)))*43758.55),d=fract(sin(dot(i+vec2(1,1),vec2(127.1,311.7)))*43758.55);return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}\n'+sh.fragmentShader
+      sh.fragmentShader='varying vec3 vWPos,vLoc;uniform vec3 uSwO,uSwA,uSwE;uniform float uSwL,uBlood,uDry,uWear,uReach,uBand;\nfloat bvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);float a=fract(sin(dot(i,vec2(127.1,311.7)))*43758.55),b=fract(sin(dot(i+vec2(1,0),vec2(127.1,311.7)))*43758.55),c=fract(sin(dot(i+vec2(0,1),vec2(127.1,311.7)))*43758.55),d=fract(sin(dot(i+vec2(1,1),vec2(127.1,311.7)))*43758.55);return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}\n'+sh.fragmentShader
       .replace('#include <color_fragment>',`#include <color_fragment>
         // blood in the weapon's own frame: it starts at the point and works down toward the hand, in streaks that run along the blade,
         // thick and near-black where it pools, a thin red film at its edges with the steel showing through; wet it shines, dry it goes brown and matte
         vec3 bd=vWPos-uSwO;float bAl=dot(bd,uSwA)/uSwL,bE=dot(bd,uSwE),bT=dot(bd,cross(uSwA,uSwE));
         float st=bvn(vec2(bAl*uSwL*7.,bE*70.+bT*40.))*.6+bvn(vec2(bAl*uSwL*23.,bE*190.+bT*90.))*.4,sp=bvn(vec2(bAl*uSwL*60.,bE*260.+bT*170.));
         float reach=1.-uBlood*uReach,bF=smoothstep(reach-.04,reach+.12,bAl+(st-.5)*.32)*smoothstep(.08,.16,bAl);
-        float bM=min(1.,uBlood*4.)*bF*smoothstep(.25,.55,st+bF*.35)+smoothstep(.82,.9,sp)*min(1.,uBlood*2.)*smoothstep(.1,.3,bAl)*.8;bM=clamp(bM,0.,1.);
-        float thick=smoothstep(.35,.9,bM*(.6+.6*st));
-        vec3 bc=mix(diffuseColor.rgb*vec3(.26,.016,.012),vec3(.07,.003,.003),thick);bc=mix(bc,mix(diffuseColor.rgb*vec3(.3,.12,.08),vec3(.05,.02,.013),thick),uDry);   // a thin film tints the steel; thick blood hides it
+        if(uBand>=0.){   /* (Build 314) blood lies where the blade went in (uBand, the hit's place along it) and spreads from there with more of it, with runs down toward the hand; it covered the whole outer blade evenly and read as pink paint */
+          float w=.06+uBlood*.3,dB=abs(bAl-uBand+(st-.5)*.12);bF=(1.-smoothstep(w*.5,w,dB))*smoothstep(.06,.14,bAl);
+          float run=smoothstep(.62,.8,bvn(vec2(bE*55.+bT*30.,3.)))*smoothstep(uBand-.05-uBlood*.3,uBand,bAl)*step(bAl,uBand)*min(1.,uBlood*2.5);bF=max(bF,run*.9);}
+        float bM=min(1.,uBlood*3.)*bF*smoothstep(.25,.55,st+bF*.35)+smoothstep(.85,.92,sp)*min(1.,uBlood*2.)*smoothstep(.1,.3,bAl)*.7;bM=clamp(bM,0.,1.);
+        float thick=smoothstep(.45,.95,bM*(.55+.6*st));
+        vec3 bc=uBand>=0.?mix(diffuseColor.rgb*vec3(.5,.07,.05),vec3(.055,.004,.003),thick):mix(diffuseColor.rgb*vec3(.26,.016,.012),vec3(.07,.003,.003),thick);bc=mix(bc,mix(diffuseColor.rgb*vec3(.3,.12,.08),vec3(.05,.02,.013),thick),uDry);   // a thin film tints the steel; thick blood hides it
         diffuseColor.rgb=mix(diffuseColor.rgb,bc,bM);`)
       .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(roughnessFactor,mix(mix(.55,.38,thick),.8,uDry),bM);   /* (Build 267) glossy blood on a blade mirrored the blue sky and read as purple */')
       .replace('#include <metalnessmap_fragment>',`#include <metalnessmap_fragment>
@@ -11242,7 +11246,7 @@ function bloodWeapon(s){
           float s1=pow(abs(sin(dot(L,vec3(410.,230.,120.))+2.*sin(dot(L,vec3(37.,-61.,23.))))),220.),s2=pow(abs(sin(dot(L,vec3(-190.,350.,260.))+2.*sin(dot(L,vec3(-29.,17.,53.))))),260.);
           float nk=step(.94,fract(sin(dot(floor(L*170.),vec3(12.9898,78.233,37.719)))*43758.5453))*wm,sc=clamp(s1+s2,0.,1.)*wm;
           diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*1.4+.05,sc*.8)*(1.-nk*.5);roughnessFactor=mix(roughnessFactor,.65,max(sc*.55,nk*.6)); }
-        metalnessFactor=mix(metalnessFactor,0.,bM);`);};
+        metalnessFactor=mix(metalnessFactor,0.,uBand>=0.?max(thick,uDry*bM):bM);   /* (Build 314) a thin film keeps the steel's shine under it, so it reads as wet red steel */`);};
     m.customProgramCacheKey=()=>'bm-blood|'+pk;cache.set(o.material,m);}o.material=cache.get(o.material);});
 }
 // where a blade comes to rest on a body. The hit capsules are a little fuller than the flesh (a blow registers as the edge arrives),
@@ -11428,7 +11432,7 @@ function resolveHit(A,B,cap,t,P,pv){if(A&&A.sword)A.sword._px=1;
     if(sev==='Head'){B.lastHitBy=A;B.lastHitT=simTime;B.die(A,'beheaded',imp,P);tell(A,'Beheaded','red');}
     else{tell(A,'Dismembered','red');if(sev.includes('Leg')){B.lastHitBy=A;B.lastHitT=simTime;B.goDown(A);}if(B.alive){(B._blowD||(B._blowD=new THREE.Vector3())).copy(dir);B._blowT=simTime;B.damage(body,A,'dismembered');}}
   } else {
-    if(!glance&&dmg>4&&B.undead!=='skel'){addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');if(mode!=='flat'&&mode!=='haft'&&B.prot(cap.zone)<.5)s.bloody(Math.min(.5,dmg/55));}
+    if(!glance&&dmg>4&&B.undead!=='skel'){addWound(B,B.caps.indexOf(cap),P,s.axis,dmg,mode==='cut'?'cut':mode==='thrust'||mode==='poke'?'stab':'bruise');if(mode!=='flat'&&mode!=='haft'&&B.prot(cap.zone)<.5)s.bloody(Math.min(.5,dmg/55),t);}
     (B._blowD||(B._blowD=new THREE.Vector3())).copy(dir);B._blowT=simTime;B.damage(organ?dmg:body,A,organ&&organ.cause?organ.cause:W.kind==='fist'?'beaten':mode==='thrust'?'run through':mode==='blunt'?'crushed':'cut down');
     if(organ&&B.alive)organHurt(A,B,organ,dmg,dir,P);
     if(B.alive&&!glance&&dmg>4){   // where it landed decides what it does: the wound bleeds, a limb loses its use, a hand goes to the hurt
@@ -11990,8 +11994,8 @@ function ambTick(){if(!AC||!torchGain)return;const cp=camera.position;let dm=1e9
   torchGain.gain.value=lerp(torchGain.gain.value,state==='loading'?0:Math.pow(clamp(1-dm/10,0,1),2)*.55,.08);
   cricketGain.gain.value=lerp(cricketGain.gain.value,curMap==='village'&&state!=='loading'?.16:0,.03);
   if(roomVerb)roomVerb.gain.value=lerp(roomVerb.gain.value,state==='loading'?0:(ROOM_ECHO[curMap]||0),.05);
-  if(CRYPT&&state==='playing'&&AC.currentTime>dripT){dripT=AC.currentTime+2.5+Math.random()*7;   // water finding its way down, somewhere off in the dark
-    const t=AC.currentTime+.02,o=AC.createOscillator(),g=AC.createGain(),pn=AC.createStereoPanner?AC.createStereoPanner():null,f0=1100+Math.random()*1500,v=.012+Math.random()*.03;o.type='sine';o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f0*.55,t+.05);
+  if(CRYPT&&state==='playing'&&AC.currentTime>dripT){dripT=AC.currentTime+10+Math.random()*18;   // water finding its way down, somewhere off in the dark
+    const t=AC.currentTime+.02,o=AC.createOscillator(),g=AC.createGain(),pn=AC.createStereoPanner?AC.createStereoPanner():null,f0=1100+Math.random()*1500,v=.005+Math.random()*.01;o.type='sine';o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f0*.55,t+.05);
     g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.09);o.connect(g);if(pn){pn.pan.value=Math.random()*1.6-.8;g.connect(pn);pn.connect(master);}else g.connect(master);o.start(t);o.stop(t+.12);}}
 
 // ================================================================ ambience (Build 230)
@@ -12051,19 +12055,19 @@ function ambBeds(dt){const X=AMBX,au=!!(AC&&X.wind),on=state!=='loading',t=au?AC
   else if(MILL){wind=.02*(.5+gu);wf=260;}
   else if(CRYPT){wind=.004;howl=.02*gu*gu+.003;drone=.03;if(au)X.howl.fl.frequency.value=300+260*gu+40*Math.sin(t*.23);}
   const rec=au&&RECAMB&&(state==='playing'||state==='attract'||state==='countdown'||state==='ended');let dayOk=false,duskOk=false;
-  if(au&&RECAMB){const R=k=>rec?k:0;dayOk=recSet('day',R(day?.55*(day[2]||.5)+.1:0));duskOk=recSet('dusk',R(curMap==='village'?.5:0));const cr=recSet('crypt',R(CRYPT?.55:0),.02);recSet('drips',R(CRYPT?.35:0),.02);
-    if(cr)drone*=.15;const shp=recSet('ship',R(S?.45+.25*storm:0));if(S&&recSet('rain',R(rain>0?rain*7:0)))rain=0;recSet('wheel',R(MILL&&MILL.open!==false?.5:0));X._shp=shp;}
+  if(au&&RECAMB){const R=k=>rec?k:0;dayOk=recSet('day',R(day?(.55*(day[2]||.5)+.1)*.45:0));duskOk=recSet('dusk',R(curMap==='village'?.22:0));const cr=recSet('crypt',R(CRYPT?.3:0),.02);   /* (Build 314, the player: too loud and too often) every recorded bed at about 45% of Build 313, and no drip loop at all */
+    if(cr)drone*=.15;const shp=recSet('ship',R(S?.2+.13*storm:0));if(S&&recSet('rain',R(rain>0?rain*3.5:0)))rain=0;recSet('wheel',R(MILL&&MILL.open!==false?.24:0));X._shp=shp;}
   if(au){set(X.wind,wind);X.wind.fl.frequency.value=lerp(X.wind.fl.frequency.value,wf,.03);}if(au){set(X.leaves,leaves);set(X.sea,sea,.15);set(X.rain,rain);set(X.howl,howl);set(X.drone,drone,.02);}
   if(state!=='playing'&&state!=='attract'){X.flash=0;return;}
   const due=(k,a,b)=>{if(X.nx[k]==null)X.nx[k]=t+a*Math.random()+2;if(t<X.nx[k])return false;X.nx[k]=t+a+Math.random()*(b-a);return true;};
-  if(day&&day[2]){const r=day[2];if(due('bird',5/r,16/r)&&!dayOk)ambChirp(.012+Math.random()*.014);if((curMap==='breach'||curMap==='raid'||curMap==='road'||dayOk&&curMap!=='colosseum')&&due('crow',dayOk?22:35,dayOk?60:90)){const n=1+(Math.random()*3|0),pan=Math.random()*1.6-.8;if(!recShot('rook',.05+Math.random()*.05,pan))ambCrow(.012+Math.random()*.01);else for(let i=1;i<n;i++)setTimeout(()=>recShot('rook',.04+Math.random()*.04,pan),i*(380+Math.random()*300));}}
-  else if(curMap==='village'){if(due('owl',28,70)&&!recShot('owl',.07))ambOwl(.022);}
-  else if(S){if(storm<.6&&due('gull',9,26))ambGull(.012+Math.random()*.012);if(due('creak',X._shp?9:3.5,X._shp?24:10))ambCreak((.02+.03*storm)*(X._shp?.6:1),true);
+  if(day&&day[2]){const r=day[2];if(due('bird',8/r,24/r)&&!dayOk)ambChirp(.012+Math.random()*.014);if((curMap==='breach'||curMap==='raid'||curMap==='road'||dayOk&&curMap!=='colosseum')&&due('crow',dayOk?60:50,dayOk?150:120)){const n=1+(Math.random()*2|0),pan=Math.random()*1.6-.8;if(!recShot('rook',.018+Math.random()*.018,pan))ambCrow(.008+Math.random()*.006);else for(let i=1;i<n;i++)setTimeout(()=>recShot('rook',.015+Math.random()*.015,pan),i*(380+Math.random()*300));}}
+  else if(curMap==='village'){if(due('owl',60,150)&&!recShot('owl',.028))ambOwl(.014);}
+  else if(S){if(storm<.6&&due('gull',20,55))ambGull(.012+Math.random()*.012);if(due('creak',X._shp?16:7,X._shp?40:18))ambCreak((.014+.02*storm)*(X._shp?.6:1),true);
     if(storm>.45&&due('thunder',16-8*storm,34-14*storm)){const near=Math.random()<storm*.5;X.flash=near?1:.55;X.fl2=Math.random()<.5?.12+Math.random()*.1:0;X.thT=t+(near?.25+Math.random()*.4:1+Math.random()*2);X.thV=near?.5:.22+Math.random()*.12;X.thN=near;}}
   else if(curMap==='tavern'){if(due('creak',9,28))ambCreak(.012+Math.random()*.012);}
   else if(MILL){if(due('creak',7,20))ambCreak(.014,true);}
-  else if(CRYPT){if(due('chain',22,60))ambChain(.01+Math.random()*.012);if(due('moan',45,110))ambMoan(.012+Math.random()*.01);if(due('creak',30,80))ambCreak(.008,true);}
-  if(X.thT&&t>X.thT){X.thT=0;if(!recShot('thunder',X.thV*(X.thN?1.1:.7)))ambThunder(X.thV,X.thN);if(X.thN&&player)shake(.25);}
+  else if(CRYPT){if(due('chain',50,130))ambChain(.006+Math.random()*.006);if(due('moan',90,220))ambMoan(.007+Math.random()*.006);if(due('creak',60,160))ambCreak(.005,true);}
+  if(X.thT&&t>X.thT){X.thT=0;if(!recShot('thunder',X.thV*(X.thN?.65:.4)))ambThunder(X.thV,X.thN);if(X.thN&&player)shake(.25);}
   // lightning: the sky's lights jump and fall away; a second, fainter flicker often follows
   if(X.flash>0||X.fl2>0){const L=X.L;if(L&&S){const k=X.flash;moon.intensity=L.si+k*7;hemi.intensity=L.hi+k*2.2;}X.flash=Math.max(0,X.flash-dt*5.5);if(X.flash<=0&&X.fl2>0){X.fl2-=dt;if(X.fl2<=0){X.flash=.45;X.fl2=0;}}
     if(X.flash<=0&&X.fl2<=0&&X.L){moon.intensity=X.L.si;hemi.intensity=X.L.hi;}}

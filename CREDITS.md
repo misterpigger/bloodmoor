@@ -65,7 +65,6 @@ Every recorded sound in `sfx/` is released under **CC0 1.0** (public domain dedi
 - `amb-day.mp3`: sfx_amb_forest_spring_afternoon-01.wav by bajko (CC0) https://freesound.org/s/385280/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
 - `amb-dusk.mp3`: Sussex Woodland & Meadow Bird Sounds, Evening.MP3 by Vonora (CC0) https://freesound.org/s/269559/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
 - `amb-crypt.mp3`: Dark Dungeon Ambience by Kinoton (CC0) https://freesound.org/s/516566/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
-- `amb-drips.mp3`: Water_dripping_echoing.wav by deleted_user_2104797 (CC0) https://freesound.org/s/166326/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
 - `amb-ship.mp3`: ship_creak.mp3 by Walter_Odington (CC0) https://freesound.org/s/31574/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
 - `amb-rain.mp3`: Rain heavy 2 (rural) by jmbphilmes (CC0) https://freesound.org/s/200272/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
 - `amb-wheel.mp3`: water wheel mill in the forest 4 by rozhkovkirill (CC0) https://freesound.org/s/724851/  licence checked: http://creativecommons.org/publicdomain/zero/1.0/
