@@ -463,10 +463,10 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=318;
+const BUILD=319;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
-const UPRIGHT=!/[?&]nouprt/.test(location.search);const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
+const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -9727,6 +9727,7 @@ class Fighter{
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
     let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1)*(this.sword&&this.sword.def.id==='chest'?.9:1)*(this.ladCarry?.92:1)*(this.roadHold?(run?.45:.85):1)*(this.spdK||1);
+    if(DIRCAP&&run&&legs){const wl=Math.hypot(wish.x,wish.z);if(wl>.05){const c=this._wf/wl,cap=c>.55?99:c>0?2.6+(c/.55)*(c/.55)*1.7:2.6+.15*clamp(-c/.7,0,1);if(spd>cap)spd=cap;}}   /* (Build 319) sprinting is forward running: going sideways or back you step quick (sideways at most 2.6 m/s, back a little over walking pace), not run the run clip turned sideways or played backwards */
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -9889,7 +9890,7 @@ class Fighter{
       else if(arm.phase==='recover'){arm.t+=h;if(arm.t>.24)arm.phase='guard';}
       if(arm.phase==='punch')_g.copy(arm.tgt);
       else if(arm.phase==='charge'){const c=arm.charge;_g.copy(this.chest).addScaledVector(u,.19+.05*c).addScaledVector(f,.2-.17*c).addScaledVector(_r,(.15+.09*c)*sg);}
-      else _g.copy(this.chest).addScaledVector(u,FG.y).addScaledVector(f,FG.z).addScaledVector(_r,FG.x*sg);
+      else{_g.copy(this.chest).addScaledVector(u,FG.y).addScaledVector(f,FG.z).addScaledVector(_r,FG.x*sg);if(arm.phase==='guard')this.fistRun(_g,sg,u,f);}
       const k=(arm.phase==='punch'?450+750*arm.power:230)*clamp((simTime-(arm.initT||-9))/.5,.06,1),c=2*Math.sqrt(k)*(arm.phase==='punch'?.7:.95);
       _a.subVectors(_g,arm.pos).multiplyScalar(k).addScaledVector(arm.vel,-c).addScaledVector(this.vel,c).add(this._fba);arm.vel.addScaledVector(_a,h);arm.pos.addScaledVector(arm.vel,h);if(!(arm.phase==='punch'&&!arm.hit))fistSolid(this,arm);
       _v.subVectors(arm.pos,sh);const rmax=reach+(arm.phase==='punch'?.12:0);if(_v.length()>rmax){_v.setLength(rmax);arm.pos.copy(sh).add(_v);}
@@ -9897,6 +9898,9 @@ class Fighter{
     }
   }
   // Half Sword style: hold a mouse button and that fist follows the mouse; the punch is however hard you swing it
+  /* (Build 319) running with bare fists: the guard comes down to the ribs and the arms pump against the legs, elbows in */
+  fistRun(g,sg,u,f){if(!RUNARMS)return;const sp=Math.hypot(this.vel.x,this.vel.z);const fc=(this.vel.x*f.x+this.vel.z*f.z)/Math.max(sp,1e-3);const k=clamp((sp-2.4)/1.3,0,1)*clamp((fc-.3)/.4,0,1)*(this.stagger>0?.3:1);this._frk=k;if(k<.01)return;
+    const sw=-(this.armSw||0)*sg;this.right(_fr4);_fr3.copy(this.chest).addScaledVector(_fr4,.15*sg).addScaledVector(u,-.13+.1*Math.max(0,sw)).addScaledVector(f,.24+.18*sw);g.lerp(_fr3,k);}
   stepFistFree(h,side,arm,held,sg,sh,f,u,reach){
     const c=arm.c;
     if(held&&!arm.wasHeld&&!this.remote){c.x=.05*sg;c.y=.25;c.z=.25;}arm.wasHeld=held;
@@ -9906,7 +9910,7 @@ class Fighter{
       _v.copy(f).multiplyScalar(Math.cos(az)).addScaledVector(_r,Math.sin(az));_v.multiplyScalar(Math.cos(el)).addScaledVector(u,Math.sin(el));
       _g.copy(sh).addScaledVector(_v,ext).addScaledVector(_r,-.06*sg);
     } else {
-      _g.copy(this.chest).addScaledVector(_r,c.x).addScaledVector(u,c.y).addScaledVector(f,c.z);
+      _g.copy(this.chest).addScaledVector(_r,c.x).addScaledVector(u,c.y).addScaledVector(f,c.z);this.fistRun(_g,sg,u,f);
       _v.subVectors(_g,sh);if(_v.length()>reach){_v.setLength(reach);_g.copy(sh).add(_v);}
     }
     if(arm.tgtW){(arm.tgtV||(arm.tgtV=V())).lerp(_v.subVectors(_g,arm.tgtW).multiplyScalar(1/h),.08);}
@@ -10574,7 +10578,7 @@ class Fighter{
       const cs=this.clutchT>simTime&&this.clutchP?(this.limbs.armL.sev||this.limbs.armL.dead?'R':'L'):null;
       for(const side of ['R','L']){const arm=this.fists[side],lm=this.limbs[side==='R'?'armR':'armL'];if(!arm.init||lm.sev||lm.dead)continue;const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
         if(side===cs){this.clutchEase(_t2,side==='R'?'Right':'Left',dt);_t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);_hv.copy(_f).negate();gripHand(B,side==='R'?'Right':'Left',_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);arm.pos.copy(_t2);continue;}
-        _t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();let hp=arm.pos;{const cw=this.isPlayer?0:(this.calmW||0),e=cw*cw*(3-2*cw);if(e>.01){_t3.copy(sh).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,.05*sg);hp=_t3.lerpVectors(arm.pos,_t3.clone(),e);_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();}}   // a calm bot's fists hang at its sides
+        {const rk=this._frk||0;_t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,(.6-.38*rk)*sg).addScaledVector(_f,-.1-.3*rk);}this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();let hp=arm.pos;{const cw=this.isPlayer?0:(this.calmW||0),e=cw*cw*(3-2*cw);if(e>.01){_t3.copy(sh).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,.05*sg);hp=_t3.lerpVectors(arm.pos,_t3.clone(),e);_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();}}   // a calm bot's fists hang at its sides
         gripHand(B,side==='R'?'Right':'Left',hp,_hv,Y_AXIS,_t1,this.armLen,arm.held&&!arm.grab&&arm.vel.length()<3?.35:1.35);   // open while reaching, closed to grab or punch
 }
     }

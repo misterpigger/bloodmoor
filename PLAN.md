@@ -50,6 +50,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 316: sparks few and small, blade blood band and cast-off off, no duel theme, arena without birds and with a crowd that does not sing, recorded splats and gurgles
 - 317: clash ring removed (the "cooking pot" bonk)
 - 318: upright on the move (run lean 17→9°, head no longer looks at the ground)
+- 319: sprinting only forward (side-step and backpedal instead of a turned or reversed run), fists pump close in when running.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
