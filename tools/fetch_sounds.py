@@ -34,25 +34,29 @@ def keep(meta, tag):
     print("  ok", fn, meta["title"], meta["duration"]); return True
 os.makedirs(OUT, exist_ok=True)
 index = []
-for q in [s.strip() for s in os.environ.get("QUERIES", "").split("|") if s.strip()]:
-    url = "https://freesound.org/search/?" + urllib.parse.urlencode({"q": q, "f": 'license:"Creative Commons 0"', "s": "Downloads (most first)"})
+def do_query(q):
+    url = "https://freesound.org/search/?" + urllib.parse.urlencode({"q": q, "f": 'license:"Creative Commons 0"'})
     print("search", q)
     try:
         html = get(url)
     except Exception as e:
-        print("  search failed", e); continue
+        print("  search failed", e); return []
     ids = []
     for m in re.finditer(r'/people/[^/"]+/sounds/(\d+)/', html):
         if m.group(1) not in ids: ids.append(m.group(1))
-    n = 0
+    got = []
     for sid in ids:
-        if n >= PER: break
+        if len(got) >= PER: break
         try:
             meta = sound(sid)
         except Exception as e:
             print("  fail", sid, e); continue
-        if keep(meta, re.sub(r"\W+", "_", q)): index.append(meta); n += 1
-        time.sleep(1)
+        if keep(meta, re.sub(r"\W+", "_", q)): got.append(meta)
+    return got
+from concurrent.futures import ThreadPoolExecutor
+QS = [s.strip() for s in os.environ.get("QUERIES", "").split("|") if s.strip()]
+with ThreadPoolExecutor(int(os.environ.get("THREADS", "8"))) as ex:
+    for got in ex.map(do_query, QS): index.extend(got)
 for sid in os.environ.get("IDS", "").split():
     try:
         meta = sound(sid)
