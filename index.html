@@ -463,10 +463,10 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=317;
+const BUILD=318;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
-const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
+const UPRIGHT=!/[?&]nouprt/.test(location.search);const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -10504,7 +10504,7 @@ class Fighter{
     if(!LIFE_OFF&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&dt>0&&dt<.2&&B.Spine1){const L=this._life||(this._life={t:Math.random()*50,y:0,p:0,r:0,ph:(this.id||0)*1.7,k:.8+((this.id||0)*37%10)/25});
       L.t+=dt*L.k;const sp=Math.hypot(this.vel.x,this.vel.z),still=clamp(1-sp/1.2,0,1),cw=this.calmW||0,gd=(1-cw)*still,cm=this.commit&&this.sword&&this.sword.def.kind!=='fist'?1:0;
       let y=gd*(.07*Math.sin(L.t*.9+L.ph)+.03*Math.sin(L.t*2.3+L.ph*2))-(this.armSw||0)*.07*(1-cm),p=gd*(.018*Math.sin(L.t*1.4+L.ph)),r=gd*(.03*Math.sin(L.t*.7+L.ph*3));
-      {const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12&&!this.knocked&&!(this.stagger>0);if(gr)p+=clamp(sp/1.4,0,1)*.04+clamp((sp-2.6)/1.6,0,1)*.02;}   /* walking, a man leans a little into his going (the clips walk bolt upright) */
+      {const gr=this.pos.y-groundY(this.pos.x,this.pos.z,this.pos.y+.3)<.12&&!this.knocked&&!(this.stagger>0);if(gr)p+=UPRIGHT?-(clamp(sp/1.4,0,1)*.02+clamp((sp-2.6)/1.6,0,1)*.1):clamp(sp/1.4,0,1)*.04+clamp((sp-2.6)/1.6,0,1)*.02;}   /* (Build 318) on the move the trunk is carried upright: the run clip already pitches it forward ~13 degrees and the old lean on top read as hunched (UPRIGHT; ?nouprt is Build 258's lean into the going) */
       if(this.sword&&this.sword.Hv&&this.sword.def.kind!=='fist'&&(cm||LOOSE)){this.fwd(_f);this.right(_r);_wl1.copy(this.sword.Hv).sub(this.vel);const lk=LOOSE?(cm?1:.4*(1-cw)):1; /* (Build 268) the trunk goes with the weapon: thrown forward and over into a committed cut, leaning back as the hands are drawn up and back, and a little in guard too */ if(LOOSE){p+=lk*clamp(_wl1.dot(_f)*.04-_wl1.y*.025+(cm?.04:0),-.12,.2);r+=lk*clamp(_wl1.dot(_r)*.03,-.14,.14);}else{p+=clamp(_wl1.dot(_f)*.03-_wl1.y*.022,-.1,.2);r+=clamp(_wl1.dot(_r)*.022,-.14,.14);}}
       const e=1-Math.exp(-8*dt);L.y=lerp(L.y,y,e);L.p=lerp(L.p,p,e);L.r=lerp(L.r,r,e);
       if(Math.abs(L.y)+Math.abs(L.p)+Math.abs(L.r)>.003){this.fwd(_f);this.right(_r);B.Spine1.parent.getWorldQuaternion(_qr2).invert();
@@ -10513,11 +10513,15 @@ class Fighter{
     /* (Build 252) carriage: the upper back rounds a little, the head is pushed ahead of the chest with the face kept level, and the shoulders roll
        forward and drop, each man by his own amount (postureOf). Drawn only, after cacheBody, so aim and reach don't move; the arms are posed
        onto the weapon after it */
-    if(POSTURE&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&B.Spine2&&B.Neck&&B.Head&&B.LeftShoulder&&B.RightShoulder){const pr=postureOf(this),mv=clamp(Math.hypot(this.vel.x,this.vel.z)/3.5,0,1),hk=pr.h*(1-.35*mv)*(1-(this.duck||0));
-      _qr.setFromAxisAngle(X_AXIS,hk);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,pr.n);B.Neck.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,-(pr.n+hk)*.8);B.Head.quaternion.premultiply(_qr);updSub(B.Spine2);
+    if(POSTURE&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&B.Spine2&&B.Neck&&B.Head&&B.LeftShoulder&&B.RightShoulder){const pr=postureOf(this),mv=clamp(Math.hypot(this.vel.x,this.vel.z)/3.5,0,1),hk=pr.h*(1-(UPRIGHT?.9:.35)*mv)*(1-(this.duck||0)),nk=pr.n*(UPRIGHT?1-.8*mv:1),sk=UPRIGHT?1-.6*mv:1;
+      _qr.setFromAxisAngle(X_AXIS,hk);B.Spine2.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,nk);B.Neck.quaternion.premultiply(_qr);_qr.setFromAxisAngle(X_AXIS,-(nk+hk)*.8);B.Head.quaternion.premultiply(_qr);updSub(B.Spine2);
       this.fwd(_f);this.right(_r);for(const [bn,sd] of [['LeftShoulder',-1],['RightShoulder',1]]){const b=B[bn];b.parent.getWorldQuaternion(_qr2).invert();_poA.copy(_r).multiplyScalar(sd);
-        _poB.crossVectors(_poA,_f).normalize().multiplyScalar(pr.s).addScaledVector(_poC.crossVectors(_poA,Y_AXIS).normalize(),-pr.d);const ang=_poB.length();
+        _poB.crossVectors(_poA,_f).normalize().multiplyScalar(pr.s*sk).addScaledVector(_poC.crossVectors(_poA,Y_AXIS).normalize(),-pr.d*sk);const ang=_poB.length();
         if(ang>1e-4){_poB.multiplyScalar(1/ang).applyQuaternion(_qr2);_qr.setFromAxisAngle(_poB,ang);b.quaternion.premultiply(_qr);updSub(b);}}}
+    /* (Build 318) on the move the eyes look where he's going, not at the ground: the head's forward pitch is taken most of the way out as speed rises */
+    if(UPRIGHT&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&B.Head&&B.HeadTop_End&&!(this.duck>.05)){const mv=clamp((Math.hypot(this.vel.x,this.vel.z)-.5)/2.5,0,1);
+      if(mv>.01){this.fwd(_f);upd1(B.Head);upd1(B.HeadTop_End);_poA.setFromMatrixPosition(B.HeadTop_End.matrixWorld).sub(_poC.setFromMatrixPosition(B.Head.matrixWorld));const a=Math.atan2(_poA.dot(_f),_poA.y)-.02;
+        if(a>0){const k=-a*.8*mv;B.Head.parent.getWorldQuaternion(_qr2).invert();_poB.crossVectors(Y_AXIS,_f).normalize().applyQuaternion(_qr2);_qr.setFromAxisAngle(_poB,k);B.Head.quaternion.premultiply(_qr);updSub(B.Head);}}}
     {const sp2=Math.hypot(this.vel.x,this.vel.z);let sw=0;if(sp2>.25&&B.LeftFoot&&B.RightFoot&&this.alive&&!this.ragdoll){this.fwd(_f);B.LeftFoot.getWorldPosition(_wl1);B.RightFoot.getWorldPosition(_wl2);sw=clamp(_wl2.sub(_wl1).dot(_f)/.55,-1,1)*clamp(sp2/1.6,0,1);}
       this.armSw=lerp(this.armSw||0,sw,1-Math.exp(-14*dt));}   // + = right foot ahead: the arms swing against the legs when walking easy
     if(this.sword&&this.mainArm){
