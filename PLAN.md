@@ -43,6 +43,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 309: bot temper after hits, skirts drape over a raised knee, crypt tables set square
 - 310: Build 305 draped garments back (with the raised-knee drape)
 - 311: deep flesh cuts slow the blade more
+- 312: Pit edge: a foot on the boards holds you, a body draped over the edge stays on
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
