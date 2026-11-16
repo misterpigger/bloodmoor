@@ -463,10 +463,10 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=322;
+const BUILD=323;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
-const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
+const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const FRUN=!/[?&]nofrun/.test(location.search),FRUN_P={cyc:.55,cyk:.22,dt:.26,cen:-.09,h0:.12,hk:.07,w:.09,bob:2,lo:-5};try{const m=location.search.match(/[?&]frunp=([^&]*)/);if(m)Object.assign(FRUN_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -10296,7 +10296,7 @@ class Fighter{
       if(gw>.01||cw>.01){this._gT=((this._gT||Math.random()*5)+dt);
         for(const [clip,w,tm] of [[GUARD.guard,gw,this._gT%GUARD.guard.d],[GUARD.crouchwalk,cw,(A.walk.time/A.walk.getClip().duration)*GUARD.crouchwalk.d]]){if(!clip||w<=.01)continue;
           for(const t of clip.tracks){const bn=B[t.bone];if(!bn)continue;const v=t.ip.evaluate(tm);_qq.set(v[0],v[1],v[2],v[3]);bn.quaternion.slerp(_qq,w);}}}}
-    if(this.pos.y<.02&&sp>.6&&this.slideT<=0&&(this.gaitW||0)<.5){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
+    if(this.pos.y<.02&&sp>.6&&this.slideT<=0&&(this.gaitW||0)<.5&&!((this._fr&&this._fr.w)>.5)&&!((this._dr&&this._dr.w)>.5)){const a=wr>ww?A.run:A.walk;const ph=((a.time/a.getClip().duration)%1+1)%1;const half=ph<.5?0:1;if(half!==this.stepHalf){this.stepHalf=half;if(this.isPlayer||this.pos.distanceToSquared(camera.position)<500)sStep(this.pos,(this.isPlayer?.45:.3)*(this.crouch?.4:1),wr>ww,this);}}
     for(const b of this.severedBones)b.scale.setScalar(1e-4);
     if(this.isPlayer&&!this.limbs.head.sev)fpHead(this,camMode==='fp'||camNearHd&&camMode!=='fp');
     let off=0;if(sp>.3){off=wrapA(Math.atan2(this.vel.x,this.vel.z)-this.yaw);if(back)off=wrapA(off+Math.PI);off=clamp(off,-1.1,1.1)*(1-(this.sideW||0));}
@@ -10487,6 +10487,21 @@ class Fighter{
           for(const sn of ['Left','Right'])feet[sn].lerp(pos[sn].p,D.w);
           /* the body rides low and springs: down onto each landing, up through the moment in the air; backpedalling the knees stay bent */
           B.Hips.position.y-=D.w*(3.5+sk*3.5+(1-sk)*2.5+bob*(3.2-2.2*sk));
+          skelClean(B);}}
+      /* (Build 323) the forward run is worked out from a phase too: the run clip landed each foot on a straight leg far out in front and flicked the back heel up to the seat, and the physical fighter, whose muscles aim at it, made it worse. Each foot lands a little ahead of the hips on a bent knee, is on the ground for a third of the cycle, comes off behind, the heel rises to about knee height as the knee drives forward under the body, and it reaches out only at the end of the swing */
+      {const R=this._fr||(this._fr={ph:0,w:0});const fw=sp>.3?(this.vel.x*_f.x+this.vel.z*_f.z)/sp:0,ok=FRUN&&lockOK&&feet.Left&&feet.Right&&!this.pin&&kk<=0&&fw>.55&&!((this._dr&&this._dr.w)>.05);
+        R.w=lerp(R.w,ok?clamp((sp-2.5)/.7,0,1)*clamp((fw-.55)/.25,0,1):0,1-Math.exp(-10*dt));
+        if(R.w>.01&&sp>.3){const P_=FRUN_P;_drD.set(this.vel.x/sp,0,this.vel.z/sp);this.right(_r);
+          const cyc=P_.cyc+P_.cyk*sp,T=1/cyc,Dt=P_.dt,a=sp*Dt*T/2,hm=P_.h0+P_.hk*sp;
+          const ph0=R.ph;R.ph=(R.ph+dt*cyc)%1;const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ank=this.ankY||.08;let bob=0;
+          const path=(ph)=>{ph=((ph%1)+1)%1;if(ph<Dt){const u=ph/Dt;return [a-2*a*u,0,u];}const u=(ph-Dt)/(1-Dt),e=clamp((u-.08)/.86,0,1),x=-a+2*a*e*e*(3-2*e);return [x,hm*Math.sin(Math.PI*Math.pow(u,.7)),-1];};
+          for(const sn of ['Left','Right']){const sg=sn==='Right'?1:-1,off=sn==='Left'?0:.5,q=path(R.ph+off),qp=path(ph0+off);
+            _drP.copy(this.pos).addScaledVector(_drD,q[0]+P_.cen).addScaledVector(_r,sg*P_.w);
+            _drP.y=groundY(_drP.x,_drP.z,gy+.3)+ank+q[1];
+            if(q[2]>=0&&qp[2]<0&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(_drP,this.isPlayer?.22:.14,true,this);
+            if(q[2]>=0)bob+=Math.sin(Math.PI*q[2]);
+            feet[sn].lerp(_drP,R.w);}
+          B.Hips.position.y-=R.w*(P_.lo+bob*P_.bob);
           skelClean(B);}}
       const pnw=this.pin?this.pin.w:0;   /* (Build 259) kneeling astride: the feet go back and out either side of him, the knees come down to the floor beside his ribs */
       if(pnw>0){this.right(_r);const gy0=groundY(this.pos.x,this.pos.z,this.pos.y+.3);for(const s in feet){const sg=s==='Right'?1:-1;_t2.copy(this.pos).addScaledVector(_f,-.36).addScaledVector(_r,sg*.27);_t2.y=groundY(_t2.x,_t2.z,gy0+.3)+(this.ankY||.08)+.04;feet[s].lerp(_t2,pnw);}}
