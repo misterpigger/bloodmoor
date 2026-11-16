@@ -9,12 +9,12 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sounds"
 UA = {"User-Agent": "Mozilla/5.0 (bloodmoor asset fetch; CC0 sounds for a free game)"}
 PER = int(os.environ.get("PER", "4"))
 def get(url, binary=False):
-    for k in range(3):
+    for k in range(2):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=25) as r:
                 d = r.read(); return d if binary else d.decode("utf-8", "replace")
         except Exception as e:
-            err = e; time.sleep(2 + k * 3)
+            err = e; print('   get failed', url[:90], e); time.sleep(2)
     raise err
 def sound(sid):
     html = get(f"https://freesound.org/s/{sid}/")
