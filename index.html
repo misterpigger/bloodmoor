@@ -463,10 +463,10 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=319;
+const BUILD=320;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
-const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
+const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
 // fist guard at rest, from the chest: low and in front of the breast with the elbows down, as the period wrestling and fist-fighting books show it (Build 125; was up at the face)
 const FG={x:.14,y:-.02,z:.38};
 let CD_END=-1;   // simTime when the start countdown ends
@@ -9366,7 +9366,7 @@ const X_AXIS=V(1,0,0);
    and how often he shifts his weight from leg to leg when standing at ease (wf, ph). Drawn only. ?noposture turns it off */
 const POSTURE=!/[?&]noposture/.test(location.search),_poA=V(),_poB=V(),_poC=V();
 function postureOf(f){if(f._pr)return f._pr;let x=((f.id|0)*2654435761>>>0)||12345;const r=()=>((x=(x*1103515245+12345)>>>0)/4294967296);
-  return f._pr={h:.07+r()*.08,n:.07+r()*.08,s:.1+r()*.1,d:.03+r()*.05,wf:.35+r()*.3,ph:r()*6.28};}
+  return f._pr={h:CHESTUP?0:.07+r()*.08,n:.07+r()*.08,s:CHESTUP?.04+r()*.05:.1+r()*.1,d:.03+r()*.05,wf:.35+r()*.3,ph:r()*6.28};}
 let SIT=+(new URLSearchParams(location.search).get('sit')??.13),FEETF=+(new URLSearchParams(location.search).get('feetf')??.04);const _sitQ=new THREE.Quaternion(),_sitV=V();
 let fid=0;
 const _kt4=V(),_f=V(),_r=V(),_t1=V(),_t2=V(),_t3=V(),_hv=V(),_pl=V(),_og=V(),_ogu=V(),_ogc=V();
@@ -9727,7 +9727,7 @@ class Fighter{
     // walking pace for a fighter on guard, a heavy run, and armour that weighs you down
     const armN=ARMOR_SLOTS.reduce((n,k)=>n+(this.armor[k]?1:0),0);
     let spd=(dragB?.6:drag?.5:1)*(1-.55*legF)*(1-.18*(this.gut||0))*(1-armN*.035)*(run?4.3:this.crouch?1.2:2.35)*(this.commit?.82:1)*(this.stagger>0?.5:1)*(this.kickT>=0?.3:1)*(this._wade?.6:1)*(this.sword&&this.sword.def.id==='chest'?.9:1)*(this.ladCarry?.92:1)*(this.roadHold?(run?.45:.85):1)*(this.spdK||1);
-    if(DIRCAP&&run&&legs){const wl=Math.hypot(wish.x,wish.z);if(wl>.05){const c=this._wf/wl,cap=c>.55?99:c>0?2.6+(c/.55)*(c/.55)*1.7:2.6+.15*clamp(-c/.7,0,1);if(spd>cap)spd=cap;}}   /* (Build 319) sprinting is forward running: going sideways or back you step quick (sideways at most 2.6 m/s, back a little over walking pace), not run the run clip turned sideways or played backwards */
+    if(DIRCAP&&run&&legs){const wl=Math.hypot(wish.x,wish.z);if(wl>.05){const c=this._wf/wl,cap=c>.55||c<-.6?99:3.6+(c>0?(c/.55)*(c/.55)*.7:0);if(spd>cap)spd=cap;}}   /* (Build 320) a sideways sprint tops out at 3.6 m/s (a man can't gallop sideways as fast as he runs forward); the legs run it with their own gait (DRUN) */
     if(!legs)spd=0;
     if(run&&wish.lengthSq()>0)this.useStamina(4.3*h);
     // stumbling: when the weight is too far off the feet, the legs step to get back under it
@@ -9900,7 +9900,7 @@ class Fighter{
   // Half Sword style: hold a mouse button and that fist follows the mouse; the punch is however hard you swing it
   /* (Build 319) running with bare fists: the guard comes down to the ribs and the arms pump against the legs, elbows in */
   fistRun(g,sg,u,f){if(!RUNARMS)return;const sp=Math.hypot(this.vel.x,this.vel.z);const fc=(this.vel.x*f.x+this.vel.z*f.z)/Math.max(sp,1e-3);const k=clamp((sp-2.4)/1.3,0,1)*clamp((fc-.3)/.4,0,1)*(this.stagger>0?.3:1);this._frk=k;if(k<.01)return;
-    const sw=-(this.armSw||0)*sg;this.right(_fr4);_fr3.copy(this.chest).addScaledVector(_fr4,.15*sg).addScaledVector(u,-.13+.1*Math.max(0,sw)).addScaledVector(f,.24+.18*sw);g.lerp(_fr3,k);}
+    const sw=-(this.armSw||0)*sg;this.right(_fr4);_fr3.copy(this.chest).addScaledVector(_fr4,.15*sg).addScaledVector(u,-.3+.12*Math.max(0,sw)).addScaledVector(f,.42+.16*sw);g.lerp(_fr3,k);}
   stepFistFree(h,side,arm,held,sg,sh,f,u,reach){
     const c=arm.c;
     if(held&&!arm.wasHeld&&!this.remote){c.x=.05*sg;c.y=.25;c.z=.25;}arm.wasHeld=held;
@@ -10279,7 +10279,7 @@ class Fighter{
     const sp=Math.hypot(this.vel.x,this.vel.z);this.fwd(_f);const fc=this.vel.x*_f.x+this.vel.z*_f.z;const back=sp>.3&&fc<-.35*sp;
     let wi=1,ww=0,wr=0;if(sp>.15){if(sp<1.8){ww=clamp(sp/1.3,0,1);wi=1-ww;}else{const t=clamp((sp-1.8)/1.8,0,1);ww=1-t;wr=t;wi=0;}}if(this.slideT>0||simTime<(this._lgT||0)){wi=1;ww=wr=0;}   /* (Build 149: a lunge is a stance shift, not the start of a walk) */
     // stepping sideways or backing off, a fighter doesn't turn his hips and walk: he keeps square and steps, foot by foot (the plant code below takes the steps)
-    {this.right(_r);const lat=sp>.3?Math.abs(this.vel.x*_r.x+this.vel.z*_r.z)/sp:0,want=sp>.3&&sp<2.8&&(lat>.8||back)&&this.slideT<=0&&this.pos.y<.03?1:0;
+    {this.right(_r);const lat=sp>.3?Math.abs(this.vel.x*_r.x+this.vel.z*_r.z)/sp:0,want=sp>.3&&(sp<2.8||DRUN)&&(lat>.8||back)&&this.slideT<=0&&this.pos.y<.03?1:0;
       this.sideW=lerp(this.sideW||0,want,1-Math.exp(-8*dt));if(this.sideW>.01){const k=this.sideW;wi+=(ww+wr)*k;ww*=1-k;wr*=1-k;}}
     const A=this.acts;A.idle.setEffectiveWeight(wi);A.walk.setEffectiveWeight(ww);A.run.setEffectiveWeight(wr);
     // one shared stride: both clips run at the cadence the blended stride needs, with their heel strikes lined up,
@@ -10464,6 +10464,29 @@ class Fighter{
           if(k.on&&(!low||Math.hypot(t.x-k.p.x,t.z-k.p.z)>.24))k.on=false;
           k.w=clamp(k.w+(k.on?1:-1)*dt/.05,0,1);
           if(k.w>0){t.x+=(k.p.x-t.x)*k.w;t.z+=(k.p.z-t.z)*k.w;}}}
+      /* (Build 320) running sideways and backwards have their own gaits instead of the run clip turned 63° or played in reverse: sideways a gallop (the lead foot reaches out, the trailing one closes in behind it, a moment in the air), backwards a quick backpedal on bent knees, feet under the hips, each foot's path worked out from a phase and the speed and put down by the leg IK */
+      {const D=this._dr||(this._dr={ph:0,w:0,lw:0});this.right(_r);const lat=sp>.3?(this.vel.x*_r.x+this.vel.z*_r.z)/sp:0,dirOK=DRUN&&lockOK&&feet.Left&&feet.Right&&!this.pin&&kk<=0&&(Math.abs(lat)>.75||back);
+        D.w=lerp(D.w,dirOK?clamp((sp-1.7)/.6,0,1):0,1-Math.exp(-10*dt));
+        if(D.w>.01&&sp>.3&&feet.Left&&feet.Right){const sideK=clamp((Math.abs(lat)-.55)/.3,0,1);D.lw=lerp(D.lw,sideK,1-Math.exp(-8*dt));const sk=D.lw;
+          _drD.set(this.vel.x/sp,0,this.vel.z/sp);const lead=lat>0?'Right':'Left';
+          const cyc=sk*(1.9+.3*sp)+(1-sk)*(1.4+.25*sp),T=1/cyc,Dt=sk*.36+(1-sk)*.42,a=sp*Dt*T/2,h=sk*.1+(1-sk)*(.08+.015*sp);   /* cycles a second, stance share, half a stride, foot lift */
+          const ph0=D.ph;D.ph=(D.ph+dt*cyc)%1;const gy=groundY(this.pos.x,this.pos.z,this.pos.y+.3),ank=this.ankY||.08;let bob=0;
+          const path=(ph)=>{ph=((ph%1)+1)%1;if(ph<Dt){const u=ph/Dt;return [a-2*a*u,0,u];}const u=(ph-Dt)/(1-Dt),e=u*u*(3-2*u);return [-a+2*a*e,h*Math.sin(Math.PI*u),-1];};
+          const pos={};for(const sn of ['Left','Right']){const sg=sn==='Right'?1:-1;
+            /* backpedal: the feet alternate half a cycle apart, a hand's width either side; gallop: both feet keep the same rhythm, the trailing one a fifth of a cycle behind, lead and trail either side of the hips along the way he goes */
+            const off=sk*(sn===lead?0:-.2)+(1-sk)*(sn==='Left'?0:.5),q=path(D.ph+off),qp=path(ph0+off);
+            const cen=sk*(sn===lead?.13:-.13),alg=q[0]+cen;
+            _drP.copy(this.pos).addScaledVector(_drD,alg).addScaledVector(_r,(1-sk)*sg*.11);
+            if(sk>0)_drP.addScaledVector(_f,sk*sg*.02);
+            _drP.y=groundY(_drP.x,_drP.z,gy+.3)+ank+q[1];pos[sn]={p:_drP.clone(),al:alg,st:q[2]};
+            if(q[2]>=0&&qp[2]<0&&(this.isPlayer||this.pos.distanceToSquared(camera.position)<200))sStep(_drP,this.isPlayer?.2:.13,true,this);   /* a footfall where each foot comes down */
+            if(q[2]>=0)bob+=.5*Math.sin(Math.PI*q[2]);}
+          /* in a gallop the trailing foot closes in behind the lead one but never passes it */
+          if(sk>0){const tr=lead==='Right'?'Left':'Right',gap=pos[lead].al-pos[tr].al;if(gap<.17)pos[tr].p.addScaledVector(_drD,(gap-.17)*sk);}
+          for(const sn of ['Left','Right'])feet[sn].lerp(pos[sn].p,D.w);
+          /* the body rides low and springs: down onto each landing, up through the moment in the air; backpedalling the knees stay bent */
+          B.Hips.position.y-=D.w*(3.5+(1-sk)*2.5+bob*3.2);
+          skelClean(B);}}
       const pnw=this.pin?this.pin.w:0;   /* (Build 259) kneeling astride: the feet go back and out either side of him, the knees come down to the floor beside his ribs */
       if(pnw>0){this.right(_r);const gy0=groundY(this.pos.x,this.pos.z,this.pos.y+.3);for(const s in feet){const sg=s==='Right'?1:-1;_t2.copy(this.pos).addScaledVector(_f,-.36).addScaledVector(_r,sg*.27);_t2.y=groundY(_t2.x,_t2.z,gy0+.3)+(this.ankY||.08)+.04;feet[s].lerp(_t2,pnw);}}
       for(const s in feet){
@@ -10522,6 +10545,10 @@ class Fighter{
       this.fwd(_f);this.right(_r);for(const [bn,sd] of [['LeftShoulder',-1],['RightShoulder',1]]){const b=B[bn];b.parent.getWorldQuaternion(_qr2).invert();_poA.copy(_r).multiplyScalar(sd);
         _poB.crossVectors(_poA,_f).normalize().multiplyScalar(pr.s*sk).addScaledVector(_poC.crossVectors(_poA,Y_AXIS).normalize(),-pr.d*sk);const ang=_poB.length();
         if(ang>1e-4){_poB.multiplyScalar(1/ang).applyQuaternion(_qr2);_qr.setFromAxisAngle(_poB,ang);b.quaternion.premultiply(_qr);updSub(b);}}}
+    /* (Build 320) chest up: the clips and the carriage left the upper back rounded about 6-11° past the skeleton's own curve (Spine1-to-Spine2 against Spine2-to-Neck, 46° against 40° in the bind pose), the hunch the player kept seeing. Spine2 is turned back until that bend is the bind pose's again, drawn only (the arms are posed after this) */
+    if(CHESTUP&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&B.Spine1&&B.Spine2&&B.Neck&&!(this.duck>.05)){this.fwd(_f);this.right(_r);upd1(B.Spine1);upd1(B.Spine2);upd1(B.Neck);
+      _poA.setFromMatrixPosition(B.Spine2.matrixWorld).sub(_poC.setFromMatrixPosition(B.Spine1.matrixWorld));_poB.setFromMatrixPosition(B.Neck.matrixWorld).sub(_poC.setFromMatrixPosition(B.Spine2.matrixWorld));
+      const rel=Math.atan2(_poB.dot(_f),_poB.y)-Math.atan2(_poA.dot(_f),_poA.y),e=rel-.71;if(e>0){B.Spine2.parent.getWorldQuaternion(_qr2).invert();_poB.copy(_r).applyQuaternion(_qr2);_qr.setFromAxisAngle(_poB,Math.min(e,.4)*.9*(1-(this._pain||0)*.6));B.Spine2.quaternion.premultiply(_qr);updSub(B.Spine2);}}
     /* (Build 318) on the move the eyes look where he's going, not at the ground: the head's forward pitch is taken most of the way out as speed rises */
     if(UPRIGHT&&this.alive&&!this.ragdoll&&!this.climb&&!(this.isPlayer&&camMode==='fp')&&B.Head&&B.HeadTop_End&&!(this.duck>.05)){const mv=clamp((Math.hypot(this.vel.x,this.vel.z)-.5)/2.5,0,1);
       if(mv>.01){this.fwd(_f);upd1(B.Head);upd1(B.HeadTop_End);_poA.setFromMatrixPosition(B.HeadTop_End.matrixWorld).sub(_poC.setFromMatrixPosition(B.Head.matrixWorld));const a=Math.atan2(_poA.dot(_f),_poA.y)-.02;
@@ -10578,7 +10605,7 @@ class Fighter{
       const cs=this.clutchT>simTime&&this.clutchP?(this.limbs.armL.sev||this.limbs.armL.dead?'R':'L'):null;
       for(const side of ['R','L']){const arm=this.fists[side],lm=this.limbs[side==='R'?'armR':'armL'];if(!arm.init||lm.sev||lm.dead)continue;const sg=side==='R'?1:-1,sh=side==='R'?this.shR:this.shL;
         if(side===cs){this.clutchEase(_t2,side==='R'?'Right':'Left',dt);_t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,.6*sg).addScaledVector(_f,-.1);_hv.copy(_f).negate();gripHand(B,side==='R'?'Right':'Left',_t2,_hv,Y_AXIS,_t1,this.armLen,1.3);arm.pos.copy(_t2);continue;}
-        {const rk=this._frk||0;_t1.copy(sh).addScaledVector(Y_AXIS,-.75).addScaledVector(_r,(.6-.38*rk)*sg).addScaledVector(_f,-.1-.3*rk);}this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();let hp=arm.pos;{const cw=this.isPlayer?0:(this.calmW||0),e=cw*cw*(3-2*cw);if(e>.01){_t3.copy(sh).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,.05*sg);hp=_t3.lerpVectors(arm.pos,_t3.clone(),e);_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();}}   // a calm bot's fists hang at its sides
+        {const rk=this._frk||0;_t1.copy(sh).addScaledVector(Y_AXIS,-.75+.4*rk).addScaledVector(_r,(.6-.55*rk)*sg).addScaledVector(_f,-.1-.65*rk);}this.physPole(side,_t1,dt);_hv.copy(_f).addScaledVector(Y_AXIS,-.15).normalize();let hp=arm.pos;{const cw=this.isPlayer?0:(this.calmW||0),e=cw*cw*(3-2*cw);if(e>.01){_t3.copy(sh).addScaledVector(Y_AXIS,-.5).addScaledVector(_f,.07).addScaledVector(_r,.05*sg);hp=_t3.lerpVectors(arm.pos,_t3.clone(),e);_hv.lerp(_pl.copy(_f).multiplyScalar(.25).addScaledVector(Y_AXIS,-1),e).normalize();}}   // a calm bot's fists hang at its sides
         gripHand(B,side==='R'?'Right':'Left',hp,_hv,Y_AXIS,_t1,this.armLen,arm.held&&!arm.grab&&arm.vel.length()<3?.35:1.35);   // open while reaching, closed to grab or punch
 }
     }
