@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=321;
+const BUILD=322;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -8658,7 +8658,7 @@ let ARMS=/[?&]arms/.test(location.search)||!/[?&]noarms/.test(location.search)&&
    or a body really moves him; the fighter's place follows the body (`pfSync`); what is drawn is the body as it is. Hand and weapon are the
    Build 154 physical weapon. Only the player and the nearest foe get it (it costs ~1 ms a fighter). */
 let PF=/[?&]pf\b/.test(location.search)||!/[?&]nopf/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-pf')==='1';}catch(e){return false;}})();const PF_P={sup:1,ky:120,cy:22,acc:9,kv:10,tq:420,aw:16,lose:.42,lean:.42,gnd:.13,cam:.12};try{const m=location.search.match(/[?&]pfp=([^&]*)/);if(m)Object.assign(PF_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}
-if(PF){HSBODY=true;ARMS=true;}
+if(PF){HSBODY=true;ARMS=true;}const PF2=!/[?&]nopf2/.test(location.search);
 let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={xs:.45,xd:.3,xf:.18,sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
 if(PF){HS_P.shadow=0;HS_P.max=2;HS_P.bb=1;}   // (the two bodies meet: the game's own push between fighters is overwritten when the place follows the body)
 // id, frame bone, start point, end point, parent, kg, radius, muscle frequency (rad/s, ×HS_P.wk), (unused: a torque cap)
@@ -8757,7 +8757,7 @@ function hsBuild(f,G){const B=f.bones;f.root.updateMatrixWorld(true);
     A=loc(A);E=loc(E);const L=A.distanceTo(E),mid=A.clone().add(E).multiplyScalar(.5);let cd;
     if(id==='hed')cd=RP.ColliderDesc.ball(r);
     else{cd=RP.ColliderDesc.capsule(Math.max(.005,L/2-r),r);_hv1.subVectors(E,A);if(_hv1.lengthSq()>1e-8){_hq.setFromUnitVectors(Y_AXIS,_hv1.normalize());cd.setRotation({x:_hq.x,y:_hq.y,z:_hq.z,w:_hq.w});}}
-    HSW.createCollider(cd.setTranslation(mid.x,mid.y,mid.z).setMass(m).setFriction(id[0]==='f'?1.1:.6).setRestitution(0).setCollisionGroups(G),b);
+    HSW.createCollider(cd.setTranslation(mid.x,mid.y,mid.z).setMass(m).setFriction(id[0]==='f'&&(id[1]==='t'||!(PF&&PF2))?1.1:PF&&PF2?.2:.6).setRestitution(0).setCollisionGroups(G),b);
     const s={id,b,m,par,wn,tm,fb,qt0:q.clone(),qt1:q.clone(),cq,wt:V(),x0:o.clone(),x1:o.clone(),jw:W[a].clone(),cw:id==='pel'?W.Hips.clone():W[a].clone().lerp(W[e],.5),I:0};
     if(par){const P=S.seg[par],pa=W[a].clone().sub(P.o0).applyQuaternion(P.qi0),ca=loc(W[a]);s.j=HSW.createImpulseJoint(RP.JointData.spherical({x:pa.x,y:pa.y,z:pa.z},{x:ca.x,y:ca.y,z:ca.z}),P.b,b,true);s.sa=a;}
     if(par){s.R0=hsBindRel(B,S.seg[par].fb,fb).multiply(new THREE.Quaternion().fromArray(HS_LREF[id]||[0,0,0,1]));s.R0i=s.R0.clone().invert();s.lim=HS_LIM[id];s.cqi=cq.clone().invert();}
@@ -8882,7 +8882,7 @@ function hsGripK(f,W,h,cm,str,a){if(W.fw)hsReach(f,W);const s=W.s;
 // the grip can't be further from the shoulder than the arm reaches: put back at arm's length, the speed outward taken off (the arm is
 // a hard stop, not a spring: hands never come off the weapon)
 // the line the hands turn the weapon onto stays within what a wrist allows against the forearm (WR_MIN..WR_MAX, as the classic weapon)
-const _wlG=V();function hsWristLim(f,g){const F=f.foreF;if(!F||!HS_P.wl)return g;const rw=f.hrW?f.hrW():0;if(rw>.05&&rw<.95)return g;const rs=rw>.5?-1:1,c=rs*g.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;if(tc===null)return g;
+const _wlG=V();function hsWristLim(f,g){const F=PF&&PF2&&f._wlF?f._wlF:f.foreF;if(!F||!HS_P.wl)return g;const rw=f.hrW?f.hrW():0;if(rw>.05&&rw<.95)return g;const rs=rw>.5?-1:1,c=rs*g.dot(F),tc=c<WR_MAX?WR_MAX:c>WR_MIN?WR_MIN:null;if(tc===null)return g;
   _wl1.copy(g).multiplyScalar(rs).addScaledVector(F,-c);if(_wl1.lengthSq()<1e-8)return g;_wl1.normalize();return _wlG.copy(F).multiplyScalar(tc).addScaledVector(_wl1,Math.sqrt(1-tc*tc)).multiplyScalar(rs);}
 function hsReach(f,W){const b=W.b,t=b.translation(),sh=f.mainArm==='L'?f.shL:f.shR,R0=f.armLen[0]+f.armLen[1]+HS_P.rx;let dx=t.x-sh.x,dy=t.y-sh.y,dz=t.z-sh.z;const d=Math.hypot(dx,dy,dz);if(!(d>R0))return;
   dx/=d;dy/=d;dz/=d;b.setTranslation({x:sh.x+dx*R0,y:sh.y+dy*R0,z:sh.z+dz*R0},true);const v=b.linvel(),u=v.x*dx+v.y*dy+v.z*dz-(f.vel.x*dx+f.vel.z*dz);if(u>0)b.setLinvel({x:v.x-dx*u,y:v.y-dy*u,z:v.z-dz*u},true);}
@@ -8938,25 +8938,26 @@ function hsNear(){HS_NEAR.clear();const c=camera.position,L=[];for(const f of fi
 /* the hips of a physical fighter: held up by legs that are on the ground, kept upright by a trunk, moved by the legs' push */
 function pfPelvis(f,Z,s,b,p,v,h){const M=Z.M,str=f.pbd?f.pbd.str:1;
   let gnd=0;for(const k of ['ftL','ftR']){const ft=Z.seg[k];if(!ft)continue;const t=ft.b.translation();if(t.y-groundY(t.x,t.z,t.y+.2)<PF_P.gnd)gnd++;}
-  const want=gnd?1:0;Z.sup=Z.sup==null?1:Z.sup+(want-Z.sup)*Math.min(1,h*(want?14:7));const sup=Z.sup*(Z.lost?Math.max(0,1-(simTime-Z.lost)/.35):1);
+  const want=gnd?1:0;Z.sup=Z.sup==null?1:Z.sup+(want-Z.sup)*Math.min(1,h*(want?14:PF2?2.5:7));const sup=Z.sup*(Z.lost?Math.max(0,1-(simTime-Z.lost)/.35):1);
   // up: toward the animated hip height (a crouch, a step up), as hard as two legs can push, and only through legs on the ground
   const ty=_hv1.y,ey=ty-p.y,vy=v.y-_hv2.y;let fy=M*(9.81+PF_P.ky*ey-PF_P.cy*vy)*(.55+.45*str);fy=clamp(fy,0,M*9.81*2.2)*sup*PF_P.sup;
   // along the ground: the legs push the hips toward the speed the fighter means to go (f.vel), only so hard
   let hx=0,hz=0;{const L=Z.seg.ftL,Rr=Z.seg.ftR,T=Z.T;if(L&&Rr&&T&&T.Hips&&T.LeftFoot&&T.RightFoot){const a=L.b.translation(),c=Rr.b.translation(),w=Math.max(0,1-Math.hypot(f.vel.x,f.vel.z)/1.2);   // standing, the legs keep the hips where they belong over the feet (as the animation has them), so he doesn't creep
       hx=clamp(((a.x+c.x)/2+T.Hips.x-(T.LeftFoot.x+T.RightFoot.x)/2-p.x)*3,-.6,.6)*w;hz=clamp(((a.z+c.z)/2+T.Hips.z-(T.LeftFoot.z+T.RightFoot.z)/2-p.z)*3,-.6,.6)*w;}}
-  const ax=(f.vel.x+hx-v.x)*PF_P.kv,az=(f.vel.z+hz-v.z)*PF_P.kv,al=Math.hypot(ax,az),am=PF_P.acc*(.4+.6*str)*sup;const kk=al>am?am/al:1;
+  const wv=PF2&&Z.pfv?Z.pfv:f.vel,ax=(wv.x+hx-v.x)*PF_P.kv,az=(wv.z+hz-v.z)*PF_P.kv,al=Math.hypot(ax,az),am=PF_P.acc*(.4+.6*str)*sup;const kk=al>am?am/al:1;
   b.applyImpulse({x:M*ax*kk*h,y:fy*h,z:M*az*kk*h},true);
   // upright: the trunk turns the hips toward the animated turn, as strong as a trunk is
   const r=b.rotation(),w=b.angvel(),aw=PF_P.aw;qErr(s.qs,_hq2.set(r.x,r.y,r.z,r.w),_hv3);const I=s.I||8;let tx=I*(aw*aw*_hv3.x+2*aw*(s.wt.x-w.x)),ty2=I*(aw*aw*_hv3.y+2*aw*(s.wt.y-w.y)),tz=I*(aw*aw*_hv3.z+2*aw*(s.wt.z-w.z));
-  const tl=Math.hypot(tx,ty2,tz),tm=PF_P.tq*(.4+.6*str)*Math.max(.15,sup);if(tl>tm){tx*=tm/tl;ty2*=tm/tl;tz*=tm/tl;}b.applyTorqueImpulse({x:tx*h,y:ty2*h,z:tz*h},true);}
+  const tl=Math.hypot(tx,ty2,tz),tm=PF_P.tq*(.4+.6*str)*Math.max(PF2?.45:.15,sup);if(tl>tm){tx*=tm/tl;ty2*=tm/tl;tz*=tm/tl;}b.applyTorqueImpulse({x:tx*h,y:ty2*h,z:tz*h},true);}
 /* the fighter is where his body is; balance lost when the hips go out past the feet and keep going, or the trunk tips too far: he goes down */
 function pfSync(f,dt){const S=f.hs,pel=S&&S.seg.pel;if(!pel||!f.alive||f.ragdoll||S.fall)return;const p=pel.b.translation(),v=pel.b.linvel();
   if(!Number.isFinite(p.x+p.z))return;if((S.age||0)>.25){f.pos.x=p.x-S.off.x;f.pos.z=p.z-S.off.z;}   // (f.vel stays what he means to do: the legs drive the hips toward it; writing the body's speed back into it fed the feet's pull round into a slow conveyor)
   const L=S.seg.ftL,Rr=S.seg.ftR;if(!L||!Rr)return;const a=L.b.translation(),c=Rr.b.translation(),T=S.T,ax0=T&&T.LeftFoot&&T.RightFoot&&T.Hips?T.Hips.x-(T.LeftFoot.x+T.RightFoot.x)/2:0,az0=T&&T.LeftFoot&&T.RightFoot&&T.Hips?T.Hips.z-(T.LeftFoot.z+T.RightFoot.z)/2:0,mx=(a.x+c.x)/2,mz=(a.z+c.z)/2,ox=p.x-mx-ax0,oz=p.z-mz-az0,o=Math.hypot(ox,oz);   // the hips against the feet, beyond where the animation has them (a run leans the hips ahead of the feet on purpose)
-  const che=S.seg.che,ct=che&&che.b.translation(),tilt=ct?Math.acos(clamp((ct.y-p.y)/Math.max(1e-3,Math.hypot(ct.x-p.x,ct.y-p.y,ct.z-p.z)),-1,1)):0;S.pfo=o;S.pft=tilt;
+  const che=S.seg.che,ct=che&&che.b.translation(),tilt=ct?Math.acos(clamp((ct.y-p.y)/Math.max(1e-3,Math.hypot(ct.x-p.x,ct.y-p.y,ct.z-p.z)),-1,1)):0;let atl=0;if(PF2&&che&&che.x1&&pel.x1){const dx=che.x1.x-pel.x1.x,dy=che.x1.y-pel.x1.y,dz=che.x1.z-pel.x1.z;atl=Math.acos(clamp(dy/Math.max(1e-3,Math.hypot(dx,dy,dz)),-1,1));}const tx=PF2?Math.max(0,tilt-atl):tilt;S.pfo=o;S.pft=tilt;
+  if(PF2){const vl=Math.hypot(f.vel.x,f.vel.z),W=S.pfv||(S.pfv=V());W.copy(f.vel);if(vl>.05){_v.set(p.x-S.off.x+f.vel.x/vl*.14,f.pos.y,p.z-S.off.z+f.vel.z/vl*.14);const qx=_v.x,qz=_v.z;CTX.m=0;collide(_v,.55,true,1.7);let nx=_v.x-qx,nz=_v.z-qz;const nl=Math.hypot(nx,nz);if(nl>1e-4){nx/=nl;nz/=nl;const vn=W.x*nx+W.z*nz;if(vn<0){W.x-=nx*vn;W.z-=nz*vn;}}}}   /* (Build 322) running into a wall the legs push along it, as the classic fighter slides: pushing straight into it left him stuck there with his feet churning */
   if(o>PF_P.lean*.6)f.balV.x+=ox/o*(o-PF_P.lean*.6)*dt*6,f.balV.z+=oz/o*(o-PF_P.lean*.6)*dt*6;   // weight out past the feet: the game's stumble steps take a step that way
   const goingOut=o>1e-3&&(v.x*ox+v.z*oz)/o>.25;
-  if(!S.lost&&(o>PF_P.lean&&goingOut||tilt>1.05||p.y<groundY(p.x,p.z,p.y)+.38)){S.lost=simTime;}
+  if(!S.lost&&(!PF2||(S.age||0)>.5)&&(o>PF_P.lean&&goingOut||tx>(PF2?.85:1.05)||p.y<groundY(p.x,p.z,p.y)+.38)){S.lost=simTime;if(window.__pfwhy)window.__pfwhy.push([+simTime.toFixed(2),o>PF_P.lean&&goingOut?'lean':tx>(PF2?.85:1.05)?'tilt':'low',+o.toFixed(2),+tilt.toFixed(2),+(p.y-groundY(p.x,p.z,p.y)).toFixed(2),f.isPlayer?'P':'B']);}
   if(S.lost&&simTime-S.lost>.25&&!f.ragdoll){S.lost=null;_v.set(ox,0,oz);if(_v.lengthSq()<1e-6)_v.set(v.x,0,v.z);_v.setLength(Math.max(1,Math.hypot(v.x,v.z))).setY(.2);f.knockdown(rand(1.2,1.8),_v.clone(),f.chest.clone());}}
 function hsStep(dt){if(!HSW)return;
   for(const f of [...HSF]){const S=f.hs,R=f.ragdoll;
@@ -8964,7 +8965,7 @@ function hsStep(dt){if(!HSW)return;
     if(S.fall){S.fall.t+=dt;S.dt=dt;const bad=(()=>{const a=S.seg.pel&&S.seg.pel.b.translation(),b=S.seg.hed&&S.seg.hed.b.translation();return a&&b&&Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)>1.4;})();if(bad){S.lastP=null;}   /* (a body pulled apart: hand over at once, from the bones, not its flung parts) */
       if(bad||!R||R.pin||R.rise||R.dragged||!fighters.includes(f)||f.sevNames.length!==S.sev||S.fall.t>HS_P.fallT||S.fall.t>.7&&hsStill(S)){hsHandOver(f);}continue;}
     if(!f.alive||R||!fighters.includes(f)||!S.dt){hsFree(f);if(!f.alive||R)f.ar=null;}}   // (a body that can't fall this way hands over to the ragdoll with each part's speed: makeRagdoll reads f.ar)
-  if(!HSF.size||!(dt>0))return;hsAcc+=dt;const h=1/HS_P.hz,n=Math.min(12,Math.floor(hsAcc/h+1e-6));hsAcc-=n*h;if(hsAcc>h)hsAcc=0;HSW.timestep=h;   // always the same small step: at a low frame rate (a match starting, shaders compiling) bigger steps blew bodies apart; past 50 ms a frame the body just falls behind
+  if(!HSF.size||!(dt>0))return;hsAcc+=dt;const h=1/HS_P.hz,n=Math.min(PF&&PF2?22:12,Math.floor(hsAcc/h+1e-6));hsAcc-=n*h;if(hsAcc>h)hsAcc=0;HSW.timestep=h;   // always the same small step: at a low frame rate (a match starting, shaders compiling) bigger steps blew bodies apart; past 50 ms a frame the body just falls behind
   for(let i=1;i<=n;i++){const a=i/n,mo=(i&1)||i===n||HS_P.moAll;hsTick++;for(const f of HSF){hsDrive(f,a,h,null,mo);if(f.hs.sh)hsDrive(f,a,h,f.hs.sh,mo);}HSW.step();hsClampV();}
   function hsClampV(){for(const f of HSF){const S=f.hs;if(S.wb&&!S.wb.att){const b=S.wb.b,w=b.angvel(),wl=Math.hypot(w.x,w.y,w.z);if(wl>40){const k=40/wl;b.setAngvel({x:w.x*k,y:w.y*k,z:w.z*k},true);}const v=b.linvel(),vl=Math.hypot(v.x,v.y,v.z);if(vl>HS_P.wv){const k=HS_P.wv/vl;b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true);}}for(const X of [S,S.sh]){if(!X)continue;for(const sg of X.list){const b=sg.b,v=b.linvel(),dx=v.x-f.vel.x,dz=v.z-f.vel.z,l=Math.hypot(dx,v.y,dz),gp=X===S&&S.grip&&(sg.id[0]==='u'||sg.id[0]==='f'&&sg.id[1]==='a'||sg.id[0]==='h'&&sg.id[1]==='a')&&S.grip.has(sg.id[2]),mx=S.fall?7:gp?HS_P.gav:5;if(l>mx){const k=mx/l;b.setLinvel({x:f.vel.x+dx*k,y:v.y*k,z:f.vel.z+dz*k},true);}const w=b.angvel(),wl=Math.hypot(w.x,w.y,w.z),wm=gp?45:22;if(wl>wm){const k=wm/wl;b.setAngvel({x:w.x*k,y:w.y*k,z:w.z*k},true);}}}}}   /* (every substep) Build 149: no part of a jointed body may fly off: pressed into a wall, a plank or the pit's rim, the solver's push-out threw people several metres (seen swinging by the Pit bridge) */   // (the joints' motors are re-aimed every other step: they're solved implicitly, so that's plenty, and it halves the cost)
   for(const f of [...HSF])if(!f.hs.fall){f.hs.env=Math.max(0,(f.hs.env||0)-dt/1.2);if(PF){pfSync(f,dt);continue;}hsSettle(f,dt);hsBalance(f,dt);if(HS_P.sync)hsSync(f,dt);}
@@ -9825,7 +9826,7 @@ class Fighter{
       if(mbS){if(this.commit){const A=this._cmA||(this._cmA={x:this.ctrl.x,y:this.ctrl.y,m:0});A.m=Math.max(A.m,clamp(Math.hypot(this.ctrl.x-A.x,this.ctrl.y-A.y)/.3,0,1));mbK=A.m*A.m*(3-2*A.m);this._cmK=mbK;}else{this._cmA=null;mbK=this._cmK??1;}}
       if((HAND_FIRST||MB)&&!this.thrust&&this.sword.def.kind!=='spear'){this._cmB=clamp((this._cmB||0)+(this.commit?1:-1)*h/.12,0,1);const cmW=this._cmB*(mbS?mbK:1);if(this._cmB>0&&cmW<1){const c0=this.commit;this.commit=false;const gA=this.guideDir(tgt,V());this.commit=true;const gB=this.guideDir(tgt,V());this.commit=c0;const cw=mbS?this._cmB*this._cmB*(3-2*this._cmB)*mbK:this._cmB*this._cmB*(3-2*this._cmB);guide.copy(gA).lerp(gB,cw).normalize();}}
       if(HAND_FIRST&&!(REF_G&&!this.commit&&!this.thrust)&&this.foreF&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&!(this.revW>.05)&&!(this.throwHold||this.throwT>=0))natGuide(this,guide,tgt);
-      (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */
+      (this._wTp||(this._wTp=V())).copy(this._wT||tgt);(this._wT||(this._wT=V())).copy(tgt);(this._wG||(this._wG=V())).copy(guide).normalize();   /* (Build 154: where the arms are told to put the weapon) */if(PF&&PF2&&this.foreF){const W=this._wlF||(this._wlF=this.foreF.clone());W.lerp(this.foreF,1-Math.exp(-12*h)).normalize();}   /* (Build 322) the wrist's limit is judged against the forearm as it has been for the last ~0.1 s: the drawn forearm is posed onto the physical weapon, so limiting the weapon by it every step fed back on itself and now and then the sword shook in the hand for seconds */
       const str=this.stamK()*(this.stagger>0?.45:1)*(this.mainArm==='L'?.75:1)*((this.mainArm==='R'?this.limbs.armL.sev||this.limbs.armL.dead:this.limbs.armR.sev||this.limbs.armR.dead)?.8:1)*(this.mainArm?1-.45*this.limbF(this.mainArm==='L'?'armL':'armR'):1);   // a cut sword arm swings weaker
       const cm=(this.commit||this.thrust)&&this.stagger<=0&&this.stamina>1.5;if(this.sword.rb){if(physTick)this.sword.physStep(PH_H,tgt,guide,cm,str,this);}else{this.sword.step(h,tgt,guide,cm,str);if(HAND_FIRST&&this._nfEdge&&this.sword.def.kind!=='spear'&&this.sword.def.kind!=='fist'&&(!cm||HF_CE>0)){const sw=this.sword,E=_nfK.copy(this._nfEdge);E.addScaledVector(sw.axis,-E.dot(sw.axis));if(E.lengthSq()>1e-4){E.normalize();if(sw.def.kind==='blade'&&E.dot(sw.edge)<0)E.negate();sw.edge.lerp(E,cm?HF_CE:.25);sw.edge.addScaledVector(sw.axis,-sw.edge.dot(sw.axis)).normalize();}}}   /* Build 160: in guard the edge is where the hand holds it, not turned by the motion */
       if(ts>17&&!this._sw){this._sw=true;sSwing(this.sword.T,ts,this.sword.def.kind);if(this.commit&&Math.random()<Math.min(.7,.22+.2*this.sword.def.weight)&&simTime>(this._effT||0)&&(this._effT=simTime+1.1))sfx(this.id%2?'humanRoughAttack':'humanAttack',this.headPos,.55,this.voice);}if(ts<5)this._sw=false;
@@ -11125,8 +11126,8 @@ const _srv=V(),FIRM=+(new URLSearchParams(location.search).get('firm')??1.4);
 const BIND=!/[?&]nobind/.test(location.search),STAM_COST=+(new URLSearchParams(location.search).get('stam')??.5);const STAM_DRIP=!/[?&]nodrip/.test(location.search),STAM_DRIPK=+(new URLSearchParams(location.search).get('dripk')??.2);
 const HIT_OLD=/[?&]oldhit/.test(location.search),HIT_PAD=+(new URLSearchParams(location.search).get('hitpad')??.012),_hq0=V(),_hq1=V(),_hqa=V();
 function clash(A,B){
-  const s=A.sword,s2=B.sword;if(s)s._px=1;if(s2)s2._px=1;if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
-  const d2=segSeg(s.H,_bt,s2.H,_pb,_c1,_c2),cr=.05+Math.min(.1,_wl3.subVectors(s.tipVel,s2.tipVel).length()*H*.9);if(d2>=cr*cr)return;   /* Build 146: the reach grows with how fast the blades close (at 25 m/s a blade moves 10 cm a step and slipped through a guard between steps) */
+  const s=A.sword,s2=B.sword;if(!(PF&&PF2)){if(s)s._px=1;if(s2)s2._px=1;}if(s.def.kind==='fist'||s2.def.kind==='fist')return;_pb.copy(s2.H).addScaledVector(s2.axis,s2.len);
+  const d2=segSeg(s.H,_bt,s2.H,_pb,_c1,_c2),cr=.05+Math.min(.1,_wl3.subVectors(s.tipVel,s2.tipVel).length()*H*.9);if(d2>=cr*cr)return;if(PF&&PF2){s._px=1;s2._px=1;}   /* (Build 322) only blades that really met: marking every pair that was checked fed every nudge to H/T back into the physical weapon each step, and it shook itself to pieces */   /* Build 146: the reach grows with how fast the blades close (at 25 m/s a blade moves 10 cm a step and slipped through a guard between steps) */
   if(window.__stats){const r=A.clashCd<=0;if(r)window.__stats.clashes=(window.__stats.clashes||0)+1;}
   const sa=SS.s,sb=SS.t;s.velAt(sa,_va);s2.velAt(sb,_vb);_rel.subVectors(_va,_vb);
   _n.subVectors(_c1,_c2);if(_n.lengthSq()<1e-8)_n.crossVectors(s.axis,s2.axis);if(_n.lengthSq()<1e-8)_n.set(1,0,0);_n.normalize();
@@ -11347,7 +11348,7 @@ const BITE_V=9;   // m/s: a cut slower than this into flesh is caught in the wou
 function hitCarry(s,n,kn,kt,hn,ht){
   _hcv.subVectors(s.T,s.Tp);let vn=_hcv.dot(n);if(vn>0){_hcv.addScaledVector(n,-vn*kn);vn=_hcv.dot(n);}_hcv.addScaledVector(n,-vn).multiplyScalar(kt).addScaledVector(n,vn);s.Tp.copy(s.T).sub(_hcv);
   let hv=s.Hv.dot(n);if(hv>0){s.Hv.addScaledVector(n,-hv*hn);hv=s.Hv.dot(n);}s.Hv.addScaledVector(n,-hv).multiplyScalar(ht).addScaledVector(n,hv);}
-function bladeContact(s,B){if(s)s._px=1;
+function bladeContact(s,B){if(s&&!(PF&&PF2))s._px=1;
   let moved=false;
   // the whole blade is solid against the body, not just its point: it lies on the flesh it struck instead of sinking through,
   // and what it presses on gets pushed, so leaning on a blade shoves a man and a blow that doesn't cut still moves him
@@ -11368,6 +11369,7 @@ function bladeContact(s,B){if(s)s._px=1;
     sThud(s.H,.4+pw*.5);B.shove(dir,.8+pw*1.7);B.addFlinch(dir,.2+pw*.5);B.bodyHit(face?'Head':'Spine2',dir,2+pw*4,face?.1+pw*.2:0);B.stagger=Math.max(B.stagger,.15+pw*.35);_hv.copy(dir).setY(0);B.vel.addScaledVector(_hv,.5+pw*.9);
     yardHit(O,s.def.name,'hilt',c.zone,dmg,vn,false,prot);camKick(B,dir,.3+pw*.6);if(dmg>7)addWound(B,B.caps.indexOf(c),s.H.clone(),dir,dmg,'bruise');B.damage(dmg,O,'beaten');if(O.isPlayer){hitstop(.03);shake(.1+pw*.15);}if(B.isPlayer)shake(.25+pw*.3);
     if(!B.isPlayer&&!B.remote&&B.ai)B.ai.backT=Math.max(B.ai.backT||0,simTime+.35+pw*.4);s.Hv.multiplyScalar(.45);}}
+  if(moved&&PF&&PF2)s._px=1;
   if(moved){s.constrain(H);if(J>.4&&B.alive&&!B.ragdoll&&O){_hv.copy(_cn).negate();B.shove(_hv,Math.min(1.2,J*s.def.weight*.05));}}
 }
 const _ov=V(),_ow=V(),_ox=V(),_oz=V();

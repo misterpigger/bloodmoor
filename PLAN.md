@@ -53,6 +53,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 319: sprinting only forward (side-step and backpedal instead of a turned or reversed run), fists pump close in when running.
 - 320: real sideways gallop and backpedal at running speed (no turned or reversed run clip), fist-run arms pump at the ribs, chest up (upper back no longer rounded past the skeleton).
 - 321: the sideways run is a low defensive slide (step out, close in, always a foot down) instead of a hop.
+- 322: physical fighter stage 1 (test switch): slides along walls, keeps up at low frame rates, no falls while a new body settles, tilt judged against the animation, the sword no longer shakes itself apart in the hand.
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
