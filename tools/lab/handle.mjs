@@ -2,8 +2,10 @@
 // tip = peak tip speed; lag = hand target to grip (cm) while committed; gap = drawn hand to grip (cm); edge = how square the edge leads in fast frames; dmg = per rep
 import {boot} from './harness.mjs';
 const WEPS=(process.env.WEPS||'arming,longsword,greatsword,axe,mace,spear').split(',');const REPS=+(process.env.REPS||4);
+const PFR=!!process.env.PFR;
 const {browser,page,logs,start}=await boot({W:320,HH:200,render:false,query:'?nohud'+(process.env.Q||'')});
 await start('yard','arena');await page.evaluate(d=>{window.__dist=d;},+(process.env.DIST||0));await new Promise(r=>setTimeout(r,2500));
+if(PFR)await page.evaluate(()=>{window.__pfr=1;});if(process.env.DL)await page.evaluate(()=>{window.__dl=1;});
 const out=await page.evaluate(async([WEPS,REPS,MVS])=>{const g=window.__game,T=g.THREE,P=g.player,input=g.input,res={};
   const pct=(a,p)=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[Math.min(b.length-1,Math.floor(p*b.length))];};
   for(let k=0;k<120;k++)g.logic(1/60);
@@ -20,8 +22,9 @@ const out=await page.evaluate(async([WEPS,REPS,MVS])=>{const g=window.__game,T=g
         for(let q=0;q<400&&!(D=pick());q++){input.locked=false;input.lmb=false;g.logic(1/60);}
         P.pos.copy(home);P.vel.set(0,0,0);P.yaw=yaw;P.stamina=100;P.hp=100;const f=V3(Math.sin(yaw),0,Math.cos(yaw));function V3(x,y,z){return new T.Vector3(x,y,z);}
         const dist=(window.__dist||reach[w]||1.3)+(M.thr?.25:0)+(mn==='rise'?.3:0);D.pos.set(home.x+f.x*dist,D.pos.y,home.z+f.z*dist);D.vel.set(0,0,0);D.yaw=yaw+Math.PI;D.bal&&D.bal.set&&D.bal.set(0,0,0);D.hp=100;
+        if(window.__pfr){g.setHS(false);g.logic(1/60);P.pos.copy(home);P.vel.set(0,0,0);P.yaw=yaw;D.pos.set(home.x+f.x*dist,D.pos.y,home.z+f.z*dist);D.vel.set(0,0,0);g.setHS(true);for(let q=0;q<20;q++){input.lmb=false;g.logic(1/60);}}   /* physical fighter: bodies are rebuilt where they are put (setting pos alone doesn't move the body) */
         window.__ulog=[];let peak=0;const pe=P.sword.edge.clone();
-        const step=(mx,my,lmb,z)=>{input.locked=false;P.stamina=100;input.mx=mx;input.my=my;input.lmb=lmb;input.stab=false;P.ctrl.z=z;D.pos.x=home.x+f.x*dist;D.pos.z=home.z+f.z*dist;D.vel.set(0,0,0);g.logic(1/60);
+        const step=(mx,my,lmb,z)=>{input.locked=false;P.stamina=100;input.mx=mx;input.my=my;input.lmb=lmb;input.stab=false;P.ctrl.z=z;if(!window.__pfr){D.pos.x=home.x+f.x*dist;D.pos.z=home.z+f.z*dist;D.vel.set(0,0,0);}g.logic(1/60);
           const s=P.sword;if(!s)return;const v=s.tipVel.length();peak=Math.max(peak,v);
           if(lmb||z>.56){const ht=P.handTarget(new T.Vector3());lag.push(ht.distanceTo(s.H)*100);
             {const hp=new T.Vector3();P.bones.RightHand.getWorldPosition(hp);gap.push(hp.distanceTo(s.H)*100);for(const [sd,arr] of [['Right',wrR],['Left',wrL]]){const a=new T.Vector3(),b=new T.Vector3(),c=new T.Vector3();P.bones[sd+'ForeArm'].getWorldPosition(a);P.bones[sd+'Hand'].getWorldPosition(b);P.bones[sd+'HandMiddle1'].getWorldPosition(c);arr.push(Math.acos(Math.max(-1,Math.min(1,b.clone().sub(a).normalize().dot(c.sub(b).normalize()))))*57.3);}}
@@ -29,12 +32,12 @@ const out=await page.evaluate(async([WEPS,REPS,MVS])=>{const g=window.__game,T=g
           roll.push(Math.acos(Math.min(1,Math.abs(pe.dot(s.edge))))*60*57.3);pe.copy(s.edge);};
         if(M.thr){for(let i=0;i<30;i++)step(.5,.42,false,.46);for(let i=0;i<8;i++)step(.5,.42,false,.46+(i+1)/8*.5);for(let i=0;i<22;i++)step(.5,.42,false,.96);for(let i=0;i<26;i++)step(.5,.42,false,.46);}
         else{const n=Math.round(M.t*60);for(let i=0;i<34;i++)step(M.pre[0],M.pre[1],false,.46);for(let i=0;i<n;i++){const u=(i+1)/n;step(M.pre[0]+(M.to[0]-M.pre[0])*u,M.pre[1]+(M.to[1]-M.pre[1])*u,true,.46);}for(let i=0;i<16;i++)step(M.to[0],M.to[1],true,.46);for(let i=0;i<26;i++)step(.5,.45,false,.46);}
-        tip.push(peak);const L=window.__ulog;let d=0;for(const h of L){d+=h[1];if(h[5])stuck++;}if(L.length)hits++;dm.push(d);
+        tip.push(peak);const L=window.__ulog;if(window.__dl)(window.__dlog=window.__dlog||[]).push(w+' '+mn+' rep'+rep+' dist '+P.pos.distanceTo(D.pos).toFixed(2)+' Pmoved '+P.pos.distanceTo(home).toFixed(2)+' Dmoved '+Math.hypot(D.pos.x-home.x-f.x*dist,D.pos.z-home.z-f.z*dist).toFixed(2)+' '+JSON.stringify(L.map(h=>h.map(x=>typeof x==='number'?+x.toFixed(2):x))));let d=0;for(const h of L){d+=h[1];if(h[5])stuck++;}if(L.length)hits++;dm.push(d);
         if(P.sword&&P.sword.stuck){P.sword.unstick&&P.sword.unstick();}
       }
       const avg=a=>a.reduce((x,y)=>x+y,0)/Math.max(1,a.length);
       R[mn]={tip:+avg(tip).toFixed(1),lag50:+pct(lag,.5).toFixed(0),lag90:+pct(lag,.9).toFixed(0),gap50:+pct(gap,.5).toFixed(0),gap90:+pct(gap,.9).toFixed(0),gapMax:+pct(gap,.999).toFixed(0),edge:+avg(edge).toFixed(2),back:+avg(back).toFixed(2),dmg:+avg(dm).toFixed(0),hits,stuck,roll90:+pct(roll,.9).toFixed(0),wrR90:+pct(wrR,.9).toFixed(0),wrL90:+pct(wrL,.9).toFixed(0),wrMax:+Math.max(pct(wrR,.999),pct(wrL,.999)).toFixed(0)};}
   }
-  return res;},[WEPS,REPS,process.env.MOVES?process.env.MOVES.split(','):null]);
-for(const [w,R] of Object.entries(out)){console.log(w);for(const [m,v] of Object.entries(R))console.log('  '+m.padEnd(7)+Object.entries(v).filter(([k])=>!(process.env.COLS)||process.env.COLS.split(',').includes(k)).map(([k,x])=>k+' '+String(x).padStart(4)).join('  '));}
+  res.__dlog=window.__dlog;return res;},[WEPS,REPS,process.env.MOVES?process.env.MOVES.split(','):null]);
+if(out.__dlog){console.log(out.__dlog.join('\n'));delete out.__dlog;}for(const [w,R] of Object.entries(out)){console.log(w);for(const [m,v] of Object.entries(R))console.log('  '+m.padEnd(7)+Object.entries(v).filter(([k])=>!(process.env.COLS)||process.env.COLS.split(',').includes(k)).map(([k,x])=>k+' '+String(x).padStart(4)).join('  '));}
 console.log(logs.slice(0,6).join('\n')||'no errors');await browser.close();process.exit(0);

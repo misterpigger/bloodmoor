@@ -56,6 +56,7 @@ For the next Claude picking this up. Read `CLAUDE.md` first (house rules at "## 
 - 322: physical fighter stage 1 (test switch): slides along walls, keeps up at low frame rates, no falls while a new body settles, tilt judged against the animation, the sword no longer shakes itself apart in the hand.
 - 323: the forward run is worked out from a phase (feet land under the body, heel to knee height, no straight-legged reach), for every fighter; the clip no longer drives the run.
 - 324: run feet plant and push off (heel strike, flat stance, heel rise about the toe, no skid at touchdown, stance foot out of the ground); ?pf swings with the classic weapon handling (the physical weapon was slow and sloshy)
+- 325: walk from a phase (heel-toe roll, straight stance leg, no heel flick); physical fighter: upper body drawn near the animation, elbows bend as animated, arms ignore the other body, standing anchor (hits land again)
 
 ### 1. (done in Build 247) Build 246 checked; the crypt is dark again, floors are the wall stone, chests and coffins are loose things, traps only where people could walk round them
 - Still to ask the player: whether the two pits being lethal (with the automatic edge catch) is what he wants in the crypt.
