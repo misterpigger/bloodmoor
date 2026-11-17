@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=327;
+const BUILD=328;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const FRUN=!/[?&]nofrun/.test(location.search),FRUN_P={cyc:.55,cyk:.22,dt:.26,cen:-.09,h0:.12,hk:.07,w:.09,bob:2,lo:-5,ret:.55,hs:.12,to:.75,sw:.95,ay:.045};const FRUN2=!/[?&]nofrun2/.test(location.search);try{const m=location.search.match(/[?&]frunp=([^&]*)/);if(m)Object.assign(FRUN_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -5379,7 +5379,7 @@ const _iS=V(),_iT=V(),_iD=V(),_iP=V(),_iE=V();
    so turning the body doesn't count) turns at most IK_SWV rad/s from where it was last frame. The pole is chosen from the aim, the
    guard and the body, and some of those flip as the hand passes close to the shoulder or the line to the pole: the elbow jumped 30-50 cm
    in one frame with the hand still (bot fights: 10-15 times a fighter-minute, forearms at 15-35 m/s), which read as arms whipping round. */
-const IKF={n:0,dt:1/60,at:0};let IK_SWV=24;try{const m=location.search.match(/[?&]ikswv=([\d.]+)/);if(m)IK_SWV=+m[1];}catch(e){}
+const IKF={n:0,dt:1/60,at:0};let IK_SWV=12;   /* (Build 328: 24 let an elbow swing 10 cm round in one frame at the edge of the aim box) */try{const m=location.search.match(/[?&]ikswv=([\d.]+)/);if(m)IK_SWV=+m[1];}catch(e){}
 const _ikwQ=new THREE.Quaternion(),_ikwA=new THREE.Vector3(),_ikwB=new THREE.Vector3();
 function ikSwivel(up,D,P){if(performance.now()-(IKF.at||0)>250)return;const u=up.userData,par=up.parent;par.matrixWorld.decompose(_ikwB,_ikwQ,_ikwA);_ikwQ.invert();_ikwA.copy(P).applyQuaternion(_ikwQ);   // this frame's swivel, in the shoulder's parent frame
   if(u._swF!==IKF.n){u._sw0=u._sw1&&IKF.n-u._swF<=2?(u._sw0||new THREE.Vector3()).copy(u._sw1):null;u._swF=IKF.n;}   // the value the last frame ended with
@@ -8662,6 +8662,8 @@ let PF=/[?&]pf\b/.test(location.search)||!/[?&]nopf/.test(location.search)&&(()=
 /* Build 327: catching your balance (Build 120) bends the knees, it doesn't drop you into a full squat (crouchAmt 1, hips 0.68 m): in play it read as a deep glitchy squat */
 const CATCH_C=(()=>{const m=location.search.match(/[?&]catchc=([0-9.]+)/);return m?+m[1]:.42;})();
 const PF_LEG=!/[?&]nopfleg/.test(location.search);
+const PF_LATCH=!/[?&]nopflatch/.test(location.search);
+const FLOCK_EASE=!/[?&]noflease/.test(location.search);
 const PF_SM=(()=>{const m=location.search.match(/[?&]pfsm=([0-9.]+)/);return m?+m[1]:/[?&]nopfsm/.test(location.search)?0:.06;})();
 if(PF){HSBODY=true;}   /* (Build 324) the physical fighter swings with the classic weapon handling; the physical weapon (Build 154) is still ?arms */const PF2=!/[?&]nopf2/.test(location.search);
 let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={xs:.45,xd:.3,xf:.18,sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
@@ -8975,6 +8977,7 @@ function pfSync(f,dt){const S=f.hs,pel=S&&S.seg.pel;if(!pel||!f.alive||f.ragdoll
   if(o>PF_P.lean*.6)f.balV.x+=ox/o*(o-PF_P.lean*.6)*dt*6,f.balV.z+=oz/o*(o-PF_P.lean*.6)*dt*6;   // weight out past the feet: the game's stumble steps take a step that way
   const goingOut=o>1e-3&&(v.x*ox+v.z*oz)/o>.25;
   if(!S.lost&&(!PF2||(S.age||0)>.5)&&(o>PF_P.lean&&goingOut||tx>(PF2?.85:1.05)||p.y<groundY(p.x,p.z,p.y)+.38)){S.lost=simTime;if(window.__pfwhy)window.__pfwhy.push([+simTime.toFixed(2),o>PF_P.lean&&goingOut?'lean':tx>(PF2?.85:1.05)?'tilt':'low',+o.toFixed(2),+tilt.toFixed(2),+(p.y-groundY(p.x,p.z,p.y)).toFixed(2),f.isPlayer?'P':'B']);}
+  if(S.lost&&PF_LATCH&&simTime-S.lost>.25&&!f.ragdoll&&o<PF_P.lean*.8&&tx<(PF2?.6:.8)&&p.y>groundY(p.x,p.z,p.y)+.45)S.lost=null;   /* (Build 328) back over his feet by the time the fall would start: he caught it, no knockdown */
   if(S.lost&&simTime-S.lost>.25&&!f.ragdoll){S.lost=null;_v.set(ox,0,oz);if(_v.lengthSq()<1e-6)_v.set(v.x,0,v.z);_v.setLength(Math.max(1,Math.hypot(v.x,v.z))).setY(.2);f.knockdown(rand(1.2,1.8),_v.clone(),f.chest.clone());}}
 function hsStep(dt){if(!HSW)return;
   for(const f of [...HSF]){const S=f.hs,R=f.ragdoll;
@@ -10476,12 +10479,12 @@ class Fighter{
       // reaches it, instead of skating over the ground with the clip's stride (running feet slid up to 6 cm a frame)
       {const FL=this.flock||(this.flock={});
         for(const s in feet){const t=feet[s];let k=FL[s];if(!k)k=FL[s]={p:t.clone(),w:0,on:false};
-          if(!lockOK){k.on=false;k.w=0;continue;}
+          if(!lockOK){k.on=false;if(!FLOCK_EASE){k.w=0;continue;}k.w=Math.max(0,k.w-dt/.16);if(k.w>0){const e=k.w*k.w*(3-2*k.w);t.x+=(k.p.x-t.x)*e;t.z+=(k.p.z-t.z)*e;}continue;}   /* (Build 328) stopping, a locked foot eases to its standing place instead of jumping there in one frame */
           const low=t.y-groundY(t.x,t.z,t.y+.3)-this.ankY<.03;
           if(low&&!k.on&&k.w<.05){k.on=true;k.p.copy(t);}
           if(k.on&&(!low||Math.hypot(t.x-k.p.x,t.z-k.p.z)>.24))k.on=false;
-          k.w=clamp(k.w+(k.on?1:-1)*dt/.05,0,1);
-          if(k.w>0){t.x+=(k.p.x-t.x)*k.w;t.z+=(k.p.z-t.z)*k.w;}}}
+          k.w=clamp(k.w+(k.on?dt/.05:-dt/(FLOCK_EASE?.15:.05)),0,1);
+          if(k.w>0){const e=FLOCK_EASE&&!k.on?k.w*k.w*(3-2*k.w):k.w;t.x+=(k.p.x-t.x)*e;t.z+=(k.p.z-t.z)*e;}}}   /* (Build 328) a foot let go eases off its locked place over 0.15 s (in 0.05 s it jerked 24 cm in three frames) */
       /* (Build 320) running sideways and backwards have their own gaits instead of the run clip turned 63° or played in reverse: sideways a gallop (the lead foot reaches out, the trailing one closes in behind it, a moment in the air), backwards a quick backpedal on bent knees, feet under the hips, each foot's path worked out from a phase and the speed and put down by the leg IK */
       {const D=this._dr||(this._dr={ph:0,w:0,lw:0});this.right(_r);const lat=sp>.3?(this.vel.x*_r.x+this.vel.z*_r.z)/sp:0,dirOK=DRUN&&lockOK&&feet.Left&&feet.Right&&!this.pin&&kk<=0&&(Math.abs(lat)>.75||back);
         D.w=lerp(D.w,dirOK?clamp((sp-1.7)/.6,0,1):0,1-Math.exp(-10*dt));
