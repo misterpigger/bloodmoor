@@ -463,7 +463,7 @@ const RDCAM={on:false,off:new THREE.Vector3()},_rq1=new THREE.Quaternion(),_rq2=
 const wrapA=a=>{if(!Number.isFinite(a))return 0;if(a>20||a<-20)a%=Math.PI*2;while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;};   // (Build 189) a huge angle used to loop forever (past ~1e16, subtracting 2π changes nothing) and froze the game
 let seed=1337; const srand=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
 const Y_AXIS=V(0,1,0);
-const BUILD=326;
+const BUILD=327;
 let REV_OUT=+(new URLSearchParams(location.search).get('revout')||.62);
 const LIFE_OFF=/[?&]nolife/.test(location.search);const BRAWN_ON=!/[?&]nobrawn/.test(location.search),BRAWN_K={A:.8,B:.3,C:.55,D:.12};   // (Build 253) see brawnInit
 const UPRIGHT=!/[?&]nouprt/.test(location.search);const DIRCAP=!/[?&]nodircap/.test(location.search);const DRUN=!/[?&]nodrun/.test(location.search),CHESTUP=!/[?&]nochestup/.test(location.search),_drD=new THREE.Vector3(),_drP=new THREE.Vector3();const FRUN=!/[?&]nofrun/.test(location.search),FRUN_P={cyc:.55,cyk:.22,dt:.26,cen:-.09,h0:.12,hk:.07,w:.09,bob:2,lo:-5,ret:.55,hs:.12,to:.75,sw:.95,ay:.045};const FRUN2=!/[?&]nofrun2/.test(location.search);try{const m=location.search.match(/[?&]frunp=([^&]*)/);if(m)Object.assign(FRUN_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}const RUNARMS=!/[?&]norunarms/.test(location.search),_fr3=new THREE.Vector3(),_fr4=new THREE.Vector3();const WSHIFT=!/[?&]nowshift/.test(location.search);let WS_P=+(new URLSearchParams(location.search).get('wsp')||.045),WS_R=+(new URLSearchParams(location.search).get('wsr')||.035);
@@ -8658,6 +8658,11 @@ let ARMS=/[?&]arms/.test(location.search)||!/[?&]noarms/.test(location.search)&&
    or a body really moves him; the fighter's place follows the body (`pfSync`); what is drawn is the body as it is. Hand and weapon are the
    Build 154 physical weapon. Only the player and the nearest foe get it (it costs ~1 ms a fighter). */
 let PF=/[?&]pf\b/.test(location.search)||!/[?&]nopf/.test(location.search)&&(()=>{try{return localStorage.getItem('bloodmoor-pf')==='1';}catch(e){return false;}})();const PF_P={sup:1,ky:120,cy:22,acc:9,kv:10,tq:420,aw:16,lose:.42,lean:.42,gnd:.13,cam:.12};try{const m=location.search.match(/[?&]pfp=([^&]*)/);if(m)Object.assign(PF_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}
+/* Build 327: the physical fighter's body is drawn smoothed: what the physics adds to the animated pose is eased in over PF_SM s, so the frame-to-frame jitter of the muscles chasing the animation (feet trembling in a guard, forearms shaking on the walk) isn't drawn; blows still show, a few frames softer */
+/* Build 327: catching your balance (Build 120) bends the knees, it doesn't drop you into a full squat (crouchAmt 1, hips 0.68 m): in play it read as a deep glitchy squat */
+const CATCH_C=(()=>{const m=location.search.match(/[?&]catchc=([0-9.]+)/);return m?+m[1]:.42;})();
+const PF_LEG=!/[?&]nopfleg/.test(location.search);
+const PF_SM=(()=>{const m=location.search.match(/[?&]pfsm=([0-9.]+)/);return m?+m[1]:/[?&]nopfsm/.test(location.search)?0:.06;})();
 if(PF){HSBODY=true;}   /* (Build 324) the physical fighter swings with the classic weapon handling; the physical weapon (Build 154) is still ?arms */const PF2=!/[?&]nopf2/.test(location.search);
 let HSW=null,hsKeyM=-1,hsSlot=0,hsAcc=0,hsTick=0;const HS_H=1/240,HSF=new Set(),HS_P={xs:.45,xd:.3,xf:.18,sct:1,wl:1,gMr:1.2,grT:.3,gev:3,gek:25,gem:30,rx:.1,g2h:2.6,gIe:1,gIr:.2,gam2:.8,push:1,pe:.9,gdo:0,gsg:1,fw:1,ghl:1,gqk:1,gex:1,grr:.15,gst:4,gff:.3,gmv:15,gh:1,gwv:8,gwc:12,ga2:1,gam:.5,wm:1,wc:1,grd:25,att:1,it:4,wv:25,ga:1,gav:30,gw:26,gF:260,gFg:200,gT:55,gTg:40,gz:1,grz:1,ggc:.9,dvb:1.1,rlx:1.6,rlk:.6,st0:.8,st1:5,dv:6,pw:10,pg:.6,aw:25,pi:1,hw:55,fa:30,km:1,wk:3,blow:14,wa:.5,wt:1.5,wh:1.3,bp:.1,hz:240,max:6,lf:.35,lig:12,lk:20,lw:30,ft:.25,fd:.08,fl:.25,fallT:3,pa:7,tip:.45,sync:0,sv:.5,dz:.08,cb:0,wa2:.6,shadow:1,dmax:.35,dleg:.08,hcap:50};try{const m=location.search.match(/[?&]hsp=([^&]*)/);if(m)Object.assign(HS_P,JSON.parse(decodeURIComponent(m[1])));}catch(e){}   // (tuning from the address, for tests)
 if(PF){HS_P.shadow=0;HS_P.max=2;HS_P.bb=1;}   // (the two bodies meet: the game's own push between fighters is overwritten when the place follows the body)
@@ -8901,6 +8906,7 @@ function hsDraw(f){const S=f.hs,A=f.ar;if(!S||!A)return;const SH=S.sh;
   for(const n of A.names){const pt=S.pts[n],P=A.P[n],Q=A.Q[n];if(!pt){if(S.T[n]){P.copy(S.T[n]);Q.copy(P);}continue;}
     hsPt(pt,P);const b=pt.s.b,t=b.translation();
     if(!Number.isFinite(P.x+P.y+P.z)){hsFree(f);return;}
+    if(!SH&&PF_SM>0&&S.T[n]&&!S.pin.has(pt.s.id)){const SM=S.sm||(S.sm={}),o=SM[n];_hv3.subVectors(P,S.T[n]);if(!o||o.distanceToSquared(_hv3)>.25)SM[n]=_hv3.clone();else{o.lerp(_hv3,1-Math.exp(-(S.dt||1/60)/PF_SM));P.copy(S.T[n]).add(o);}}
     const ps=SH&&SH.pts[n];if(ps&&S.T[n]){hsPt(ps,_hv3);_hv3.subVectors(P,_hv3);const dl=_hv3.length(),mx=/Foot|Toe|Leg/.test(n)&&!/UpLeg/.test(n)?HS_P.dleg:HS_P.dmax;/* feet stay where the animation plants them: a foot caught on someone else's body flicked back and forth */if(dl>mx)_hv3.multiplyScalar(mx/dl);{const e=S.env||0;_hv3.multiplyScalar(e*e*(3-2*e));if(S.bd){const c=_hv3.dot(S.bd);if(c<-.015)_hv3.addScaledVector(S.bd,-(c+.015));}/* (no rebound past where it stood: the body's springs overshot back toward the blow) */const DO=S.dO||(S.dO={}),o=DO[n]||(DO[n]=V()),mv=(_hv3.lengthSq()<o.lengthSq()?HS_P.dvb:HS_P.dv)*(S.dt||1/60);   /* Build 147: knocked out fast, back slowly (dvb): it sprang straight back like rubber */_hv4.subVectors(_hv3,o);const ml=_hv4.length();if(ml>mv)_hv4.multiplyScalar(mv/ml);o.add(_hv4);_hv3.copy(o);}/* and it changes at most dv m/s, so a part never jumps between frames *//* Build 142: only what a blow did is drawn, fading over ~1.2 s; between blows the body is the animation (the drift between the real body and its shadow drew arms and chests flicking about) */_hv4.copy(P);P.copy(S.T[n]).add(_hv3);(S.dd||(S.dd={}))[n]=dl;}
     const v=b.linvel(),w=b.angvel(),c=b.worldCom?b.worldCom():t;_hv1.set(P.x-c.x,P.y-c.y,P.z-c.z);_hv2.set(w.x,w.y,w.z).cross(_hv1);
     Q.set(P.x-(v.x+_hv2.x)*A.hs,P.y-(v.y+_hv2.y)*A.hs,P.z-(v.z+_hv2.z)*A.hs);
@@ -8915,8 +8921,19 @@ function hsDraw(f){const S=f.hs,A=f.ar;if(!S||!A)return;const SH=S.sh;
   for(const sd of ['R','L']){if(!S.pin.has('ha'+sd))continue;const nm=sd==='R'?'Right':'Left',Sh=A.P[nm+'Arm'],El=A.P[nm+'ForeArm'],Hn=A.P[nm+'Hand'],T0=S.T[nm+'Arm'],T1=S.T[nm+'ForeArm'],T2=S.T[nm+'Hand'];
     if(!Sh||!El||!Hn||!T0||!T1||!T2)continue;const L1=T0.distanceTo(T1),L2=T1.distanceTo(T2);_hv1.subVectors(Hn,Sh);let d=_hv1.length();if(d<1e-4)continue;_hv1.multiplyScalar(1/d);
     if(d>L1+L2-.002){const nd=L1+L2-.002,o=V().copy(Hn);Hn.copy(Sh).addScaledVector(_hv1,nd);const ho=A.P[nm+'HandMiddle1'];if(ho){ho.add(o.sub(Hn).negate());}d=nd;}
-    const a=(L1*L1-L2*L2+d*d)/(2*d),hh=Math.sqrt(Math.max(0,L1*L1-a*a));_hv2.subVectors(El,Sh);_hv2.addScaledVector(_hv1,-_hv2.dot(_hv1));if(_hv2.lengthSq()<1e-8)_hv2.subVectors(T1,T0).addScaledVector(_hv1,-_hv1.dot(_hv3.subVectors(T1,T0)));_hv2.normalize();
+    const a=(L1*L1-L2*L2+d*d)/(2*d),hh=Math.sqrt(Math.max(0,L1*L1-a*a));if(!SH&&PF_LEG){_hv5.subVectors(T2,T0);const tl=_hv5.length();_hv2.subVectors(T1,T0);if(tl>1e-4){_hv5.multiplyScalar(1/tl);_hv2.addScaledVector(_hv5,-_hv2.dot(_hv5));}_hv2.addScaledVector(_hv1,-_hv2.dot(_hv1));}else{_hv2.subVectors(El,Sh);_hv2.addScaledVector(_hv1,-_hv2.dot(_hv1));}/* (Build 327) the physical fighter's elbow bends the way the animation's does: taken from the physical elbow it flipped about and the wrist drew bent past 60-100 degrees */if(_hv2.lengthSq()<1e-8)_hv2.subVectors(T1,T0).addScaledVector(_hv1,-_hv1.dot(_hv3.subVectors(T1,T0)));_hv2.normalize();
     _hv3.copy(Sh).addScaledVector(_hv1,a).addScaledVector(_hv2,hh);if(Number.isFinite(_hv3.x+_hv3.y+_hv3.z)){const Qe=A.Q[nm+'ForeArm'];if(Qe)Qe.add(_hv4.subVectors(_hv3,El));El.copy(_hv3);}}
+  /* Build 327: the physical fighter's legs are drawn as legs: hip, knee and foot are solved again with the leg's real lengths and the knee
+     bent the way the animation bends it, from the physical hip to the physical foot. Drawn straight from the bodies, a leg that couldn't
+     reach (a catch, a stagger, a foot held on the ground) folded with its knee pointing back or sideways and the shin crooked */
+  if(!SH&&PF_LEG)for(const nm of ['Right','Left']){const Hp=A.P[nm+'UpLeg'],Kn=A.P[nm+'Leg'],Ft=A.P[nm+'Foot'],To=A.P[nm+'ToeBase'],T0=S.T[nm+'UpLeg'],T1=S.T[nm+'Leg'],T2=S.T[nm+'Foot'];
+    if(!Hp||!Kn||!Ft||!T0||!T1||!T2)continue;const L1=T0.distanceTo(T1),L2=T1.distanceTo(T2);_hv1.subVectors(Ft,Hp);let d=_hv1.length();if(d<1e-4)continue;_hv1.multiplyScalar(1/d);
+    const dmax=(L1+L2)*.995;if(d>dmax){_hv4.copy(Ft);Ft.copy(Hp).addScaledVector(_hv1,dmax);_hv4.subVectors(Ft,_hv4);if(To)To.add(_hv4);const Qf=A.Q[nm+'Foot'];if(Qf)Qf.add(_hv4);const Qt=A.Q[nm+'ToeBase'];if(Qt)Qt.add(_hv4);d=dmax;}
+    const a2=(L1*L1-L2*L2+d*d)/(2*d),hh=Math.sqrt(Math.max(0,L1*L1-a2*a2));
+    _hv5.subVectors(T2,T0);const tl=_hv5.length();_hv2.subVectors(T1,T0);if(tl>1e-4){_hv5.multiplyScalar(1/tl);_hv2.addScaledVector(_hv5,-_hv2.dot(_hv5));}
+    if(_hv2.lengthSq()<1e-6)_hv2.set(Math.sin(f.yaw),0,Math.cos(f.yaw));
+    _hv2.addScaledVector(_hv1,-_hv2.dot(_hv1));if(_hv2.lengthSq()<1e-8)continue;_hv2.normalize();
+    _hv3.copy(Hp).addScaledVector(_hv1,a2).addScaledVector(_hv2,hh);if(Number.isFinite(_hv3.x+_hv3.y+_hv3.z)){const Qk=A.Q[nm+'Leg'];if(Qk)Qk.add(_hv4.subVectors(_hv3,Kn));Kn.copy(_hv3);}}
   armsClear(f,A);
   A.apply();f.root.updateMatrixWorld(true);f.updateCaps();}
 /* Build 150: arms don't pass through other people. The fighters' bodies don't collide in the physics (pressed together they threw each
@@ -9794,7 +9811,7 @@ class Fighter{
       // past the ankles' limit: a lean that isn't too far is caught (Build 120): the fighter drops low onto bent knees, a hand goes down
       // toward the ground, and they come back up out of it, instead of every lean past .42 ending flat on the ground. Too far, or caught
       // again within a second and a half, and they go down as before
-      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=1;this.vel.multiplyScalar(REEL2&&!this.isPlayer&&!this.remote?.15:.4);   /* (Build 287) a bot caught on bent knees is planted there: it used to slide on back in the squat, pushed by the blow and then walking off */
+      if(m2>.42&&m2<.62&&!SHIP&&simTime>(this.catchCD||0)){this.catchT=simTime+.9;this.catchCD=simTime+1.5;this.bal.multiplyScalar(.25);this.balV.multiplyScalar(.2);this.stagger=Math.max(this.stagger,.8);this.crouchK=CATCH_C;this.vel.multiplyScalar(REEL2&&!this.isPlayer&&!this.remote?.15:.4);   /* (Build 287) a bot caught on bent knees is planted there: it used to slide on back in the squat, pushed by the blow and then walking off */
         if(this.bodyHit){_v.set(this.bal.x,0,this.bal.z);if(_v.lengthSq()>1e-6){_v.normalize();this.fwd(_f);if(_v.x*_f.x+_v.z*_f.z<-.3)_v.copy(_f);this.bodyHit('Spine2',_v,2.5,.15);}}   /* (caught going backwards, the chest is thrown forward over the knees, not further back) */if(this.isPlayer)tell(this,'You catch yourself','red');}
       else if(m2>.42){_v.set(this.bal.x,0,this.bal.z).multiplyScalar((SHIP?1.1:2.4)/m2).setY(.4);this.bal.set(0,0,0);this.balV.set(0,0,0);this.knockdown(rand(1.1,1.9),_v.clone(),this.chest);return;}
     } else {this.bal.multiplyScalar(Math.exp(-6*h));this.balV.multiplyScalar(Math.exp(-6*h));}
@@ -10305,7 +10322,7 @@ class Fighter{
     _qr.setFromAxisAngle(Y_AXIS,-this.hipOff*.9);B.Spine.quaternion.premultiply(_qr);
     // crouch / airborne tuck / kick (leg IK keeps the feet planted)
     const airborne=this.pos.y>.03||this.fallT!=null;
-    /* Build 142: a catch or a leg blow sets a crouch to reach (crouchK) instead of snapping crouchAmt in one frame (the hips dropped at 20 m/s) */this.crouchK=Math.max(0,(this.crouchK||0)-dt*1.5);this.crouchAmt=lerp(this.crouchAmt,Math.max(this.crouch||this.stoop||(this.catchT||0)>simTime+.15?1:airborne?.45:0,this.crouchK),1-Math.exp(-(this.crouchK>.3||(this.catchT||0)>simTime?16:10)*dt));
+    /* Build 142: a catch or a leg blow sets a crouch to reach (crouchK) instead of snapping crouchAmt in one frame (the hips dropped at 20 m/s) */this.crouchK=Math.max(0,(this.crouchK||0)-dt*1.5);this.crouchAmt=lerp(this.crouchAmt,Math.max(this.crouch||this.stoop||(this.catchT||0)>simTime+.15?CATCH_C:airborne?.45:0,this.crouchK),1-Math.exp(-(this.crouchK>.3||(this.catchT||0)>simTime?16:10)*dt));
     // calm: nobody within reach of a fight and nothing has happened lately, so the body stands easy (fighting stance and guard come up when a foe comes near)
     this._calmT=(this._calmT||0)-dt;if(this._calmT<=0){this._calmT=.25;let dq=1e9;const sd0=this.entrant&&this.entrant.side;for(const o of fighters)if(o!==this&&o.alive&&!(sd0&&o.entrant&&o.entrant.side===sd0)){const q=o.pos.distanceToSquared(this.pos);if(q<dq)dq=q;}this._foeD=Math.sqrt(dq);}
     if(this.hp<(this._hp0??this.hp))this._hurtAt=simTime;this._hp0=this.hp;
