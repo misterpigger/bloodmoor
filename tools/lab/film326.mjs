@@ -10,7 +10,7 @@ await page.evaluate(async([wep,map])=>{const g=window.__game;const wait=ms=>new 
   const st=document.createElement('style');st.textContent='#hud,#prompt,#topc,#grip,#yard{display:none!important}';document.head.appendChild(st);
   window.__pause=true;for(let i=0;i<200&&!g.RP;i++)await wait(50);for(let i=0;i<240;i++)g.logic(1/60);
   const P=g.player;if(wep&&(!P.sword||P.sword.def.id!==wep)){g.spawnWeaponLoot(g.WEAPONS[wep],P.pos.x,P.pos.z);g.pickUp(P,g.loot[g.loot.length-1]);}
-  P.damage=()=>{};window.__fi=0;if(window.__walkOnly||window.__mouse||window.__sweep)for(const f of g.fighters)if(f!==P){f.think=()=>{};f.pos.x+=60;}},[WEP,MAP]);
+  P.damage=()=>{};if(P.armor)for(const k of Object.keys(P.armor))if(P.armor[k])P.unequip(k);window.__fi=0;if(window.__walkOnly||window.__mouse||window.__sweep)for(const f of g.fighters)if(f!==P){f.think=()=>{};f.pos.x+=60;}},[WEP,MAP]);
 await fr(2,1/60);
 const N=SECS*60;const log=[];let fi=0;
 for(let i=0;i<N;i++){
