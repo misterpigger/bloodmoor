@@ -102,3 +102,4 @@ Cudgel, hayfork, billhook, rusted sword, knightly sword, gilt mace (Build 243; d
 ### Later (his words, not yet)
 A castle to explore the way the crypt is explored, after the crypt is right. The physical fighter stays its own switch in Options.
 - 328: Person-like mouse test; off elbow swivel capped at 12 rad/s (flips −70%), feet ease off a lock and on stopping (no snap), physics: a fall is cancelled if he's back over his feet.
+- 329: Test switches ?calm (body follows swings less) for the player to try with ?pf and &tret=.85&brk=320.
